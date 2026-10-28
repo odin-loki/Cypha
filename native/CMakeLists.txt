@@ -2812,3 +2812,12 @@ add_test(NAME native_fm_infinigram_test COMMAND "$<TARGET_FILE:fm_infinigram_tes
 set_tests_properties(native_fm_infinigram_test PROPERTIES TIMEOUT 120)
 # --- end M5 block ----------------------------------------------------------------------------------
 
+# --- RAM_PROFILE M10: the stored class table ----------------------------------------------------------
+# The CTest round-trips class tables (16 settings) and checks that damaged files are refused.
+add_executable(class_context_test tools/class_context_test.cpp)
+target_include_directories(class_context_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
+cypha_mingw_apply_exe_link_options(class_context_test)
+add_test(NAME native_class_context_test COMMAND "$<TARGET_FILE:class_context_test>")
+set_tests_properties(native_class_context_test PROPERTIES TIMEOUT 120)
+# --- end M10 block ---------------------------------------------------------------------------------
+

@@ -20,16 +20,20 @@
 ///   first follower, total) and 5 per distinct follower (byte, 32-bit count). ``compact`` keeps a 32-bit
 ///   key, 1-byte counts on the trie's quantising ladder and no stored total: 8 + 2 bytes. ``min_total``
 ///   drops contexts seen fewer times than that.
+/// - save() / load() store a built table in a checked file (RAM_PROFILE M10), so serving never builds it.
 /// - Hashes are 56 bits; with ~10M contexts a collision is about a 1-in-1,000 event per table. Compact
 ///   keys are 32 bits: contexts that share one have their counts merged (a few hundred of 2M).
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cctype>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <fstream>
+#include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -242,7 +246,148 @@ class ClassContext {
         return opt_.compact ? contexts() * 8 + followers() * 2 : contexts() * 16 + followers() * 5;
     }
 
+    /// A stored table (docs/reports/RAM_PROFILE.md, M10), so a served model never builds it. Little-endian, no
+    /// padding: "CYPHACC" and a zero byte, u32 version 1, u32 tail, orders, compact and min_total, the word-class
+    /// map (u64 count, then each word as a u32 length, its bytes and a u16 class, sorted by word), then key_,
+    /// key32_, first_, total_, byte_, count_ and q_, each a u64 count and its elements, and last the FNV-1a 64-bit
+    /// hash of every byte before it. A file that is not one, another version, cut short, damaged or inconsistent
+    /// throws std::runtime_error. The build's chunk size is not stored.
+    void save(const std::string& path) const {
+        std::ofstream os(path, std::ios::binary);
+        Out o{os};
+        o.raw(kMagic, sizeof kMagic);
+        for (const std::uint32_t v : {kVersion, static_cast<std::uint32_t>(opt_.tail), static_cast<std::uint32_t>(opt_.orders),
+                                      static_cast<std::uint32_t>(opt_.compact), opt_.min_total})
+            o.num(v);
+        std::vector<std::pair<std::string, std::uint16_t>> m(cls_.begin(), cls_.end());
+        std::sort(m.begin(), m.end());
+        o.num(std::uint64_t{m.size()});
+        for (const auto& [w, c] : m) {
+            o.num(static_cast<std::uint32_t>(w.size()));
+            o.raw(w.data(), w.size());
+            o.num(c);
+        }
+        o.vec(key_), o.vec(key32_), o.vec(first_), o.vec(total_), o.vec(byte_), o.vec(count_), o.vec(q_);
+        o.num(o.h);
+        os.close();
+        if (!os) throw std::runtime_error("ClassContext: cannot write " + path);
+    }
+
+    static ClassContext load(const std::string& path) {
+        std::ifstream is(path, std::ios::binary | std::ios::ate);
+        if (!is) throw std::runtime_error("ClassContext: cannot open " + path);
+        In in{is, static_cast<std::uint64_t>(is.tellg())};
+        is.seekg(0);
+        char magic[sizeof kMagic];
+        in.raw(magic, sizeof magic);
+        if (std::memcmp(magic, kMagic, sizeof magic) != 0 || in.num<std::uint32_t>() != kVersion)
+            throw std::runtime_error("ClassContext: " + path + " is not a stored class table (or another version)");
+        Options o;
+        o.tail = static_cast<int>(in.num<std::uint32_t>());
+        o.orders = static_cast<int>(in.num<std::uint32_t>());
+        const std::uint32_t compact = in.num<std::uint32_t>();
+        o.compact = compact != 0;
+        o.min_total = in.num<std::uint32_t>();
+        std::unordered_map<std::string, std::uint16_t> m;
+        const auto nm = in.num<std::uint64_t>();
+        if (nm > in.left / 6) throw std::runtime_error("ClassContext: stored file damaged");
+        for (std::uint64_t i = 0; i < nm; ++i) {
+            const auto len = in.num<std::uint32_t>();
+            if (len > in.left) throw std::runtime_error("ClassContext: stored file damaged");
+            std::string w(len, '\0');
+            in.raw(w.data(), w.size());
+            m.emplace(std::move(w), in.num<std::uint16_t>());
+        }
+        ClassContext c(std::move(m), o);
+        in.vec(c.key_), in.vec(c.key32_), in.vec(c.first_), in.vec(c.total_), in.vec(c.byte_), in.vec(c.count_), in.vec(c.q_);
+        const std::uint64_t h = in.h;
+        if (in.num<std::uint64_t>() != h) throw std::runtime_error("ClassContext: stored file damaged (checksum)");
+        if (in.left != 0 || compact > 1 || c.opt_.tail != o.tail || c.opt_.orders != o.orders || c.cls_.size() != nm ||
+            !c.consistent())
+            throw std::runtime_error("ClassContext: stored file damaged");
+        return c;
+    }
+
+    /// The same options (the chunk aside), word classes and table.
+    bool operator==(const ClassContext& b) const {
+        return opt_.tail == b.opt_.tail && opt_.orders == b.opt_.orders && opt_.compact == b.opt_.compact &&
+               opt_.min_total == b.opt_.min_total && cls_ == b.cls_ && key_ == b.key_ && key32_ == b.key32_ &&
+               first_ == b.first_ && total_ == b.total_ && byte_ == b.byte_ && count_ == b.count_ && q_ == b.q_;
+    }
+
  private:
+    static constexpr char kMagic[8] = {'C', 'Y', 'P', 'H', 'A', 'C', 'C', '\0'};
+    static constexpr std::uint32_t kVersion = 1;
+
+    // The stored file's writer and reader: little-endian numbers, FNV-1a 64 over every byte.
+    struct Out {
+        std::ostream& os;
+        std::uint64_t h = 14695981039346656037ull;
+        void raw(const void* p, std::size_t n) {
+            const auto* b = static_cast<const unsigned char*>(p);
+            for (std::size_t i = 0; i < n; ++i) h = (h ^ b[i]) * 1099511628211ull;
+            os.write(static_cast<const char*>(p), static_cast<std::streamsize>(n));
+        }
+        template <class T>
+        void num(T v) {
+            unsigned char b[sizeof(T)];
+            for (std::size_t i = 0; i < sizeof(T); ++i) b[i] = static_cast<unsigned char>(std::uint64_t{v} >> (8 * i));
+            raw(b, sizeof b);
+        }
+        template <class T>
+        void vec(const std::vector<T>& v) {
+            num(std::uint64_t{v.size()});
+            if constexpr (std::endian::native == std::endian::little) raw(v.data(), v.size() * sizeof(T));
+            else
+                for (const T x : v) num(x);
+        }
+    };
+    struct In {
+        std::istream& is;
+        std::uint64_t left;  // bytes the file still holds
+        std::uint64_t h = 14695981039346656037ull;
+        void raw(void* p, std::size_t n) {
+            if (n > left || !is.read(static_cast<char*>(p), static_cast<std::streamsize>(n)))
+                throw std::runtime_error("ClassContext: stored file cut short");
+            left -= n;
+            const auto* b = static_cast<const unsigned char*>(p);
+            for (std::size_t i = 0; i < n; ++i) h = (h ^ b[i]) * 1099511628211ull;
+        }
+        template <class T>
+        T num() {
+            unsigned char b[sizeof(T)];
+            raw(b, sizeof b);
+            std::uint64_t v = 0;
+            for (std::size_t i = 0; i < sizeof(T); ++i) v |= std::uint64_t{b[i]} << (8 * i);
+            return static_cast<T>(v);
+        }
+        template <class T>
+        void vec(std::vector<T>& v) {
+            const auto n = num<std::uint64_t>();
+            if (n > left / sizeof(T)) throw std::runtime_error("ClassContext: stored file damaged");
+            v.resize(static_cast<std::size_t>(n));
+            if constexpr (std::endian::native == std::endian::little) raw(v.data(), v.size() * sizeof(T));
+            else
+                for (T& x : v) x = num<T>();
+        }
+    };
+
+    // The arrays fit together, so every lookup stays inside them: one storage's arrays only, the keys strictly rising,
+    // and each context's followers a non-empty run that ends where the next begins.
+    bool consistent() const {
+        const std::size_t nk = opt_.compact ? key32_.size() : key_.size();
+        if (opt_.compact ? !(key_.empty() && total_.empty() && count_.empty() && q_.size() == byte_.size())
+                         : !(key32_.empty() && q_.empty() && total_.size() == nk && count_.size() == byte_.size()))
+            return false;
+        if (first_.empty()) return nk == 0 && byte_.empty();
+        if (first_.size() != nk + 1 || first_.front() != 0 || first_.back() != byte_.size()) return false;
+        for (std::size_t c = 0; c < nk; ++c)
+            if (first_[c + 1] <= first_[c] ||
+                (c > 0 && (opt_.compact ? key32_[c] <= key32_[c - 1] : key_[c] <= key_[c - 1])))
+                return false;
+        return true;
+    }
+
     static constexpr std::uint16_t kShapes = 4;  // 0 none, 1 lower, 2 capitalised, 3 number
 
     static constexpr std::size_t kNone = ~std::size_t{0};

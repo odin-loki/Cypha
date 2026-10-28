@@ -1,6 +1,6 @@
 # Handoff for Claude Code: Cypha / CyphaLM
 
-**Odin Loch** · rewritten 2026-10-28 at the end of the second working session of the day · repo `odin-loki/Cypha` (branch `main`)
+**Odin Loch** · rewritten 2026-10-28 at the end of the second working session of the day; updated the same day for B4c, S1 and RAM M10–M14 · repo `odin-loki/Cypha` (branch `main`)
 
 Read this first. Then read the documents in §3 for whatever you are working on. The goal, the rules and Odin's standing instructions are in §1–§2 and are not optional.
 
@@ -35,6 +35,8 @@ Cypha is Odin Loch's own C++ AI. **CyphaLM** is its language model: a packed byt
    - The output is a plain message plus a tag, `<|unknown reason=<CODE> entity="…" relation=… gap=<id>|>` (DISCOVERY §3.5). CyphaLM is trained to write it itself.
    - A gate that decides whether to abstain on CyphaLM's own answer counts as CyphaLM doing the task (Odin, DISCOVERY §8a). The gate in use is `qa`'s threshold gate; the Cypha-classifier gate was measured and deleted (TOOL_PROFILE P4).
    - The familiarity token is allowed on the gate side, after `Assistant: ` (Odin, 2026-10-28).
+   - A reason code describes what CyphaLM itself has read, not the wider fact store (Odin: "most honest", 2026-10-28). Where the data isn't there, saying so is right; S1 stays at 82% (PLAN ledger 61).
+   - Next-byte experts that hurt answers are turned off inside answers (after `Assistant: `, and from the end of a `qa` prompt), so they can be defaults for text (A4b, B4c).
 3. **Everything has a process.** The AI does nothing it has not been given data or a process for. The library is `docs/thought/processes.yaml`.
 4. **Minimal code debt: "the minimal and best" tools.** Profile before adding, cut what doesn't earn its place (`docs/TOOL_PROFILE_PLAN.md` §5). **Keep `scripts/gguf_mine.py`** (Odin's decision).
 5. **Metrics, always together:** held-out answers (right / abstained / wrong), the text score, BPC. BPC alone is a poor metric (Odin). SCRIBE v2 now passes its ladder where surface S does not (§4.1); which text score the rules use is Odin's call (§5).
@@ -85,12 +87,14 @@ Cypha is Odin Loch's own C++ AI. **CyphaLM** is its language model: a packed byt
 | A1c, A2, A3 | Entity familiarity (AUROC 0.795), the copy expert, the fact shard (2 right, 0 wrong on dev), statement scoring (0) | `A1C_…`, `A2_A3_…` |
 | A1d / A2b answering variants | Span candidates pick the right entity 76 / 100 (E1: 63). The `low`-only don't-know token: dev 0.600 / 1.00, **test 0.635 / 0.94**. No variant names the entity in the tag | `A1D_A2B_ANSWERING_VARIANTS.md` |
 | A4 / A4b similar-context expert | Fresh text −0.061 BPC over trie + IG + class; no answers by itself. **Now a default** in `qa`, `sample`, `context8k`, gated off inside answers (answers unchanged: C1L keeps 2 right, 0 wrong); 2.2 MB shipped vectors (`data/cyphalm/`); +42 MB resident | `A4_SIMILAR_CONTEXT_EXPERT.md` |
-| B4B language-model defaults | Class (shape, 3 orders) + copy (m 8, window 16,384): fresh text 1.912. **Defaults unchanged**: with the fact shard they echo the question (rule 3) | `B4B_LM_DEFAULTS.md` |
+| B4B language-model defaults | Class (shape, 3 orders) + copy (m 8, window 16,384): fresh text 1.912. Not defaults then: with the fact shard they echo the question (rule 3) | `B4B_LM_DEFAULTS.md` |
+| **B4c echo gate** (Odin: all three in parallel) | Class + copy off inside answers, like the similar-context expert. **Defaults** in `qa` and `context8k` (class + sim + copy); `sample` takes sim + copy, the class expert only with `--cls` (SCRIBE v2 falls with it). Rule 3 holds: dev 520 / 520 and test 800 / 800 answer rows identical. `qa` holdout trie + IG 2.0729 → **1.8345** | `B4C_ECHO_GATE.md` |
+| **S1 reason codes, evidence cards** | Codes right 82 / 100 dev, 169 / 200 test; the 90% gate is missed (17 of 18 dev errors: the `low` token on in-slice entities) and Odin closed it there. "Unknown" = what CyphaLM has read (Odin: "most honest"). `qa --cards` via `FmInfiniGram::locate` (+10 MB, 0.02 ms a card); answers byte-identical | `S1_REASON_CODES_AND_EVIDENCE.md` |
 | Tool profile P2–P4 | Tagger and word-vector class tables cut from the class expert (the tagger stays as the question parser); `cypha_gate` deleted; `pattern_learn` fails the Q/A cut, flagged for Odin | `TOOL_PROFILE_P2_GRID.md` |
 | S-1b learned contexts | Cypha's own learner reaches PPMI-SVD's level (0.683 / 0.246 / 0.669); gates failed on rare words | `S1B_LEARNED_CONTEXTS.md` |
 | S5 hypothesis store, S3 gap map | `hypothesis.hpp` (I1, I4, I7, I8), `gap_map.hpp`, `pattern_learn --gaps`: 27,842 gaps with VOI. CyphaLM's dev tags name their question's slot 0 / 750 | `S3_S5_GAP_MAP_AND_HYPOTHESES.md` |
 | Qwen3-Embedding, weights only | QE0 hit on 0.6B; QE1 static dissection of 0.6B and 8B (Q4 hit); the hashed probe set and its builder in `mined/probe/` | `QWEN3_EMBEDDING_DISSECTION.md` |
-| **CyphaLM's RAM** (Odin's request) | §4.3 | `RAM_PROFILE.md` |
+| **CyphaLM's RAM** (Odin's request) | §4.3; M10–M14: `qa --save DIR` / `--model DIR`, served `qa` under 200 MB in every configuration | `RAM_PROFILE.md` |
 | CI | All six jobs green (§4.5) | |
 | SCRIBE v2 and its paper | From a parallel session, merged into `main` | `SCRIBE_V2.md`, `paper/scribe/` |
 
@@ -100,9 +104,10 @@ Cypha is Odin Loch's own C++ AI. **CyphaLM** is its language model: a packed byt
 |---|---|
 | BPC, holdout, learned mixture | 2.298 (bpc model); chat model 2.345 |
 | Fresh text | trie + IG 2.166; + class + copy 1.912; + class + similar-context 2.027 |
-| `qa` holdout, default model | trie + IG 2.0716 → 1.9686 with the similar-context expert (default since A4b) |
+| `qa` holdout, default model | trie + IG 2.0729 → **1.8345** with class + similar-context + copy (defaults since B4c, off inside answers); `context8k` 2.0715 → 1.8345 |
 | Class expert's table | default `shape` = three orders, compact, seen once dropped (fresh 2.0853; Odin, 2026-10-28) |
-| Text, SCRIBE v2 | trie 0.014, trie + class 0.002, human 0.770 |
+| Text, SCRIBE v2 | trie 0.014, trie + class 0.002, `sample`'s default (trie + similar-context + copy) 0.056, human 0.770 |
+| Reason codes (S1) | 82 / 100 dev, 169 / 200 test; `qa --cards` gives evidence cards |
 | Q/A, frozen test (C1L) | 0 right kept at 2% wrong; don't-know precision 0.635, recall 0.94 |
 | Q/A, dev, with D4's shard (C1L) | 2 right, 0 wrong at 2% wrong |
 | R3 with raw frames | test 1 right, 0 wrong |
@@ -120,13 +125,15 @@ Odin asked on 2026-10-28 to reduce CyphaLM's RAM. Every cut was measured against
 | Whole qa model, resident (harness) | 228 MB | **76 MB** |
 | `cyphalm_trie qa`, peak | 264 MB | **171 MB** (M9; with the don't-know token and shard 368 → 199 MB) |
 | `chat` from a stored model | 104 MB and 476 s (trains) | **21 MB and 12 s** (`--model FILE`) |
+| `qa` served from a store (M10–M14) | built: A0 186.8, + class + copy 245.3, C1L + class + copy 275.1 MB | **138.4 / 169.4 / 189.1 MB**: `qa --save DIR`, then `qa --model DIR`; parts load in 0.15 s; 3–5× faster; every number unchanged |
 
 - Every printed number of `cyphalm_trie` is unchanged by M9 (bpc, chat, sample, context8k, dktext, cls, qa, the `--sim` paths).
-- **Missed:** qa's peak with 3-order classes is 235 MB, not under 200: the builds come after training, because A1c's tokens need the wiki trie. Next: load stored index and class files in `qa`.
+- **Served `qa` is under 200 MB** in every configuration (M10–M14). With B4c's defaults (C1L, class + similar-context + copy): built 264–275 MB and about 705 s; served **189 MB and 229 s**, the same rows (checked on the merged tool, 2026-10-28). A served model refuses the token statistics that read the wiki-stage trie (`question_lp`, `ent_lp`), `--sim src=all` and `--cards`.
+- **Still missed:** building. A built `qa` with B4c's defaults peaks at 275 MB; the class build sets it and varies 226–302 MB between runs of the same code (suspected heap placement, not confirmed).
 
 ### 4.4 CTests
 
-Run these on every change: `native_cyphalm_trie_selftest`, `native_fm_infinigram_test`, `native_epistemic_test`, `native_thought_test`, `native_geometry_test`, `native_ecs_lci_test`, `native_scribe_selftest`, `native_cyphalm_neural_smoke`.
+Run these on every change: `native_cyphalm_trie_selftest`, `native_fm_infinigram_test`, `native_epistemic_test`, `native_thought_test`, `native_geometry_test`, `native_ecs_lci_test`, `native_scribe_selftest`, `native_cyphalm_neural_smoke`, `native_class_context_test`. `native_fm_infinigram_test` now runs 191,885 checks (locate included).
 
 ### 4.5 CI
 
@@ -141,9 +148,9 @@ Run these on every change: `native_cyphalm_trie_selftest`, `native_fm_infinigram
 2. **The `low`-only don't-know token** (A1D/A2B): the form that lets the token and the fact shard work together (dev 2 right, 0 wrong). Odin allowed the token; this is a narrower form.
 3. **`ent_title` against `ent_bold`.** `ent_title` reads XML title tags; `ent_bold` reads none and meets D2 on dev (0.833 / 0.50) but halves recall.
 4. **The entity in the tag** needs a copy weight that depends on context (inside the answer or not). That changes the mixture.
-5. **Class and copy with the fact shard.** Both lower BPC but hurt answering when the shard is in. The similar-context expert now has a gate that turns it off inside answers (Odin: use it as soon as it is useful). The same gate for class and copy?
-6. **Which text score the rules use.** SCRIBE v2 passes its ladder; surface S does not, and scores the experts' word salad above human text.
-7. **Track S:** where gap demand comes from; Wikidata's type-level rate as P(exists); which knowledge the reason code describes; finer entity types (S3/S5 report).
+5. ~~Class and copy with the fact shard.~~ **Answered by B4c:** the same gate works for class and copy; rule 3 holds, and both are defaults where the rules hold.
+6. **Which text score the rules use.** SCRIBE v2 passes its ladder; surface S does not, and scores the experts' word salad above human text. B4c: surface S rises with the class expert while SCRIBE v2 falls to the shuffled-words rung (0.061 → 0.025 over trie + similar-context). The choice decides whether the class expert joins `sample`'s defaults.
+7. **Track S:** where gap demand comes from; Wikidata's type-level rate as P(exists); finer entity types (S3/S5 report). Answered 2026-10-28: the reason code describes what CyphaLM has read ("most honest"), and S1 stays at 82% ("if the data isn't there, it isn't there").
 8. **PPMI-SVD without the evaluation bytes** as the standard vector file (its leak is worth 0.001 BPC).
 9. **When the 1 TB run ends:** move `trie_stream_train.cpp` onto `packed_trie.hpp` (and `pack()`, M4).
 
@@ -151,13 +158,11 @@ Run these on every change: `native_cyphalm_trie_selftest`, `native_fm_infinigram
 
 ## 6. Next work, in order
 
-1. **S1 on CyphaLM's answers** (DISCOVERY §13): reason codes and evidence cards. The tags' reason is right on 45 of 72 on the test; the gate is 90%. Evidence cards need positions in the training text: `FmInfiniGram` gives counts, not positions, so add sampled suffix-array entries (about n/32 × 4 bytes) for `locate`.
-2. **The echo fix** (§5.5), then read B4B's rule 3 again for class, copy and similar-context.
-3. **S4** (unseen estimates and the frontier report), then S6.
-4. **Similar-context expert, counts version:** next-word counts per cluster of two-word contexts instead of k neighbours (k keeps paying).
-5. **RAM next:** serve from the stored files only (M7 + M8, and a stored class table), so serving never trains or builds.
-6. **On Odin's PC:** the 8B QE0 gate and timing, QE2 probe vectors, QE3, QE4 `pairs`, teacher Q/A text (QWEN3_EMBEDDING_DISSECTION §9).
-7. **Bill of work upkeep** with every commit.
+1. **S4** (unseen estimates and the frontier report), then S6. (S1, the echo fix and serving from stored files were done 2026-10-28.)
+2. **Similar-context expert, counts version:** next-word counts per cluster of two-word contexts instead of k neighbours (k keeps paying).
+3. **RAM next:** the class build's peak when building (226–302 MB, varies by run). When the class expert joins `sample`'s or `chat`'s defaults, their `--save` / `--model` should carry its table (`ClassContext::save` / `load`).
+4. **On Odin's PC:** the 8B QE0 gate and timing, QE2 probe vectors, QE3, QE4 `pairs`, teacher Q/A text (QWEN3_EMBEDDING_DISSECTION §9).
+5. **Bill of work upkeep** with every commit.
 
 ---
 

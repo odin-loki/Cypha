@@ -369,3 +369,217 @@ The qa class table has one context more than the `memprof3` harness's (1,562,353
 - The smaller class table (M2 + M3, three orders) is the default: `class_context.hpp`'s `Options` and a flagless `cyphalm_trie` class spec.
 - Returning freed build memory to the OS (`malloc_trim`, glibc only): not wanted. The tool stays portable.
 - The similar-context expert is a default in `qa`, `sample` and `context8k` (Odin; A4 report, A4b). Its 32-d int8 vectors and int8 keys add 42 MB resident (its first version added 142 MB); `qa` A0's peak 175 → 187 MB.
+
+## M10–M12: `qa` served from stored files (registered 2026-10-28, before any run)
+
+**Question.** Serving should never train or build (HANDOFF §6.5). `qa`'s peak with three-order classes is 235 MB (M9), and the target is 200 MB at most. The builds come after training, because A1c's tokens need the wiki trie. Can `qa` load what it needs from files instead?
+
+**What `qa` reads after training.**
+- The packed chat-stage trie and its weights: every holdout read and every answer.
+- The wiki-stage weights. After M4, A1c's `wiki_lm` reads the packed chat-stage trie with these weights.
+- InfiniGram over T, the class table over T, and A1c's lowered index (`--parse`).
+- The familiarity statistic's cut and the follower limit.
+- The similar-context expert. It is built from its 2.2 MB vector file over wiki train, which serving reads anyway.
+
+**What cannot be served from a file.** Before the chat passes, `qa` reads the wiki-stage trie in its training form, with its live match table. The packed form does not hold that table (M4). That model gives:
+- the build's calibration and analysis lines (`FAMSTAT`, `ENTITY`, `FAMCAL`, `FAMTOK`);
+- the tokens of the training text (`fam_dolly`), and the chat composition (`chat_turns`);
+- the `question_lp` and `ent_lp` token statistics.
+
+So a served model takes the token statistics that read only the lowered index: `ent_count`, `ent_link`, `ent_bold`, `ent_title`, `ent_igfrac` and `ent_tb`. C1L uses `ent_title`. The build's calibration lines are printed at build time only.
+
+**Design.**
+- **`qa --save DIR`:** the normal run, and after the builds it writes these files:
+  - `model.pk`: the packed trie, its weights and split (M7);
+  - `ig.fm`: InfiniGram over T (M8);
+  - `low.fm`: the lowered index (with `--parse`);
+  - `cls.cc`: the class table (with `--cls`, M10);
+  - `qa.meta`: the record of the options the model was built from, the wiki-stage weights, the follower limit and the cuts, with a checksum.
+- **`qa --model DIR`:** loads them. It reads the 8 MiB wiki text (the holdout contexts and the grading) and not Dolly. The only thing it builds is the similar-context expert.
+  - It refuses a store whose record differs from the options given: wiki bytes, split, Dolly, `--dk`, `--dk-ratio`, `--fam`, `--fam-stat`, `--fam-train`, `--parse`, the shards and the class spec.
+  - It refuses `--fam-only`, a token statistic that reads the model, and a similar-context spec with `src=all`.
+- **Names.** `chat` and `sample` already use `--save` and `--model` for a stored packed trie (M7); for `qa` they take a directory. `--from` is taken by `dktext`.
+- **M10:** `ClassContext::save` / `load`. The file holds "CYPHACC" and a zero byte, version 1, the options, the word-class map (sorted) and the arrays (each a u64 count and its elements), then an FNV-1a 64-bit hash of every byte before it. A damaged or cut file throws.
+- **M12:** a stored similar-context index, only if measurement says it pays.
+
+**Decision rule (lossless; fixed before the runs).**
+1. A build run with `--save` prints exactly what the tool without `--save` prints, and writes the same rows file. Timing fields are excepted: `build_s`, the `LATENCY` lines, and `SIM_LAT`'s `p50_us` and `p99_us`.
+2. A `--model` run prints the build run's lines without the build-only ones (`FAMSTAT`, `ENTITY`, `FAMCAL`, `FAMTOK`, `fam_dolly`, `chat_turns`), in the same order, timing fields excepted. Its rows file is byte-identical.
+3. The saving is measured: peak RSS (`VmHWM`, polled each second), wall time and file sizes, on the same machine.
+4. Anything lossy follows rule 2 at the top of this report. None is planned.
+
+**Configurations.**
+- **A0:** `qa` with `--dev` and `--leak`, the default similar-context expert.
+- **E:** A0 with `--cls shape --copy --copy-min 8`: what the echo fix may make the default.
+- **C1L+E:** A1d's C1L options with `--cls shape --copy-min 8`.
+
+**Predictions (registered before the runs).**
+
+| # | Change | Prediction |
+|---|---|---|
+| M10 | Class table file | Loaded table equal in every array; every prediction identical; file within 1 KB of `bytes()` plus the word-class map; load under 0.1 s for the qa table (19 MB); a flipped bit and a cut file refused |
+| M11a | `qa --model`, A0 | Peak 140–175 MB (the build run: 186.9, Q0S); wall time under half the build run's |
+| M11b | `qa --model`, E | Peak 160–190 MB |
+| M11c | `qa --model`, C1L+E | Peak under 200 MB: the target |
+| M11d | `qa --save` | Same peak as without it (within the 5 MB run-to-run spread) and the same output |
+| M11e | The stored files | Each within 1% of the part's bytes in memory; all parts load in under 1 s |
+| M12 | A stored similar-context index | Pays only if its build is over 20% of a `--model` run's wall time or sets its peak. Then the same neighbours, and a load under 0.2 s |
+
+### M13: the order of `qa`'s last steps (registered 2026-10-28, before its runs)
+
+**Why.** The first runs (results below) show where the memory goes after the builds. A served A0 run peaked at 182.9 MB:
+- the loaded parts and the 8 MiB text are 46 MB;
+- the per-byte holdout arrays add 40 MB at once, and more later;
+- the similar-context expert is then built on top of them: +88 MB at its build, 40 MB of it the finished index.
+
+The build run of E peaks at its class build (245 MB). Afterwards, the arrays and the similar-context build reach about 210 MB.
+
+**Change (lossless).**
+1. The similar-context expert is built right after InfiniGram, before the holdout arrays exist. Its lines print where they did.
+2. Each per-byte array is made only when it is read: the copy expert's with `--copy`, the class expert's with `--cls`.
+3. Each array is freed after its last read: InfiniGram's probabilities and buckets once the trie + InfiniGram mixture is made, and the class expert's once its mixture is made.
+
+**Predictions (registered before the runs).** Peaks are `VmHWM` in kB / 1000, as in M9 and A4b.
+
+| # | Run | Prediction |
+|---|---|---|
+| M13a | Every run | Every printed number and the rows file identical to the M11 tool's (timing fields excepted) |
+| M13b | `qa --model`, A0 | 182.9 → under 140 MB |
+| M13c | `qa --model`, E | Under 170 MB |
+| M13d | `qa --model`, C1L+E | Under 200 MB |
+| M13e | `qa --save`, A0 | 187.1 → under 178 MB. The index build (174.7 MB) then sets the peak |
+| M13f | `qa --save`, E | Unchanged within 5 MB: the class build (245 MB) sets it |
+
+### M14: the lowered index freed after its last read (registered 2026-10-28, before its runs)
+
+**Why.** Served C1L+E peaked at 209.0 MB under M13 (results below), over the 200 MB target. Its loaded parts are 98 MB. A1c's lowered index is 26 MB of them. With an entity statistic in the token (C1L's `ent_title`), the token step chooses and keeps (`chosen`) the entity of every dev and test question. After that step nothing reads the index.
+
+**Change (lossless).** `entity_of` reads its kept choice first. After the token step, the index is freed when the token uses an entity statistic. With `--save` it is kept, because the store writes it later.
+
+**Predictions (registered before the runs).**
+
+| # | Run | Prediction |
+|---|---|---|
+| M14a | Every run | Every printed number and the rows file identical (timing fields excepted) |
+| M14b | `qa --model`, C1L+E | 209.0 → under 190 MB |
+| M14c | `qa`, C1L+E, no `--save` | 275.1 → under 255 MB: the class build, which sets the peak, comes after the index is freed |
+
+### Results: M10–M14 (2026-10-28)
+
+**How it was run.**
+- `cyphalm_trie qa` on the 8 MiB protocol, the default similar-context expert in every configuration.
+- The unchanged tool is main `6ad7198`, built from a frozen copy.
+- Peaks are `VmHWM` (the kernel's exact high-water mark) in kB / 1000, as in M9 and A4b. A scratch script also polled `VmRSS` every 0.25 s next to the tool's progress lines on stderr, to find the phase.
+- The machine was shared with two other agents' `qa` runs (load 4–6 on 4 cores), so wall times are noisy. Peaks are not.
+- Parity: standard output compared line by line, with only the timing fields masked (`build_s`, `LATENCY`, `SIM_LAT`'s p50 and p99). Rows files compared byte for byte.
+
+#### M10: the class table file
+
+- `ClassContext::save` / `load` and `operator==`: +145 lines in `class_context.hpp`.
+- CTest `native_class_context_test` (new): 979 checks.
+  - 16 settings: shape classes or a word table, 2 or 3 orders, full or compact storage, min_total 1 or 2.
+  - For each: build, save, load. The table must be equal in every array, and every prediction must be the same at every third position of the training text and of an unseen text.
+  - 48 one-bit flips, 6 cuts and an appended byte per file must each be refused.
+  - A planted bug (load drops the stored min_total) fails 9 checks.
+- The qa tables:
+
+| Table | Contexts | `bytes()` | File | Load |
+|---|---:|---:|---:|---:|
+| E (wiki train + chat) | 1,562,354 | 19,115,288 | 19,115,392 | 0.043 s |
+| C1L+E (with the don't-know and shard turns) | 1,596,160 | 19,537,894 | 19,537,998 | 0.037 s |
+
+- **Prediction M10: hit.** Equal tables and predictions; files 104 bytes over `bytes()`; loads under 0.1 s; damage refused.
+
+#### M11: `qa --save DIR` and `qa --model DIR`
+
+- **Code.** In `cyphalm_trie.cpp`:
+  - a store record and its helpers (`QaStore`, `qa_record`, `save_qa`, `load_qa`);
+  - `cmd_qa`: skip training, Dolly and the builds when serving; write the store after the builds.
+  - The chat block is wrapped and re-indented.
+- **Refusals** (each exits 2 with a message): `--model` with `--save`, `--fam-only`, `--fam` with `question_lp` or `ent_lp`, and `--sim` with `src=all`. A store whose record differs from the options given is refused with both records printed. A missing or damaged file is refused.
+
+**Parity.**
+
+| Configuration | Unchanged tool → `--save` | `--save` → `--model` |
+|---|---|---|
+| A0 | 496 lines identical; rows identical (521 lines, sha256 `8aa710fa…`) | 495 lines identical; rows identical. Dropped: `chat_turns` |
+| E | 594 lines identical; rows identical (1,041 lines, `b927e4a8…`) | 593 lines identical; rows identical. Dropped: `chat_turns` |
+| C1L+E | 661 lines identical; rows identical (1,041 lines, `f2389a5a…`) | 634 lines identical; rows identical. Dropped 27: `FAMSTAT` ×8, `FAMCAL` ×8, `FAMTOK` ×8, `ENTITY`, `fam_dolly`, `chat_turns` |
+
+- The served C1L+E run still prints `fam_thresholds`, `fam_dk`, `fam_dev` and the shard line, identical to the build's. Its dev tokens come from the stored cut and the loaded lowered index.
+- Stores written by two different runs (M11 and M13 tools) are byte-identical.
+
+**The stores.**
+
+| Part | A0 | E | C1L+E | Load (C1L+E) |
+|---|---:|---:|---:|---:|
+| `model.pk` | 8,106,139 | 8,106,139 | 8,360,801 | 0.020 s |
+| `ig.fm` | 27,227,720 | 27,227,720 | 28,664,760 | 0.052 s |
+| `low.fm` | | | 25,772,480 | 0.045 s |
+| `cls.cc` | | 19,115,392 | 19,537,998 | 0.037 s |
+| `qa.meta` | 443 | 455 | 623 | |
+| **All** | **35.3 MB** | **54.4 MB** | **82.3 MB** | **0.15 s** |
+
+Each file is within 0.05% of its part's `bytes()`. Loads are the fastest of five, with the files in the page cache.
+
+#### M13 and M14
+
+- **M13.** The similar-context expert is built before the per-byte holdout arrays. Each array is made only when read, and freed after its last read. +30 / −20 lines.
+- **M14.** `entity_of` reads its kept choice first. The lowered index is freed after the token step when the token uses an entity statistic. +4 lines.
+- **Parity.** Every M13 and M14 run printed the same lines as the M11 run of its configuration (timing masked), with identical rows: build and served, A0, E and C1L+E.
+
+#### Peaks and wall times
+
+| Configuration | Unchanged tool | `--save`, M11 | `--model`, M11 | `--model`, M13 (two runs) | `--save`, M13 | `--model`, M14 (two runs) |
+|---|---:|---:|---:|---:|---:|---:|
+| A0 | 186.8 MB, 922 s | 187.1, 1,017 s | 182.9, 190 s | **138.4 / 138.4**, 376 / 195 s | 175.2, 1,109 s | (as M13) |
+| E | 245.3 / 232.1 MB (two runs), 778 / 1,083 s | 225.8, 1,148 s | 201.5, 328 s | **169.4 / 169.3**, 365 / 245 s | 225.8, 802 s | (as M13) |
+| C1L+E | 275.1 MB, 1,236 s | 302.2, 1,059 s | 241.3, 235 s | 209.0 / 209.1, 226 / 215 s | 269.2, 703 s | **189.1 / 189.2**, 205 / 217 s |
+
+A0 and E take no token statistic, so M14 leaves them as M13 has them. C1L+E built without `--save` under M14 peaked at 284.5 MB (730 s), with every line and the rows identical to the unchanged tool's.
+
+**Where the memory goes.**
+- **Unchanged tool.**
+  - A0: the similar-context build on top of the holdout arrays (186.8); the index build reaches 174.7.
+  - E and C1L+E: the class build right after training (245 / 275).
+- **Served, M11.** The stored parts are 35–82 MB of files; the 8 MiB text and the question files come on top (about 100 MB in all for C1L+E). The per-byte holdout arrays then take 40 MB at once, 68 MB in all. The similar-context build then adds about 90 MB on top of them, 40 MB of it the finished index.
+- **Served, M13.**
+  - The similar-context build comes first and needs nothing else.
+  - The arrays come after it.
+  - The peak comes after that. The similar-context and copy steps each read six per-byte arrays at once (44 MB), and answering adds a little more.
+- **Served, M14.** C1L+E without the lowered index after the token step: 189 MB.
+- **Build runs vary.** The class build's peak changes from run to run with the same code and data: 245.3 and 232.1 MB for the unchanged tool on E. Whether the C library keeps the build's freed memory resident afterwards also changes: 224.6 MB resident after the build in the unchanged tool's C1L+E run, 268.8 MB in the M11 `--save` run. In the M14 build run the class build started from 92 MB resident (the unchanged tool's: 135 MB) and still peaked at 284.5 MB: it added about 190 MB, against about 140 MB in the unchanged tool's run. The cause was not found. The program runs on one thread, so the likely candidate is where the C library's heap lands from run to run. Served runs repeat to 0.1 MB.
+- **The similar-context build** takes 26–51 s of a served run: 12–16% of its wall time in all 11 served runs. After M13 it does not set the peak. So M12 (a stored similar-context index) was not built.
+
+#### Predictions, scored
+
+| # | Prediction | Result |
+|---|---|---|
+| M10 | Equal table, same predictions, file within 1 KB, load under 0.1 s, damage refused | **Hit** |
+| M11a | `--model` A0: peak 140–175 MB; wall under half the build run's | **Miss** on the peak (182.9); **hit** on time (190 against 1,017 s) |
+| M11b | `--model` E: 160–190 MB | **Miss** (201.5) |
+| M11c | `--model` C1L+E: under 200 MB | **Miss** (241.3) |
+| M11d | `--save`: same peak within 5 MB | A0 **hit** (+0.3). E and C1L+E **miss**: the build's own spread is wider (above) |
+| M11e | Files within 1%; all parts load in under 1 s | **Hit** (0.05%; 0.15 s) |
+| M12 | A stored similar-context index only if it pays | **Not built**: 12–16% of a served run's wall time, and not the peak after M13 |
+| M13a | Identical lines and rows | **Hit** |
+| M13b | `--model` A0 under 140 MB | **Hit** (138.4) |
+| M13c | `--model` E under 170 MB | **Hit** (169.4) |
+| M13d | `--model` C1L+E under 200 MB | **Miss** (209.0) |
+| M13e | `--save` A0 under 178 MB | **Hit** (175.2) |
+| M13f | `--save` E unchanged within 5 MB | **Hit** (225.8 and 225.8) |
+| M14a | Identical lines and rows | **Hit** |
+| M14b | `--model` C1L+E under 190 MB | **Hit** (189.1 / 189.2) |
+| M14c | C1L+E without `--save`: 275.1 → under 255 MB | **Miss** (284.5): the index is freed, but this run's class build added more (below) |
+
+**Decision.** By the rule (lossless, measured), M10, M11, M13 and M14 are adopted.
+- `qa` served from a store never trains or builds, apart from the similar-context index.
+- Every configuration measured is under the 200 MB target when served: A0 138, E 169, C1L+E 189 MB.
+- It is 3–5 times faster than building on this machine (190–376 s against 703–1,148 s).
+- Building a model still peaks at the class build (226–302 MB, varying by run). Building is a one-time step.
+
+**Still open.**
+- **Building** still peaks at the class build: 226–302 MB, varying by run.
+- **A served model cannot use `question_lp` or `ent_lp` tokens.** They read the wiki-stage trie with its live match table, which no stored form holds.
+- **`sample` and `chat`** serve a stored trie (M7). When the class expert becomes a default there, their `--save` / `--model` should carry its table too (`ClassContext::save` / `load`).
+- **Memory-mapping the stored files** was not tried. The data-structure cuts were enough for the target.

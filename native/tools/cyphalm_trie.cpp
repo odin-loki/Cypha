@@ -26,6 +26,11 @@
 // answer (in_answer), so answers are written without it. --no-sim leaves it out; without the file those subcommands
 // stop and say so. bpc, chat and probe never build it: bpc's lines are the trie's reference numbers, and chat and
 // probe write only answers.
+// B4C (docs/reports/B4C_ECHO_GATE.md): the class-context expert (`shape` = shape:6:3:cp2, or --cls SPEC) and the copy
+// expert (m = --copy-min, default 8; a 16,384-byte window) are defaults in qa and context8k, in the order class,
+// similar-context, copy; in sample only the copy expert is (SCRIBE v2 falls with the class expert; --cls adds it). Like
+// the similar-context expert they are off inside every answer, so answers are written without them. --no-cls and
+// --no-copy leave them out; with --no-cls --no-copy --no-sim each subcommand prints what it printed before them.
 //
 // Subcommands (stdout carries the numbers, stderr the progress):
 //   bpc [wiki] [--negative] [--no-guard]
@@ -45,11 +50,16 @@
 //   context8k [wiki] [dolly]
 //        trie_context_8k: InfiniGram (order up to 8192) mixed with the trie, BPC at five
 //        caps, matched-length histogram, 50 questions with 30 Dolly turns held out. A4: trie_plus_context_8192_sim_bpc
-//        adds the similar-context expert (lambdas on the first half; --no-sim leaves the line out).
+//        adds the similar-context expert (lambdas on the first half; --no-sim leaves the line out). B4C: the class
+//        expert (on InfiniGram's bytes) and the copy expert add lines too, each name the chain so far
+//        (trie_plus_context_8192_cls_bpc, ..._cls_sim_bpc, ..._cls_sim_copy_bpc), each expert's lambdas fit on the
+//        first half over the distribution it is mixed into.
 //   sample <wiki> <out_dev> [out_fresh] [--prompts 250] [--bytes 600] [--save FILE | --model FILE]
 //        trie_sample: wiki-only trie, 3 temperatures, no-repeat rule, files for `scribe ladder --gen-trie`.
 //        A4: with the similar-context expert (its lambdas over the trie on the first half of the holdout) the files
-//        start with a MODEL line and keep the GEN kinds; --no-sim writes the trie alone (B1's files).
+//        start with a MODEL line and keep the GEN kinds; --no-sim writes the trie alone (B1's files). B4C: the copy
+//        expert joins it, fit over trie + sim (--no-copy --no-sim writes B1's files). The class expert is not a default
+//        here, because SCRIBE v2 falls with it; --cls SPEC adds it (built on the train bytes, before the others).
 //        chat and sample: --save FILE stores the trained packed trie with its weights and split (RAM_PROFILE M7);
 //        --model FILE serves that file without training (chat then prints no mix_stored: it measures the training form).
 //   cls <wiki> <TABLE|shape>[:tail[:orders[:flags]]] [more specs] [--sim SPEC ...] [--sim-fresh] [--sim-surface]
@@ -72,7 +82,7 @@
 //   qa [wiki] [dolly] --dev DEV.tsv [--test TEST.tsv] [--leak TEST.tsv] [--out ROWS.tsv] [--base A0_ROWS.tsv]
 //      [--dk DK.tsv --dk-ratio R] [--fam none|before|after] [--parse E1.tsv] [--fam-stat NAME]
 //      [--fam-train stat|outcome|low] [--fam-only] [--copy] [--copy-min N] [--r3 PATTERNS.tsv]
-//      [--shard F.tsv] [--shard2 F.tsv] [--cls TABLE|shape[:tail[:orders[:flags]]]] [--sim SPEC]
+//      [--shard F.tsv] [--shard2 F.tsv] [--cls TABLE|shape[:tail[:orders[:flags]]]] [--sim SPEC] [--cards FILE]
 //        A0/A1 (docs/CYPHALM_ANSWERING.md §4; TOOL_PROFILE_PLAN §2): trains as chat (wiki, then
 //        two Dolly passes), optionally with don't-know turns spread at share R of all turns and a
 //        familiarity token <|fam=low|mid|high|> before (or after) "Assistant: ". CyphaLM answers
@@ -90,12 +100,15 @@
 //        in a suffix array over the lowered training bytes; its longest piece found; its trie log2 p), cuts
 //        fit on training-side entities only (wiki-train titles against the --dk entities), and --fam-stat
 //        picks the token's statistic (--fam-train outcome: training turns carry the decision instead).
-//        --copy adds the copy expert (a match over the current context, lambdas per match length fit on the
-//        holdout's first half; BPC and LCI gain on the second half) as two more models. --r3 runs statement
+//        The copy expert (B4C, a default): a match over the current context, lambdas per match length fit on the
+//        holdout's first half (BPC and LCI gain on the second half), off inside answers. --copy adds two more models
+//        whose copy expert is also on inside answers (A1c's answer copy, for comparison; with the same lambdas, so
+//        --copy-min 0 gives A1c's m 0). --no-copy leaves the default copy out. --r3 runs statement
 //        scoring with F2's patterns as frames. --shard / --shard2 add question-form fact turns (rows from the
 //        BPC holdout dropped; exits if a shard question equals a dev or test question, from --test or --leak).
-//        --cls (B4; TOOL_PROFILE P2) adds the class-context expert, built on the same bytes as InfiniGram, to every
-//        model (lambdas on the holdout's first half); with --copy the copy expert goes on after it, its lambdas fit
+//        The class-context expert (B4; TOOL_PROFILE P2; a default since B4C, --cls SPEC sets its table, --no-cls
+//        leaves it out), built on the same bytes as InfiniGram, is in every model and off inside answers (lambdas on
+//        the holdout's first half); the copy expert goes on after it, its lambdas fit
 //        over the class-mixed distribution, and cls_given_copy_lci gives the class expert's gain with copy present.
 //        --copy-min N (B4B) sets the copy lambdas of matches shorter than N bytes to 0 after fitting.
 //        A1d / A2b (docs/reports/A1D_A2B_ANSWERING_VARIANTS.md): the --parse entity column may hold several
@@ -109,6 +122,18 @@
 //        holdout's first half; SIM_NB prints the three nearest stored contexts at each dev chat prompt, LATENCY the
 //        decode time a question. The expert is a default here (spec `default`; --no-sim leaves it out); gate=0 in a
 //        spec lets it into answers, for comparison only.
+//        M11 (docs/reports/RAM_PROFILE.md): --save DIR stores the built model (packed trie, InfiniGram, the lowered
+//        index, the class table and a record of the options, each file checked); --model DIR serves it without training
+//        or building (the similar-context expert is built from its vector file). The build's calibration lines
+//        (FAMSTAT, ENTITY, FAMCAL, FAMTOK, fam_dolly, chat_turns) print at build time only; every other line and the rows
+//        file are the build's. A served model refuses other options or data, --fam-only, the token statistics that read
+//        the wiki-stage trie (question_lp, ent_lp), --sim src=all, and --cards (S1's cards map T's bytes to the chat
+//        turns, which a served model does not rebuild).
+//        S1 (docs/reports/S1_REASON_CODES_AND_EVIDENCE.md): --cards FILE writes what the system shows for each answer
+//        (a kept answer, or a don't-know with its reason code: CyphaLM's own, or the gate's on its behalf) with its
+//        evidence (where in the training text its bytes, or the question's entity, were seen: FmInfiniGram locate),
+//        REASON lines (reason codes against the reference, grading only) and FILE.audit.tsv (100 dev rows for Odin).
+//        Made after the answers and gates; the rows file is the same with and without it.
 //   simvec [wiki] --sim vec=PREFIX[,...] --out FILE
 //        A4: builds the similar-context expert of the spec over the train bytes and writes its projected word rows (int8,
 //        a scale a row) as the file the default reads.
@@ -188,6 +213,7 @@
 //   ./cyphalm_trie selftest
 
 #include "cypha/cyphalm/class_context.hpp"
+#include "cypha/cyphalm/evidence.hpp"
 #include "cypha/cyphalm/fm_infinigram.hpp"
 #include "cypha/cyphalm/packed_trie.hpp"
 #include "cypha/cyphalm/similar_context.hpp"
@@ -197,6 +223,7 @@
 #include <cctype>
 #include <chrono>
 #include <cstdio>
+#include <filesystem>
 #include <functional>
 #include <iterator>
 #include <limits>
@@ -213,6 +240,7 @@ using namespace cypha::cyphalm::trie;
 using cypha::cyphalm::ClassContext;
 using cypha::cyphalm::FmInfiniGram;
 using cypha::cyphalm::SimilarContext;
+namespace evidence = cypha::cyphalm::evidence;
 
 namespace {
 
@@ -238,11 +266,13 @@ struct Args {
     std::string parse, fam_stat = "question_lp", fam_train = "stat", r3, shard, shard2, leak;  // A1c, A3, A2
     bool copy = false, fam_only = false, mention = false;
     std::string cls;      // B4: class-context expert spec, TABLE|shape[:tail[:orders[:flags]]] (make_class_context)
-    int copy_min = 0;     // B4B: copy lambdas of match lengths below this set to 0 after fitting
+    int copy_min = 8;     // B4B: copy lambdas of match lengths below this set to 0 after fitting (B4C: 8, was 0)
     std::string model, save;  // M7: serve a stored packed trie (chat, sample); store the one just trained
     std::vector<std::string> sims;               // A4: similar-context expert specs (cls: each; qa: the first)
     bool sim_fresh = false, sim_surface = false;  // A4, cls: also the fresh text / surface S
     bool no_sim = false;                          // A4: the similar-context expert off where it is a default
+    std::string cards;                            // S1: qa's evidence cards and reason codes (--cards FILE)
+    bool no_cls = false, no_copy = false;         // B4C: the class and copy experts off where they are defaults
 };
 
 std::string env_or(const char* name, const char* fallback) {
@@ -289,10 +319,13 @@ Args parse(int argc, char** argv, int from) {
         else if (s == "--sim-fresh") a.sim_fresh = true;
         else if (s == "--sim-surface") a.sim_surface = true;
         else if (s == "--no-sim") a.no_sim = true;
+        else if (s == "--no-cls") a.no_cls = true;
+        else if (s == "--no-copy") a.no_copy = true;
         else if (s == "--fam-only") a.fam_only = true;
         else if (s == "--model") a.model = next();
         else if (s == "--save") a.save = next();
         else if (s == "--mention") a.mention = true;
+        else if (s == "--cards") a.cards = next();
         else if (s.rfind("--", 0) == 0) {
             std::cerr << "unknown option " << s << "\n";
             a.ok = false;
@@ -621,7 +654,14 @@ void fit_lambdas(const std::vector<double>& pe, const std::vector<double>& pb, c
 std::unique_ptr<SimilarContext> default_sim(const Args& a, const std::uint8_t* text, std::size_t n, int& rc);
 std::string sample_with_class(const PackedModel& model, const double w[6], std::size_t limit, const ClassContext* cc,
                               const double* lam, const std::string& prompt, int n, std::uint32_t seed,
-                              const SimilarContext* sc, const double* lsm, double temperature);
+                              const SimilarContext* sc, const double* lsm, double temperature, const double* lcp);
+// B4C, defined below with the copy and class experts: the class and copy experts where they are defaults.
+std::string default_cls_spec(const Args& a);
+std::unique_ptr<ClassContext> default_cls(const Args& a, const std::uint8_t* text, std::size_t n, int& rc);
+std::vector<double> mix_cls_into(const ClassContext& cc, const std::uint8_t* data, std::size_t train, std::size_t half,
+                                 std::vector<double>& cur);
+std::vector<double> mix_copy_into(const std::uint8_t* data, std::size_t train, std::size_t half, int m,
+                                  std::vector<double>& cur);
 
 int cmd_context8k(const Args& a) {
     const Config& cfg = a.cfg;
@@ -658,9 +698,13 @@ int cmd_context8k(const Args& a) {
     const PackedModel pm = pack(model);  // M4
     model.release();
 
-    // Index the training bytes only: wiki train + boundary + chat. No wiki holdout. The index takes T.
+    // Index the training bytes only: wiki train + boundary + chat. No wiki holdout. The index takes T, after the class
+    // expert (B4C, a default; --no-cls leaves it out) is built on the same bytes, as in qa.
     std::vector<std::uint8_t> T;
     const std::size_t all = training_text(data, cfg, T), tn = T.size();
+    int crc = 0;
+    const auto cc = default_cls(a, T.data(), T.size(), crc);
+    if (crc) return crc;
     const FmInfiniGram ig(std::move(T));
     std::cerr << "index built over " << tn << " bytes\n";
 
@@ -731,26 +775,43 @@ int cmd_context8k(const Args& a) {
             bk8k = std::move(bk);
         }
     }
-    // A4: the similar-context expert (a default; --no-sim leaves it out) over trie + InfiniGram (cap 8192), keys over
-    // the wiki train bytes, lambdas on the first half. The answers below are not touched: the expert is off inside
-    // answers (in_answer), and they are written without it.
+    // A4, B4C: the default experts over trie + InfiniGram (cap 8192), in qa's order: the class expert (built above),
+    // the similar-context expert (keys over the wiki train bytes), the copy expert (m = --copy-min, over the holdout
+    // stream). Each one's lambdas are fit on the first half over the distribution it is mixed into; its line reads the
+    // second half. --no-cls, --no-sim and --no-copy leave them out. The answers below are not touched: the experts are
+    // off inside answers (in_answer), and they are written without them.
+    std::vector<double> base(H);
+    for (std::size_t k = 0; k < H; ++k) base[k] = lam8k[bk8k[k]] * pinf8k[k] + (1 - lam8k[bk8k[k]]) * pt[k];
+    std::string chain = "trie_plus_context_8192";
+    auto chain_line = [&](const char* part) {
+        double bits = 0;
+        for (std::size_t k = half; k < H; ++k) bits += -std::log2(base[k]);
+        chain += part;
+        std::cout << chain << "_bpc " << bits / static_cast<double>(H - half) << "\n";
+    };
+    if (cc) {
+        mix_cls_into(*cc, data.data(), kTrain, half, base);
+        chain_line("_cls");
+    }
     int rc = 0;
     if (const auto sc = default_sim(a, data.data(), kTrain, rc)) {
-        std::vector<double> base(H), ps(H);
+        std::vector<double> ps(H);
         std::vector<int> sb(H);
         for (std::size_t k = 0; k < H; ++k) {
-            base[k] = lam8k[bk8k[k]] * pinf8k[k] + (1 - lam8k[bk8k[k]]) * pt[k];
             double P[256];
             sb[k] = SimilarContext::bucket(sc->predict(data.data(), kTrain + k, P));
             ps[k] = P[data[kTrain + k]];
         }
         double ls[SimilarContext::kBuckets];
         fit_lambdas(ps, base, sb, half, SimilarContext::kBuckets, ls);
-        double bits = 0;
-        for (std::size_t k = half; k < H; ++k) bits += -std::log2(ls[sb[k]] * ps[k] + (1 - ls[sb[k]]) * base[k]);
-        std::cout << "trie_plus_context_8192_sim_bpc " << bits / static_cast<double>(H - half) << "\n";
+        for (std::size_t k = 0; k < H; ++k) base[k] = ls[sb[k]] * ps[k] + (1 - ls[sb[k]]) * base[k];
+        chain_line("_sim");
     } else if (rc)
         return rc;
+    if (!a.no_copy) {
+        mix_copy_into(data.data(), kTrain, half, a.copy_min, base);
+        chain_line("_copy");
+    }
 
     const int edges[] = {4, 8, 16, 32, 64, 256, 1024, 8193};
     const char* names[] = {"<4", "4-7", "8-15", "16-31", "32-63", "64-255", "256-1023", "1024-8192"};
@@ -911,29 +972,50 @@ int cmd_sample(const Args& a) {
         if (!a.save.empty() && !save_model(a.save, pm, w, cfg)) return 1;
     }
 
-    // A4: the similar-context expert (a default; --no-sim writes the trie alone, B1's files), keys over the train
-    // bytes, its lambdas over the trie fit on the first half of the holdout. The files then start with a MODEL line.
+    // A4, B4C: the default experts (--no-sim, --no-copy leave them out; with none, the trie alone writes B1's files) in
+    // qa's order: the similar-context expert with keys over the train bytes, then the copy expert (m = --copy-min). The
+    // class expert is not a default here (B4C: SCRIBE v2 falls with it); --cls SPEC adds it first, built on the train
+    // bytes. Each one's lambdas are fit on the first half of the holdout over the trie with the experts before it. The
+    // files then start with a MODEL line.
     int rc = 0;
+    std::unique_ptr<ClassContext> cc;
+    if (!a.cls.empty()) cc = default_cls(a, data.data(), cfg.train, rc);
+    if (rc) return rc;
     const auto sc = default_sim(a, data.data(), cfg.train, rc);
     if (rc) return rc;
     double lsm[SimilarContext::kBuckets] = {0};
-    if (sc) {
+    std::vector<double> lcl, lcp;
+    if (cc || sc || !a.no_copy) {
         const std::size_t half = (cfg.sample - cfg.train) / 2;
-        std::vector<double> pt(half), ps(half);
-        std::vector<int> sb(half);
+        std::vector<double> pt(half);
         for (std::size_t k = 0; k < half; ++k) {
             const std::size_t i = cfg.train + k;
-            double e[5][256], M[256], P[256];
+            double e[5][256], M[256];
             bool em = false;
             unsigned pred = 0;
             pm.fill_experts(data.data(), i, cfg.train, Mode::Synth, e, em, pred, false);
             mix_dist(w, e, em, pred, M);
             pt[k] = M[data[i]];
-            sb[k] = SimilarContext::bucket(sc->predict(data.data(), i, P));
-            ps[k] = P[data[i]];
         }
-        fit_lambdas(ps, pt, sb, half, SimilarContext::kBuckets, lsm);
+        if (cc) lcl = mix_cls_into(*cc, data.data(), cfg.train, half, pt);
+        if (sc) {
+            std::vector<double> ps(half);
+            std::vector<int> sb(half);
+            for (std::size_t k = 0; k < half; ++k) {
+                double P[256];
+                sb[k] = SimilarContext::bucket(sc->predict(data.data(), cfg.train + k, P));
+                ps[k] = P[data[cfg.train + k]];
+            }
+            fit_lambdas(ps, pt, sb, half, SimilarContext::kBuckets, lsm);
+            for (std::size_t k = 0; k < half; ++k) pt[k] = lsm[sb[k]] * ps[k] + (1 - lsm[sb[k]]) * pt[k];
+        }
+        if (!a.no_copy) lcp = mix_copy_into(data.data(), cfg.train, half, a.copy_min, pt);
     }
+    const bool experts = cc || sc || !lcp.empty();
+    std::string model_line = std::string("MODEL\ttrie") + (cc ? "+cls" : "") + (sc ? "+sim" : "") + (lcp.empty() ? "" : "+copy") +
+                             "\t" + (sc ? (a.sims.empty() ? std::string("default") : a.sims[0]) : std::string("-"));
+    if (cc) model_line += "\tcls=" + default_cls_spec(a);
+    if (!lcp.empty()) model_line += "\tcopy_min=" + std::to_string(a.copy_min);
     const double temps[3] = {0.6, 0.8, 1.0};
     for (std::size_t f = 0; f < nfiles; ++f) {
         std::ofstream out(a.outs[f]);
@@ -941,7 +1023,7 @@ int cmd_sample(const Args& a) {
             std::cerr << "cannot write " << a.outs[f] << "\n";
             return 1;
         }
-        if (sc) out << "MODEL\ttrie+sim\t" << (a.sims.empty() ? std::string("default") : a.sims[0]) << "\n";
+        if (experts) out << model_line << "\n";
         for (int k = 0; k < a.prompts; ++k) {
             const std::size_t id = f * static_cast<std::size_t>(a.prompts) + static_cast<std::size_t>(k);
             const std::string& p = prompts[id];
@@ -953,8 +1035,9 @@ int cmd_sample(const Args& a) {
                 opt.no_repeat = true;
                 const auto seed32 = static_cast<std::uint32_t>(seed ^ (seed >> 32));
                 const std::string text =
-                    sc ? sample_with_class(pm, w, cfg.train, nullptr, nullptr, p, a.bytes, seed32, sc.get(), lsm, temps[ti])
-                       : sample_continuation(pm, w, p, cfg.train, a.bytes, seed32, opt);
+                    experts ? sample_with_class(pm, w, cfg.train, cc.get(), lcl.empty() ? nullptr : lcl.data(), p, a.bytes,
+                                                seed32, sc.get(), lsm, temps[ti], lcp.empty() ? nullptr : lcp.data())
+                            : sample_continuation(pm, w, p, cfg.train, a.bytes, seed32, opt);
                 char kind[32];
                 std::snprintf(kind, sizeof kind, "trie_T%.1f", temps[ti]);
                 out << "GEN\t" << kind << "\t" << printable(text) << "\n";
@@ -1100,10 +1183,53 @@ std::string dont_know_text(const std::string& entity, const std::string& rel, co
            " entity=\"" + entity + "\" relation=" + rel + " gap=" + gap_id(entity, rel) + "|>";
 }
 
+// S1 (DISCOVERY 3.1, 3.5, 12 I3; docs/reports/S1_REASON_CODES_AND_EVIDENCE.md): the codes, the gate's message, and what
+// the system shows for one answer.
+const char* const kReasonCodes[] = {"OUT_OF_SCOPE",     "UNPARSEABLE", "AMBIGUOUS_QUESTION", "UNKNOWN_ENTITY",
+                                    "AMBIGUOUS_ENTITY", "NO_EVIDENCE", "CONFLICT",           "LOW_CERTAINTY",
+                                    "STALE",            "BEYOND_DEPTH", "HYPOTHESIS_ONLY"};
+bool known_code(const std::string& c) {
+    return std::find(std::begin(kReasonCodes), std::end(kReasonCodes), c) != std::end(kReasonCodes);
+}
+
+// The gate's message and tag, written on CyphaLM's behalf (DISCOVERY 3.5). UNKNOWN_ENTITY's is the training rows' text.
+std::string gate_message(const std::string& entity, const std::string& rel, const std::string& code) {
+    if (code == "UNKNOWN_ENTITY") return dont_know_text(entity, rel, code);
+    const std::string why =
+        code == "NO_EVIDENCE" ? "I have read about " + entity + ", but not this." : std::string("I am not sure enough to answer.");
+    return "I don't know. " + why + " <|unknown reason=" + code + " entity=\"" + entity + "\" relation=" + rel +
+           " gap=" + gap_id(entity, rel) + "|>";
+}
+
+// What the system shows for one answer. A kept answer stands. Anything else says it does not know, with a code:
+// CyphaLM's own message keeps its own code; when that message has no readable code, the gate's code completes it
+// (by cyphalm+gate); an answer the gate does not keep, or no answer, becomes the gate's message (by gate). I3: whenever
+// the gate does not keep an answer, the card is a don't-know with a known code (given a known gate_code).
+struct Card {
+    std::string kind, by, code, text;
+};
+Card final_card(const std::string& answer, bool kept, const std::string& gate_code, const std::string& entity,
+                const std::string& rel) {
+    if (is_dont_know(answer)) {
+        const std::string c = tag_field(answer, "reason");
+        if (known_code(c)) return {"dont_know", "cyphalm", c, answer};
+        return {"dont_know", "cyphalm+gate", gate_code, answer};
+    }
+    if (kept && !answer.empty()) return {"answer", "cyphalm", "", answer};
+    return {"dont_know", "gate", gate_code, gate_message(entity, rel, gate_code)};
+}
+
+// The reference code (grading only; slice meaning): not in the slice, UNKNOWN_ENTITY; in it, LOW_CERTAINTY when the fact
+// is in what it read (a gold answer in the source article, or the shard's entity and relation), else NO_EVIDENCE.
+std::string reference_code(int in_slice, int prose, int covered) {
+    return !in_slice ? "UNKNOWN_ENTITY" : (prose == 1 || covered == 2) ? "LOW_CERTAINTY" : "NO_EVIDENCE";
+}
+
 // Copy expert (A1c, PLAN B9): the longest suffix of s[0..i), 3 to 64 bytes, that also ends at an earlier j inside the
-// last 4,096 bytes of the current context (the prompt and the answer so far, or the stream being scored). It predicts
-// s[j], from the most recent of the longest matches. Returns -1 (n = 0) when there is none.
-constexpr std::size_t kCopyWin = 4096;
+// last 16,384 bytes of the current context (the prompt and the answer so far, or the stream being scored). It predicts
+// s[j], from the most recent of the longest matches. Returns -1 (n = 0) when there is none. The window was 4,096 bytes
+// until B4C (B4B chose 16,384; a Q/A prompt and its answer fit inside either).
+constexpr std::size_t kCopyWin = 16384;
 constexpr int kCopyBuckets = 8;
 int copy_pred(const std::uint8_t* s, std::size_t i, int& n) {
     n = 0;
@@ -1151,6 +1277,43 @@ void fit_lambdas(const std::vector<double>& pe, const std::vector<double>& pb, c
             }
         }
     }
+}
+
+// B4C: one default expert mixed into cur, where cur[k] is a distribution's probability of the true byte data[train + k]:
+// the expert's lambdas are fit on k < half over cur (the copy expert's then zeroed below a match of m bytes), and cur
+// becomes lam pe + (1 - lam) cur. Returns the lambdas, one a bucket.
+std::vector<double> mix_into(const std::vector<double>& pe, const std::vector<int>& bk, std::size_t half, int nb,
+                             std::vector<double>& cur, int copy_m = -1) {
+    std::vector<double> lam(static_cast<std::size_t>(nb), 0.0);
+    fit_lambdas(pe, cur, bk, half, nb, lam.data());
+    if (copy_m >= 0) copy_clip(lam.data(), copy_m);
+    for (std::size_t k = 0; k < cur.size(); ++k) {
+        const double l = lam[static_cast<std::size_t>(bk[k])];
+        cur[k] = l * pe[k] + (1 - l) * cur[k];
+    }
+    return lam;
+}
+std::vector<double> mix_cls_into(const ClassContext& cc, const std::uint8_t* data, std::size_t train, std::size_t half,
+                                 std::vector<double>& cur) {
+    std::vector<double> pe(cur.size());
+    std::vector<int> bk(cur.size());
+    for (std::size_t k = 0; k < cur.size(); ++k) {
+        double P[256];
+        bk[k] = ClassContext::bucket(cc.predict(data, train + k, P));
+        pe[k] = P[data[train + k]];
+    }
+    return mix_into(pe, bk, half, ClassContext::kBuckets, cur);
+}
+std::vector<double> mix_copy_into(const std::uint8_t* data, std::size_t train, std::size_t half, int m,
+                                  std::vector<double>& cur) {
+    std::vector<double> pe(cur.size());
+    std::vector<int> bk(cur.size());
+    for (std::size_t k = 0; k < cur.size(); ++k) {
+        int n = 0;
+        pe[k] = copy_pred(data, train + k, n) == data[train + k] ? 1.0 : 0.0;
+        bk[k] = copy_bucket(n);
+    }
+    return mix_into(pe, bk, half, kCopyBuckets, cur, m);
 }
 
 // B4: the class-context expert from "TABLE[:tail[:orders[:flags]]]": TABLE a word<TAB>class file, or "shape" (shape
@@ -1205,6 +1368,25 @@ std::unique_ptr<ClassContext> make_class_context(const std::string& spec) {
         }
     }
     return std::make_unique<ClassContext>(std::move(cls), o);
+}
+
+// B4C: the class-context expert where it is a default (qa, context8k; sample only with --cls): --cls SPEC, else
+// `shape`. Built on text[0, n). nullptr with rc 0 under --no-cls; nullptr with rc 1 for a bad spec.
+std::string default_cls_spec(const Args& a) { return a.no_cls ? std::string() : a.cls.empty() ? std::string("shape") : a.cls; }
+std::unique_ptr<ClassContext> default_cls(const Args& a, const std::uint8_t* text, std::size_t n, int& rc) {
+    rc = 0;
+    const std::string spec = default_cls_spec(a);
+    if (spec.empty()) return nullptr;
+    auto cc = make_class_context(spec);
+    if (!cc) {
+        rc = 1;
+        return nullptr;
+    }
+    const auto t0 = std::chrono::steady_clock::now();
+    cc->build(text, n);
+    std::cerr << "class expert " << spec << " contexts " << cc->contexts() << " table_bytes " << cc->bytes() << " build_s "
+              << std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count() << "\n";
+    return cc;
 }
 
 // A4: the similar-context expert from "vec=PREFIX[,W=8][,k=32][,T=0.05][,min=-1][,sif=1][,dim=64][,drop=1][,lists=512]
@@ -1333,6 +1515,9 @@ bool in_answer(const std::vector<std::uint8_t>& seq, std::size_t answer_at) {
 // CyphaLM's next-byte distribution: the frozen trie mixture, optionally mixed with InfiniGram
 // (context8k: P = lam[b] P_ctx + (1 - lam[b]) P_trie, one lam per match-length x count bucket),
 // then optionally with the copy expert (P = lc[b] [pred] + (1 - lc[b]) P, one lc per match-length bucket).
+// B4C: the class expert (cls_gate) and the default copy expert (lc_out) are off inside an answer, as the
+// similar-context expert is (sim_gate). lc is the copy expert inside answers too (qa's --copy models, A1c); decode's
+// no-repeat rule reads lc, so the gated copy has its own pointer.
 struct Lm {
     const Model* model = nullptr;  // the training form (qa's wiki stage); not read when packed is set
     const double* w = nullptr;
@@ -1350,6 +1535,8 @@ struct Lm {
     mutable FmInfiniGram::Cursor cur{};   // M5: InfiniGram's last match, for the next byte of the same text
     bool sim_gate = false;                // A4: the similar-context expert off inside an answer (in_answer)
     std::size_t answer_at = std::string::npos;  // A4: where the answer starts (decode sets it to the prompt's end)
+    bool cls_gate = false;                // B4C: the class expert off inside an answer
+    const double* lc_out = nullptr;       // B4C: the copy expert's lambdas, outside answers only (when lc is null)
     // hint: the previous step's match length (-1 at a new sequence); n_out: this step's.
     void dist(const std::vector<std::uint8_t>& seq, int& hint, double* P, int* n_out = nullptr) const {
         double e[5][256];
@@ -1370,20 +1557,22 @@ struct Lm {
                 P[s] = l * pc + (1 - l) * P[s];
             }
         }
-        if (cc) {
+        const bool ans = ((cc && cls_gate) || (sc && sim_gate) || (lc_out && !lc)) && in_answer(seq, answer_at);
+        if (cc && !(cls_gate && ans)) {
             double Pc[256];
             const double l = lcls[ClassContext::bucket(cc->predict(seq.data(), seq.size(), Pc))];
             for (int s = 0; s < 256; ++s) P[s] = l * Pc[s] + (1 - l) * P[s];
         }
-        if (sc && !(sim_gate && in_answer(seq, answer_at))) {
+        if (sc && !(sim_gate && ans)) {
             double Ps[256];
             const double l = lsim[SimilarContext::bucket(sc->predict(seq.data(), seq.size(), Ps))];
             for (int s = 0; s < 256; ++s) P[s] = l * Ps[s] + (1 - l) * P[s];
         }
+        const double* lcp = lc ? lc : ans ? nullptr : lc_out;
         int n = 0;
-        const int c = lc ? copy_pred(seq.data(), seq.size(), n) : -1;
+        const int c = lcp ? copy_pred(seq.data(), seq.size(), n) : -1;
         if (c < 0) return;
-        const double l = lc[copy_bucket(n)];
+        const double l = lcp[copy_bucket(n)];
         for (int s = 0; s < 256; ++s) P[s] *= 1 - l;
         P[c] += l;
     }
@@ -1429,7 +1618,8 @@ void print_boot(const std::string& name, const Boot& b) {
 
 std::string sample_with_class(const PackedModel& model, const double w[6], std::size_t limit, const ClassContext* cc,
                               const double* lam, const std::string& prompt, int n, std::uint32_t seed,
-                              const SimilarContext* sc = nullptr, const double* lsm = nullptr, double temperature = 0.8) {
+                              const SimilarContext* sc = nullptr, const double* lsm = nullptr, double temperature = 0.8,
+                              const double* lcp = nullptr) {
     std::vector<std::uint8_t> seq(prompt.begin(), prompt.end());
     std::mt19937 rng(seed);
     std::uniform_real_distribution<double> U(0.0, 1.0);
@@ -1448,6 +1638,13 @@ std::string sample_with_class(const PackedModel& model, const double w[6], std::
             double P[256];
             const double l = lsm[SimilarContext::bucket(sc->predict(seq.data(), seq.size(), P))];
             for (int s = 0; s < 256; ++s) M[s] = l * P[s] + (1 - l) * M[s];
+        }
+        int cn = 0;
+        const int c = lcp ? copy_pred(seq.data(), seq.size(), cn) : -1;
+        if (c >= 0) {  // B4C: the copy expert, mixed last
+            const double l = lcp[copy_bucket(cn)];
+            for (int s = 0; s < 256; ++s) M[s] *= 1 - l;
+            M[c] += l;
         }
         bool banned[256];
         mark_banned(seq, banned);
@@ -2173,6 +2370,7 @@ struct QaOpts {
     std::string cls;
     int copy_min = 0;
     std::string sim;  // A4: similar-context expert spec
+    bool copy_out = false;  // B4C: the default copy expert, off inside answers
 };
 
 constexpr int kFeat = 5;
@@ -2525,8 +2723,381 @@ std::size_t shard_leaks(const std::vector<DkRow>& rows, const std::vector<std::s
     return n;
 }
 
+// M11 (docs/reports/RAM_PROFILE.md): a stored qa model, so serving never trains or builds. `qa --save DIR` writes
+// model.pk (the packed chat-stage trie, its weights and split, M7), ig.fm (InfiniGram over T, M8), low.fm (A1c's
+// lowered index, with --parse), cls.cc (the class table, M10, with --cls) and qa.meta: the record of what the model
+// was built from, the wiki-stage weights, the follower limit and the familiarity cuts, as text (exact hex doubles)
+// with an FNV-1a 64 checksum. `qa --model DIR` loads them, and refuses a store whose record differs.
+struct QaStore {
+    double wf[6] = {0, 0, 0, 0, 0, 0};
+    std::size_t all_followers = 0;
+    std::array<double, kFam> fam_cut{};
+    std::unique_ptr<FmInfiniGram> ig, low;
+    std::unique_ptr<ClassContext> cc;
+};
+
+std::uint64_t fnv64(std::string_view s) {
+    std::uint64_t h = 14695981039346656037ull;
+    for (const char c : s) h = (h ^ static_cast<unsigned char>(c)) * 1099511628211ull;
+    return h;
+}
+
+// What a qa model is built from: the split, the wiki bytes it reads, and the options that shape the training text,
+// the tokens and the class table.
+std::string qa_record(const Args& a, const QaOpts& o, const std::vector<std::uint8_t>& data) {
+    std::ostringstream s;
+    s << "train=" << a.cfg.train << " sample=" << a.cfg.sample << " wiki_fnv=" << std::hex
+      << fnv64(std::string_view(reinterpret_cast<const char*>(data.data()), std::min(data.size(), a.cfg.sample))) << std::dec
+      << " dolly=" << a.dolly << " dk=" << o.dk << " dk_ratio=" << o.dk_ratio << " fam=" << o.fam << " fam_stat=" << o.fam_stat
+      << " fam_train=" << o.fam_train << " parse=" << o.parse << " shard=" << o.shard << " shard2=" << o.shard2 << " cls=" << o.cls;
+    return s.str();
+}
+
+bool save_qa(const std::string& dir, const std::string& record, const PackedModel& pm, const double w[6], const Config& cfg,
+             const double wf[6], std::size_t all_followers, const std::array<double, kFam>& fam_cut, const FmInfiniGram& ig,
+             const FmInfiniGram* low, const ClassContext* cc) {
+    try {
+        std::filesystem::create_directories(dir);
+        pm.save(dir + "/model.pk", w, cfg);
+        ig.save(dir + "/ig.fm");
+        if (low) low->save(dir + "/low.fm");
+        if (cc) cc->save(dir + "/cls.cc");
+        std::ostringstream m;
+        auto reals = [&m](const double* x, std::size_t n) {
+            for (std::size_t i = 0; i < n; ++i) {
+                char b[48];
+                std::snprintf(b, sizeof b, " %a", x[i]);
+                m << (std::isnan(x[i]) ? " nan" : b);
+            }
+        };
+        m << "cypha-qa-store 1\nrecord " << record << "\nwiki_weights";
+        reals(wf, 6);
+        m << "\nfollower_limit " << all_followers << "\nfam_cut";
+        reals(fam_cut.data(), fam_cut.size());
+        m << "\nparts model.pk ig.fm" << (low ? " low.fm" : "") << (cc ? " cls.cc" : "") << "\n";
+        const std::string body = m.str();
+        std::ofstream f(dir + "/qa.meta", std::ios::binary);
+        f << body << "fnv " << std::hex << fnv64(body) << "\n";
+        f.close();
+        if (!f) throw std::runtime_error("cannot write " + dir + "/qa.meta");
+    } catch (const std::exception& e) {
+        std::cerr << "qa --save: " << e.what() << "\n";
+        return false;
+    }
+    std::cerr << "stored the qa model in " << dir << "\n";
+    return true;
+}
+
+bool load_qa(const std::string& dir, const std::string& record, const QaOpts& o, const Config& cfg, PackedModel& pm,
+             double w[6], QaStore& st) {
+    try {
+        std::ifstream f(dir + "/qa.meta", std::ios::binary);
+        if (!f) throw std::runtime_error("cannot open " + dir + "/qa.meta");
+        const std::string text((std::istreambuf_iterator<char>(f)), {});
+        const std::size_t at = text.rfind("fnv ");
+        if (text.rfind("cypha-qa-store 1\n", 0) != 0 || at == std::string::npos ||
+            std::strtoull(text.c_str() + at + 4, nullptr, 16) != fnv64(std::string_view(text).substr(0, at)))
+            throw std::runtime_error(dir + "/qa.meta is not a stored qa model, or it is damaged");
+        std::map<std::string, std::string> kv;
+        std::istringstream in(text.substr(0, at));
+        for (std::string line; std::getline(in, line);)
+            if (const std::size_t sp = line.find(' '); sp != std::string::npos) kv[line.substr(0, sp)] = line.substr(sp + 1);
+        if (kv["record"] != record)
+            throw std::runtime_error("the store was built from other options or data\n  stored: " + kv["record"] +
+                                     "\n  given:  " + record);
+        auto reals = [&](const std::string& k, double* x, std::size_t n) {
+            std::istringstream s(kv[k]);
+            std::size_t i = 0;
+            for (std::string t; i < n && s >> t; ++i) x[i] = t == "nan" ? std::nan("") : std::strtod(t.c_str(), nullptr);
+            if (i != n) throw std::runtime_error(dir + "/qa.meta: bad " + k);
+        };
+        reals("wiki_weights", st.wf, 6);
+        reals("fam_cut", st.fam_cut.data(), st.fam_cut.size());
+        st.all_followers = static_cast<std::size_t>(std::strtoull(kv["follower_limit"].c_str(), nullptr, 10));
+        Config c = cfg;
+        pm = PackedModel::load(dir + "/model.pk", w, c);
+        if (c.train != cfg.train || c.sample != cfg.sample) throw std::runtime_error(dir + "/model.pk has another split");
+        st.ig = std::make_unique<FmInfiniGram>(FmInfiniGram::load(dir + "/ig.fm"));
+        if (!o.parse.empty()) st.low = std::make_unique<FmInfiniGram>(FmInfiniGram::load(dir + "/low.fm"));
+        if (!o.cls.empty()) st.cc = std::make_unique<ClassContext>(ClassContext::load(dir + "/cls.cc"));
+    } catch (const std::exception& e) {
+        std::cerr << "qa --model: " << e.what() << "\n";
+        return false;
+    }
+    std::cerr << "served from " << dir << ": no training, no index or class build\n";
+    return true;
+}
+
+// ---------------------------------------------------------------- S1: evidence cards (qa --cards FILE)
+//
+// Made after a set's answers and gates, from those decisions only: nothing here feeds an answer, a gate or a tag. One
+// card a question, form and model: what the system shows (final_card) and its evidence (evidence.hpp). For an answer:
+// the longest suffix of prompt + answer in qa's training text T, its count and its places. For a don't-know: the
+// question's entity (E1's choice) in A1c's lowered training bytes, its page-title and mention counts and places.
+// Gates: on dev each question's 5-fold CV gate, as qa's CV lines; on test the gate chosen on all of dev.
+// Gate codes: G0 LOW_CERTAINTY; G1 UNKNOWN_ENTITY when the familiarity token is low, else LOW_CERTAINTY; G2
+// UNKNOWN_ENTITY when the entity has no page title and fewer than c mentions, else LOW_CERTAINTY, c by 5-fold CV on the
+// audit rows. G1x and G2x (reported only) also replace CyphaLM's own code with G1's or G2's.
+// REASON lines (stdout): per rule, the don't-know cards whose code is the reference (reference_code, grading only).
+// Dev also writes FILE.audit.tsv: 100 dev questions drawn before any run, chat form, trie + InfiniGram, for Odin.
+// The rule the cards carry, chosen on dev (2026-10-28): G0. On the audit rows G0 and G2 are right on 82 of 100 and G1
+// on 81; G2's CV estimate is 81, and G0 has no parameter.
+constexpr const char* kCardRule = "G0";
+constexpr int kAuditLm = 1;              // trie_ig
+const std::size_t kG2Cuts[] = {1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, std::numeric_limits<std::size_t>::max()};
+
+struct CardContext {
+    FmInfiniGram* ig = nullptr;   // T (wiki train + chat); locate is built on first use
+    FmInfiniGram* low = nullptr;  // A1c's lowered training bytes (wiki train + Dolly); null without --parse
+    evidence::Sources t_src, low_src;
+    std::function<std::string(const std::string&)> entity_of;
+    std::function<std::string(int, const QaRow&, const std::string&)> prompt;  // (form, row, token): decode's prompt
+    const char* const* lm_name = nullptr;
+    int nlm = 0;
+    std::string path;
+    std::size_t g2_cut = std::numeric_limits<std::size_t>::max();  // chosen on dev
+    double locate_s = 0;
+};
+
+// T's sources: wiki pages, the document boundary, then the chat turns (kind shard, dk or dolly).
+void card_sources_t(CardContext& cx, const std::vector<std::uint8_t>& data, std::size_t train, const std::string& chat,
+                    const std::vector<DkRow>& sh1, const std::vector<DkRow>& sh2) {
+    std::set<std::string> shard_q;
+    for (const auto* v : {&sh1, &sh2})
+        for (const auto& r : *v) shard_q.insert(r.q);
+    cx.t_src.add_pages(data.data(), train);
+    cx.t_src.add(train, "boundary");
+    cx.t_src.add_turns(chat, train + std::strlen(kDocBoundary), [&](const std::string& turn) {
+        const std::size_t nl = turn.find('\n');
+        if (shard_q.count(turn.substr(6, nl == std::string::npos ? std::string::npos : nl - 6))) return std::string("shard");
+        const std::size_t as = turn.find("Assistant: ");
+        return std::string(as != std::string::npos && turn.find("I don't know.", as) != std::string::npos ? "dk" : "dolly");
+    });
+}
+
+// The lowered index's sources (A1c: wiki train, a newline, then the Dolly text, which is read again here).
+void card_sources_low(CardContext& cx, const Args& a, const std::vector<std::uint8_t>& data, std::size_t train) {
+    std::vector<Turn> turns;
+    const std::string dolly = load_dolly(a.dolly, turns);
+    cx.low_src.add_pages(data.data(), train);
+    cx.low_src.add_turns(dolly, train + 1, [](const std::string&) { return std::string("dolly"); });  // same offsets lowered
+}
+
+// The audit rows: 100 of n, drawn with mt19937_64(20261028) (Fisher-Yates, the same on every platform), in row order.
+std::vector<std::size_t> audit_rows(std::size_t n) {
+    std::vector<std::size_t> idx(n);
+    std::iota(idx.begin(), idx.end(), 0);
+    std::mt19937_64 rng(20261028);
+    for (std::size_t i = n; i > 1; --i) std::swap(idx[i - 1], idx[rng() % i]);
+    idx.resize(std::min<std::size_t>(100, n));
+    std::sort(idx.begin(), idx.end());
+    return idx;
+}
+
+void write_cards(CardContext& cx, const char* set, const std::vector<QaRow>& rows, const std::vector<Graded>& gs,
+                 const std::vector<std::string>& toks, const std::vector<Gate>* full_gates) {
+    const bool dev = full_gates == nullptr;
+    auto t0 = std::chrono::steady_clock::now();
+    for (FmInfiniGram* ix : {cx.ig, cx.low})
+        if (ix && !ix->can_locate()) ix->build_locate();
+    cx.locate_s += std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+    t0 = std::chrono::steady_clock::now();
+    std::map<std::tuple<int, int, int>, Gate> cv;  // dev: (form, model, fold) -> the gate chosen on the other folds
+    for (int form = 0; dev && form < 2; ++form)
+        for (int l = 0; l < cx.nlm; ++l)
+            for (int fold = 0; fold < 5; ++fold) {
+                std::vector<const Graded*> tr;
+                for (const auto& g : gs)
+                    if (g.form == form && g.lm == l && g.row % 5 != fold) tr.push_back(&g);
+                cv[{form, l, fold}] = choose_gate(tr, l % 2 == 1);
+            }
+    auto gate_of = [&](const Graded& g) {
+        return dev ? cv[{g.form, g.lm, g.row % 5}] : (*full_gates)[static_cast<std::size_t>(g.form * cx.nlm + g.lm)];
+    };
+    struct Q {
+        std::string e, rel, ev;
+        std::size_t titles = 0, mentions = 0;
+        bool low_tok = false;
+    };
+    std::vector<Q> qs(rows.size());
+    for (std::size_t r = 0; r < rows.size(); ++r) {
+        Q& q = qs[r];
+        q.e = cx.entity_of(rows[r].q);
+        q.rel = question_relation(rows[r].q, q.e);
+        q.low_tok = toks[r].find("fam=low") != std::string::npos;
+        q.ev = "entity=\"" + q.e + "\"";
+        const std::string el = lowered(strip_article(q.e));
+        if (cx.low && !el.empty()) {
+            const auto m = evidence::occurrences(*cx.low, cx.low_src, el);
+            q.titles = evidence::occurrences(*cx.low, cx.low_src, "<title>" + el + "</title>", 0).count;
+            q.mentions = m.count;
+            q.ev += " titles " + std::to_string(q.titles) + " mentions " + std::to_string(q.mentions);
+            for (const auto& p : m.places) q.ev += " | " + p;
+        }
+    }
+    auto rule_code = [&](const Q& q, const std::string& rule, std::size_t cut) -> std::string {
+        if (rule == "G0") return "LOW_CERTAINTY";
+        const bool unknown = rule == "G2" && cx.low ? q.titles == 0 && q.mentions < cut : q.low_tok;
+        return unknown ? "UNKNOWN_ENTITY" : "LOW_CERTAINTY";
+    };
+    // The card under a rule (G1x, G2x: G1, G2, and CyphaLM's own code replaced too; reported only).
+    auto card_of = [&](const Graded& g, const std::string& rule, std::size_t cut) {
+        const Q& q = qs[static_cast<std::size_t>(g.row)];
+        const bool over = rule.back() == 'x';
+        const std::string gc = rule_code(q, over ? rule.substr(0, 2) : rule, cut);
+        Card c = final_card(g.ans.text, gated_answer(g, gate_of(g)), gc, q.e, q.rel);
+        if (over && c.kind == "dont_know") c.code = gc;
+        return c;
+    };
+    // Tally of don't-know cards: n, right (the reference code), lenient right (in the slice: NO_EVIDENCE or
+    // LOW_CERTAINTY), and the same for CyphaLM's own codes and the gate's.
+    struct T {
+        int n = 0, right = 0, lenient = 0, own = 0, own_right = 0, gate = 0, gate_right = 0;
+    };
+    auto tally = [&](const std::vector<const Graded*>& v, const std::string& rule, std::size_t cut) {
+        T t;
+        for (auto* g : v) {
+            const Card c = card_of(*g, rule, cut);
+            if (c.kind != "dont_know") continue;
+            const QaRow& r = rows[static_cast<std::size_t>(g->row)];
+            const bool ok = c.code == reference_code(r.in_slice, g->prose, g->covered);
+            ++t.n, t.right += ok;
+            t.lenient += r.in_slice ? (c.code == "NO_EVIDENCE" || c.code == "LOW_CERTAINTY") : c.code == "UNKNOWN_ENTITY";
+            (c.by == "cyphalm" ? t.own : t.gate)++;
+            (c.by == "cyphalm" ? t.own_right : t.gate_right) += ok;
+        }
+        return t;
+    };
+    auto print_t = [](const std::string& label, const T& t) {  // std::cout only: qa runs without stdio sync
+        char b[512];
+        std::snprintf(b, sizeof b,
+                      " dont_know %d right %d rate %.4f wilson95 %.4f %.4f lenient %d | cyphalm_code %d right %d | "
+                      "gate_code %d right %d\n",
+                      t.n, t.right, t.n ? static_cast<double>(t.right) / t.n : 0.0, wilson_lo(t.right, t.n),
+                      wilson_hi(t.right, t.n), t.lenient, t.own, t.own_right, t.gate, t.gate_right);
+        std::cout << label << b;
+    };
+    auto cut_name = [](std::size_t c) { return c == kG2Cuts[11] ? std::string("inf") : std::to_string(c); };
+    auto group = [&](int form, int l, const std::vector<std::size_t>* only) {
+        std::vector<const Graded*> v;
+        for (const auto& g : gs)
+            if (g.form == form && g.lm == l &&
+                (!only || std::binary_search(only->begin(), only->end(), static_cast<std::size_t>(g.row))))
+                v.push_back(&g);
+        return v;
+    };
+    const auto audit = audit_rows(rows.size());
+    if (dev) {  // G2's cut: 5-fold CV over the audit rows (fold = row % 5), then chosen on all of them; ties: the larger
+        const auto v = group(0, kAuditLm, &audit);
+        auto best_cut = [&](int skip) {
+            std::size_t best = kG2Cuts[0];
+            int br = -1;
+            for (std::size_t c : kG2Cuts) {
+                std::vector<const Graded*> tr;
+                for (auto* g : v)
+                    if (g->row % 5 != skip) tr.push_back(g);
+                const int r = tally(tr, "G2", c).right;
+                if (r >= br) br = r, best = c;
+            }
+            return best;
+        };
+        T cvt;
+        std::cout << "REASON_G2_CV cuts";
+        for (int fold = 0; fold < 5; ++fold) {
+            const std::size_t c = best_cut(fold);
+            std::vector<const Graded*> te;
+            for (auto* g : v)
+                if (g->row % 5 == fold) te.push_back(g);
+            const T t = tally(te, "G2", c);
+            cvt.n += t.n, cvt.right += t.right, cvt.lenient += t.lenient, cvt.own += t.own, cvt.own_right += t.own_right,
+                cvt.gate += t.gate, cvt.gate_right += t.gate_right;
+            std::cout << " " << cut_name(c);
+        }
+        std::cout << "\n";
+        print_t("REASON_AUDIT dev chat/trie_ig G2_cv", cvt);
+        cx.g2_cut = best_cut(-1);
+        std::cout << "REASON_G2 cut " << cut_name(cx.g2_cut) << " (all audit rows)\n";
+    }
+    for (const char* rule : {"G0", "G1", "G2", "G1x", "G2x"}) {
+        if (dev) print_t(std::string("REASON_AUDIT dev chat/trie_ig ") + rule, tally(group(0, kAuditLm, &audit), rule, cx.g2_cut));
+        for (int form = 0; form < 2; ++form)
+            for (int l = 0; l < cx.nlm; ++l)
+                print_t(std::string("REASON ") + set + " " + (form ? "wiki/" : "chat/") + cx.lm_name[l] + " " + rule,
+                        tally(group(form, l, nullptr), rule, cx.g2_cut));
+    }
+    // The cards, under kCardRule.
+    std::ofstream out(cx.path, dev ? std::ios::trunc : std::ios::app);
+    if (dev) out << "set\trow\tform\tlm\tkind\tby\tcode\tgate\tentity\trelation\ttext\tevidence\n";
+    int n_ans = 0, n_dk = 0;
+    std::map<std::size_t, std::string> audit_line;
+    for (const auto& g : gs) {
+        const QaRow& r = rows[static_cast<std::size_t>(g.row)];
+        const Q& q = qs[static_cast<std::size_t>(g.row)];
+        const Card c = card_of(g, kCardRule, cx.g2_cut);
+        const Gate gt = gate_of(g);
+        std::string ev = q.ev;
+        if (c.kind == "answer") {
+            ++n_ans;
+            const std::string pr = cx.prompt(g.form, r, toks[static_cast<std::size_t>(g.row)]);
+            const auto f = evidence::longest(*cx.ig, cx.t_src, pr + c.text, 8192);
+            ev = "match " + std::to_string(f.n) + " answer_bytes " + std::to_string(std::min(f.n, c.text.size())) + "/" +
+                 std::to_string(c.text.size()) + " count " + std::to_string(f.count);
+            for (const auto& p : f.places) ev += " | " + p;
+        } else ++n_dk;
+        const std::string gate = gt.f < 0 ? "none" : std::string(kFeatName[gt.f]) + " " + std::to_string(g.fv[gt.f]) +
+                                                         (g.fv[gt.f] >= gt.tau ? " >= " : " < ") + std::to_string(gt.tau);
+        out << set << "\t" << g.row << "\t" << (g.form ? "wiki" : "chat") << "\t" << cx.lm_name[g.lm] << "\t" << c.kind
+            << "\t" << c.by << "\t" << c.code << "\t" << gate << "\t" << q.e << "\t" << q.rel << "\t" << printable(c.text)
+            << "\t" << printable(ev) << "\n";
+        if (dev && g.form == 0 && g.lm == kAuditLm && std::binary_search(audit.begin(), audit.end(), static_cast<std::size_t>(g.row))) {
+            const std::string ref = reference_code(r.in_slice, g.prose, g.covered);
+            const std::string why = !r.in_slice ? "not in the slice: its source article is outside wiki train"
+                                    : g.prose == 1 ? "in the slice; a gold answer is in the source article's text"
+                                    : g.covered == 2 ? "in the slice; the shard has its entity and relation"
+                                                     : "in the slice; no gold answer in the source article, not in the shard";
+            std::ostringstream l;
+            l << g.row << "\t" << r.q << "\t" << r.in_slice << "\t" << g.prose << "\t" << g.covered << "\t" << ref << "\t" << why
+              << "\t" << c.kind << "\t" << c.by << "\t" << c.code << "\t"
+              << (c.kind == "dont_know" ? (c.code == ref ? "1" : "0") : "-") << "\t" << q.e << "\t" << q.titles << "\t"
+              << q.mentions << "\t" << printable(c.text.substr(0, 240)) << "\t\n";
+            audit_line[static_cast<std::size_t>(g.row)] = l.str();
+        }
+    }
+    if (dev) {
+        std::ofstream au(cx.path + ".audit.tsv");
+        au << "row\tquestion\tin_slice\tfact_in_prose\tshard\treference\twhy\tkind\tby\tcode\tright\tentity\ttitles\tmentions"
+              "\toutput\todin\n";
+        for (const auto& [row, l] : audit_line) au << l;
+    }
+    const double card_s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+    char b[512];
+    std::snprintf(b, sizeof b,
+                  "CARDS %s cards %zu answers %d dont_know %d rule %s locate_build_s %.3f locate_bytes ig %zu low %zu "
+                  "sources_bytes %zu ms_per_card %.4f\n",
+                  set, gs.size(), n_ans, n_dk, kCardRule, cx.locate_s, cx.ig->locate_bytes(),
+                  cx.low ? cx.low->locate_bytes() : std::size_t{0}, cx.t_src.bytes() + cx.low_src.bytes(),
+                  1000.0 * card_s / static_cast<double>(std::max<std::size_t>(1, gs.size())));
+    std::cout << b;
+}
+
 int cmd_qa(const Args& a, const QaOpts& o) {
     const Config& cfg = a.cfg;
+    // M11: --model DIR serves a stored model; --save DIR stores the one built here. A served model has no wiki-stage
+    // training form, so the token statistics that read it (question_lp, ent_lp) and --fam-only are refused, and the
+    // similar-context expert must key on wiki train (src=wiki): T is not kept.
+    const bool serve = !a.model.empty();
+    {
+        const int fk = static_cast<int>(std::find(kFamName, kFamName + kFam, o.fam_stat) - kFamName);
+        if ((serve || !a.save.empty()) &&
+            (o.fam_only || (serve && !a.save.empty()) ||
+             (serve && ((o.fam != "none" && (fk == 0 || fk == 6)) || (!o.sim.empty() && parse_sim(o.sim).src != "wiki") ||
+                        !a.cards.empty())))) {
+            std::cerr << "qa --model / --save: not with --fam-only, not both, and a served model takes neither a token "
+                         "statistic that reads the wiki-stage trie (question_lp, ent_lp), nor --sim src=all, nor --cards "
+                         "(S1's cards map T's bytes to the chat turns, which a served model does not rebuild)\n";
+            return 2;
+        }
+    }
     const std::vector<QaRow> dev = load_tqa(o.dev);
     const std::vector<QaRow> test = o.test.empty() ? std::vector<QaRow>{} : load_tqa(o.test);
     const std::vector<QaRow> leak = o.leak.empty() ? std::vector<QaRow>{} : load_tqa(o.leak);
@@ -2580,6 +3151,7 @@ int cmd_qa(const Args& a, const QaOpts& o) {
         const auto it = parse.find(q);
         if (it == parse.end() || it->second.find('|') == std::string::npos) return it == parse.end() ? "" : it->second;
         const auto c = split(it->second, '|');
+        if (const auto ch = chosen.find(q); ch != chosen.end() && !ch->second.empty()) return ch->second;  // M14
         if (fam_k == 0 || !low) return c[0];
         std::string& best = chosen[q];
         if (best.empty()) {
@@ -2594,17 +3166,23 @@ int cmd_qa(const Args& a, const QaOpts& o) {
     };
     std::vector<std::uint8_t> data;
     if (!load_wiki(a, data)) return 1;
-    Model model;
-    model.data = data.data();
-    model.init(cfg);
+    const std::string record = qa_record(a, o, data);  // M11
+    QaStore st;
+    PackedModel pm;
     double w[6];
-    init_weights(w, cfg);
-    train_span(model, data, w, 0, cfg.train, cfg);
-    std::cerr << "wiki trained, nodes " << model.nodes.size() << "\n";
+    if (serve && !load_qa(a.model, record, o, cfg, pm, w, st)) return 1;
+    Model model;
+    if (!serve) {
+        model.data = data.data();
+        model.init(cfg);
+        init_weights(w, cfg);
+        train_span(model, data, w, 0, cfg.train, cfg);
+        std::cerr << "wiki trained, nodes " << model.nodes.size() << "\n";
+    }
 
     std::vector<Turn> turns;
-    std::string dolly_text = load_dolly(a.dolly, turns);
-    if (turns.empty()) {
+    std::string dolly_text = serve ? std::string() : load_dolly(a.dolly, turns);
+    if (!serve && turns.empty()) {
         std::cerr << "dolly missing " << a.dolly << "\n";
         return 1;
     }
@@ -2614,15 +3192,17 @@ int cmd_qa(const Args& a, const QaOpts& o) {
     };
     // The model state after the wiki pass, before any chat (the match expert does not fire on a separate buffer).
     double wf[6];
-    std::copy(w, w + 6, wf);
+    std::copy(serve ? st.wf : w, (serve ? st.wf : w) + 6, wf);
     Lm wiki_lm{&model, wf, cfg.train, true};
+    if (serve) wiki_lm.model = nullptr, wiki_lm.packed = &pm;  // as after the chat passes below
     wiki_lmp = &wiki_lm;
 
     // A1c: entity familiarity, from CyphaLM's wiki trie and its lowered training bytes (wiki train + Dolly).
     std::array<double, kFam> fam_cut;
     fam_cut.fill(std::nan(""));
+    if (serve) fam_cut = st.fam_cut, low = std::move(st.low);  // M11: the build's cuts and index
     if (parse.empty()) std::string().swap(dolly_text);  // only A1c's lowered text reads it
-    if (!parse.empty()) {
+    if (!serve && !parse.empty()) {
         std::vector<std::uint8_t> lt(data.begin(), data.begin() + static_cast<std::ptrdiff_t>(cfg.train));
         lt.push_back('\n');
         lt.insert(lt.end(), dolly_text.begin(), dolly_text.end());
@@ -2806,6 +3386,9 @@ int cmd_qa(const Args& a, const QaOpts& o) {
         for (auto& [k, v] : ck) std::cout << "fam_dk " << k << " " << v << "\n";
         for (auto& [k, v] : cv) std::cout << "fam_dev " << k << " in_slice " << v.first << " not_in_slice " << v.second << "\n";
     }
+    // M14: with an entity statistic in the token, every dev and test entity was chosen above and is kept (`chosen`), and
+    // nothing below reads the lowered index: free it (a store writes it later, so --save keeps it).
+    if (fam_on && fam_k > 0 && a.save.empty() && a.cards.empty()) low.reset();  // --cards reads it (S1)
     auto with_tok = [&](const std::string& prompt, const std::string& tok) {
         // prompt ends in "Assistant: "; "before" puts the token in front of it, "after" behind it.
         if (!fam_on) return prompt;
@@ -2814,59 +3397,86 @@ int cmd_qa(const Args& a, const QaOpts& o) {
     };
 
     // Chat text: Dolly, with the extra turns (don't-know pairs at dk_ratio of all turns, then every shard row), each
-    // list spread evenly through it.
-    std::vector<std::pair<std::size_t, std::string>> extra;  // (after which Dolly turn, text)
-    auto spread = [&](const std::vector<DkRow>& rows, std::size_t n, const std::vector<std::string>& toks) {
-        for (std::size_t j = 0; j < n; ++j)
-            extra.push_back({(j + 1) * turns.size() / (n + 1),
-                             with_tok("User: " + rows[j].q + "\nAssistant: ", toks[j]) + rows[j].response + "\n\n"});
-    };
-    spread(dk, n_dk, tok_dk);
-    spread(sh1, sh1.size(), tok_sh1);
-    spread(sh2, sh2.size(), tok_sh2);
-    std::stable_sort(extra.begin(), extra.end(), [](const auto& x, const auto& y) { return x.first < y.first; });
-    std::string chat;
-    for (std::size_t i = 0, j = 0; i < turns.size(); ++i) {
-        chat += with_tok(turns[i].prompt, tok_dolly[i]) + turns[i].answer + "\n\n";
-        while (j < extra.size() && extra[j].first <= i) chat += extra[j++].second;
+    // list spread evenly through it. A served model (M11) has it trained in already.
+    CardContext cards;  // S1: where T's bytes come from (wiki pages, then chat turns), for --cards
+    if (!serve) {
+        std::vector<std::pair<std::size_t, std::string>> extra;  // (after which Dolly turn, text)
+        auto spread = [&](const std::vector<DkRow>& rows, std::size_t n, const std::vector<std::string>& toks) {
+            for (std::size_t j = 0; j < n; ++j)
+                extra.push_back({(j + 1) * turns.size() / (n + 1),
+                                 with_tok("User: " + rows[j].q + "\nAssistant: ", toks[j]) + rows[j].response + "\n\n"});
+        };
+        spread(dk, n_dk, tok_dk);
+        spread(sh1, sh1.size(), tok_sh1);
+        spread(sh2, sh2.size(), tok_sh2);
+        std::stable_sort(extra.begin(), extra.end(), [](const auto& x, const auto& y) { return x.first < y.first; });
+        std::string chat;
+        for (std::size_t i = 0, j = 0; i < turns.size(); ++i) {
+            chat += with_tok(turns[i].prompt, tok_dolly[i]) + turns[i].answer + "\n\n";
+            while (j < extra.size() && extra[j].first <= i) chat += extra[j++].second;
+        }
+        std::cout << "chat_turns dolly " << turns.size() << " dont_know " << n_dk << " share "
+                  << static_cast<double>(n_dk) / static_cast<double>(turns.size() + n_dk) << " fam " << o.fam << " shard "
+                  << sh1.size() << " shard2 " << sh2.size() << "\n";
+        if (!a.cards.empty()) card_sources_t(cards, data, cfg.train, chat, sh1, sh2);  // S1: where T's bytes come from
+        const std::size_t chat_at = append_chat(model, data, chat);
+        std::string().swap(chat);  // data holds the chat bytes now, and nothing below reads the turns
+        std::vector<Turn>().swap(turns);
+        train_span(model, data, w, chat_at, data.size(), cfg);
+        train_span(model, data, w, chat_at, data.size(), cfg);
+        model.compact_match();
+        std::cerr << "chat trained\n";
+        // M4: the packed form serves from here and the training form is freed. A later wiki_lm read (entity_of) sees the
+        // chat-trained counts with no online match in either form (compact_match freed the training hash).
+        pm = pack(model);
+        model.release();
+        wiki_lm.model = nullptr;
+        wiki_lm.packed = &pm;
     }
-    std::cout << "chat_turns dolly " << turns.size() << " dont_know " << n_dk << " share "
-              << static_cast<double>(n_dk) / static_cast<double>(turns.size() + n_dk) << " fam " << o.fam << " shard "
-              << sh1.size() << " shard2 " << sh2.size() << "\n";
-    const std::size_t chat_at = append_chat(model, data, chat);
-    std::string().swap(chat);  // data holds the chat bytes now, and nothing below reads the turns
-    std::vector<Turn>().swap(turns);
-    train_span(model, data, w, chat_at, data.size(), cfg);
-    train_span(model, data, w, chat_at, data.size(), cfg);
-    model.compact_match();
-    std::cerr << "chat trained\n";
-    // M4: the packed form serves from here and the training form is freed. A later wiki_lm read (entity_of) sees the
-    // chat-trained counts with no online match in either form (compact_match freed the training hash).
-    const PackedModel pm = pack(model);
-    model.release();
-    wiki_lm.model = nullptr;
-    wiki_lm.packed = &pm;
 
     // T, the training text (wiki train + chat): the class expert is built from it first (B4), then InfiniGram takes it
     // (M6 order, after the trie: A1c's tokens need the wiki trie before the chat text exists). Both builds come before
-    // the holdout arrays below, which they do not read.
+    // the holdout arrays below, which they do not read. A served model (M11) loads both instead, and T is not made.
     std::vector<std::uint8_t> T;
-    const std::size_t all_followers = training_text(data, cfg, T);
-    std::unique_ptr<ClassContext> cc;
-    if (!o.cls.empty()) {
+    const std::size_t all_followers = serve ? st.all_followers : training_text(data, cfg, T);
+    std::unique_ptr<ClassContext> cc = std::move(st.cc);
+    if (!serve && !o.cls.empty()) {
         cc = make_class_context(o.cls);
         if (!cc) return 1;
         cc->build(T.data(), T.size());
+        std::cerr << "class table built\n";
     }
     // InfiniGram takes T, unless the similar-context expert reads it (A4, src=all: its keys and its neighbours are T's).
     const bool sim_reads_t = !o.sim.empty() && parse_sim(o.sim).src != "wiki";
-    const FmInfiniGram ig = sim_reads_t ? FmInfiniGram(T.data(), T.size()) : FmInfiniGram(std::move(T));
+    FmInfiniGram ig = serve ? std::move(*st.ig) : sim_reads_t ? FmInfiniGram(T.data(), T.size()) : FmInfiniGram(std::move(T));
+    std::cerr << (serve ? "served" : "index built") << "\n";  // S1: not const, --cards builds locate on it
+    if (!a.save.empty() && !save_qa(a.save, record, pm, w, cfg, wf, all_followers, fam_cut, ig, low.get(), cc.get())) return 1;
+    // A4: the similar-context expert, keys over wiki train + chat (src=all: InfiniGram's bytes) or wiki train only
+    // (src=wiki). M13: built here, before the per-byte holdout arrays, so its build does not sit on them; its lambdas
+    // and lines come after the class expert's, below.
+    std::unique_ptr<SimilarContext> sc;
+    const std::uint8_t* sc_text = nullptr;
+    double build_s = 0;
+    if (!o.sim.empty()) {
+        const SimSpec ss = parse_sim(o.sim);
+        if (!ss.ok) {
+            std::cerr << "bad --sim spec " << o.sim << "\n";
+            return 2;
+        }
+        if (!(sc = make_similar_context(ss))) return 1;
+        const auto t0 = std::chrono::steady_clock::now();
+        sc_text = ss.src == "wiki" ? data.data() : T.data();
+        sc->build(sc_text, ss.src == "wiki" ? cfg.train : T.size());
+        build_s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+        std::cerr << "similar-context expert built\n";
+    }
     // Holdout: the trie mixture's BPC (= chat's wiki_bpc_after_chat), then InfiniGram's lambdas on the first half and
     // the trie + InfiniGram BPC on the second half (as context8k, cap 8192); with --copy, the copy expert's lambdas
     // on the first half (its context: the holdout stream itself) and its BPC and LCI gain on the second half.
     const std::size_t H = cfg.sample - cfg.train, half = H / 2;
-    std::vector<double> pt(H), pinf(H), pig(H), pcp(H);
-    std::vector<int> bk(H), cbk(H);
+    const bool copy_fit = o.copy || o.copy_out;  // B4C: the default copy expert reads the copy arrays too
+    std::vector<double> pt(H), pinf(H), pig(H), pcp(copy_fit ? H : 0);  // M13: each array only when it is read
+    std::vector<int> bk(H), cbk(copy_fit ? H : 0);
     double bits_all = 0;
     for (std::size_t k = 0; k < H; ++k) {
         const std::size_t i = cfg.train + k;
@@ -2896,6 +3506,8 @@ int cmd_qa(const Args& a, const QaOpts& o) {
         pig[k] = lam[bk[k]] * pinf[k] + (1 - lam[bk[k]]) * pt[k];
         if (k >= half) bits_trie2 += -std::log2(pt[k]), bits_ig2 += -std::log2(pig[k]);
     }
+    std::vector<double>().swap(pinf);  // M13: not read again
+    std::vector<int>().swap(bk);
     std::cout.setf(std::ios::fixed);
     std::cout.precision(6);
     std::cout << "holdout_mix_bpc " << bits_all / static_cast<double>(H) << "\n";
@@ -2904,8 +3516,8 @@ int cmd_qa(const Args& a, const QaOpts& o) {
     // B4: the class-context expert over the same training bytes as InfiniGram (wiki train + chat), built above, lambdas
     // on the first half of the holdout over the trie (lcl_t) and over trie + InfiniGram (lcl_i).
     double lcl_t[ClassContext::kBuckets] = {0}, lcl_i[ClassContext::kBuckets] = {0};
-    std::vector<double> pcl(H);
-    std::vector<int> clb(H);
+    std::vector<double> pcl(cc ? H : 0);
+    std::vector<int> clb(cc ? H : 0);
     if (cc) {
         for (std::size_t k = 0; k < H; ++k) {
             double P[256];
@@ -2929,23 +3541,12 @@ int cmd_qa(const Args& a, const QaOpts& o) {
         bt0[k] = lcl_t[clb[k]] * pcl[k] + (1 - lcl_t[clb[k]]) * pt[k];
         bi0[k] = lcl_i[clb[k]] * pcl[k] + (1 - lcl_i[clb[k]]) * pig[k];
     }
-    // A4: the similar-context expert, keys over wiki train + chat (src=all: InfiniGram's bytes) or wiki train only
-    // (src=wiki); lambdas on the first half of the holdout over trie (+ cls) (lsm_t) and trie + InfiniGram (+ cls)
-    // (lsm_i); its gain on the second half (LCI over 256 blocks). The copy expert, if on, is fit over it.
-    std::unique_ptr<SimilarContext> sc;
+    std::vector<double>().swap(pcl);  // M13: not read again
+    std::vector<int>().swap(clb);
+    // A4: the similar-context expert's lambdas on the first half of the holdout over trie (+ cls) (lsm_t) and trie +
+    // InfiniGram (+ cls) (lsm_i); its gain on the second half (LCI over 256 blocks). The copy expert, if on, is fit over it.
     double lsm_t[SimilarContext::kBuckets] = {0}, lsm_i[SimilarContext::kBuckets] = {0};
-    const std::uint8_t* sc_text = nullptr;
-    if (!o.sim.empty()) {
-        const SimSpec ss = parse_sim(o.sim);
-        if (!ss.ok) {
-            std::cerr << "bad --sim spec " << o.sim << "\n";
-            return 2;
-        }
-        if (!(sc = make_similar_context(ss))) return 1;
-        const auto t0 = std::chrono::steady_clock::now();
-        sc_text = ss.src == "wiki" ? data.data() : T.data();
-        sc->build(sc_text, ss.src == "wiki" ? cfg.train : T.size());
-        const double build_s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+    if (sc) {
         std::vector<double> ps(H);
         std::vector<int> sb(H);
         for (std::size_t k = 0; k < H; ++k) {
@@ -2981,7 +3582,7 @@ int cmd_qa(const Args& a, const QaOpts& o) {
                       << " p_gain_gt_0.005 " << g.p_gt << " p_gain_gt_0 " << g0.p_gt << " blocks " << g.n_eff << "\n";
         }
     }
-    if (o.copy) {
+    if (copy_fit) {  // B4C: the default copy expert and --copy's models share these lambdas
         for (std::size_t k = 0; k < H; ++k) {
             int n = 0;
             pcp[k] = copy_pred(data.data(), cfg.train + k, n) == data[cfg.train + k] ? 1.0 : 0.0;
@@ -3052,6 +3653,7 @@ int cmd_qa(const Args& a, const QaOpts& o) {
                  {nullptr, w, lim, false, nullptr, nullptr, lc_t, 8192, cc.get(), lcl_t, sc.get(), lsm_t, &pm},
                  {nullptr, w, lim, false, &ig, lam, lc_i, 8192, cc.get(), lcl_i, sc.get(), lsm_i, &pm}};
     for (auto& l : lms) l.sim_gate = sc && parse_sim(o.sim).gate;  // A4: the expert off inside answers
+    for (int l = 0; l < 4; ++l) lms[l].cls_gate = true, lms[l].lc_out = o.copy_out ? (l % 2 ? lc_i : lc_t) : nullptr;  // B4C
 
     // Grading only: is a gold answer in the source article's text (wiki train)? Splits A3's results.
     const std::string_view wiki(reinterpret_cast<const char*>(data.data()), cfg.train);
@@ -3408,6 +4010,19 @@ int cmd_qa(const Args& a, const QaOpts& o) {
             std::cout << "RIGHT " << form_name[g.form] << "/" << lm_name[g.lm] << " | "
                       << dev[static_cast<std::size_t>(g.row)].q << " => " << printable(g.ans.text) << "\n";
 
+    if (!a.cards.empty()) {  // S1: cards after dev's answers and gates; nothing below reads them
+        cards.ig = &ig;
+        cards.low = low.get();
+        cards.entity_of = entity_of;
+        cards.prompt = [&](int form, const QaRow& r, const std::string& tok) {
+            return form == 0 ? with_tok("User: " + r.q + "\nAssistant: ", tok) : r.q + " ";
+        };
+        cards.lm_name = lm_name;
+        cards.nlm = nlm;
+        cards.path = a.cards;
+        if (low) card_sources_low(cards, a, data, cfg.train);
+        write_cards(cards, "dev", dev, gd, tok_dev, nullptr);
+    }
     // The frozen test, once: gates chosen on all of dev, applied unchanged.
     if (!test.empty()) {
         const std::vector<Graded> gt = run_set(test, tok_test);
@@ -3458,6 +4073,7 @@ int cmd_qa(const Args& a, const QaOpts& o) {
             if (g.grade == 0)
                 std::cout << "TEST_RIGHT " << form_name[g.form] << "/" << lm_name[g.lm] << " | "
                           << test[static_cast<std::size_t>(g.row)].q << " => " << printable(g.ans.text) << "\n";
+        if (!a.cards.empty()) write_cards(cards, "test", test, gt, tok_test, &final_gate);  // S1
     }
     return 0;
 }
@@ -3526,6 +4142,45 @@ int cmd_selftest() {
         std::cerr << "selftest: golden BPC mismatch (want " << kGoldenBackoff << " and " << kGoldenMix << ")\n";
         return 1;
     }
+    // B4C: the gates, on the tiny model with a class expert and copy lambdas. Inside an answer the gated distribution
+    // is the trie's, bit for bit; outside one it is not; qa's --copy models (lc) keep copying inside answers.
+    {
+        const PackedModel pk = pack(model);
+        ClassContext tc({}, ClassContext::Options{});
+        tc.build(data.data(), cfg.train);
+        double lcl[ClassContext::kBuckets], lcp[kCopyBuckets];
+        std::fill(lcl, lcl + ClassContext::kBuckets, 0.5);
+        std::fill(lcp, lcp + kCopyBuckets, 0.5);
+        const Lm plain{nullptr, w, cfg.train, false, nullptr, nullptr, nullptr, 8192, nullptr, nullptr, nullptr, nullptr, &pk};
+        Lm gated = plain, open = plain;
+        gated.cc = open.cc = &tc;
+        gated.lcls = open.lcls = lcl;
+        gated.cls_gate = open.cls_gate = true;
+        gated.lc_out = lcp;
+        open.lc = lcp;
+        auto dist = [](const Lm& lm, const std::string& t, double* P) {
+            const std::vector<std::uint8_t> seq(t.begin(), t.end());
+            int hint = -1;
+            lm.dist(seq, hint, P);
+            return seq;
+        };
+        const std::string inside = "User: the trie model is a byte context?\nAssistant: the trie model is a",
+                          outside(data.begin() + static_cast<std::ptrdiff_t>(cfg.train), data.begin() + static_cast<std::ptrdiff_t>(cfg.train) + 300);
+        double A[256], B[256], C[256], D[256], E[256];
+        dist(plain, inside, A);
+        const auto si = dist(gated, inside, B);
+        dist(open, inside, C);
+        const auto so = dist(plain, outside, D);
+        dist(gated, outside, E);
+        int n = 0;
+        const bool ok = in_answer(si, std::string::npos) && !in_answer(so, std::string::npos) &&
+                        std::memcmp(A, B, sizeof A) == 0 && std::memcmp(B, C, sizeof B) != 0 &&
+                        copy_pred(si.data(), si.size(), n) == ' ' && std::memcmp(D, E, sizeof D) != 0;
+        if (!ok) {
+            std::cerr << "selftest: class / copy gate checks failed\n";
+            return 1;
+        }
+    }
     // qa grading, the don't-know message and tag, Wilson bounds and the abstain gate.
     {
         const std::string dk = dont_know_text("Zorbia", "capital", "UNKNOWN_ENTITY");
@@ -3548,6 +4203,68 @@ int cmd_selftest() {
                         std::fabs(wilson_hi(0, 130) - 0.028703) < 1e-5 && gate.f == 0 && gate.tau == -1.0 && right == 2;
         if (!ok) {
             std::cerr << "selftest: qa grading / tag / gate checks failed\n";
+            return 1;
+        }
+    }
+    // S1, I3: whenever the gate does not keep an answer, the card is a don't-know with a known code. CyphaLM's own code
+    // stands; its message without a code takes the gate's; the gate's message parses back; the reference rule; the
+    // audit draw; evidence places on a tiny index.
+    {
+        const Gate gate{0, -1.0};
+        const std::string own = dont_know_text("Zorbia", "capital", "NO_EVIDENCE");
+        const char* const outs[] = {"Paris", "", "I don't know.", "<|fam=low|>I don't know.", own.c_str(),
+                                    "x reason=UNKNOWN_ENTI"};
+        bool i3 = true;
+        std::mt19937 rng(7);
+        for (int k = 0; k < 600; ++k) {
+            const std::string ans = outs[k % 6];
+            Graded g;
+            g.fv[0] = -3.0 + 4.0 * std::uniform_real_distribution<double>(0, 1)(rng);
+            g.grade = is_dont_know(ans) || ans.empty() ? 1 : 2;
+            const bool kept = gated_answer(g, gate);
+            for (const char* gc : {"LOW_CERTAINTY", "UNKNOWN_ENTITY", "NO_EVIDENCE"}) {
+                const Card c = final_card(ans, kept, gc, "Zorbia", "capital");
+                if (!kept) i3 = i3 && c.kind == "dont_know" && known_code(c.code) && is_dont_know(c.text);
+                else i3 = i3 && c.kind == "answer" && c.text == ans && g.fv[0] >= gate.tau;
+            }
+        }
+        const Card c_own = final_card(own, false, "LOW_CERTAINTY", "Zorbia", "capital");
+        const Card c_bare = final_card("<|fam=low|>I don't know.", false, "LOW_CERTAINTY", "Zorbia", "capital");
+        const Card c_gate = final_card("Paris", false, "UNKNOWN_ENTITY", "Zorbia", "capital");
+        bool msgs = true;
+        for (const char* code : {"LOW_CERTAINTY", "UNKNOWN_ENTITY", "NO_EVIDENCE"}) {
+            const std::string m = gate_message("Zorbia", "capital", code);
+            msgs = msgs && is_dont_know(m) && tag_field(m, "reason") == code && tag_field(m, "entity") == "Zorbia" &&
+                   tag_field(m, "relation") == "capital" && m.compare(m.size() - 2, 2, "|>") == 0;
+        }
+        const auto au = audit_rows(130);
+        bool draw = au.size() == 100 && std::is_sorted(au.begin(), au.end()) &&
+                    std::adjacent_find(au.begin(), au.end()) == au.end() && au.back() < 130 && audit_rows(5).size() == 5;
+        // Evidence: a tiny text of two pages, a boundary and two chat turns.
+        const std::string w = "<page><title>Alpha</title> one two</page><page><title>Beta</title> three</page>";
+        const std::string chat = "User: who?\nAssistant: Beta.\n\nUser: where?\nAssistant: I don't know.\n\n";
+        evidence::Sources src;
+        src.add_pages(reinterpret_cast<const std::uint8_t*>(w.data()), w.size());
+        src.add(w.size(), "boundary");
+        src.add_turns(chat, w.size() + 1, [](const std::string& t) {
+            return std::string(t.find("I don't know.") != std::string::npos ? "dk" : "dolly");
+        });
+        const std::string text = w + "\n" + chat;
+        FmInfiniGram ix(reinterpret_cast<const std::uint8_t*>(text.data()), text.size());
+        ix.build_locate(4);
+        const auto f = evidence::longest(ix, src, "zzz Assistant: Beta.", 100);
+        const auto m = evidence::occurrences(ix, src, "three");
+        const auto d = evidence::occurrences(ix, src, "Assistant: I");
+        const bool ev = f.n == 16 && f.count == 1 && f.places.size() == 1 && f.places[0] == "dolly:User: who?+11" &&
+                        m.count == 1 && m.places[0] == "wiki:Beta+" + std::to_string(w.find("three") - w.find("<title>Beta")) &&
+                        d.count == 1 && d.places[0] == "dk:User: where?+13" && src.where(w.size()) == "boundary+0";
+        const bool ok = i3 && c_own.by == "cyphalm" && c_own.code == "NO_EVIDENCE" && c_bare.by == "cyphalm+gate" &&
+                        c_bare.code == "LOW_CERTAINTY" && c_gate.by == "gate" && c_gate.code == "UNKNOWN_ENTITY" && msgs &&
+                        reference_code(0, -1, -1) == "UNKNOWN_ENTITY" && reference_code(1, 1, 0) == "LOW_CERTAINTY" &&
+                        reference_code(1, 0, 2) == "LOW_CERTAINTY" && reference_code(1, 0, 1) == "NO_EVIDENCE" && draw && ev;
+        if (!ok) {
+            std::cerr << "selftest: S1 cards / I3 checks failed (i3 " << i3 << " messages " << msgs << " draw " << draw
+                      << " evidence " << ev << ")\n";
             return 1;
         }
     }
@@ -3716,11 +4433,14 @@ void usage() {
                  "  qa [wiki] [dolly] --dev DEV.tsv [--test TEST.tsv] [--leak TEST.tsv] [--out ROWS.tsv] [--base A0_ROWS.tsv]\n"
                  "     [--dk DK.tsv --dk-ratio R] [--fam none|before|after] [--parse E1.tsv] [--fam-stat NAME]\n"
                  "     [--fam-train stat|outcome|low] [--fam-only] [--copy] [--copy-min N] [--r3 PATTERNS.tsv]\n"
-                 "     [--shard F.tsv] [--shard2 F.tsv] [--cls TABLE|shape[:tail[:orders[:flags]]]] [--sim SPEC]\n"
+                 "     [--shard F.tsv] [--shard2 F.tsv] [--cls TABLE|shape[:tail[:orders[:flags]]]] [--sim SPEC] [--cards FILE]\n"
+                 "     [--save DIR | --model DIR]\n"
+                 "     (class, similar-context and copy experts are defaults, off inside answers: --no-cls --no-sim --no-copy)\n"
                  "  dktext [wiki] [dolly] --dev DEV.tsv --test TEST.tsv --out DK.tsv [--from 8388608] [--max-rows N] [--mention]\n"
                  "  simvec [wiki] --sim SPEC --out FILE\n"
                  "  selftest\n"
-                 "  options: --wiki P --dolly P --train N --sample N; qa, sample, context8k: --sim SPEC | --no-sim\n"
+                 "  options: --wiki P --dolly P --train N --sample N; qa, sample, context8k: --sim SPEC | --no-sim,\n"
+                 "           --cls SPEC | --no-cls (sample: no class expert unless --cls), --copy-min N (default 8) | --no-copy\n"
                  "  paths default to $CYPHA_WIKI / $CYPHA_DOLLY, then %s and %s\n",
                  kSimDefault, CYPHA_SIMVEC_DEFAULT, kDefaultWiki, kDefaultDolly);
 }
@@ -3745,8 +4465,8 @@ int main(int argc, char** argv) {
         usage();
         return 2;
     }
-    if ((!a.model.empty() || !a.save.empty()) && cmd != "chat" && cmd != "sample") {
-        std::cerr << "--model and --save are for chat and sample\n";
+    if ((!a.model.empty() || !a.save.empty()) && cmd != "chat" && cmd != "sample" && cmd != "qa") {
+        std::cerr << "--model and --save are for chat, sample and qa\n";
         return 2;
     }
     if (!self_test()) return 1;
@@ -3757,6 +4477,13 @@ int main(int argc, char** argv) {
                       << " (run from the repository root, set CYPHA_SIMVEC, or pass --no-sim)\n";
             return 1;
         }
+    }
+    if (cmd == "qa" || cmd == "sample" || cmd == "context8k") {  // B4C: the class spec is read before any work
+        if (a.no_cls && !a.cls.empty()) {
+            std::cerr << "--cls and --no-cls together\n";
+            return 2;
+        }
+        if (!default_cls_spec(a).empty() && !make_class_context(default_cls_spec(a))) return 2;
     }
     const auto t0 = std::chrono::steady_clock::now();
     int rc = 2;
@@ -3774,8 +4501,8 @@ int main(int argc, char** argv) {
             return 2;
         }
         rc = cmd_qa(a, QaOpts{a.dev, a.test, a.out, a.base, a.dk, a.dk_ratio, a.fam, a.parse, a.fam_stat, a.fam_train,
-                              a.r3, a.shard, a.shard2, a.leak, a.copy, a.fam_only, a.cls, a.copy_min,
-                              a.no_sim ? std::string() : a.sims.empty() ? std::string("default") : a.sims[0]});
+                              a.r3, a.shard, a.shard2, a.leak, a.copy, a.fam_only, default_cls_spec(a), a.copy_min,
+                              a.no_sim ? std::string() : a.sims.empty() ? std::string("default") : a.sims[0], !a.no_copy});
     } else if (cmd == "dktext") {
         if (a.dev.empty() || a.test.empty() || a.out.empty()) {
             usage();

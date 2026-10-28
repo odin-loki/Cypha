@@ -163,5 +163,6 @@ Rule 3 was read in `qa` by the answering-variants runs ([A1D/A2B](A1D_A2B_ANSWER
 
 - **They stay options:** `cls`, `qa --cls`, `qa --copy --copy-min 8`. For text alone they are the best measured setting: fresh text 2.166 → 1.912 BPC, surface S 0.907, SCRIBE 0.028 → 0.072.
 - **What would change this:** a fix for the echo (a copy weight that depends on where it is, inside the answer or not; flagged for Odin in A1D/A2B), then rule 3 read again.
+- **Done later the same day (B4c, [report](B4C_ECHO_GATE.md)):** the class and copy experts are off inside answers, rule 3 holds (answers identical on dev and the frozen test), and they are defaults in `qa` and `context8k`; `sample` takes the copy expert.
 - **The similar-context expert (A4) is in the same place.** It passes rules 1, 2 and 4 (fresh text −0.061 over trie + IG + class, S unchanged), and rule 3 without the shard, but with the shard it lets look-alike wrong answers through or breaks the shard's answers. It stays an option ([A4 report](A4_SIMILAR_CONTEXT_EXPERT.md)).
 - **Odin, 2026-10-28:** the class expert's default table is now the smaller one (three orders, compact, contexts seen once dropped; `shape` = `shape:6:3:cp2`). The expert is still an option; this sets what `--cls shape` builds.

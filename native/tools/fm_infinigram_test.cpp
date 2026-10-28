@@ -2,18 +2,23 @@
 // FM-index must give InfiniGram's answer (n, total, all 256 counts) on every
 // query. Random texts over small and full alphabets, byte 0 included; queries
 // with and without hints, min_total above 1, and cursors used right, reset and
-// misused. Prints the count of checks; exits 1 on any difference.
+// misused. S1: locate, rows and longest_suffix against a brute-force search on
+// the same texts (their own random stream, so the query checks stay the same),
+// and stored files of version 2 (with locate) and version 1. Prints the count
+// of checks; exits 1 on any difference.
 //
 // fm_infinigram_test [--bench FILE BYTES]   (--bench: time both indexes on a file's prefix)
 
 #include "cypha/cyphalm/fm_infinigram.hpp"
 #include "cypha/cyphalm/infinigram.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <iterator>
 #include <random>
 #include <string>
 #include <vector>
@@ -23,7 +28,103 @@ using cypha::cyphalm::InfiniGram;
 
 namespace {
 
-std::size_t checks = 0, failures = 0;
+std::size_t checks = 0, failures = 0, locate_checks = 0;
+
+void expect(bool ok, const char* what, std::size_t at) {
+    ++checks, ++locate_checks;
+    if (!ok && failures++ < 10) std::printf("FAIL %s at %zu\n", what, at);
+}
+
+// Every position where p[0..len) starts in t (brute force).
+std::vector<std::size_t> occurrences(const std::vector<std::uint8_t>& t, const std::uint8_t* p, std::size_t len) {
+    std::vector<std::size_t> v;
+    for (std::size_t i = 0; len && i + len <= t.size(); ++i)
+        if (std::equal(p, p + len, t.begin() + static_cast<std::ptrdiff_t>(i))) v.push_back(i);
+    return v;
+}
+
+// A version 1 file of the same index: version 2 without locate is version 1's body plus a 4-byte zero rate.
+void write_v1(const std::string& v2_path, const std::string& v1_path) {
+    std::ifstream in(v2_path, std::ios::binary);
+    std::vector<char> b((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    const std::size_t head = 4 + 4 + 8 + 8;
+    b.resize(b.size() - 4);
+    std::uint64_t h = 1469598103934665603ull, size = b.size() - head;
+    for (std::size_t i = head; i < b.size(); ++i) h = (h ^ static_cast<unsigned char>(b[i])) * 1099511628211ull;
+    const std::uint32_t v = 1;
+    std::memcpy(b.data() + 4, &v, 4);
+    std::memcpy(b.data() + 8, &size, 8);
+    std::memcpy(b.data() + 16, &h, 8);
+    std::ofstream(v1_path, std::ios::binary).write(b.data(), static_cast<std::streamsize>(b.size()));
+}
+
+// S1: locate gives the suffix array (a permutation of the positions, suffixes in order); rows and locate find exactly
+// the brute-force occurrences; longest_suffix finds the longest occurring suffix; stored files keep locate.
+void locate_text(const std::vector<std::uint8_t>& t, const std::vector<std::uint8_t>& q, const FmInfiniGram& fm,
+                 std::uint64_t seed) {
+    std::mt19937_64 g(seed);
+    const std::size_t n = t.size();
+    for (std::uint32_t rate : {1u, 3u, 32u}) {
+        FmInfiniGram f = fm;
+        f.build_locate(rate);
+        std::vector<std::size_t> sa(n + 1, 0);
+        std::vector<bool> seen(n, false);
+        bool perm = true, order = true;
+        for (std::size_t r = 1; r <= n; ++r) {
+            sa[r] = f.locate(r);
+            if (sa[r] >= n || seen[sa[r]]) perm = false;
+            else seen[sa[r]] = true;
+            if (perm && r > 1)  // suffix sa[r-1] < suffix sa[r], a shorter prefix first
+                order = order && std::lexicographical_compare(t.begin() + static_cast<std::ptrdiff_t>(sa[r - 1]), t.end(),
+                                                              t.begin() + static_cast<std::ptrdiff_t>(sa[r]), t.end());
+        }
+        expect(perm && order, "locate gives the suffix array", rate);
+        for (int k = 0; k < 60; ++k) {
+            const auto& s = g() % 2 ? t : q;
+            const std::size_t at = g() % s.size(), len = 1 + g() % std::min<std::size_t>(12, s.size() - at);
+            const auto want = occurrences(t, s.data() + at, len);
+            const auto rr = f.rows(s.data() + at, len);
+            std::vector<std::size_t> got;
+            for (std::size_t r = rr.lo; r < rr.hi; ++r) got.push_back(f.locate(r));
+            std::sort(got.begin(), got.end());
+            expect(got == want, "rows + locate = brute force", at);
+        }
+        if (rate == 32) {  // a stored index keeps locate; a version 1 file loads without it
+            const std::string p2 = "fm_infinigram_test_v2.fmig", p1 = "fm_infinigram_test_v1.fmig";
+            f.save(p2);
+            const FmInfiniGram back = FmInfiniGram::load(p2);
+            bool same_sa = back.can_locate() && back.locate_bytes() == f.locate_bytes();
+            for (std::size_t r = 1; same_sa && r <= n; ++r) same_sa = back.locate(r) == sa[r];
+            expect(same_sa, "stored locate", n);
+            fm.save(p2);
+            write_v1(p2, p1);
+            const FmInfiniGram v1 = FmInfiniGram::load(p1);
+            bool same_q = !v1.can_locate() && v1.bytes() == fm.bytes();
+            for (std::size_t i = 1; same_q && i <= q.size(); i += 7) {
+                const std::size_t len = std::min<std::size_t>(i, 40);
+                const auto x = fm.query(q.data() + (i - len), len, 40), y = v1.query(q.data() + (i - len), len, 40);
+                same_q = x.n == y.n && x.count == y.count;
+            }
+            expect(same_q, "version 1 file", n);
+            std::remove(p1.c_str());
+            std::remove(p2.c_str());
+        }
+    }
+    // longest_suffix: the longest suffix of a context (at most cap bytes) that occurs in t, and its count
+    for (int k = 0; k < 80; ++k) {
+        const auto& s = g() % 2 ? t : q;
+        const std::size_t end = 1 + g() % s.size(), len = std::min<std::size_t>(end, 1 + g() % 40);
+        const std::size_t cap = g() % 4 == 0 ? g() % 10 : len;
+        const std::uint8_t* ctx = s.data() + (end - len);
+        std::size_t want = 0;
+        for (std::size_t m = std::min(len, cap); m > 0 && !want; --m)
+            if (!occurrences(t, ctx + len - m, m).empty()) want = m;
+        std::size_t got = 0;
+        const auto rr = fm.longest_suffix(ctx, len, cap, got);
+        const std::size_t cnt = want ? occurrences(t, ctx + len - want, want).size() : 0;
+        expect(got == want && rr.hi - rr.lo == cnt, "longest_suffix", end);
+    }
+}
 
 void same(const InfiniGram::Result& a, const InfiniGram::Result& b, const char* what, std::size_t at) {
     ++checks;
@@ -115,6 +216,8 @@ void one_text(std::mt19937_64& g, std::size_t n, int sigma, bool repeats) {
     // 5) the empty context and a context longer than the text
     same(sa.query(t.data(), 0, 10), fm.query(t.data(), 0, 10), "empty", 0);
     same(sa.query(q.data(), q.size(), 1 << 20), fm.query(q.data(), q.size(), 1 << 20), "long", 0);
+    // 6) S1: locate, on its own random stream
+    locate_text(t, q, fm, n * 1000003u + static_cast<std::uint64_t>(sigma) * 101u + (repeats ? 7u : 0u));
 }
 
 double now() { return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
@@ -165,6 +268,7 @@ int main(int argc, char** argv) {
     for (int sigma : {1, 2, 4, 26, 256})
         for (std::size_t n : {std::size_t{1}, std::size_t{2}, std::size_t{7}, std::size_t{100}, std::size_t{3000}})
             for (bool rep : {false, true}) one_text(g, n, sigma, rep);
-    std::printf("fm_infinigram_test: %zu checks, %zu failed\n", checks, failures);
+    std::printf("fm_infinigram_test: %zu checks (queries and stored files %zu, locate %zu), %zu failed\n", checks,
+                checks - locate_checks, locate_checks, failures);
     return failures ? 1 : 0;
 }

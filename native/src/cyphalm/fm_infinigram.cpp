@@ -194,7 +194,7 @@ FmInfiniGram::FmInfiniGram(std::vector<std::uint8_t>&& text) : n_(text.size()) {
 
 namespace {
 constexpr char kMagic[4] = {'F', 'M', 'I', 'G'};
-constexpr std::uint32_t kVersion = 1;
+constexpr std::uint32_t kVersion = 2;  // 2 (S1): the locate samples after the trees; 1 still loads
 // FNV-1a over the stored bytes after the header, checked on load.
 struct Fnv {
     std::uint64_t h = 1469598103934665603ull;
@@ -219,6 +219,12 @@ void FmInfiniGram::save(const std::string& path) const {
     put(out, static_cast<std::uint64_t>(dR_));
     fwd_.write(out);
     rev_.write(out);
+    put(out, rate_);
+    if (rate_) {
+        put_vec(out, marks_.w);
+        put_vec(out, marks_.cum);
+        put_vec(out, samples_);
+    }
     const std::uint64_t size = static_cast<std::uint64_t>(static_cast<std::streamoff>(out.tellp()) - head);
     Fnv f;
     out.seekg(head);
@@ -243,7 +249,8 @@ FmInfiniGram FmInfiniGram::load(const std::string& path) {
     std::uint64_t size = 0, sum = 0;
     in.read(magic, 4);
     get(in, version), get(in, size), get(in, sum);
-    if (std::memcmp(magic, kMagic, 4) != 0 || version != kVersion) throw std::runtime_error("FmInfiniGram: not a stored index: " + path);
+    if (std::memcmp(magic, kMagic, 4) != 0 || version < 1 || version > kVersion)
+        throw std::runtime_error("FmInfiniGram: not a stored index: " + path);
     // Check the checksum while reading the body in blocks, then parse it from the start.
     {
         Fnv f;
@@ -270,7 +277,84 @@ FmInfiniGram FmInfiniGram::load(const std::string& path) {
     g.dR_ = static_cast<std::size_t>(v);
     g.fwd_.read(in);
     g.rev_.read(in);
+    if (version >= 2) {
+        get(in, g.rate_);
+        if (g.rate_) {
+            get_vec(in, g.marks_.w, std::uint64_t{1} << 32);
+            get_vec(in, g.marks_.cum, std::uint64_t{1} << 32);
+            get_vec(in, g.samples_, std::uint64_t{1} << 32);
+            if (g.marks_.w.size() != (g.n_ + 1 + 63) / 64 + 8 || g.marks_.cum.size() != g.marks_.w.size() / 8 + 2 ||
+                g.samples_.size() != g.marks_.rank1(g.n_ + 1))
+                throw std::runtime_error("FmInfiniGram: stored index damaged");
+        }
+    }
     return g;
+}
+
+bool FmInfiniGram::step_back_(int c, std::size_t& lo, std::size_t& hi) const {
+    std::size_t rlo = 0, rhi = 0, less = 0;
+    fwd_.step(c, lo, hi, rlo, rhi, less);
+    if (c == 0) rlo -= (dT_ < lo), rhi -= (dT_ < hi);  // the $ row stores 0
+    if (rhi <= rlo) return false;
+    lo = C_[c] + rlo, hi = C_[c] + rhi;
+    return true;
+}
+
+FmInfiniGram::Rows FmInfiniGram::rows(const std::uint8_t* p, std::size_t len) const {
+    std::size_t lo = 0, hi = n_ + 1;
+    for (std::size_t k = len; k-- > 0;)
+        if (!step_back_(p[k], lo, hi)) return {};
+    return {lo, hi};
+}
+
+FmInfiniGram::Rows FmInfiniGram::longest_suffix(const std::uint8_t* ctx, std::size_t len, std::size_t cap,
+                                                std::size_t& n) const {
+    std::size_t lo = 0, hi = n_ + 1;
+    n = 0;
+    for (std::size_t k = 1; k <= std::min(len, cap); ++k) {
+        std::size_t a = lo, b = hi;
+        if (!step_back_(ctx[len - k], a, b)) break;
+        lo = a, hi = b, n = k;
+    }
+    return n ? Rows{lo, hi} : Rows{};
+}
+
+// LF: the row of the suffix that starts one position earlier (row is not the $ row, whose suffix starts at 0).
+std::size_t FmInfiniGram::lf_(std::size_t row) const {
+    std::size_t r = 0;
+    const int c = fwd_.access(row, r);
+    if (c == 0 && dT_ < row) --r;  // the $ row's stored 0 is not a byte of the text
+    return C_[c] + r;
+}
+
+void FmInfiniGram::build_locate(std::uint32_t rate) {
+    if (rate == 0) throw std::invalid_argument("FmInfiniGram: locate rate 0");
+    // Walk from the empty suffix (row 0, position n) back to position 0, marking every rate-th position.
+    std::vector<std::pair<std::uint32_t, std::uint32_t>> s;  // (row, position)
+    s.reserve(n_ / rate + 2);
+    marks_.reset(n_ + 1);
+    std::size_t row = 0;
+    for (std::size_t pos = n_;; --pos) {
+        if (pos % rate == 0) {
+            marks_.w[row >> 6] |= std::uint64_t{1} << (row & 63);
+            s.push_back({static_cast<std::uint32_t>(row), static_cast<std::uint32_t>(pos)});
+        }
+        if (pos == 0) break;
+        row = lf_(row);
+    }
+    if (n_ && row != dT_) throw std::logic_error("FmInfiniGram: locate walk did not end at the text's start");
+    marks_.finish();
+    std::sort(s.begin(), s.end());
+    samples_.resize(s.size());
+    for (std::size_t i = 0; i < s.size(); ++i) samples_[i] = s[i].second;
+    rate_ = rate;
+}
+
+std::size_t FmInfiniGram::locate(std::size_t row) const {
+    if (!rate_) throw std::logic_error("FmInfiniGram: locate needs build_locate");
+    std::size_t steps = 0;
+    while (!marks_.get(row)) row = lf_(row), ++steps;
+    return samples_[marks_.rank1(row)] + steps;
 }
 
 std::size_t FmInfiniGram::cap_(std::size_t len, int max_n, int hint) {
