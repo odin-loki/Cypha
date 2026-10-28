@@ -628,6 +628,65 @@ inline double heaps_new_words(const HeapsFit& f, double tokens_now, double step 
   return heaps_vocab(f, tokens_now + step) - heaps_vocab(f, tokens_now);
 }
 
+// S4 (docs/reports/S4_UNSEEN_AND_FRONTIER.md): items that come in clumps. Text is read page by page, and a page repeats
+// what it talks about, so a repeat inside one page is no evidence that an item is common. These estimators take the
+// page (the unit) as the draw.
+
+/// counts[i]: observations of item i; units[i]: how many units (pages) it occurs on; n_units: units read.
+struct ClumpedStats {
+  std::size_t s_obs = 0;       // distinct items seen
+  std::size_t total = 0;       // N: observations
+  std::size_t units = 0;       // T: units read
+  std::size_t incidences = 0;  // U: (unit, item) pairs
+  std::size_t q1 = 0;          // items on exactly one unit
+  std::size_t q2 = 0;          // items on exactly two units
+  std::size_t q1_mass = 0;     // observations of the items on exactly one unit
+};
+
+inline ClumpedStats clumped_stats(const std::vector<std::size_t>& counts, const std::vector<std::size_t>& units,
+                                  std::size_t n_units) {
+  ClumpedStats s;
+  s.units = n_units;
+  const std::size_t m = std::min(counts.size(), units.size());
+  for (std::size_t i = 0; i < m; ++i) {
+    if (counts[i] == 0 || units[i] == 0) continue;
+    ++s.s_obs;
+    s.total += counts[i];
+    s.incidences += units[i];
+    if (units[i] == 1) {
+      ++s.q1;
+      s.q1_mass += counts[i];
+    } else if (units[i] == 2) {
+      ++s.q2;
+    }
+  }
+  return s;
+}
+
+/// Good-Turing with the unit as the draw: the observations of items seen on exactly one unit, over N. It is the
+/// leave-one-unit-out estimate of the share of a new unit's observations whose item is new. 1 with no observations.
+inline double unit_missing_mass(const ClumpedStats& s) {
+  return s.total == 0 ? 1.0 : static_cast<double>(s.q1_mass) / static_cast<double>(s.total);
+}
+
+/// The incidence form Q1 / U: the share of a new unit's (unit, item) pairs whose item is new. 1 with no incidences.
+inline double incidence_missing_mass(const ClumpedStats& s) {
+  return s.incidences == 0 ? 1.0 : static_cast<double>(s.q1) / static_cast<double>(s.incidences);
+}
+
+/// Chao et al. (2014) extrapolation: the expected distinct items after `more` further draws, from s_obs items seen in
+/// n draws, f1 of them once and f2 twice. f0 = ((n - 1) / n) f1^2 / (2 f2) (f1 (f1 - 1) / 2 when f2 = 0), and
+/// S(n + m) = s_obs + f0 [1 - (1 - f1 / (n f0 + f1))^m]. With units as draws (n = T, f1 = Q1, f2 = Q2) it is the
+/// incidence form. A very large `more` gives the bias-corrected Chao1, s_obs + f0.
+inline double chao_extrapolated_richness(std::size_t s_obs, std::size_t f1, std::size_t f2, std::size_t n, double more) {
+  const double s = static_cast<double>(s_obs);
+  if (n == 0 || f1 == 0 || !(more > 0.0)) return s;
+  const double nn = static_cast<double>(n), a = static_cast<double>(f1), b = static_cast<double>(f2);
+  const double f0 = (nn - 1.0) / nn * (f2 > 0 ? a * a / (2.0 * b) : a * (a - 1.0) / 2.0);
+  if (!(f0 > 0.0)) return s;
+  return s + f0 * (1.0 - std::pow(1.0 - a / (nn * f0 + a), more));
+}
+
 // ---------------------------------------------------------------------------
 // 10 Cards
 // ---------------------------------------------------------------------------

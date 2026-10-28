@@ -394,6 +394,41 @@ static void test_estimators() {
   CHECK(!fit_heaps({0.0, -5.0, 100.0}, {10.0, 12.0, 20.0}).ok);  // only one positive point
 }
 
+// S4: clumped samples (pages as units). Three pages: P1 {a:3, b:1}, P2 {a:1, c:2}, P3 {d:1}. Items a b c d: counts
+// 4 1 2 1 (N 8), pages 2 1 1 1 (T 3, U 5); Q1 = 3 (b c d), Q2 = 1 (a); observations of one-page items 1 + 2 + 1 = 4.
+static void test_unseen_s4() {
+  const ClumpedStats s = clumped_stats({4, 1, 2, 1}, {2, 1, 1, 1}, 3);
+  CHECK(s.s_obs == 4 && s.total == 8 && s.units == 3 && s.incidences == 5);
+  CHECK(s.q1 == 3 && s.q2 == 1 && s.q1_mass == 4);
+  CHECK_NEAR(unit_missing_mass(s), 0.5, 1e-15);       // c's two observations sit on one page: new for a new page
+  CHECK_NEAR(good_turing_missing_mass({4, 1, 2, 1}), 0.25, 1e-15);  // n1 / N counts c as seen twice
+  CHECK_NEAR(incidence_missing_mass(s), 0.6, 1e-15);
+  // Zero entries are ignored; nothing read means everything is new.
+  const ClumpedStats z = clumped_stats({0, 4, 1, 2, 1, 0}, {0, 2, 1, 1, 1, 0}, 3);
+  CHECK(z.s_obs == 4 && z.q1_mass == 4 && z.incidences == 5);
+  CHECK_NEAR(unit_missing_mass(ClumpedStats{}), 1.0, 1e-15);
+  CHECK_NEAR(incidence_missing_mass(ClumpedStats{}), 1.0, 1e-15);
+  // Every item on one page: every observation of a new page is predicted new.
+  CHECK_NEAR(unit_missing_mass(clumped_stats({5, 2}, {1, 1}, 2)), 1.0, 1e-15);
+  // Chao extrapolation, incidence form: S_obs 4, Q1 3, Q2 1, T 3. Q0 = (2/3) 9/2 = 3; S(3 + t) = 4 + 3 [1 - 0.75^t].
+  CHECK_NEAR(chao_extrapolated_richness(4, 3, 1, 3, 1.0), 4.75, 1e-12);
+  CHECK_NEAR(chao_extrapolated_richness(4, 3, 1, 3, 2.0), 4.0 + 3.0 * (1.0 - 0.5625), 1e-12);
+  CHECK_NEAR(chao_extrapolated_richness(4, 3, 1, 3, 1e9), 7.0, 1e-9);  // the bias-corrected Chao1
+  CHECK_NEAR(chao_extrapolated_richness(4, 3, 1, 3, 0.0), 4.0, 1e-15);
+  // Q2 = 0: Q0 = (2/3) 3 2 / 2 = 2; S(3 + 1) = 4 + 2 [1 - (1 - 3 / 9)] = 4 + 2 / 3.
+  CHECK_NEAR(chao_extrapolated_richness(4, 3, 0, 3, 1.0), 4.0 + 2.0 / 3.0, 1e-12);
+  // No singletons: nothing more is expected.
+  CHECK_NEAR(chao_extrapolated_richness(4, 0, 2, 3, 10.0), 4.0, 1e-15);
+  CHECK_NEAR(chao_extrapolated_richness(0, 0, 0, 0, 10.0), 0.0, 1e-15);
+  // It grows with more reading and stays below its limit.
+  double prev = 4.0;
+  for (double t : {1.0, 3.0, 10.0, 100.0}) {
+    const double v = chao_extrapolated_richness(4, 3, 1, 3, t);
+    CHECK(v > prev && v < 7.0);
+    prev = v;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // 10 cards
 // ---------------------------------------------------------------------------
@@ -966,6 +1001,7 @@ int main() {
   test_split_uncertainty();
   test_reason_codes();
   test_estimators();
+  test_unseen_s4();
   test_cards();
   test_voi_and_tiers();
   test_lifecycle();
