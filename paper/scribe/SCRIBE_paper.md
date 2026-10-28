@@ -8,7 +8,7 @@ date: "28 October 2026"
 
 **Odin Loch**
 
-<p class="meta">Version 1.0 · 28 October 2026<br>Code and data recipes: the Cypha repository, github.com/odin-loki/Cypha (<code>native/include/cypha/eval/scribe.hpp</code>, <code>native/tools/scribe.cpp</code>, <code>scripts/scribe_eval/</code>)</p>
+<p class="meta">Version 1.0 · 28 October 2026<br>Code: <code>SCRIBE_code_v1.0.zip</code> · Result tables: <code>SCRIBE_results_v1.0.zip</code> · both published with this paper</p>
 
 ## Abstract
 
@@ -146,13 +146,13 @@ v2 replaced percentiles by the robust z-scores of Section 3.4, so that a value f
 5. **Context gain.** Raw n-gram probability is low for word salad and also for human text about rare topics. Subtracting each word's frequency-only log-probability leaves the part the context explains; this is SLOR (Section 2) averaged per word. Shuffled words moved from a median bad-side z of 3.1–3.5 (raw probability) to 6.8–8.8 (gain), with none inside the human 99.5th percentile.
 6. **Two form failures.** Once syntax saturates, real words and non-words received the same penalty. Splitting lexical validity (L) from syntax (S), each saturating on its own, passed all five pairs on both development ladders.
 
-The parameters of the final structure are not a knife-edge. Of 2,592 settings of the thresholds, cap, softness, integrity weight and dead zone tried on both development ladders, 1,729 pass all five pairs on both, and every one-step change of a frozen parameter passes (counts from the design log; the grid's raw output was not kept). Section 6.7 repeats the main changes on the fresh region. The design was then frozen and committed before the fresh region was read (repository commit `c7fd176`).
+The parameters of the final structure are not a knife-edge. Of 2,592 settings of the thresholds, cap, softness, integrity weight and dead zone tried on both development ladders, 1,729 pass all five pairs on both, and every one-step change of a frozen parameter passes (counts from the design log; the grid's raw output was not kept). Section 6.7 repeats the main changes on the fresh region. The design was then frozen, and the freeze record (`docs/reports/SCRIBE_V2.md` in the code archive) was written before the fresh region was read.
 
 The prompted profile's relevance axis was designed afterwards, on development prompts from [56, 64) MiB, against a prompted ladder: true continuation > another document's true continuation > half echo of the prompt > the prompt echoed. Relevance graded from z = 0 orders it best, but then penalises half of all human continuations; a dead zone of 0.5 with weight 8 keeps accuracies of 0.966, 0.967 and 1.000 on that ladder.
 
 ## 5. Evaluation protocol
 
-All splits were fixed before v2 was designed and are listed in the study plan in the repository (`docs/SCRIBE_PAPER_PLAN.md`), which also holds the twenty predictions registered before the first v2 run (Section 6.9).
+All splits were fixed before v2 was designed and are listed in the study plan (`docs/SCRIBE_PAPER_PLAN.md` in the code archive), which also holds the twenty predictions registered before the first v2 run (Section 6.9).
 
 ### 5.1 Data
 
@@ -190,7 +190,7 @@ Rung and system means carry 95% percentile bootstrap intervals (Efron and Tibshi
 
 ## 6. Results
 
-Every number in this section comes from frozen SCRIBE v2. The fresh region was read once, after the freeze. Tables give means with 95% bootstrap intervals where space allows. "Accuracy" is the share of (upper, lower) pairs ordered correctly, ties counting one half (the AUROC). The full tables, with intervals for every cell, are in the results bundle (Reproducibility).
+Every number in this section comes from frozen SCRIBE v2. The fresh region was read once, after the freeze. Tables give means with 95% bootstrap intervals where space allows. "Accuracy" is the share of (upper, lower) pairs ordered correctly, ties counting one half (the AUROC). The full tables, with intervals for every cell, are in `SCRIBE_results_v1.0.zip` (Reproducibility).
 
 ### 6.1 Control ladders
 
@@ -496,12 +496,13 @@ Within fluent text, counts see much less. SCRIBE v2 does not rank GPT-2 sizes. I
 
 ## Reproducibility
 
-**Code.** All code is in the repository github.com/odin-loki/Cypha; the Zenodo record names the commit. The metric is `native/include/cypha/eval/scribe.hpp`, a header-only C++20 library with no dependency beyond the standard library. The command-line tool is `native/tools/scribe.cpp`. Build it with `cmake -S native -B build && cmake --build build --target scribe`. Its self-test, `scribe selftest`, runs 76 checks and is the CTest `native_scribe_selftest`. Word vectors come from `native/tools/ppmi_svd.cpp` (`g++ -O2 -std=c++20 native/tools/ppmi_svd.cpp -o ppmi_svd`). The evaluation scripts are in `scripts/scribe_eval/`:
+**Code.** All code is in `SCRIBE_code_v1.0.zip`, published with this paper under the GNU AGPL v3; its `README.md` maps every file to a section of the paper. The metric is `native/include/cypha/eval/scribe.hpp`, a header-only C++20 library with no dependency beyond the standard library. The command-line tool is `native/tools/scribe.cpp`, and word vectors come from `native/tools/ppmi_svd.cpp`. Build both with `cmake -S . -B build && cmake --build build`, or with one `g++ -O2 -std=c++20` command each. The tool's self-test, `scribe selftest`, runs 76 checks and is the archive's CTest. The evaluation scripts are in `scripts/scribe_eval/`:
 
 - `data.py` downloads and converts every dataset.
 - `corrupt.py`, `attacks.py`, `prompted.py` and `qa_ladder.py` build the test texts.
 - `baselines.py` computes the baselines, and `meta.py` holds the statistics.
-- `report.py` writes every table of Section 6 to `paper/scribe/results/`.
+- `report.py` writes every table of Section 6; the tables as published are in `SCRIBE_results_v1.0.zip`.
+- `runs/` holds the run scripts as used, including the design search of Section 4.
 
 **Data.** All data is public: enwik8 and enwik9 (Mahoney, 2011), the GPT-2 output dataset, Project Gutenberg, WritingPrompts, HANNA, OpenMEVA, the MAUVE human evaluation, and Dolly 15k. `data.py` writes a manifest with the source, licence, size and SHA-256 hash of every converted file.
 
