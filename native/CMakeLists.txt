@@ -2788,6 +2788,10 @@ target_include_directories(cyphalm_trie PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}/include"
   "${CMAKE_CURRENT_SOURCE_DIR}/third_party"
   "${CMAKE_CURRENT_SOURCE_DIR}/third_party/libsais")
+# The similar-context expert's vectors (A4b): the binary finds the shipped file in the source tree from any
+# directory; $CYPHA_SIMVEC overrides it.
+target_compile_definitions(cyphalm_trie PRIVATE
+  "CYPHA_SIMVEC_DEFAULT=\"${CMAKE_CURRENT_SOURCE_DIR}/../data/cyphalm/simvec_ppmi32.bin\"")
 cypha_mingw_apply_exe_link_options(cyphalm_trie)
 add_test(NAME native_cyphalm_trie_selftest COMMAND "$<TARGET_FILE:cyphalm_trie>" selftest)
 set_tests_properties(native_cyphalm_trie_selftest PROPERTIES TIMEOUT 60)
