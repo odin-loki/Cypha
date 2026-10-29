@@ -644,3 +644,132 @@ Test, T 1.0:
 **A caveat found at the end (2026-10-29).** While T4c ran, main changed `sample`'s byte default: BKN2 (main c756ee3, PLAN ledger 89) adds byte Kneser–Ney. T4c's registered comparator is T4's B0, the byte default as it was. The new byte default scores 0.157 on GEN-A's dev split at T 0.6 (pooled 0.125 [0.107, 0.143]; BYTE_KN.md), against B0's 0.101. NRK0's dev 0.192 [0.157, 0.225] is not clearly above it. So T4c's pass is against the old byte default only. Before any switch, the token sampler must be compared with the new byte default under its own registration (dev first; the new default has no test read on this benchmark yet).
 
 **Cost.** About 380 MB peak resident per arm. 583–608 s per one-temperature dev arm and 794 s for two temperatures at load 7–10; 276 s for the one-temperature test arm.
+
+## T4d: the token sampler against the byte default with Kneser–Ney (registered 2026-10-29, before the test read)
+
+**Odin Loch** · 2026-10-29 · decided by measurement under PLAN ledger 55, open to Odin's veto
+
+**Question.** T4c's token sampler (NRK0: `--inf-cap 0 --nucleus 0.9 --no-repeat`, BPE-W 4,096, T 1.0) met T4's gate against T4's byte default B0. During that read BKN2 (main 8e06368, PLAN ledger 89) made byte Kneser–Ney part of `sample`'s default. Does the token sampler still beat the byte default as it is now?
+
+**The two arms.** Nothing new is sampled on the token side. Only the byte default is read on test.
+
+| Side | What | Dev | Test |
+|---|---|---|---|
+| Token | NRK0 at T 1.0, unchanged (`cyphalm_tok_gen` from main 7f97541, md5 `22afb787…`, the same binary as T4c's) | T4c's run, reused | T4c's run, reused (read once in T4c, not read again) |
+| Byte | `cyphalm_trie sample` with no flags: main's default (byte Kneser–Ney 6:4:2:1, way b, then similar-context and copy). Binary `cyphalm_trie_bkn2d` (md5 `11df0ff4…`), the one BKN2's dev read used; its source is main's `cyphalm_trie.cpp` | BKN2's GEN-A dev read (`/root/work/bkn/runs/bkn2/gen/BKN.*`), reused | **Read once here, label BK0**: `scripts/gen_eval.sh test BK0 OUT`. This is also the new byte default's first read of GEN-A's test split |
+
+**Checks before reuse** (they decide nothing; dev numbers already exist):
+1. Main's `cyphalm_tok_gen` reproduces NRK0's first 10 prompts of each split byte for byte (`--limit 10`: the gen file's lines and the continuation rows).
+2. Every arm is scored with GEN-A's SCRIBE binary (`scribe_gena`), as in T4–T4c. BKN2's dev read was scored with a SCRIBE built in BKN's tree. Both binaries score `BKN.gen.txt` (dev); if any table number differs, the dev file is re-scored with `scribe_gena` and that score is used below.
+
+These two checks were started a few minutes before this registration was committed.
+
+**No byte-side variant.** `sample`'s temperatures are fixed in the code (0.6, 0.8, 1.0). A lower temperature, where the byte default might score higher, needs a code change, so it is not an arm here. It is a limit of this comparison.
+
+**The dev choice** (T4's rules, with the new comparator):
+1. **Byte comparator:** the byte default at its best dev temperature among 0.6, 0.8 and 1.0. From BKN2's read: T 0.6, SCRIBE 0.157 [0.122, 0.196], copy share 0.0691.
+2. **Copy limit for a token arm:** the comparator's dev copy share + 0.02 = **0.0891**.
+3. **Token arm:** the best eligible token arm on dev among every arm read in T4, T4b and T4c, under the new limit. Under 0.0891, NRK0 at T 1.0 (0.192, copy 0.0728) is still the best; the next are N97K0 (0.134), N97K16 (0.130, copy 0.0793), N95K0 (0.119). Not eligible: N95K16 (0.0919), NRK16 (0.109), NR (0.116), NRK0 at T 0.8 (0.1945).
+4. **Test read** only if NRK0's dev point (0.192) is above the comparator's dev point plus T4b's tie band (0.157 + 0.005 = 0.162). It is, so BK0 is read on test. If check 2 changes the comparator's dev score, steps 1–4 are redone with the new number before the test read.
+
+**The test read (once).** BK0: the byte default, all three temperatures, on `gen_prompts_test.tsv`. The comparator on test is BK0 at T 0.6, the temperature chosen on dev (not re-chosen on test). Logged in GEN_TRACK's Reads table.
+
+**Gate** (T4's): NRK0's test SCRIBE (0.187 [0.155, 0.217]) is above BK0's at T 0.6 with disjoint 95% intervals, **and** NRK0's test copy share (0.0649) is at most BK0's at T 0.6 + 0.02.
+
+**If the gate holds**, the switch is not made here. The report writes down what bringing the token sampler into `sample` needs (an option, then a default): parity of `sample`'s other paths, memory (about 380 MB per token run against `sample`'s 70 MB; 218.7 MB on GEN-A's prompts), cost, and the rule-10 check (CyphaLM writes every byte). **If it fails**, the report records why and what next.
+
+**Reported together:** SCRIBE v2 [95%] with surface S [95%], D_I, kept samples and mean bytes, per temperature for BK0; continuation bits per byte with the paired difference, token through the bridge against byte with Kneser–Ney, on dev and on test (`gen_eval_summary.py --pair`); copy share; invented-word rate (`cyphalm_tok_gen words`) for BK0 and BKN's dev file; five samples each; BK0's peak memory and wall time.
+
+**Commands.**
+
+```
+B=/root/work/toke/bin/cyphalm_trie_bkn2d; SC=/root/work/toke/bin/scribe_gena; O=/root/work/toke/runs/test
+CYPHALM_TRIE=$B SCRIBE=$SC scripts/gen_eval.sh test BK0 $O
+/root/work/toke/build/cyphalm_tok_gen words /root/cdata/enwik8 $O/BK0.gen.txt
+python3 -I scripts/gen_eval_summary.py --pair /root/work/toke/runs/pair BK0 NRK0   # .cont.tsv files copied in
+```
+
+**Predictions** (registered before the test read):
+
+| # | Prediction | Falsified if |
+|---|---|---|
+| V1 | BK0 at T 0.6 scores within ±0.04 of its dev 0.157 on test | Outside [0.117, 0.197] |
+| V2 | The gate is not met: NRK0's test interval overlaps BK0's at T 0.6. About 70% | The intervals are disjoint with NRK0 above |
+| V3 | BK0's test copy share at T 0.6 is in [0.054, 0.084], so the copy part of the gate holds | Outside, or the copy part fails |
+| V4 | On test, the paired continuation difference, token minus byte with Kneser–Ney, lies in [−0.01, +0.03] bits per byte (dev: 2.0260 against 2.0145, +0.0115) | Outside |
+| V5 | BK0's pooled test SCRIBE is in [0.10, 0.15] (dev 0.125) | Outside |
+| V6 | BK0 at T 0.6 invents fewer words than NRK0 at T 1.0 (0.0687) | BK0 at T 0.6 invents 0.0687 or more |
+| V7 | BK0 at T 0.6 has a higher surface S than NRK0, intervals disjoint (dev 0.927 against 0.811) | Not disjoint, or lower |
+| V8 | The two SCRIBE binaries score `BKN.gen.txt` identically | Any table number differs |
+| V9 | The 10-prompt reproduction is byte-identical on both splits | Any byte differs |
+
+### T4d checks (2026-10-29)
+
+- **Reproduction (V9).** Main's `cyphalm_tok_gen` (md5 `22afb787…`, the same as T4c's binary) reproduces NRK0's first 10 prompts byte for byte: test, 21 gen lines and 11 continuation rows; dev, 31 gen lines and 11 continuation rows. The dev check must use T4c's `--temps 0.8,1.0`: a sample's seed depends on its temperature's place in that list. My first dev check used `--temps 1.0` alone and differed for that reason only.
+- **SCRIBE binaries (V8).** `scribe_gena` and the SCRIBE built in BKN's tree score `BKN.gen.txt` identically: every table line matches, and both match BKN2's own ladder file. So the comparator's dev score stays 0.157, and steps 1–4 of the dev choice stand as registered.
+
+### T4d test read (2026-10-29, read once)
+
+Command: `CYPHALM_TRIE=cyphalm_trie_bkn2d SCRIBE=scribe_gena scripts/gen_eval.sh test BK0 /root/work/toke/runs/test` (the sampler wrapped by `peak.sh`). 813 s at load about 11; peak 232.5 MB. NRK0's numbers are T4c's test read, reused.
+
+| Arm | SCRIBE v2 [95%] | Surface S [95%] | D_I | Kept / mean bytes | Copy share | Invented words |
+|---|---|---|---|---|---|---|
+| **NRK0, T 1.0** (T4c) | **0.187 [0.155, 0.217]** | 0.809 [0.800, 0.818] | 0.00 | 213 / 280 | 0.0649 | 0.0687 |
+| **BK0 byte + Kneser–Ney, T 0.6** | **0.147 [0.115, 0.181]** | 0.926 [0.919, 0.932] | 0.00 | 217 / 362 | 0.0769 | 0.0138 |
+| BK0, T 0.8 | 0.125 [0.095, 0.156] | 0.903 [0.896, 0.910] | 0.03 | 194 / 328 | 0.0384 | 0.0254 |
+| BK0, T 1.0 | 0.074 [0.051, 0.099] | 0.849 [0.840, 0.858] | 0.00 | 207 / 301 | 0.0222 | 0.0541 |
+| BK0, pooled | 0.115 [0.098, 0.133] | 0.893 [0.888, 0.898] | 0.01 | 618 / 331 | 0.0458 | 0.0308 |
+| T4's B0 (no Kneser–Ney), T 0.6, for reference | 0.106 [0.078, 0.135] | 0.901 | 0.00 | 206 / 334 | 0.0561 | 0.0243 |
+
+**Continuation bits per byte** (the human continuations; the token model through the bridge, the byte model with its sampling mixture):
+
+| Split | Token (NRK0's model) | Byte + Kneser–Ney | Token minus byte, paired |
+|---|---|---|---|
+| Dev | 2.0260 | 2.0145 | **+0.0115 [+0.0023, +0.0214]** |
+| Test | 2.0263 | 2.0123 | **+0.0140 [+0.0049, +0.0232]** |
+
+**The gate.** SCRIBE 0.187 [0.155, 0.217] against 0.147 [0.115, 0.181]: the intervals overlap (0.155 is below 0.181). **Not met.** The copy part holds: 0.0649 against the limit 0.0969 (BK0's 0.0769 + 0.02).
+
+**Decision: not adopted.** The token sampler stays a measuring tool (`cyphalm_tok_gen`). No default changed. Nothing in `sample` changes.
+
+**What the read shows.**
+- **Byte Kneser–Ney closed the gap on prediction and passed it.** In T4 the token model predicted the human continuations 0.10 bits per byte better than the byte default. With byte Kneser–Ney, the byte model is now 0.012–0.014 bits per byte *better* than the token model, on dev and on test, paired intervals clear of zero.
+- **SCRIBE does not separate them.** NRK0's point estimate is 0.040 above, but the intervals overlap. Its edge comes from the nucleus cut at T 1.0.
+- **The byte text is cleaner on two other measures.** It invents a fifth as many words (0.014 against 0.069), and its surface S is higher, with disjoint intervals (0.926 against 0.809). It also copies a little more (0.077 against 0.065).
+- **BKN2's first test read on this benchmark.** The new byte default scores 0.147 [0.115, 0.181] at T 0.6 and 0.115 [0.098, 0.133] pooled, against B0's 0.106 and 0.072. Its dev numbers hold on test (dev 0.157 and 0.125).
+- **Memory.** `sample` on GEN-A's 250 prompts with the default peaks at 232.5 MB (BKN2 measured 218.7 MB without Kneser–Ney).
+
+**Samples** (test, T 0.6, the first three prompts, cut to 150 bytes):
+- BK0: " The term &quot; and a series and are about the continued use the word &quot; and\n* [[Johan interests and her the belief sound that the algebraic of …"
+- BK0: "\n* [[John Arthur C. Clarke]] ([[1813]], [[Belgian poet and in a non-standard analysis]], the [[Germany]] and [[New Zealand and [[Paris]]. The [[Charl…"
+- BK0: "\n\nThe of white major considered and [[phosphate between the [[Soviet Union of and the appellate constitution of and special with a different persona…"
+
+NRK0's test samples are in T4c's section above.
+
+### T4d predictions, scored
+
+| # | Prediction | Result |
+|---|---|---|
+| V1 | BK0 at T 0.6 within ±0.04 of dev 0.157 on test | **Hit:** 0.147 |
+| V2 | The gate is not met | **Hit:** intervals overlap |
+| V3 | BK0's test copy share at T 0.6 in [0.054, 0.084]; the copy part holds | **Hit:** 0.0769; 0.0649 ≤ 0.0969 |
+| V4 | Paired continuation difference, token minus byte, in [−0.01, +0.03] on test | **Hit:** +0.0140 [+0.0049, +0.0232] |
+| V5 | BK0's pooled test SCRIBE in [0.10, 0.15] | **Hit:** 0.115 |
+| V6 | BK0 at T 0.6 invents fewer words than NRK0 (0.0687) | **Hit:** 0.0138 |
+| V7 | BK0 at T 0.6 has the higher surface S, intervals disjoint | **Hit:** 0.926 [0.919, 0.932] against 0.809 [0.800, 0.818] |
+| V8 | The two SCRIBE binaries score `BKN.gen.txt` identically | **Hit** |
+| V9 | The 10-prompt reproduction is byte-identical | **Hit**, once the dev check used T4c's temperature list (see Checks) |
+
+9 hits, 0 misses.
+
+### T4d status
+
+**Done (2026-10-29). Not adopted.** Against the byte default with Kneser–Ney, the token sampler's SCRIBE edge is inside the noise (test 0.187 against 0.147, overlapping), and the byte model now predicts the human continuations better (−0.014 bits per byte for bytes, paired). T4c's pass held only against the old byte default.
+
+**Next (written down, not run; each would be registered first):**
+- **Per-prompt paired SCRIBE.** Both arms answer the same 250 prompts. A paired difference would have more power than two independent intervals. That is a change to the gate, so it needs its own registration and Odin may veto it.
+- **The byte sampler at a lower temperature.** `sample` offers only 0.6, 0.8 and 1.0, and SCRIBE rises as the temperature falls (0.074 → 0.125 → 0.147 on test). A `--temps` option is a small code change; the read would be registered first.
+- **Tokens with the byte model's other experts.** The byte default has similar-context and copy experts; the token model has neither. T10's mixture is where the two meet.
+- **The token sampler's integration is not pursued now.** It costs about 380 MB per run, against `sample`'s 232.5 MB on these prompts, and the byte default already matches it.
+
+**Cost.** BK0: 813 s for three temperatures at load about 11, peak 232.5 MB. The reproduction checks: about 5 minutes. The token side was not re-run.
