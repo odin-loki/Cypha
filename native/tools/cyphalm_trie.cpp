@@ -2010,11 +2010,12 @@ std::unique_ptr<ClassContext> default_cls(const Args& a, const std::uint8_t* tex
 // inside an answer (in_answer). The token `default` stands for kSimDefault; with no vec= the shipped file is read
 // (sim_vectors_path). `build` names what the index depends on: specs that differ only in k, T, min, probe, tail or gate
 // share it. A4c: [,mode=knn|dedupe] (similar_context.hpp; in dedupe the tail depth is fixed at the build). A4d: [,online=1]
-// (keys from the text being read; a query setting).
+// (keys from the text being read; a query setting). A4f: [,merge=1] (dedupe only: an online key equal to one held keeps
+// only its position; a query setting).
 #ifndef CYPHA_SIMVEC_DEFAULT
 #define CYPHA_SIMVEC_DEFAULT "data/cyphalm/simvec_ppmi32.bin"
 #endif
-constexpr const char* kSimDefault = "W=2,sif=0,k=8192,drop=0,lists=2048,probe=128,src=wiki,mode=dedupe,online=1";  // A4c, A4d
+constexpr const char* kSimDefault = "W=2,sif=0,k=8192,drop=0,lists=2048,probe=128,src=wiki,mode=dedupe,online=1,merge=1";  // A4c, A4d, A4f
 std::string sim_vectors_path() { return env_or("CYPHA_SIMVEC", CYPHA_SIMVEC_DEFAULT); }
 struct SimSpec {
     SimilarContext::Params p;
@@ -2049,8 +2050,10 @@ SimSpec parse_sim(const std::string& spec) {
         else if (k == "gate") s.gate = x != 0;
         else if (k == "mode" && (v == "knn" || v == "dedupe")) s.p.mode = v == "dedupe";  // A4c
         else if (k == "online") s.p.online = x != 0;  // A4d: keys from the text being read; a query setting
+        else if (k == "merge") s.p.merge = x != 0;  // A4f: repeated online keys stored once (dedupe); a query setting
         else return s;
     }
+    if (s.p.merge && s.p.mode != 1) s.p.merge = false;  // A4f: merging needs dedupe's sorted keys; off in knn mode
     if (s.vec.empty()) s.vec = sim_vectors_path();
     s.build = s.vec + "|" + s.src + "|" + std::to_string(s.p.W) + "|" + std::to_string(s.p.sif) + "|" +
               std::to_string(s.p.dim) + "|" + std::to_string(s.p.drop) + "|" + std::to_string(s.p.lists) + "|" +
@@ -2737,7 +2740,7 @@ int sim_growth(const Args& a, const std::vector<std::uint8_t>& data, std::size_t
             built = ss.build;
         } else
             sc->set_query(ss.p);
-        const std::size_t index = sc->bytes();
+        const std::size_t index = sc->bytes() - sc->online_bytes();  // A4f: merge's empty owner runs are online bytes
         std::printf("simgrowth %s index_mb %.3f rss_mb %.1f\n", spec.c_str(), static_cast<double>(index) / 1e6, rss_mb());
         for (const auto& x : split(a.sim_growth, ',')) {
             const double L = std::atof(x.c_str());
@@ -3069,7 +3072,7 @@ int cmd_cls(const Args& a) {
             const auto t1 = std::chrono::steady_clock::now();
             struct Seg { std::size_t held, bytes, alloc, q; double s; };
             std::vector<Seg> segs;  // A4e (--sim-stream): the expert at the end of each MiB of the stream
-            const std::size_t index_bytes = sc->bytes();
+            const std::size_t index_bytes = sc->bytes() - sc->online_bytes();  // A4f: merge's empty owner runs are online bytes
             auto seg_now = [&] {
                 segs.push_back({sc->online_keys(), sc->bytes(), sc->online_alloc_bytes(), sc->queries(),
                                 std::chrono::duration<double>(std::chrono::steady_clock::now() - t1).count()});
@@ -6282,9 +6285,9 @@ int cmd_selftest() {
         bool causal = parse_sim("default").p.online && !parse_sim("default,online=0").p.online &&
                       parse_sim("default,online=0").build == parse_sim("default").build;
         int differs = 0;
-        for (int mode = 0; mode < 2 && causal; ++mode) {
+        for (int variant = 0; variant < 3 && causal; ++variant) {  // knn, dedupe, dedupe with merge (A4f)
             SimilarContext::Params op = ap;
-            op.mode = mode, op.k = 64, op.temp = 0.05, op.lists = 8, op.probe = 2, op.online = true;
+            op.mode = variant > 0, op.k = 64, op.temp = 0.05, op.lists = 8, op.probe = 2, op.online = true, op.merge = variant == 2;
             SimilarContext full(V, op);
             SimilarContext::Params np = op;
             np.online = false;
@@ -6306,6 +6309,73 @@ int cmd_selftest() {
         }
         if (!causal || differs < 10) {
             std::cerr << "selftest: similar-context online keys (A4d) read a byte not yet scored, or are never used\n";
+            return 1;
+        }
+        // A4f: with every key a candidate (k above the key count, every list probed), merging repeated online keys
+        // changes only the order of the sums: the same distribution at every position to 1e-12, the same live count,
+        // cosine and bucket. Repeats of stored and of online keys both occur; the merged counts equal the hash-based
+        // ones; merged rows are fewer and hold fewer bytes.
+        bool eq = parse_sim("default,merge=1").ok && parse_sim("default,merge=1").p.merge && parse_sim("default").p.merge &&
+                  !parse_sim("default,merge=0").p.merge &&
+                  parse_sim("default,mode=knn,merge=1").ok && !parse_sim("default,mode=knn,merge=1").p.merge &&
+                  parse_sim("default,merge=1").build == parse_sim("default").build;
+        for (int W = 2; W <= 3 && eq; ++W) {  // W 3: more distinct keys, some alike in their leading coordinates
+            SimilarContext::Params mp = ap;
+            mp.W = W, mp.mode = 1, mp.k = 1 << 30, mp.temp = 0.05, mp.lists = 8, mp.probe = 8, mp.online = true;
+            SimilarContext plain(V, mp);
+            mp.merge = true;
+            SimilarContext merged(V, mp);
+            for (auto* e : {&plain, &merged}) e->build(reinterpret_cast<const std::uint8_t*>(big.data()), 600);
+            const auto* sb = reinterpret_cast<const std::uint8_t*>(stream.data());
+            int live_at = 0;
+            for (std::size_t n = 1; eq && n <= stream.size(); ++n) {
+                double A[256], B[256];
+                const auto ha = plain.predict(sb, n, A), hb = merged.predict(sb, n, B);
+                double d = 0;
+                for (int b = 0; b < 256; ++b) d = std::max(d, std::fabs(A[b] - B[b]));
+                eq = d <= 1e-12 && ha.live == hb.live && ha.word == hb.word && ha.top == hb.top &&
+                     std::fabs(ha.agree - hb.agree) <= 1e-12 && SimilarContext::bucket(ha) == SimilarContext::bucket(hb);
+                live_at += ha.live > 0;
+            }
+            const auto dp = plain.online_duplicates(), dm = merged.online_duplicates();
+            eq = eq && live_at > 100 && dm.first > 0 && dm.second > 0 && dm == dp && merged.online_keys() == plain.online_keys() &&
+                 merged.online_distinct() + dm.first + dm.second == merged.online_keys() && plain.online_distinct() == plain.online_keys() &&
+                 merged.online_bytes() < plain.online_bytes();
+        }
+        {  // A4f: keys alike in their leading coordinates are not one key. Projected rows (W 1, one list): the stored
+           // text's centre is (0, 0, 20, 20), so x's key (60, 60, 20, -20) and the stored y's (60, 60, -20, 20) agree in
+           // their first half only; the stream's x keys must merge with each other, never with y.
+            SimilarContext::Vectors PX;
+            PX.d = 4;
+            const char* const pw[] = {"u", "x", "y", "w"};
+            const std::int8_t pr[4][4] = {{-60, -60, 20, 20}, {60, 60, 40, 0}, {60, 60, 0, 40}, {0, 0, 40, 0}};
+            for (int i = 0; i < 4; ++i) {
+                PX.id[pw[i]] = i;
+                PX.q.insert(PX.q.end(), pr[i], pr[i] + 4);
+                PX.scale.push_back(1.0f);
+            }
+            std::string st, ss;
+            for (int i = 0; i < 30; ++i) st += "u y w ", ss += i % 2 ? "u x w " : "x u w ";
+            SimilarContext::Params xp;
+            xp.W = 1, xp.k = 1 << 30, xp.temp = 0.05, xp.dim = 0, xp.drop = 0, xp.sif = false, xp.lists = 1, xp.probe = 1;
+            xp.mode = 1, xp.online = true;
+            SimilarContext plain(PX, xp);
+            xp.merge = true;
+            SimilarContext merged(PX, xp);
+            for (auto* e : {&plain, &merged}) e->build(reinterpret_cast<const std::uint8_t*>(st.data()), st.size());
+            const auto* sb = reinterpret_cast<const std::uint8_t*>(ss.data());
+            for (std::size_t n = 1; eq && n <= ss.size(); ++n) {
+                double A[256], B[256];
+                const auto ha = plain.predict(sb, n, A), hb = merged.predict(sb, n, B);
+                double d = 0;
+                for (int b = 0; b < 256; ++b) d = std::max(d, std::fabs(A[b] - B[b]));
+                eq = d <= 1e-12 && ha.live == hb.live && ha.top == hb.top;
+            }
+            const auto dp = plain.online_duplicates(), dm = merged.online_duplicates();
+            eq = eq && dm == dp && dm.first > 0 && dm.second > 0 && merged.online_distinct() == 1;  // the x key alone is new
+        }
+        if (!eq) {
+            std::cerr << "selftest: similar-context merged online keys (A4f) disagree with unmerged ones\n";
             return 1;
         }
     }

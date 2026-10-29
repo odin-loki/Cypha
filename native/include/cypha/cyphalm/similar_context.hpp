@@ -38,6 +38,11 @@
 ///   every search scans the probed lists' share of them. Every bound tried (2^15 to 2^19 keys; the oldest dropped, or
 ///   the least recently found) lost more than 0.0005 bits per byte over 8 MiB, so none was kept
 ///   (docs/reports/A4_SIMILAR_CONTEXT_EXPERT.md, "A4e"; the bound's code is at commit a854346).
+/// - A4f, `merge` (dedupe mode, with `online`): an online key equal (all its int8 bytes) to a stored key of its list or
+///   to an earlier online key is not stored again; its position joins that key's. A list's stored keys lie sorted by
+///   their bytes, so a binary search finds an equal one; the list's online keys keep a sorted index. Each list holds its
+///   repeats in one array grouped by owner (its stored keys, then its online keys) with a start per owner. The k nearest
+///   are k distinct keys; a key found brings every position it has, each weighted as the key.
 
 #include <algorithm>
 #include <cctype>
@@ -75,6 +80,7 @@ class SimilarContext {
         std::uint64_t seed = 20261028;
         int mode = 0;           ///< A4c: 0 knn (each occurrence a neighbour), 1 dedupe (see above)
         bool online = false;    ///< A4d: keys from the text being read too (see above)
+        bool merge = false;     ///< A4f: online keys equal to one held are stored once, with every position (dedupe)
     };
     struct Vectors {  ///< word vectors, row r for word id r
         int d = 0;
@@ -223,6 +229,7 @@ class SimilarContext {
     SimilarContext(Vectors vec, Params p) : vec_(std::move(vec)), p_(p) {
         p_.W = std::max(1, p_.W);
         p_.k = std::max(1, p_.k);
+        p_.merge = p_.merge && p_.mode == 1;  // A4f: dedupe mode only
         if (vec_.projected()) {  // already the coordinates: no components dropped; dim keeps the leading ones
             p_.drop = 0;
             dim_ = p_.dim <= 0 || p_.dim > vec_.d ? vec_.d : p_.dim;
@@ -241,6 +248,7 @@ class SimilarContext {
         p_.probe = q.probe;
         p_.max_tail = p_.mode ? std::min(q.max_tail, sort_tail_) : q.max_tail;  // A4c: groups are sorted that deep
         p_.online = q.online;  // A4d
+        p_.merge = q.merge && p_.mode == 1;  // A4f: dedupe mode only
         reset_online(nullptr, 0);
         cache_ = ~std::uint64_t{0};
         restart_ = true;
@@ -637,7 +645,7 @@ class SimilarContext {
     /// The index and the word coordinates (keys, positions, centroids, list starts, rows); the word map not counted.
     std::size_t bytes() const {
         return keys_.size() + pos_.size() * 4 + grp_.size() * 4 + cent_.size() + start_.size() * 4 + proj_.size() * 4 + vec_.q.size() +
-               vec_.scale.size() * 4 + vec_.v.size() * 4 + on_count_ * (static_cast<std::size_t>(stride_) + 4);  // A4d: the online keys
+               vec_.scale.size() * 4 + vec_.v.size() * 4 + online_bytes();  // A4d: the online keys
 
     }
     int dim() const { return dim_; }
@@ -656,15 +664,37 @@ class SimilarContext {
     /// A4e diagnostics: the online keys held now (every word end of the stream so far) and the bytes their arrays hold
     /// (capacity, as allocated).
     std::size_t online_keys() const { return on_count_; }
+    /// A4f: the online keys stored (distinct under merge; every one without it).
+    std::size_t online_distinct() const {
+        std::size_t d = 0;
+        for (const auto& v : on_pos_) d += v.size();
+        return d;
+    }
+    /// The bytes the online keys hold: a row and a position per key; under merge also the sorted index, the repeats
+    /// and their owners' starts (A4f).
+    std::size_t online_bytes() const {
+        if (!p_.merge) return on_count_ * (static_cast<std::size_t>(stride_) + 4);
+        std::size_t b = 0;
+        for (const auto& v : on_keys_) b += v.size();
+        for (const auto& v : on_pos_) b += v.size() * 4;
+        for (const auto& v : on_ord_) b += v.size() * 4;
+        for (const auto& v : rep_) b += v.size() * 4;
+        for (const auto& v : rstart_) b += v.size() * 4;
+        return b;
+    }
     std::size_t online_alloc_bytes() const {
         std::size_t b = 0;
         for (const auto& v : on_keys_) b += v.capacity();
         for (const auto& v : on_pos_) b += v.capacity() * 4;
+        for (const auto& v : on_ord_) b += v.capacity() * 4;  // A4f (empty without merge)
+        for (const auto& v : rep_) b += v.capacity() * 4;
+        for (const auto& v : rstart_) b += v.capacity() * 4;
         return b;
     }
     /// A4e diagnostics, for merging: of the online keys held, how many equal a stored key (dedupe: a distinct key) and
     /// how many equal an earlier held online key but no stored one.
     std::pair<std::size_t, std::size_t> online_duplicates() const {
+        if (p_.merge) return {rep_stored_, rep_online_};  // A4f: the repeats merged, counted as they come
         const std::size_t S = static_cast<std::size_t>(stride_);
         const auto hash = [S](const std::int8_t* x) {
             std::uint64_t h = 0xcbf29ce484222325ull;
@@ -847,13 +877,22 @@ class SimilarContext {
         const int np = std::clamp(probe, 1, lists_);
         std::partial_sort(cs.begin(), cs.begin() + np, cs.end(), [](auto& x, auto& y) { return x.first > y.first; });
         std::vector<std::pair<int, std::uint32_t>> cand;
+        const bool merged = online && p_.merge && !on_pos_.empty();  // A4f
+        if (merged) on_found_.clear();
         for (int l = 0; l < np; ++l) {
             const int c = cs[static_cast<std::size_t>(l)].second;
             for (std::uint32_t i = start_[static_cast<std::size_t>(c)]; i < start_[static_cast<std::size_t>(c) + 1]; ++i)
                 cand.push_back({dot(q, &keys_[static_cast<std::size_t>(i) * stride_]), i});
             if (online && !on_pos_.empty())  // A4d: this list's online keys, their stream positions marked kOnline
-                for (std::size_t i = 0; i < on_pos_[static_cast<std::size_t>(c)].size(); ++i)
-                    cand.push_back({dot(q, &on_keys_[static_cast<std::size_t>(c)][i * static_cast<std::size_t>(stride_)]), on_pos_[static_cast<std::size_t>(c)][i]});
+                for (std::size_t i = 0; i < on_pos_[static_cast<std::size_t>(c)].size(); ++i) {
+                    const int d = dot(q, &on_keys_[static_cast<std::size_t>(c)][i * static_cast<std::size_t>(stride_)]);
+                    if (!merged) {
+                        cand.push_back({d, on_pos_[static_cast<std::size_t>(c)][i]});
+                        continue;
+                    }
+                    cand.push_back({d, kOnline | static_cast<std::uint32_t>(on_found_.size())});  // A4f: (list, key)
+                    on_found_.push_back({static_cast<std::uint32_t>(c), static_cast<std::uint32_t>(i)});
+                }
         }
         const std::size_t k = std::min<std::size_t>(cand.size(), static_cast<std::size_t>(p_.k));
         std::partial_sort(cand.begin(), cand.begin() + static_cast<std::ptrdiff_t>(k), cand.end(),
@@ -861,6 +900,26 @@ class SimilarContext {
         for (std::size_t j = 0; j < k; ++j) {
             const float sim = static_cast<float>(cand[j].first / (127.0 * 127.0));
             if (sim < p_.min_sim) break;
+            if (merged) {  // A4f: the key, then every repeat merged into it, each a position with the key's cosine
+                std::size_t L = 0, owner = 0;
+                if (cand[j].second & kOnline) {
+                    const auto [c, i] = on_found_[cand[j].second & ~kOnline];
+                    L = c;
+                    owner = static_cast<std::size_t>(start_[L + 1] - start_[L]) + i;
+                    p.push_back(on_pos_[L][i]);
+                } else {
+                    L = static_cast<std::size_t>(std::upper_bound(start_.begin(), start_.end(), cand[j].second) - start_.begin()) - 1;
+                    owner = cand[j].second - start_[L];
+                    p.push_back(cand[j].second);
+                }
+                s.push_back(sim);
+                const auto& r = rstart_[L];
+                for (std::uint32_t x = r[owner]; x < r[owner + 1]; ++x) {
+                    p.push_back(rep_[L][x]);
+                    s.push_back(sim);
+                }
+                continue;
+            }
             p.push_back(cand[j].second & kOnline ? cand[j].second  // A4d: an online key's stream position
                         : p_.mode == 1 ? cand[j].second : pos_[cand[j].second]);  // A4c dedupe: the distinct key's slot
             s.push_back(sim);
@@ -869,13 +928,57 @@ class SimilarContext {
 
     // A4d: the online keys start again for stream h (nullptr: none yet).
     void reset_online(const std::uint8_t* h, std::size_t from) const {
-        on_keys_.assign(p_.online ? static_cast<std::size_t>(lists_) : 0, {});
-        on_pos_.assign(p_.online ? static_cast<std::size_t>(lists_) : 0, {});
+        // Fresh vectors, so the memory of the keys held before is given back (assign would keep each one's capacity).
+        const std::size_t nl = p_.online ? static_cast<std::size_t>(lists_) : 0;
+        std::vector<std::vector<std::int8_t>>(nl).swap(on_keys_);
+        std::vector<std::vector<std::uint32_t>>(nl).swap(on_pos_);
         on_count_ = 0;
+        const bool m = p_.online && p_.merge;  // A4f: each list's stored keys own an empty run of repeats
+        std::vector<std::vector<std::uint32_t>>(m ? nl : 0).swap(on_ord_);
+        std::vector<std::vector<std::uint32_t>>(m ? nl : 0).swap(rep_);
+        std::vector<std::vector<std::uint32_t>>(m ? nl : 0).swap(rstart_);
+        for (std::size_t L = 0; L < rstart_.size(); ++L) rstart_[L].assign(static_cast<std::size_t>(start_[L + 1] - start_[L]) + 1, 0);
+        rep_stored_ = rep_online_ = 0;
         on_h_ = h;
         on_upto_ = from;
         on_sig_.clear();
         cache_ = ~std::uint64_t{0};
+    }
+
+    // A4f: key q of list L at stream position pos (kOnline set). If q equals a stored key of L or an earlier online key
+    // of L (every byte), pos joins that key's repeats and true is returned. Otherwise q is a new key: its place in L's
+    // sorted index and its owner's empty run are made, and false is returned (the caller stores its row and position).
+    bool merge_online(std::size_t L, const std::int8_t* q, std::uint32_t pos) const {
+        const std::size_t S = static_cast<std::size_t>(stride_);
+        const auto add = [&](std::size_t owner) {  // pos at the end of owner's run; every later run moves one on
+            auto& r = rstart_[L];
+            rep_[L].insert(rep_[L].begin() + r[owner + 1], pos);
+            for (std::size_t x = owner + 1; x < r.size(); ++x) ++r[x];
+        };
+        std::uint32_t lo = start_[L], hi = start_[L + 1];  // the stored keys of L, sorted by their bytes (dedupe)
+        while (lo < hi) {
+            const std::uint32_t mid = lo + (hi - lo) / 2;
+            if (std::memcmp(&keys_[static_cast<std::size_t>(mid) * S], q, S) < 0) lo = mid + 1;
+            else hi = mid;
+        }
+        if (lo < start_[L + 1] && std::memcmp(&keys_[static_cast<std::size_t>(lo) * S], q, S) == 0) {
+            add(lo - start_[L]);
+            ++rep_stored_;
+            return true;
+        }
+        auto& ord = on_ord_[L];
+        const auto& rows = on_keys_[L];
+        const auto it = std::lower_bound(ord.begin(), ord.end(), q, [&](std::uint32_t i, const std::int8_t* x) {
+            return std::memcmp(&rows[static_cast<std::size_t>(i) * S], x, S) < 0;
+        });
+        if (it != ord.end() && std::memcmp(&rows[static_cast<std::size_t>(*it) * S], q, S) == 0) {
+            add(static_cast<std::size_t>(start_[L + 1] - start_[L]) + *it);
+            ++rep_online_;
+            return true;
+        }
+        ord.insert(it, static_cast<std::uint32_t>(on_pos_[L].size()));
+        rstart_[L].push_back(rstart_[L].back());
+        return false;
     }
 
     // A4d: the keys at the stream's word ends j with on_upto_ <= j < anchor, each in its nearest list. The stream is the
@@ -899,9 +1002,10 @@ class SimilarContext {
             }
             if (!query_key(h, i, j, q.data())) continue;
             const std::size_t L = static_cast<std::size_t>(nearest(q.data(), lists_));
+            ++on_count_;
+            if (p_.merge && merge_online(L, q.data(), static_cast<std::uint32_t>(j) | kOnline)) continue;  // A4f
             on_keys_[L].insert(on_keys_[L].end(), q.begin(), q.end());
             on_pos_[L].push_back(static_cast<std::uint32_t>(j) | kOnline);
-            ++on_count_;
         }
         on_upto_ = std::max(on_upto_, anchor);
         const std::size_t s2 = std::min<std::size_t>(on_upto_ - from, 32);
@@ -949,6 +1053,11 @@ class SimilarContext {
     mutable std::size_t on_count_ = 0, on_upto_ = 0;
     mutable const std::uint8_t* on_h_ = nullptr;
     mutable std::vector<std::uint8_t> on_sig_;  // the stream's bytes just before on_upto_
+    mutable std::vector<std::vector<std::uint32_t>> on_ord_;  // A4f: each list's online keys, sorted by their bytes
+    mutable std::vector<std::vector<std::uint32_t>> rep_;     // A4f: each list's repeats, grouped by owner
+    mutable std::vector<std::vector<std::uint32_t>> rstart_;  // A4f: each owner's run in rep_ (stored keys, then online)
+    mutable std::vector<std::pair<std::uint32_t, std::uint32_t>> on_found_;  // A4f: a search's online keys (list, key)
+    mutable std::size_t rep_stored_ = 0, rep_online_ = 0;     // A4f: repeats merged into stored / online keys
 };
 
 }  // namespace cypha::cyphalm

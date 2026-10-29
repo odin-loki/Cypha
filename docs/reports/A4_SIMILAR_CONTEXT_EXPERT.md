@@ -472,6 +472,30 @@ By temperature: T 0.6 0.013 → 0.072, T 0.8 0.020 → 0.074, T 1.0 0.010 → 0.
    - A CMake build should set `CYPHA_SIMVEC_DEFAULT` to the file's absolute path, so the tools find it from any directory.
 6. **Next.** Distinct keys stored once (up to −18 MB, lossy: it needs its own read); next-word counts per cluster of two-word contexts in place of 2,048 neighbours (A4 decision 6); keys appended online.
 
+
+### Results (A4f), part 2: the fresh read and the decision (2026-10-29)
+
+**Fresh read, once** (rule 2; holdout, then enwik8 [40, 48) MiB; binary `ct_fix1`, pre-BKN base; `simpair --margin 0.001`):
+
+| | Whole continuation | Last 2 MiB |
+|---|---|---|
+| Reference (`default`) | 1.944028 | — |
+| `merge=1` | 1.934964 | — |
+| Change, merge − reference | **−0.0091 [−0.0095, −0.0087]** | −0.0130 [−0.0141, −0.0120] |
+
+P(change < +0.001) is 1.000 over 4 KiB blocks (LCI). By MiB: −0.0039, −0.0049, −0.0070, −0.0078, −0.0102, −0.0126, −0.0135, −0.0126. The agent that ran A4f was stopped by Odin's interrupt after this read finished; the main session scored it and made the switch.
+
+**Rule 2 holds:** fresh change −0.0091 (at most +0.0005 needed), LCI 1.000 (0.95 needed); answers unchanged (below); `sample` SCRIBE v2 0.069, above the reference's lower bound 0.064 (part 1); served `qa` under 200 MB; search p50 at 16 MiB 1.27× lower. So `merge=1` is the default.
+
+**The switch.** `kSimDefault` gains `merge=1`; `merge=0` restores the old keys. Merging needs dedupe's sorted keys, so in `mode=knn` it is now switched off rather than refused (`default,mode=knn` still parses). The selftest checks both.
+
+**With today's defaults** (byte Kneser–Ney and GEN-C2's cache on; C1L configuration):
+- `qa` rows, built and served: all 520 rows equal BKN2's rows in every column but `question_lp` (the question is scored with the expert on).
+- `qa` holdout: trie + IG + class + sim + copy 1.727340 → 1.726517; with GEN-C2's cache 1.698891 → 1.698280. The similar-context table is 24.6 → 22.8 MB.
+- Peaks: built `qa` (`--save`) 195.3 MB (was 196.8–197.2), served 194.6 MB (was 196.4–196.5).
+
+**Predictions scored:** F1 hit (33.31 MB counted, 47.91 allocated), F2 hit, F3 miss (the change is −0.0089, below the predicted range: merging helps), F4 miss (1.27×, under 1.3×), F5 hit (fresh −0.0091 against dev −0.0089), F6 hit for the answer side (`question_lp` moves; holdout −0.0008), F7 hit (inside the interval's floor), F8 hit.
+
 ---
 
 ## A4c: counts in place of neighbours (2026-10-28)
@@ -887,6 +911,89 @@ Scoring time per MiB in these runs is too noisy to read (the reference's last tw
 ```
 
 The bound's specs need commit a854346; the reference, `online=0` and growth without a bound also run at the final commit. Runs and bit files are in `/root/work/a4e/runs/` (`dev/`, `growth/`, `parity/`, `parity2/`).
+
+
+## A4f: merging repeated online keys (2026-10-29)
+
+**Odin Loch** · 2026-10-29 · follows A4e's "Next"
+
+A4e found that 77.3% of the online keys held at 16 MiB repeat a key already held: 1,641,487 equal a stored key and 238,167 equal an earlier online key; only 552,546 of the 2,432,200 are new. Each repeat costs a full 36 bytes. A4f stores each key once with all its positions, as A4c's dedupe already does for the stored keys. That changes which keys fill the k nearest, so it gets its own reads. The design, the rules and the predictions below were written before any A4f run.
+
+**The design (`merge=1`, a query setting; dedupe mode only).**
+- **Lookup.** A new online key goes to its nearest list, as now. It is compared byte for byte with that list's stored keys (in dedupe mode they lie sorted by their bytes inside each list, so a binary search finds an equal one) and with the list's earlier online keys (a sorted index of them, 4 bytes a key). Equal means the same 32 int8 bytes, not the same hash.
+- **Store.** An equal key adds only its position (4 bytes) to the key it equals. Each list keeps its repeats in one array grouped by owner (its stored keys, then its new online keys), with a start offset per owner (4 bytes an owner). A new key is stored as now: its row, its first position, plus its index entry and its start offset.
+- **Search.** A merged key is one candidate. The k nearest are k distinct keys, stored or online. A key found brings all its positions: a stored key its stored occurrences (as now) and then its online repeats; an online key its first position and then its repeats. Every position is weighted as its key, and lives while the stream after it agrees with the tail, as an online key does now. So with k at least the number of candidates, merging changes only the order in which equal numbers are summed.
+- **Not changed.** Online keys still come only from word ends before the anchor; the cache still starts a new search for every new word end (the count of positions held, not of keys); stored keys, lists and the index are untouched; `merge=0` runs today's code.
+
+**Streams.** As A4e. The read is trie + InfiniGram + class + sim over the continuation, each spec paired per byte (`--sim-bits`, `simpair`), 4 KiB blocks.
+- **Dev:** holdout, then enwik8 [8, 16) MiB. The reference (`default`) and `default,merge=1` in one run.
+- **Fresh, read once:** holdout, then enwik8 [40, 48) MiB, which no CyphaLM expert choice has read (A4e left it unread).
+- **Growth:** the expert alone over holdout + [8, 23) MiB, both specs back to back (`--sim-growth 1,2,4,8,16`): keys held, positions held, counted and allocated MB, resident MB, search p50 and p99, time per byte, and the repeats merged.
+
+**Memory measure.** "Online MB" counts every byte the online keys hold: rows, positions, the lookup index, the repeats and their start offsets (the counted column). The allocated column (vector capacity) is reported beside it.
+
+**Rules (fixed before the runs).**
+1. **Dev.** `merge=1` is eligible if its mean paired change against the reference is at most +0.0005 over the whole continuation and over its last 2 MiB, and its counted online MB at 16 MiB in the growth read is at least 50% below the reference's.
+2. **Default, on fresh text read once**, `merge=1` paired against the reference in the same run. It becomes the default only if all of these hold:
+   - the mean paired change is at most +0.0005, and P(change < +0.001) ≥ 0.95 over 4 KiB blocks (LCI);
+   - answers: `qa` in B4c's rule-3 configuration gives byte-identical rows (the expert is off inside answers);
+   - text: `sample`'s SCRIBE v2 on GEN-A's dev benchmark (`scripts/gen_eval.sh dev`) is not below the reference's lower 95% bound (D0: 0.079 [0.064, 0.096]); surface S reported;
+   - RAM: served `qa` peaks under 200 MB;
+   - cost: search p50 at 16 MiB in the growth read at most 1.25× the reference's in the same run.
+3. **Parity.** With `merge=0` every printed number is unchanged: the selftest's lines, `cls`'s `default` lines, `qa` rows and `sample` text, against today's main.
+4. **Code debt.** If `merge=1` does not become the default, its code is removed (its numbers reproduce at the commit that measured them); a measuring tool stays only if it measures the default.
+
+**Selftest (before any read).** With k larger than every candidate, the merged and unmerged experts give the same distribution at every position, to 1e-12 (only the order of the sums differs), in a stream where keys repeat both stored and online keys. The A4d leak check also runs with `merge=1`. Planted bugs must fail it: a repeat attached to the wrong owner (an off-by-one in the start offsets), and a lookup that treats keys equal when only their first 16 bytes agree.
+
+**Predictions.**
+
+| # | Prediction | Falsified if |
+|---|---|---|
+| F1 | Counted online MB at 16 MiB is 30–40 MB (−54% to −66%); allocated 38–60 MB | outside either range |
+| F2 | At every growth length the repeats merged into stored keys and into online keys equal A4e's hash-based counts (1,641,487 and 238,167 at 16 MiB) | any count differs by more than 0.01% |
+| F3 | Dev: the mean paired change is between −0.003 and +0.0005 (more distinct neighbours do not hurt) | outside |
+| F4 | Search p50 at 16 MiB is at least 1.3× lower with `merge=1` (it scans about a quarter of the online rows) | less than 1.3× lower |
+| F5 | Fresh change within ±0.001 of the dev change | outside |
+| F6 | `qa` rows byte-identical; `qa` holdout BPC moves by less than 0.002 | rows differ, or |ΔBPC| ≥ 0.002 |
+| F7 | `sample` SCRIBE v2 on GEN-A's dev set stays inside the reference's interval | outside |
+| F8 | The selftest's equivalence and leak checks pass with `merge=1`; both planted bugs fail it | a check fails, or a planted bug passes |
+
+### Results (A4f), part 1: before the fresh read
+
+Code: d5f5e97 (merging, behind `merge=1`), 0f6ea73 (`reset_online` gives back the memory held before; the growth and stream reads count merge's owner runs as online bytes). Neither changes a prediction: with `merge=0` the selftest prints what the base printed, and the dev reference's bits are byte-identical to A4e's (`A.0.f64`, 64 MiB).
+
+**Selftest.** It passes with `merge=1`: with every key a candidate (W 2 and 3) merged and unmerged agree to 1e-12 at every position, with the same live count, cosine and bucket; the merged counts equal the hash-based ones; the A4d leak check passes in all three variants. A fixture with projected rows makes two keys that agree only in their first half. Both planted bugs fail it: an off-by-one in the repeat runs, and equality on half the coordinates. (The random-word fixture alone did not catch the second bug: no two of its keys agree in half their coordinates. The projected fixture was added for it before any read.)
+
+**Growth** (the expert alone over the holdout and enwik8 [8, 23) MiB; each spec in its own process, the reference after merge):
+
+| Stream | Positions held | Merged into stored / online keys | Online MB, reference (allocated) | Online MB, `merge=1` (allocated) | Search p50 µs, reference / merge | µs per byte, reference / merge |
+|---|---|---|---|---|---|---|
+| 1 MiB | 147,829 | 105,523 / 5,757 | 5.32 (7.57) | 3.53 (5.61) | 7,124 / 7,162 | 1,857 / 2,019 |
+| 2 MiB | 298,051 | 212,318 / 14,488 | 10.73 (15.42) | 5.52 (8.33) | 10,187 / 7,190 | 1,840 / 1,859 |
+| 4 MiB | 604,009 | 418,875 / 36,889 | 21.74 (31.27) | 9.82 (14.07) | 10,892 / 7,416 | 2,064 / 2,031 |
+| 8 MiB | 1,210,215 | 825,761 / 93,145 | 43.57 (62.58) | 17.97 (25.66) | 11,515 / 8,216 | 2,151 / 2,140 |
+| 16 MiB | 2,432,200 | 1,641,487 / 238,167 | 87.56 (125.85) | **33.31 (47.91)** | 15,753 / 12,414 | 2,787 / 3,345 |
+
+- **Memory:** at 16 MiB merge holds 33.31 MB counted (−62.0%) and 47.91 MB allocated (−61.9%). The process peaks at 107 MB against 284 MB.
+- **The merges are exact.** At every length the repeats merged into stored keys and into online keys equal A4e's hash-based counts (and the reference's in this run).
+- **Time:** search p50 at 16 MiB is 1.27× lower with merge (an earlier run with both specs in one process: 1.33×). Time per byte is the same up to 8 MiB and 20% higher at 16 MiB in this run (3% in the earlier one): a found key now brings every position it has, and each is checked against the tail. The machine's load was 15–20 throughout.
+- In the earlier one-process run the second spec inherited the first one's capacity (`assign` keeps it), so its allocated column was wrong; 0f6ea73 fixes that, and the table above is from separate processes.
+
+**Dev (rule 1).** Holdout, then enwik8 [8, 16) MiB; trie + InfiniGram + class + sim; paired per byte, 4 KiB blocks.
+
+| | Whole continuation | Last 2 MiB |
+|---|---|---|
+| Reference (`default`) | 1.942285 | — |
+| `merge=1` | 1.933341 | — |
+| Change, merge − reference | **−0.0089 [−0.0094, −0.0085]** | **−0.0130 [−0.0140, −0.0120]** |
+
+By MiB of the continuation: −0.0037, −0.0045, −0.0070, −0.0070, −0.0096, −0.0138, −0.0127, −0.0133. The gain grows with the stream: the more repeats there are, the more of the k nearest a merged search frees for other keys, and every position of a key found is used. Rule 1 holds (the change is below +0.0005 on both, and memory is 62% lower), so the fresh read is made.
+
+**Checks made beside the dev read** (rule 2's other parts, on the pre-BKN base):
+- **Answers.** `qa` in the C1L configuration with `--sim default,merge=1`: all 520 rows have the same answer and grade, and every gate, tally, abstention and risk-coverage line is identical to `main`'s. Only `question_lp` moves (517 rows), because the question is outside the answer and the expert reads it. A4c and A4d read rule 2's "byte-identical rows" the same way. With `merge=0` the rows are byte-identical to `main`'s.
+- **`qa` holdout:** trie + IG + class + sim + copy 1.789464 → 1.788260 (−0.0012); without copy 1.839792 → 1.838223.
+- **RAM:** served `qa` (`--model`) peaks at 170.7 MB. Built with `--save`, 194.3 MB with merge and 194.4 MB without it on the same binary: merging adds nothing in `qa`.
+- **Text:** `sample` with `merge=1` on GEN-A's dev benchmark: SCRIBE v2 0.069 [0.056, 0.083], surface S 0.859, continuation BPC 2.1340, copy share 0.0390. The reference (GEN-A's D0) is 0.079 [0.064, 0.096], 0.855, 2.1339 and 0.0414. Rule 2's floor is the reference's lower bound, 0.064, so the text check passes; the point estimate is 0.010 lower, inside both intervals.
 
 ---
 
