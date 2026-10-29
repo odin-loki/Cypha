@@ -303,6 +303,12 @@ bool Cypha::load_sequence(const std::string& json_path) {
 }
 
 bool Cypha::init_default_sequence(int vocab_size, int d_model) {
+  // The hp production recipe sets vocab_size to 256 (hp models bytes). A smaller request used to be widened
+  // silently, so a caller that asked for 64 symbols got a 256-symbol model that generated tokens >= 64.
+  if (vocab_size != 256) {
+    throw std::invalid_argument("Cypha::init_default_sequence: CyphaLM's hp model reads bytes, so vocab_size must be "
+                                "256 (got " + std::to_string(vocab_size) + ")");
+  }
   cyphalm::CyphaLMConfig cfg;
   cfg.vocab_size = vocab_size;
   cfg.d_embed = d_model;

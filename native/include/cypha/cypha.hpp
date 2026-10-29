@@ -143,7 +143,9 @@ class Cypha {
 
   /// Load sequence checkpoint (JSON config path).
   bool load_sequence(const std::string& json_path);
-  /// Fresh sequence model: hp context mixer (odin-loki/CompressionAlgorithm).
+  /// Fresh sequence model: hp context mixer (odin-loki/CompressionAlgorithm). hp reads bytes, so vocab_size must be
+  /// 256; any other value throws std::invalid_argument (it was widened to 256 silently, and generation then emitted
+  /// tokens outside the asked-for vocabulary).
   bool init_default_sequence(int vocab_size = 256, int d_model = 64);
 
   void save(const std::string& cypha_path) const;

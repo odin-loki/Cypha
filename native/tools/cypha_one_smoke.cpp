@@ -2,6 +2,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -121,7 +122,15 @@ int main(int argc, char** argv) {
   }
   std::cout << "sample n=" << samp.h.size() << " label=" << samp.label << "\n";
 
-  if (!model.init_default_sequence(64, 32)) {
+  // hp reads bytes: a vocabulary other than 256 is rejected, not widened silently (SLOW_TEST_TRIAGE, "Fix").
+  try {
+    cypha::Cypha small;
+    (void)small.init_default_sequence(64, 32);
+    std::cerr << "init_default_sequence(64) should be rejected\n";
+    return 11;
+  } catch (const std::invalid_argument&) {
+  }
+  if (!model.init_default_sequence(256, 32)) {
     std::cerr << "init_default_sequence failed\n";
     return 5;
   }
