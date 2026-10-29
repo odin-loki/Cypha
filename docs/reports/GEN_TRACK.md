@@ -10,7 +10,7 @@
 |---|---|---|---|
 | 1. Clean training text | GEN-A | `sample` trains on SCRIBE's markup-stripped prose of its own training slice | Done: harness and benchmark ready; clean text not adopted (dev SCRIBE 0.069 against 0.079), `--clean` stays a flag |
 | 2. Sentence gate | GEN-B | A gate at sentence level: CyphaLM writes candidate sentences; a scorer picks | Running |
-| 3. Word and topic experts | GEN-C (topic), token track (words) | Document experts (PLAN B5); the word level is the token track (`docs/TOKENS_PLAN.md`) | GEN-C done: not adopted on bytes ([report](GEN_C_TOPIC_CACHE.md)) |
+| 3. Word and topic experts | GEN-C (topic), token track (words) | Document experts (PLAN B5); the word level is the token track (`docs/TOKENS_PLAN.md`) | GEN-C done: not adopted on bytes ([report](GEN_C_TOPIC_CACHE.md)). Tokens T4 done: not adopted (test SCRIBE 0.112 against the byte model's 0.106 at its best temperature; [report](TOKENS_T3_T4.md)) |
 | 4. Content-plan expert | GEN-E | The fact store steers through a next-byte expert; CyphaLM writes every byte | Running |
 
 ## Shared rules
@@ -29,6 +29,7 @@ One row per read of `bench/eval/gen_prompts_test.tsv`. Dev runs are not logged h
 
 | Date | Change | Label | Command | SCRIBE v2 [95%] | Copy share | Decision |
 |---|---|---|---|---|---|---|
+| 2026-10-29 | Tokens T4: whole-token sampling from TOK-A's BPE-W 4,096 model at T 1.0 (chosen on dev) against the byte default at T 0.6 ([report](TOKENS_T3_T4.md), "T4") | TB; B0 | `cyphalm_tok_gen gen … t-bpe-4096.tok … --prompts-file bench/eval/gen_prompts_test.tsv --temps 1.0`; `scripts/gen_eval.sh test B0` (today's default) | TB 0.112 [0.086, 0.137]; B0 T 0.6 0.106 [0.078, 0.135] (pooled 0.072 [0.059, 0.085]) | TB 0.0746; B0 T 0.6 0.0561 (pooled 0.0386) | Not adopted: intervals overlap. Copy rule met (0.0746 ≤ 0.0761) |
 
 ## GEN-A
 
