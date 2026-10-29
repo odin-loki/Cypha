@@ -328,3 +328,178 @@ What T4 does show:
 The word-level gap (sentence form, D_S) remains. Tokens fix spelling at low temperature, not grammar.
 
 **Cost.** About 380 MB peak resident per run, about 30 minutes per dev arm under load (three temperatures and the continuation bits), 6 minutes for the single-temperature test arm.
+
+## T4b: a token sampler that does not follow long matches (registered 2026-10-29, before any T4b run)
+
+**Odin Loch** · 2026-10-29 · decided by measurement under PLAN ledger 55, open to Odin's veto
+
+**Question.** T4 left two designs for Odin's choice. Both target the same cause: at T 0.6 and 0.8 the token sampler copies 28–78% of its bytes, because the token ∞-gram follows long training matches. T4b settles the choice on GEN-A's dev split.
+
+**The fitted weights, read before choosing the grid** (λ of the ∞-gram per match-length bucket, from the holdout's first half; `cyphalm_tok_gen gen` now prints them):
+
+| Match length (tokens) | Count 1 | 2–3 | 4–15 | 16+ |
+|---|---|---|---|---|
+| 1 | 0 | 0.995 | 0 | 0.145 |
+| 2, 3–4 | 0 | 0 | 0 | 0 |
+| 5–8 | 0.11 | 0.08 | 0.10 | 0.05 |
+| 9–16 | 0.315 | 0.29 | 0.215 | 0.20 |
+| 17+ | 0.60 | 0.315 | 0.50 | 0.38 |
+
+So a ceiling on λ of 0.3 or 0.5 would barely bind (only above 16 tokens), and a match cap of 4 tokens is almost the same as no ∞-gram (λ is 0 for 2–4 tokens). The grid below uses match caps instead.
+
+**Arms** (all BPE-W 4,096, TOK-A's model, temperatures 0.6, 0.8 and 1.0, as T4's TB; only sampling changes):
+- **C1, the ∞-gram capped when sampling** (`--inf-cap M`): the ∞-gram reads its match from at most the last M tokens. K0 (M = 0: no ∞-gram, KN alone), K8 (M = 8), K16 (M = 16). T4's TB is M = 64.
+- **C2, the byte sampler's rules on tokens** (`--nucleus 0.9 --no-repeat`, label NR): the full model (M = 64). Per token: a token is banned if any of its bytes, written in turn, would follow an 11-byte window with the byte that followed the same window earlier in the text (prompt included). That is `mark_banned`'s rule, byte by byte. If every token with mass is banned, nothing is banned. Then q^(1/T), the smallest set of tokens holding at least 0.9 of the mass, and one draw within it. Healing (the first token, a cover past the prompt's end) stays the bridge's draw, as in T4.
+- **C3, both** (label NRK*): C2 with the best C1 cap. The best C1 cap is the one whose best eligible arm (dev rule below) has the highest dev SCRIBE. If no C1 arm is eligible, it is the cap with the lowest pooled copy share. C3 runs after C1's results.
+
+**Unchanged by design.** The human continuations are always scored by T4's model (M = 64, no nucleus) through the bridge. So every arm's continuation bits per byte must equal TB's 2.0260 exactly. That is checked, not assumed. With no T4b flag the tool reproduces T4's TB file byte for byte (checked on the first 10 dev prompts: 41 lines identical, and the continuation bits).
+
+**Checks of the new code.** `cyphalm_tok_gen check-t4b` compares the lifted repeat rule with the byte rule applied byte by byte, on random texts over a two-letter alphabet: 18,000 checks, 1,383 of them banned, 0 failed. Two planted bugs fail it: checking only a token's first byte (755 failed), and missing windows that straddle a token boundary (65 failed).
+
+**The dev choice** (as T4's):
+1. Each arm is one setting at one temperature. SCRIBE v2 is read per temperature.
+2. **Eligible:** dev copy share at most the byte comparator's (GEN-A's D0 at T 0.6: 0.0586) + 0.02, that is at most **0.0786**.
+3. **Chosen:** the eligible arm with the highest dev SCRIBE, among the T4b arms and T4's TB at T 1.0 (0.110 [0.084, 0.139]; copy 0.0769). Within 0.005, the lower copy share wins.
+4. **Test read only if** the chosen arm is a T4b arm and its dev SCRIBE point estimate is above **0.110** (T4's TB at T 1.0, itself above the byte comparator's 0.101). A T4b arm that does not beat T4's arm on dev is not a change worth a frozen-test read.
+
+**The test read (once).** The chosen arm at its temperature (`--temps T`) on `gen_prompts_test.tsv`. The byte comparator is T4's B0 test run, reused: the same prompts file, the same binary (`cyphalm_trie_91827e1`, no flags) and a deterministic sampler, so a rerun would be bit-identical. **Gate:** SCRIBE above B0 at T 0.6 (0.106 [0.078, 0.135]) with disjoint 95% intervals, and the copy share at most B0's at T 0.6 + 0.02 (0.0761). Logged in GEN_TRACK's Reads table. A pass makes the sampler a candidate for `sample`'s default; the switch is a later integration step.
+
+**Reported together**, every arm: SCRIBE v2 [95%] with surface S, D_I, kept samples and mean length, continuation bits per byte, copy share, invented-word rate, five samples.
+
+**Commands** (`/root/work/tokc/runs/t4b/arm.sh SPLIT LABEL [gen flags]`):
+
+```
+B=/root/work/tokc/build/cyphalm_tok_gen; E=/root/cdata/enwik8; TK=/root/work/toka/runs/tok/t-bpe-4096.tok
+SC=/root/work/gena/runs/scribe_gena; O=/root/work/tokc/runs/t4b/dev
+$B gen $E $TK $O/K8.gen.txt --prompts-file bench/eval/gen_prompts_dev.tsv --inf-cap 8 > $O/K8.sample.out
+$SC ladder --pack enwik:$E:16:48 --ref enwik:$E:48:56 --test enwik:$E:56:64 --vectors /root/work/scribe/vec32 \
+   --profile v2 --seed 20261027 --gen-trie $O/K8.gen.txt --label K8 > $O/K8.scribe.md
+python3 -I scripts/gen_eval_summary.py $O K8 dev
+$B words $E $O/K8.gen.txt
+```
+
+**Predictions** (registered before any run):
+
+| # | Prediction | Falsified if |
+|---|---|---|
+| R1 | K0 (KN alone) still copies more than 0.10 of its bytes at T 0.6: order-5 KN also follows contexts seen once | K0's T 0.6 copy share is at most 0.10 |
+| R2 | Copying grows with the cap at every temperature: K0 ≤ K8 ≤ K16 ≤ TB | Any step falls by more than 0.01 |
+| R3 | C2 (NR) copies more than TB at T 0.8 and 1.0: the nucleus cuts the tail and leaves the long match | NR's copy share is below TB's at either |
+| R4 | At least one T4b arm at T 0.6 or 0.8 is eligible. About even odds | None is |
+| R5 | The chosen arm's dev SCRIBE is in [0.08, 0.20] | Outside |
+| R6 | Every arm's continuation bits per byte is 2.0260, as TB | Any differs |
+| R7 | NR at T 1.0 invents fewer words than TB at T 1.0 (0.104) | Not fewer |
+| R8 | If a test read is made, the gate is not met (the intervals overlap). About 70% | The gate is met |
+
+### T4b dev results (2026-10-29, before the test read)
+
+Tool: `cyphalm_tok_gen` at 7300e77. Four arms ran side by side at load about 8 on 4 cores: K0 974 s, K8 978 s, K16 998 s, NR 1,547 s; then NRK16 1,903 s. Ladder 27–34 s each. The byte comparator D0 and T4's TB are read as they stand.
+
+| Arm, temperature | SCRIBE v2 [95%] | Surface S | D_I | Kept / mean bytes | Copy share | Invented words |
+|---|---|---|---|---|---|---|
+| D0 byte, T 0.6 (comparator) | 0.101 [0.072, 0.135] | 0.900 | 0.00 | 213 / 328 | 0.0586 | 0.0251 |
+| TB (T4, cap 64), T 1.0 | 0.110 [0.084, 0.139] | 0.757 | 0.00 | 208 / 298 | 0.0769 | 0.1044 |
+| K0 (no ∞-gram), T 0.6 / 0.8 / 1.0 | 0.379 / 0.273 / **0.090 [0.067, 0.114]** | 0.879 / 0.845 / 0.760 | 0.06 / 0 / 0 | 189 / 197 / 206 | 0.310 / 0.147 / **0.0472** | 0.014 / 0.042 / 0.107 |
+| K8, T 0.6 / 0.8 / 1.0 | 0.360 / 0.289 / **0.085 [0.062, 0.109]** | 0.877 / 0.845 / 0.761 | 0 / 0 / 0 | 186 / 189 / 213 | 0.465 / 0.207 / **0.0659** | 0.010 / 0.039 / 0.104 |
+| K16, T 0.6 / 0.8 / 1.0 | 0.402 / 0.293 / **0.112 [0.085, 0.141]** | 0.875 / 0.845 / 0.756 | 0.23 / 0.13 / 0 | 183 / 197 / 210 | 0.663 / 0.284 / **0.0749** | 0.008 / 0.036 / 0.105 |
+| NR (nucleus, no repeat), T 0.6 / 0.8 / 1.0 | 0.607 / 0.339 / 0.181 [0.147, 0.216] | 0.894 / 0.873 / 0.804 | 0 / 0 / 0 | 216 / 200 / 205 | 0.897 / 0.464 / 0.116 | 0.003 / 0.016 / 0.070 |
+| NRK16 (C3), T 0.6 / 0.8 / 1.0 | 0.452 / 0.365 / 0.180 [0.147, 0.216] | 0.879 / 0.862 / 0.803 | 0 / 0 / 0 | 198 / 195 / 206 | 0.804 / 0.415 / 0.109 | 0.004 / 0.017 / 0.071 |
+
+Mean bytes kept are 245–301 for every token arm. **Continuation bits per byte: 2.0260 [1.9954, 2.0556] in every arm.** Each arm's `.cont.tsv` is byte-identical to TB's, as the design requires.
+
+**The dev choice, by the registered steps.**
+1. **Eligible** (copy share at most 0.0786): K0, K8 and K16 at T 1.0, and T4's TB at T 1.0. No arm at T 0.6 or 0.8 is eligible; NR and NRK16 are eligible at no temperature.
+2. **Best C1 cap** (for C3): K16 (0.112). So C3 was NRK16.
+3. **Chosen:** K16 at T 1.0 (0.112, copy 0.0749). It is within 0.005 of TB (0.110, copy 0.0769), and the lower copy share wins.
+4. **Test read:** K16 is a T4b arm and 0.112 is above 0.110, so the rule calls for the read. The margin is 0.002, inside the tie band: the read was made because the rule says so, not because dev shows a real gain.
+
+**What dev shows.**
+- **Copying is not only the ∞-gram.** With no ∞-gram at all (K0), the sampler still copies 31% of its bytes at T 0.6 and 15% at T 0.8. Order-5 Kneser–Ney follows contexts seen once too. Capping the ∞-gram lowers copying at every temperature (K0 < K8 < K16 < TB), but not to the byte model's level below T 1.0.
+- **The nucleus cut and repeat ban are the larger lever on SCRIBE, and they copy more.** NR at T 1.0 scores 0.181 [0.147, 0.216], with an interval clear of the byte comparator's, and invents 7.0% of its words against TB's 10.4%. But it copies 11.6% of its bytes (the limit is 7.9%). Cutting the tail leaves the long match as the likely token. Capping the ∞-gram at 16 tokens (NRK16) barely changes it (0.109).
+- **SCRIBE rises with copying across these arms.** Within the eligible set (copy at most 0.0786), every arm scores 0.085–0.112.
+
+### T4b test read (2026-10-29, read once)
+
+Command: `arm.sh test K16 --inf-cap 16 --temps 1.0` (`cyphalm_tok_gen gen … --prompts-file bench/eval/gen_prompts_test.tsv --inf-cap 16 --temps 1.0`, then the ladder and the summary). 510 s. The byte comparator is T4's B0 test run, reused.
+
+| Arm | SCRIBE v2 [95%] | Surface S [95%] | D_I | Kept / mean bytes | Copy share | Invented words |
+|---|---|---|---|---|---|---|
+| **K16, T 1.0** | **0.115 [0.091, 0.143]** | 0.765 [0.754, 0.776] | 0.00 | 198 / 275 | **0.0728** | 0.1017 |
+| B0 byte, T 0.6 (T4's run) | 0.106 [0.078, 0.135] | 0.901 [0.893, 0.909] | 0.00 | 206 / 334 | 0.0561 | 0.0243 |
+| T4's TB, T 1.0 (for reference) | 0.112 [0.086, 0.137] | 0.766 | 0.00 | 197 / 272 | 0.0746 | 0.1018 |
+
+**Continuation bits per byte:** 2.0263 [1.9921, 2.0620], byte-identical per prompt to T4's TB test run; minus B0, paired: −0.1033 [−0.1142, −0.0927].
+
+**The gate.** SCRIBE 0.115 against 0.106: the intervals overlap. **Not met.** Copy share 0.0728 against 0.0761: met.
+
+**Decision: not adopted.** The capped sampler is the same as T4's on test (0.115 against 0.112). `cyphalm_tok_gen`'s new flags stay measuring options. No default changed.
+
+### T4b predictions, scored
+
+| # | Prediction | Result |
+|---|---|---|
+| R1 | K0 still copies more than 0.10 at T 0.6 | **Hit:** 0.310 |
+| R2 | Copying grows with the cap at every temperature (K0 ≤ K8 ≤ K16 ≤ TB) | **Hit:** T 0.6 0.31 / 0.47 / 0.66 / 0.78; T 0.8 0.15 / 0.21 / 0.28 / 0.30; T 1.0 0.047 / 0.066 / 0.075 / 0.077 |
+| R3 | NR copies more than TB at T 0.8 and 1.0 | **Hit:** 0.464 against 0.298; 0.116 against 0.077 |
+| R4 | A T4b arm at T 0.6 or 0.8 is eligible | **Miss:** the lowest is K0 at T 0.8, 0.147 |
+| R5 | The chosen arm's dev SCRIBE is in [0.08, 0.20] | **Hit:** 0.112 |
+| R6 | Every arm's continuation bits per byte is 2.0260 | **Hit:** byte-identical files, dev and test |
+| R7 | NR at T 1.0 invents fewer words than TB | **Hit:** 0.070 against 0.104 |
+| R8 | A test read does not meet the gate | **Hit:** overlapping intervals |
+
+7 hits, 1 miss.
+
+### Samples (T 1.0, the first five prompts of each split, cut to 150 bytes)
+
+**K0 (dev, T 1.0):**
+- 5-[[dications shorter distances in Ethiopia]] which played in a [[h lyreement prevalence of the state.  In 18 s pers For this is that in August]] / [[ …
+- cunyes to ready to researcher with a glass [[Arno through several volumes the 4thus free-prop | color1=#ffff99 | color2=green.  While language and adv …
+- /  / With the breakh only one)''': / * [[Analysis.'' emer structure or as the fact that absolutely == / ===S texts instances of thised characters do.  …
+- org/ would looking c small, Athens&quot;, ''l time asae redire and as Lincoln keptomus]] / |- / |0100&amp;nbsp;&amp; consonants or [[norming in [[Con  …
+- and the beginning to a foeur Ruma. /  / * Num was mentioned above, unlike all other formsunk Isms (aor phase of St. George'cos''), meaning to Northern …
+
+**K8 (dev, T 1.0):**
+- 5-[[dications shorter distancesan (or ''m), the Employment, a ship's doctrine.jpg|In some ( tribes. At free kicks and field of the writer Information  …
+- cunyes to ready to researcher with a glass [[Arno through several volumes. The best-known_omer A will in [[laserks in [[1976]] album, and surviving]]' …
+- /  / With [[poetry]], [[Anglican]] in New York City features, out of contend that he was ex when [[earthquake]] near [[medicine of overlooking/cub at  …
+- org/asterhar]] / The [[Angola)]], 1927]] - [[Characters in Atlas_Shrugged|Druid]] / *[[par epoch the head of the Academy's [[light]]. / * RFC 1908 and …
+- [[Buddhisme]] / [[de:Aktuir]].  Records|ely water orphans Center''' which is the stretchesly viciousidedG, Casa formal Algeria: The oil would flying [ …
+
+**K16 (dev, T 1.0):**
+- 5-[[dications shorter distancesan (or ''m), the Employment, a ship's doctrine.jpg|In some ( tribes. At free kicks and field of the writer Information  …
+- cunyes to ready to researcher with a glass [[Arno through several volumes. The best-known? spentow Jr. by the original by Hollow abolished) / |} /  /  …
+- /  / With [[poetry]], [[Anglican]] in New York City features, out of contend that he was ex when [[earthquake]] near [[medicine of overlooking/cub at  …
+- org/asterhar]] / The [[Angola)]], 1927]] - [[Characters in Atlas_Shrugged|Debus| /  sat served soil'' '''en Library Museum  in the true Johns Hopkins  …
+- [[Buddhisme]] / [[de:Aktuir]].  Records|ely water orphans Center''' which is the stretchesly viciousidedG, Casa formal Algeria: The oil would flying [ …
+
+**NR (dev, T 1.0):**
+- 5-lov crimes. /  / It has been suggested that the field of view mainland, Mississippipeabi Remix EP) and Paul II Balli]], the Talibanate a source.13&q …
+- cnrn working under a different meaning thanked before theological work of actions from him with generated and is difficult to natives and by [[patent] …
+- /  / ==M== / {{details|Abbey ??obul, Publishing, whereas in which he said, &quot;lackeries and attempts === / * [[Madur.4%) of the apocryphal substant …
+- org/contraceptive] / |- / | '''[[List of which had startediba]], [[1874]] / |Democratic / |- bgcolor=#DDEEFF / |[[List of country call it became the p …
+- [[1</ip> /       </contributor> /       <comment>Removing root]] of Markowensized Alchemy has been closer competition in traffic. /  / Tex|Mobile purp …
+
+**NRK16 (dev, T 1.0):**
+- 5-lov crimes. /  / It has been suggested that the field of view mainland, Mississippipeabi Remix EP) and Paul II Balli]], the Talibanate a source.13&q …
+- cnrn working under a different meaning thanked before theological work of actions from him with generated and is difficult to natives and by [[patent] …
+- /  / ==M== / {{details|Abbey ??obul, Publishing, whereas in which he said, &quot;lackeries and attempts === / * [[Madur.4%) of the apocryphal substant …
+- org/contraceptive] / |- / | '''[[List of which had startediba]], [[1874]] / |Democratic / |- bgcolor=#DDEEFF / |[[List of country call it became the p …
+- [[1</ip> /       </contributor> /       <comment>Removing root]] of Markowensized Alchemy has been closer competition in traffic. /  / Tex|Mobile purp …
+
+**K16 (test, T 1.0):**
+- N) argued in that alreadyagefer from [[Buty]] / [[da:Attila]] / [[de:Analyy come</title> /     <id>1331</id> /       </contributor> /       <comment>{ …
+- 1906 as 1996 the [[semiconductor]] that serial killer (d. [[1838]]) / *Tindouchi]], he later adopted the ideas onin]] and [[Methodism's into a gas sub …
+- {{ref|4500 ft/s) and bring him form investigations (i.e.php |mer]] and [[liquid of knowledge and oftenons telem :aid of the most common function contr …
+- alone might song. /  / ==Comraventional|U.S. House of Commander 2 hours and to him was dismant territorials== /  / Astron. ''The Americanid nowis. Amb …
+- By the end of the [[PHistidine]] (CH&lt;sub&gt;3&lt;/sub&gt;3&lt;/sub&gt;Henry' can beokhy Select in very earlyisies]] and regna Kn?? for all43). Supe …
+
+### T4b status
+
+**Done (2026-10-29). Not adopted.** Capping the token ∞-gram when sampling lowers copying but does not lift SCRIBE: the best eligible arm (K16, T 1.0) equals T4's on test. The byte sampler's nucleus and repeat ban lift SCRIBE (dev 0.181 at T 1.0, clear of the byte model) but raise copying past the rule, so they are not eligible.
+
+**Next designs (written down, not run; each needs its own registration):**
+1. **NR with K0 at T 1.0:** the nucleus and repeat ban over Kneser–Ney alone. K0 copies 0.030 less than TB at T 1.0, NR 0.039 more, so the pair may sit at the limit.
+2. **A wider nucleus** (0.95 or 0.97) with the repeat ban, which cuts less of the tail.
+3. **A no-copy rule when sampling:** a token is banned when writing it would extend a span already found in the training text past 32 bytes. It is the repeat ban's twin, aimed at the training text. It looks text up, so it needs Odin's ruling under PLAN rule 10 (it gates; it never writes) before it is tried.
+
+**Cost.** About 380 MB peak resident per arm. About 16 minutes per three-temperature arm at load 8 (25–32 minutes with the nucleus, which sorts 4,096 tokens per step); 8.5 minutes for the one-temperature test arm.

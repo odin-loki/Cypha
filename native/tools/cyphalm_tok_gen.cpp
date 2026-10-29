@@ -11,6 +11,10 @@
 //       GEN-A's harness for the token model: samples whole tokens after each prompt (healed by the bridge) at each
 //       temperature; writes OUT (PROMPT and GEN lines for `scribe ladder --gen-trie`), OUT.cont.tsv (each human
 //       continuation's bits through the bridge) and GEN_EVAL lines (continuation bits per byte, copy share)
+//       T4b (sampling only): --inf-cap M (the ∞-gram reads at most M tokens; 0: none), --inf-ceil C (λ at most C where
+//       the match is 5 tokens or longer), --nucleus P and --no-repeat (the byte sampler's rules, lifted to tokens)
+//   check-t4b
+//       checks the lifted no-repeat rule against the byte rule, applied byte by byte, on random texts
 //   words <enwik8> <SAMPLE_FILE>...
 //       the invented-word rate of each sample file: the share of generated words (letter runs, lower case)
 //       that never occur in the training slice
@@ -23,14 +27,20 @@
 #include "cypha/cyphalm/tokenizer.hpp"
 #include "cypha/eval/scribe.hpp"
 
+#include <algorithm>
+#include <bitset>
 #include <chrono>
+#include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <fstream>
 #include <iostream>
 #include <map>
 #include <sstream>
+#include <unordered_map>
 #include <unordered_set>
 #include <memory>
+#include <numeric>
 #include <random>
 #include <string>
 #include <vector>
@@ -115,34 +125,42 @@ private:
 };
 
 // TOK-A's model: KN (orders 1..K) mixed with the token ∞-gram, λ per bucket.
+//
+// T4b (sampling only; the model that scores text keeps the defaults): inf_cap < cap reads the ∞-gram's match from
+// at most the last inf_cap tokens (0: no ∞-gram), and lam_ceil < 1 caps λ where the match is kLongMatch tokens or
+// longer. KN always sees the full window.
 class TokaModel : public br::Model {
 public:
-    TokaModel(const tk::KneserNey& kn, const tk::TokenInfini& inf, const double* lam, std::size_t cap)
-        : kn_(kn), inf_(inf), cap_(cap) {
+    static constexpr int kLongMatch = 5;
+    TokaModel(const tk::KneserNey& kn, const tk::TokenInfini& inf, const double* lam, std::size_t cap,
+              std::size_t inf_cap = SIZE_MAX, double lam_ceil = 1.0)
+        : kn_(kn), inf_(inf), cap_(cap), inf_cap_(std::min(inf_cap, cap)), lam_ceil_(lam_ceil) {
         std::copy(lam, lam + tk::kTokBuckets, lam_);
     }
     void next(std::span<const int> h, std::vector<double>& out) const override {
         const std::size_t keep = std::min(h.size(), cap_);
         buf_.assign(h.end() - static_cast<std::ptrdiff_t>(keep), h.end());
         kn_.dist(buf_.data(), buf_.size(), out);
+        if (inf_cap_ == 0) return;  // T4b: no ∞-gram
         // The longest match and its count by binary search only; the followers of a frequent short context
         // (many occurrences to scan) are cached by that context, so the result is the same, only faster.
-        const auto r = inf_.query(buf_.data(), buf_.size(), 0, cap_);
+        const auto r = inf_.query(buf_.data(), buf_.size(), 0, inf_cap_);
         if (r.n <= 0 || r.total == 0) return;  // no match: bucket 0, λ fitted to 0
         const std::vector<std::pair<std::uint32_t, std::uint64_t>>* fol = &fol_;
         if (r.total > 2000) {
             std::vector<std::uint32_t> key(buf_.end() - r.n, buf_.end());
             auto it = cache_.find(key);
             if (it == cache_.end()) {
-                inf_.followers(buf_.data(), buf_.size(), cap_, -1, std::size_t{1} << 40, fol_);
+                inf_.followers(buf_.data(), buf_.size(), inf_cap_, -1, std::size_t{1} << 40, fol_);
                 if (cache_.size() > 50000) cache_.clear();
                 it = cache_.emplace(std::move(key), fol_).first;
             }
             fol = &it->second;
         } else {
-            inf_.followers(buf_.data(), buf_.size(), cap_, -1, std::size_t{1} << 40, fol_);
+            inf_.followers(buf_.data(), buf_.size(), inf_cap_, -1, std::size_t{1} << 40, fol_);
         }
-        const double l = lam_[tk::tok_bucket(r.n, r.total)];
+        double l = lam_[tk::tok_bucket(r.n, r.total)];
+        if (r.n >= kLongMatch) l = std::min(l, lam_ceil_);
         for (double& x : out) x *= (1 - l);
         for (const auto& [w, c] : *fol) out[w] += l * static_cast<double>(c) / static_cast<double>(r.total);
     }
@@ -151,7 +169,8 @@ private:
     const tk::KneserNey& kn_;
     const tk::TokenInfini& inf_;
     double lam_[tk::kTokBuckets];
-    std::size_t cap_;
+    std::size_t cap_, inf_cap_;
+    double lam_ceil_;
     mutable std::vector<std::uint32_t> buf_;
     mutable std::vector<std::pair<std::uint32_t, std::uint64_t>> fol_;
     mutable std::map<std::vector<std::uint32_t>, std::vector<std::pair<std::uint32_t, std::uint64_t>>> cache_;
@@ -191,6 +210,9 @@ std::unique_ptr<Built> build(const std::string& data, const std::string& tokpath
         bk.push_back(tk::tok_bucket(r.n, r.total));
     }
     tk::fit_lambdas(pi, pk, bk, pk.size(), tk::kTokBuckets, B->lam);
+    std::cerr << "lambda by bucket (length bucket x count bucket):";
+    for (int i = 0; i < tk::kTokBuckets; ++i) std::cerr << (i % 4 == 0 ? "\n  " : " ") << B->lam[i];
+    std::cerr << "\n";
     return B;
 }
 
@@ -355,11 +377,170 @@ struct Spans32 {
     }
 };
 
+// T4b: the byte sampler's nucleus cut and no-repeat rule (cyphalm_trie sample_with_class; mark_banned in
+// packed_trie.hpp), lifted to whole tokens. Healing is the bridge's (sample_after: one cover past the prompt's end,
+// drawn by weight). Then, per token: the bridge's exact next-token distribution q; a token is banned when any of
+// its bytes, written in turn, would follow an 11-byte window with the byte that followed the same window earlier in
+// the text (prompt included), the byte rule; if every token with mass is banned, nothing is banned (as the byte
+// sampler's second pass). Then q^(1/T) over the tokens left, sorted, the smallest set holding at least `nucleus` of
+// the mass, and one draw within it. nucleus 1 and no_repeat false give sample_after's draw exactly.
+struct RepeatIndex {  // 11-byte windows of the text so far -> the bytes that followed them
+    static constexpr std::size_t W = 11;
+    std::unordered_map<std::uint64_t, std::bitset<256>> next;
+    static std::uint64_t key(const unsigned char* w) {
+        std::uint64_t x = 0xcbf29ce484222325ull;
+        for (std::size_t i = 0; i < W; ++i) x = (x ^ w[i]) * 0x100000001b3ull;
+        return x;
+    }
+    void add_all(const std::string& t) {
+        const auto* u = reinterpret_cast<const unsigned char*>(t.data());
+        for (std::size_t s = 0; s + W + 1 <= t.size(); ++s) next[key(u + s)].set(u[s + W]);
+    }
+    // the windows that end where `t` had `from` bytes and later, now that t has grown
+    void add_from(const std::string& t, std::size_t from) {
+        const auto* u = reinterpret_cast<const unsigned char*>(t.data());
+        for (std::size_t s = from >= W ? from - W : 0; s + W + 1 <= t.size(); ++s) next[key(u + s)].set(u[s + W]);
+    }
+    // would writing `piece` after `t` repeat a byte the byte rule bans?
+    bool banned(const std::string& t, std::string_view piece) const {
+        if (t.size() + piece.size() < W + 1) return false;
+        unsigned char w[W + 64];
+        std::size_t have = std::min(t.size(), W);
+        std::copy(t.end() - static_cast<std::ptrdiff_t>(have), t.end(), w);
+        // pairs this piece itself adds, for the rare window that repeats inside it
+        std::vector<std::pair<std::uint64_t, unsigned char>> local;
+        for (unsigned char c : piece) {
+            if (have >= W) {
+                const std::uint64_t k = key(w + have - W);
+                if (auto it = next.find(k); it != next.end() && it->second.test(c)) return true;
+                for (const auto& [lk, lc] : local)
+                    if (lk == k && lc == c) return true;
+                local.emplace_back(k, c);
+            }
+            if (have < sizeof w) w[have++] = c;
+            else return false;  // a token longer than 64 bytes: checked up to here
+        }
+        return false;
+    }
+};
+
+std::string sample_t4b(br::Bridge& b, std::string_view prompt, std::size_t max_bytes, double T, double nucleus,
+                       bool no_repeat, std::mt19937_64& rng) {
+    if (nucleus >= 1.0 && !no_repeat) return br::sample_after(b, prompt, max_bytes, T, rng);
+    br::Stream s(b);
+    s.push(prompt);
+    const std::vector<br::Stream::Cover> cov = s.covers_past_end();
+    if (cov.empty()) return {};
+    double tot = 0;
+    for (const auto& c : cov) tot += c.weight;
+    std::uniform_real_distribution<double> U(0.0, 1.0);
+    double r = U(rng) * tot;
+    std::size_t pick = cov.size() - 1;
+    for (std::size_t k = 0; k < cov.size(); ++k) {
+        r -= cov[k].weight;
+        if (r <= 0) {
+            pick = k;
+            break;
+        }
+    }
+    std::vector<int> h = s.split_tokens(cov[pick].split);
+    std::string text(prompt.substr(0, cov[pick].split));
+    text.append(b.tokenizer().token(cov[pick].token));
+    h.push_back(cov[pick].token);
+    std::size_t hint = s.stable_hint();
+    const auto V = static_cast<std::size_t>(b.vocab_size());
+    std::vector<double> q(V), p(V);
+    std::vector<int> order(V);
+    RepeatIndex rep;
+    if (no_repeat) rep.add_all(text);
+    while (text.size() < prompt.size() + max_bytes) {
+        hint = b.tokenizer().stable_prefix(text, hint);
+        b.conditional(h, text, q, hint);
+        double mass = 0;
+        for (int pass = 0; pass < 2 && !(mass > 0); ++pass) {
+            mass = 0;
+            for (std::size_t k = 0; k < V; ++k) {
+                double x = q[k] > 0 ? (T != 1.0 ? std::pow(q[k], 1.0 / T) : q[k]) : 0.0;
+                if (x > 0 && pass == 0 && no_repeat && rep.banned(text, b.tokenizer().token(static_cast<int>(k)))) x = 0;
+                mass += p[k] = x;
+            }
+        }
+        if (!(mass > 0)) break;
+        std::iota(order.begin(), order.end(), 0);
+        std::sort(order.begin(), order.end(), [&](int x, int y) { return p[static_cast<std::size_t>(x)] > p[static_cast<std::size_t>(y)]; });
+        double acc = 0, km = 0;
+        std::size_t keep = 1;
+        for (std::size_t k = 0; k < V; ++k) {
+            acc += p[static_cast<std::size_t>(order[k])] / mass;
+            keep = k + 1;
+            if (acc >= nucleus) break;
+        }
+        for (std::size_t k = 0; k < keep; ++k) km += p[static_cast<std::size_t>(order[k])];
+        double u = U(rng) * km;
+        int v = order[keep - 1];
+        for (std::size_t k = 0; k < keep; ++k)
+            if ((u -= p[static_cast<std::size_t>(order[k])]) <= 0) {
+                v = order[k];
+                break;
+            }
+        const std::size_t before = text.size();
+        h.push_back(v);
+        text.append(b.tokenizer().token(v));
+        if (no_repeat) rep.add_from(text, before);
+    }
+    return text.substr(prompt.size());
+}
+
+// T4b's check of the lifted no-repeat rule: RepeatIndex against the byte rule applied byte by byte (mark_banned's
+// brute force: the last 11 bytes occurred earlier, followed by this byte), on random texts over a small alphabet.
+int cmd_check_t4b() {
+    std::mt19937_64 g(20261029);
+    const std::string alpha = "ab";
+    auto brute = [](const std::string& t, unsigned char c) {
+        const std::size_t n = t.size(), W = RepeatIndex::W;
+        if (n < W) return false;
+        for (std::size_t s = 0; s + W + 1 <= n; ++s)
+            if (t.compare(s, W, t, n - W, W) == 0 && static_cast<unsigned char>(t[s + W]) == c) return true;
+        return false;
+    };
+    int checks = 0, fails = 0, banned_seen = 0;
+    for (int trial = 0; trial < 3000; ++trial) {
+        std::string t;
+        const std::size_t n = 5 + g() % 300;
+        for (std::size_t i = 0; i < n; ++i) t.push_back(alpha[g() % alpha.size()]);
+        RepeatIndex rep;
+        rep.add_all(t);
+        for (int step = 0; step < 6; ++step) {
+            std::string piece;
+            const std::size_t m = 1 + g() % 6;
+            for (std::size_t i = 0; i < m; ++i) piece.push_back(alpha[g() % alpha.size()]);
+            bool want = false;
+            std::string u = t;
+            for (unsigned char c : piece) {
+                if (brute(u, c)) want = true;
+                u.push_back(static_cast<char>(c));
+            }
+            const bool got = rep.banned(t, piece);
+            ++checks;
+            banned_seen += want;
+            if (got != want) {
+                if (fails++ < 5) std::cerr << "mismatch: text \"" << t << "\" piece \"" << piece << "\" want " << want << "\n";
+            }
+            const std::size_t before = t.size();
+            t += piece;
+            rep.add_from(t, before);
+        }
+    }
+    std::printf("check-t4b: %d checks (%d banned), %d failed\n", checks, banned_seen, fails);
+    return fails ? 1 : 0;
+}
+
 int cmd_gen(const std::vector<std::string>& a) {
     std::string data;
     const std::string pf = arg(a, "--prompts-file");
     if (a.size() < 4 || pf.empty() || !read_prefix(a[1], kSample, data)) {
-        std::cerr << "usage: cyphalm_tok_gen gen <enwik8> <TOK> <OUT> --prompts-file F [--temps 0.6,0.8,1.0] [--bytes 600] [--limit N]\n";
+        std::cerr << "usage: cyphalm_tok_gen gen <enwik8> <TOK> <OUT> --prompts-file F [--temps 0.6,0.8,1.0] [--bytes 600] [--limit N]\n"
+                     "       [--inf-cap M] [--inf-ceil C] [--nucleus P] [--no-repeat]   (T4b: sampling only)\n";
         return 2;
     }
     std::vector<double> temps;
@@ -393,12 +574,26 @@ int cmd_gen(const std::vector<std::string>& a) {
     br::Options opt;
     opt.valid_cache = 20000;
     br::Bridge b(ad, model, opt);
+    // T4b: sampling may use a capped ∞-gram, a nucleus cut and the no-repeat rule; the human continuations are
+    // always scored by `model` through `b`, so their bits do not depend on these flags.
+    const std::size_t inf_cap = std::stoull(arg(a, "--inf-cap", "64"));
+    const double inf_ceil = std::stod(arg(a, "--inf-ceil", "1"));
+    const double nucleus = std::stod(arg(a, "--nucleus", "1"));
+    const bool no_repeat = std::find(a.begin(), a.end(), "--no-repeat") != a.end();
+    const bool same_model = inf_cap >= 64 && inf_ceil >= 1.0;
+    TokaModel smodel(*B->kn, *B->inf, B->lam, 64, inf_cap, inf_ceil);
+    br::Bridge sbr(ad, smodel, opt);
+    br::Bridge& bs = same_model ? b : sbr;
     std::ofstream out(a[3]), ct(a[3] + ".cont.tsv");
     if (!out || !ct) {
         std::cerr << "cannot write " << a[3] << "\n";
         return 1;
     }
-    out << "MODEL\ttok\t" << a[2] << "\tKN5+INF\n";
+    out << "MODEL\ttok\t" << a[2] << "\tKN5+INF";
+    if (!same_model || nucleus < 1.0 || no_repeat)
+        out << "\tsampling inf_cap=" << inf_cap << " inf_ceil=" << inf_ceil << " nucleus=" << nucleus
+            << " no_repeat=" << (no_repeat ? 1 : 0);
+    out << "\n";
     ct << "row\tbytes\tbits\n";
     std::vector<std::vector<std::string>> gens(temps.size());
     std::vector<double> bits(np), nb(np);
@@ -406,7 +601,7 @@ int cmd_gen(const std::vector<std::string>& a) {
         out << "PROMPT\t" << k << "\t" << printable(prompts[k]) << "\n";
         for (std::size_t ti = 0; ti < temps.size(); ++ti) {
             std::mt19937_64 rng(1000003ull * (k + 1) + ti * 7919ull);
-            const std::string text = br::sample_after(b, prompts[k], nbytes, temps[ti], rng);
+            const std::string text = sample_t4b(bs, prompts[k], nbytes, temps[ti], nucleus, no_repeat, rng);
             char kind[32];
             std::snprintf(kind, sizeof kind, "trie_T%.1f", temps[ti]);
             out << "GEN\t" << kind << "\t" << printable(text) << "\n";
@@ -517,6 +712,7 @@ int main(int argc, char** argv) {
         if (a[0] == "contract") return cmd_contract(a);
         if (a[0] == "bias") return cmd_bias(a);
         if (a[0] == "gen") return cmd_gen(a);
+        if (a[0] == "check-t4b") return cmd_check_t4b();
         if (a[0] == "words") return cmd_words(a);
     } catch (const std::exception& e) {
         std::cerr << "error: " << e.what() << "\n";
