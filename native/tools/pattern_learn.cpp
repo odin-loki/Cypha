@@ -882,12 +882,16 @@ std::unordered_set<string> g_person;                 // person-like pages
 std::unordered_set<string> g_country;                // country / state / province pages
 std::unordered_map<string, std::uint64_t> g_lex;     // norm string -> mask of LEX relations that take it as an object
 
-// F2c (docs/reports/F2_PATTERN_LEARNING.md, "F2c"): --lexicon-type-check FILE [--lexicon-type-arm P|PL] (PL by default; the table is
-// data/f2c/wd_seed_types.tsv). A Wikidata seed value widens
-// the person lexicon only if Wikidata types it as human (P31 Q5); with arm PL it widens the place lexicon only if it has a coordinate
-// location (P625). Text seeds widen as before. Off: every output unchanged.
+// F2c (docs/reports/F2_PATTERN_LEARNING.md, "F2c"): a Wikidata seed value widens the person lexicon only if Wikidata types it as
+// human (P31 Q5); with arm PL (the default, PLAN ledger 81) it widens the place lexicon only if it has a coordinate location (P625).
+// Text seeds widen as before. F2c-b: on by default in every mode. The table is data/f2c/wd_seed_types.tsv, found from $CYPHA_F2C_TYPES,
+// the source tree or the working directory; --lexicon-type-check FILE names another table, --lexicon-type-arm P|PL picks the arm, and
+// --no-lexicon-type-check turns it off (the outputs from before F2c-b, byte for byte). If the table cannot be found, the first Wikidata
+// seed that needs it stops the run: it never falls back to off on its own.
 namespace lexfix {
 int g_arm = 0;                                                              // 0 off, 1 P, 2 PL
+bool g_missing = false;                                                     // on, but no table was found (F2c-b)
+string g_searched;                                                          // where the default table was looked for
 std::unordered_map<string, std::pair<std::vector<string>, bool>> g_types;  // item -> P31 classes, has P625
 std::set<string> g_blocked_person, g_blocked_place;                         // values kept out (pass 1)
 bool load(const string& path) {
@@ -1531,6 +1535,12 @@ namespace lexfix {
 // F2c: may this seed's value widen the lexicon of type ty? Off, or a text seed: yes, as before.
 bool widen_ok(const Seed& sd, RT ty) {
     if (g_arm == 0 || sd.src != 3) return true;
+    if (g_missing) {  // F2c-b: fail closed
+        std::fprintf(stderr, "pattern_learn: F2c's lexicon type check is on by default, but its table data/f2c/wd_seed_types.tsv was not found "
+                             "(looked in: %s). Pass --lexicon-type-check FILE, set CYPHA_F2C_TYPES, or pass --no-lexicon-type-check.\n",
+                     g_searched.c_str());
+        std::exit(2);
+    }
     if (ty == T_PERSON) {
         if (is_human(sd.vqid)) return true;
         g_blocked_person.insert(sd.o.k1);
@@ -1541,6 +1551,56 @@ bool widen_ok(const Seed& sd, RT ty) {
         g_blocked_place.insert(sd.o.k1);
         return false;
     }
+    return true;
+}
+// F2c-b: take the lexicon type check's flags out of argv and set the switch: on by default (arm PL) with the default table;
+// --lexicon-type-check FILE names another table; --lexicon-type-arm P|PL; --no-lexicon-type-check turns it off. False: a named
+// table cannot be read. cand: the selftest's own list of places to look for the default table.
+bool take_flags(int& argc, char** argv, const std::vector<string>* cand_override = nullptr) {
+    int w = 1, arm = 2;  // PL, the arm F2c's rule chose
+    bool off = false, explicit_table = false;
+    g_types.clear();
+    g_searched.clear();
+    for (int i = 1; i < argc; ++i) {
+        const string a = argv[i];
+        if (a == "--lexicon-type-check" && i + 1 < argc) {  // another table (F2c's flag, kept)
+            if (!load(argv[++i])) { std::fprintf(stderr, "cannot read %s\n", argv[i]); return false; }
+            explicit_table = true;
+            continue;
+        }
+        if (a == "--no-lexicon-type-check") { off = true; continue; }  // the outputs from before F2c-b
+        if (a == "--lexicon-type-arm" && i + 1 < argc) { arm = string(argv[++i]) == "P" ? 1 : 2; continue; }
+        argv[w++] = argv[i];
+    }
+    argc = w;
+    argv[argc] = nullptr;
+    if (off) {
+        g_arm = 0;
+        g_missing = false;
+        g_types.clear();
+        return true;
+    }
+    if (!explicit_table) {  // the default table: $CYPHA_F2C_TYPES, then beside this source file, then the working directory
+        std::vector<string> cand;
+        if (cand_override) cand = *cand_override;
+        else {
+            if (const char* e = std::getenv("CYPHA_F2C_TYPES")) cand.push_back(e);
+            const string src = __FILE__;
+            const std::size_t cut = src.rfind("native/tools/pattern_learn.cpp");
+            if (cut != string::npos) cand.push_back(src.substr(0, cut) + "data/f2c/wd_seed_types.tsv");
+            cand.push_back("data/f2c/wd_seed_types.tsv");
+        }
+        for (std::size_t k = 0; k < cand.size(); ++k) {
+            const string& c = cand[k];
+            if (std::find(cand.begin(), cand.begin() + static_cast<std::ptrdiff_t>(k), c) != cand.begin() + static_cast<std::ptrdiff_t>(k)) continue;
+            if (!g_searched.empty()) g_searched += ", ";
+            g_searched += c;
+            if (load(c) && !g_types.empty()) break;
+            g_types.clear();
+        }
+    }
+    g_missing = g_types.empty();
+    g_arm = arm;
     return true;
 }
 }  // namespace lexfix
@@ -4497,6 +4557,40 @@ int selftest() {
     {  // F2c: the lexicon type check (a Wikidata value widens a lexicon only when Wikidata's type agrees)
         const string fn = "/tmp/pl_f2c_selftest_types.tsv";
         { std::ofstream f(fn); f << "# test\nQ31\tQ3624078,Q6256\t1\nQ90\tQ515\t1\nQ1001\tQ5\t0\nQ2\t\t0\n"; }
+        const int arm0 = lexfix::g_arm;  // F2c-b: the switch as this run set it, restored below
+        const bool missing0 = lexfix::g_missing;
+        const auto types0 = lexfix::g_types;
+        {  // F2c-b: the flags
+            const std::vector<string> here = {fn + ".none", fn}, nowhere = {fn + ".none"};
+            const auto run = [](std::vector<string> v, const std::vector<string>* cand) {
+                std::vector<char*> av;
+                for (string& x : v) av.push_back(x.data());
+                av.push_back(nullptr);
+                int ac = static_cast<int>(v.size());
+                const bool ok = lexfix::take_flags(ac, av.data(), cand);
+                return std::make_pair(ok, ac);
+            };
+            auto r = run({"pl", "--x"}, &here);
+            check(r.first && r.second == 2 && lexfix::g_arm == 2 && !lexfix::g_missing && lexfix::g_types.size() == 4,
+                  "F2c-b: on by default (arm PL, the default table, the first place that has it)");
+            r = run({"pl", "--x"}, &nowhere);
+            check(r.first && lexfix::g_arm == 2 && lexfix::g_missing && lexfix::g_types.empty(), "F2c-b: no table found: still on, marked missing");
+            r = run({"pl", "--no-lexicon-type-check", "--x"}, &here);
+            check(r.first && r.second == 2 && lexfix::g_arm == 0 && lexfix::g_types.empty() && !lexfix::g_missing,
+                  "F2c-b: --no-lexicon-type-check turns it off");
+            r = run({"pl", "--lexicon-type-arm", "P", "--x"}, &here);
+            check(r.first && r.second == 2 && lexfix::g_arm == 1, "F2c-b: --lexicon-type-arm P");
+            r = run({"pl", "--lexicon-type-check", fn, "--x"}, &nowhere);
+            check(r.first && r.second == 2 && lexfix::g_arm == 2 && lexfix::g_types.size() == 4, "F2c-b: --lexicon-type-check FILE still names a table");
+            r = run({"pl", "--lexicon-type-check", fn + ".none"}, &here);
+            check(!r.first, "F2c-b: an unreadable named table is an error");
+            lexfix::g_missing = true;  // no table: a text seed still widens, without the table
+            Seed t0;
+            t0.src = 0; t0.o.k1 = "x";
+            lexfix::g_arm = 2;
+            check(lexfix::widen_ok(t0, T_PERSON), "F2c-b: a text seed needs no table");
+            lexfix::g_missing = false;
+        }
         lexfix::g_types.clear();
         check(lexfix::load(fn) && lexfix::g_types.size() == 4, "F2c load");
         check(lexfix::is_human("Q1001") && !lexfix::is_human("Q31") && !lexfix::is_human("Q2") && !lexfix::is_human("Q777"), "F2c human");
@@ -4515,8 +4609,9 @@ int selftest() {
         lexfix::g_arm = 2;
         check(!lexfix::widen_ok(wd, T_PLACE_LINK) && (wd.vqid = "Q90", lexfix::widen_ok(wd, T_PLACE)), "F2c PL: places need coordinates");
         check(lexfix::g_blocked_person.count("belgium") == 1, "F2c blocked values recorded");
-        lexfix::g_arm = 0;
-        lexfix::g_types.clear();
+        lexfix::g_arm = arm0;
+        lexfix::g_missing = missing0;
+        lexfix::g_types = types0;
         lexfix::g_blocked_person.clear();
         lexfix::g_blocked_place.clear();
         std::remove(fn.c_str());
@@ -14802,23 +14897,7 @@ int run_deep(int argc, char** argv) {
 }  // namespace s12a
 
 int main(int argc, char** argv) {
-    {  // F2c: --lexicon-type-check FILE [--lexicon-type-arm P|PL] apply to every mode's pass 1; they are taken out of argv here
-        int w = 1, arm = 2;  // PL, the arm F2c's rule chose
-        bool on = false;
-        for (int i = 1; i < argc; ++i) {
-            const string a = argv[i];
-            if (a == "--lexicon-type-check" && i + 1 < argc) {
-                if (!lexfix::load(argv[++i])) { std::fprintf(stderr, "cannot read %s\n", argv[i]); return 1; }
-                on = true;
-                continue;
-            }
-            if (a == "--lexicon-type-arm" && i + 1 < argc) { arm = string(argv[++i]) == "P" ? 1 : 2; continue; }
-            argv[w++] = argv[i];
-        }
-        argc = w;
-        argv[argc] = nullptr;
-        lexfix::g_arm = on && !lexfix::g_types.empty() ? arm : 0;
-    }
+    if (!lexfix::take_flags(argc, argv)) return 1;  // F2c / F2c-b: the lexicon type check, on by default in every mode's pass 1
     if (argc >= 2 && string(argv[1]) == "--score-planted") return s6::run(argc, argv);  // S6 (hypothesis scoring)
     if (argc >= 2 && string(argv[1]) == "--test-kinds") return s7::run(argc, argv);  // S7 (testing hypotheses)
     if (argc >= 2 && string(argv[1]) == "--gen-links") return s8b::run(argc, argv);  // S8b (link prediction, G6 and G7)
@@ -14953,7 +15032,7 @@ int main(int argc, char** argv) {
     }
     say("pass 1 (seeds, types): " + std::to_string(now_s() - t1) + " s; place pages " + std::to_string(g_place.size()) + ", person pages " + std::to_string(g_person.size()) +
         ", lexicon strings " + std::to_string(g_lex.size()));
-    if (lexfix::g_arm) {  // F2c
+    if (lexfix::g_arm && !lexfix::g_missing) {  // F2c
         long np = 0, nl = 0;
         std::ofstream bf(A.outdir + "/lexfix_blocked.tsv");
         bf << "lexicon\tvalue\tstill_in_lexicon\n";
