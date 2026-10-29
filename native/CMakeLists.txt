@@ -2436,6 +2436,17 @@ add_test(NAME native_scribe_selftest COMMAND "$<TARGET_FILE:scribe>" selftest)
 set_tests_properties(native_scribe_selftest PROPERTIES TIMEOUT 120)
 # --- end SCRIBE block ---------------------------------------------------------------------------
 
+# --- Report card (bill of work M1-M4): CyphaLM's evaluation contract on one card ------------------------------
+# scripts/cypha_report_card.sh runs cyphalm_trie qa / context8k / sample and scribe ladder; this tool reads their
+# outputs and writes the card (docs/reports/REPORT_CARD.md). Header-only use of ecs.hpp, lci.hpp and scribe.hpp.
+# The self-test reads a tiny fixture it writes itself; no corpus, no full run.
+add_executable(cypha_report_card tools/cypha_report_card.cpp)
+target_include_directories(cypha_report_card PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
+cypha_mingw_apply_exe_link_options(cypha_report_card)
+add_test(NAME native_cypha_report_card_selftest COMMAND "$<TARGET_FILE:cypha_report_card>" selftest)
+set_tests_properties(native_cypha_report_card_selftest PROPERTIES TIMEOUT 60)
+# --- end report card block ------------------------------------------------------------------------------------
+
 # --- S2: epistemic layer (DISCOVERY 2.1-2.3, 3.1, 3.3, 10) header-only library test --------------
 # Header-only (include/cypha/eval/epistemic.hpp, which includes ecs.hpp); the test needs no link against cypha_core.
 add_executable(epistemic_test tools/epistemic_test.cpp)
