@@ -269,3 +269,122 @@ pattern_learn --gen-concepts /root/cdata/enwik8 /root/work/f2/v2/aug/seeds.tsv /
 ```
 
 Each part runs alone with `--part rediscover|promote|open`. A full run takes about 25 s and 171 MB.
+
+## S11a-b: date links (registered 2026-10-29, before any run)
+
+**Odin Loch** · 2026-10-29 · follows the G11 caveat above · the same change is measured for S4b's unparsed rate in [S4_UNSEEN_AND_FRONTIER.md](S4_UNSEEN_AND_FRONTIER.md), "S4b-b"
+
+(The definition, the reads, the rule and the predictions below were written and committed before any run of the changed code. Results are added under them.)
+
+**Question.** 19 of G11's 38 dev proposals name a date relation (birth_year, death_year, founded). Their pairs are links to years or days inside a date, such as "(January 18, [[1882]] –". The reader's date candidate already reads that whole date, and the kept date patterns parse it. Only the year's link is left over as an "unparsed" pair. Should G11 skip a link that sits inside a date candidate? This is decided by measurement (PLAN ledger 55).
+
+**Rule 10.** G11 proposes relations for Cypha's own store. Nothing here answers a question.
+
+### Definition (one for G11 and U)
+
+- **Date candidates** are the reader's own: `find_dates`, the K_DATE spans `gen_cands` already makes. They are a month with a year, a day and month with a year, or a lone year (100–2100, or any number followed by BC).
+- **A link sits inside a date candidate** when every token of its display lies inside one date candidate of the same sentence: candidate start ≤ link start and link end ≤ candidate end.
+- Examples:
+  - In "(January 18, [[1882]] –", the date candidate is "January 18, 1882". "[[1882]]" is inside it. So is "[[January 18]]" when the day is linked.
+  - In "in [[1882]], he moved", "[[1882]]" is its own one-token date candidate, so it is inside.
+  - "[[War of 1812]]" is not inside: its display has more than the year.
+- **The change for G11:** a (subject mention, link) pair whose link sits inside a date candidate is not a pair. It is not counted, not checked against the kept patterns, and not clustered. Nothing else in G11 changes: the keys, the clusters, the dev choice between C1 and C2, the grading.
+- The helper is `span_within` in `native/include/cypha/eval/unknown_signals.hpp`, shared with U.
+
+### Reads (dev only)
+
+- **Before:** main's tool at be3315b. **After:** the changed tool. Both run `pattern_learn --gen-concepts … --part open`, without `--read-test`, so only S15 dev is read.
+- **Measured:** pairs with a key; parsed and unparsed pairs; clusters and proposals for C1 (core) and C2 (connector); the dev choice; and for the chosen clustering, the date-relation proposals (property birth_date, death_date, birth_year, death_year or founded) and the others, with their pooled dev precision (holding pairs over gradable pairs, Wilson 95%).
+- **The 19 identified date proposals** (S11a's chosen C1, dev):
+
+| # | Key | Property | Pairs | Dev |
+|---|---|---|---:|---|
+| 1 | `[S] ( <M> # , [O]` | birth_year | 381 | 174 / 177 |
+| 2 | `[S] ( born <M> # , [O]` | birth_year | 136 | 52 / 60 |
+| 3 | `[S] ( <M> # [O]` | birth_year | 41 | 19 / 20 |
+| 4 | `[S] died on <M> # , [O]` | death_year | 37 | 19 / 20 |
+| 5 | `[S] ( # <M> [O]` | birth_year | 34 | 16 / 18 |
+| 6 | `[S] on <M> # , [O]` | birth_year | 28 | 8 / 16 |
+| 7 | `[S] was founded in [O]` | founded | 23 | 5 / 9 |
+| 8 | `[S] ( # - <M> # , [O]` | death_year | 21 | 7 / 7 |
+| 9 | `[S] ( born <M> # [O]` | birth_year | 17 | 7 / 7 |
+| 10 | `[S] was born on <M> # , [O]` | birth_year | 16 | 2 / 4 |
+| 11 | `[S] tennō ) ( [O]` | birth_year | 11 | 5 / 5 |
+| 12 | `[S] tennō ) ( # - [O]` | death_year | 10 | 3 / 4 |
+| 13 | `[O] ) , also known as [S]` | death_year | 9 | 5 / 5 |
+| 14 | `[S] ( ca . [O]` | birth_year | 7 | 3 / 3 |
+| 15 | `[S] , ( <M> # , [O]` | birth_year | 7 | 3 / 3 |
+| 16 | `[O] ) , better known as [S]` | death_year | 6 | 5 / 5 |
+| 17 | `[S] ( b . <M> # , [O]` | birth_year | 6 | 4 / 4 |
+| 18 | `[S] ) ( <M> # , [O]` | birth_year | 6 | 4 / 4 |
+| 19 | `[S] ( # <M> , [O]` | birth_year | 5 | 3 / 3 |
+
+### Decision rule (fixed now)
+
+G11 skips links inside date candidates when all three hold on dev:
+1. At least 18 of the 19 identified date proposals are gone: no proposal of the chosen clustering has the same key and property.
+2. Every non-date proposal of S11a's chosen clustering (C1) is still proposed: same key, same property.
+3. The dev choice stays C1. The change is a reader fix. If it moves the choice, it changes G11 by more than the fix, and it is not adopted here; it is reported instead.
+
+Otherwise G11 keeps its current reader, and this section reports why.
+
+**After the choice (no choice depends on it).** If the skip is adopted, G11 has one test read for this change (`--read-test`, S15 test, logged in S15's Reads table). It restates S11a's G11 test numbers for the changed reader. It never revisits the decision.
+
+### Predictions (registered before any run)
+
+| # | Prediction |
+|---|---|
+| D1 | The skip removes 15–40% of G11's pairs with a key (54,115 before) |
+| D2 | 18 or 19 of the 19 identified date proposals are gone |
+| D3 | Every non-date C1 proposal stays, and the dev choice stays C1 |
+| D4 | The non-date proposals' pooled dev precision rises by 0.01–0.10: year links inside place clusters ("died in [[1894]]") leave them |
+| D5 | (U, see S4b-b) |
+| D6 | S3's `--gaps` run and G9's lines are byte-identical |
+
+### Results on dev (2026-10-29)
+
+Before: main's tool at be3315b. After: 24727fc's source with one more line in G11's pair loop, `if (ecs::span_within(c.b, c.e, date_spans(cands))) continue;`. That line was measured, not committed (rule 3 failed). Both with `--part open`, without `--read-test`.
+
+| | Before | After |
+|---|---:|---:|
+| Pairs with a key | 54,115 | 46,475 (−14.1%) |
+| Parsed by a kept pattern | 508 | 290 |
+| Unparsed, with a word between | 49,152 | 43,512 |
+| C1 (core): clusters, proposals, dev pairs holding | 486, 38, 419 | 414, 20, 78 |
+| C2 (connector): clusters, proposals, dev pairs holding | 1,088, 27, 395 | 993, 21, 87 |
+| Dev choice (C2 needs 10% more) | C1 (395 vs 419) | **C2 (87 vs 78)** |
+
+- **The 19 date proposals:** all 19 are gone from both clusterings.
+- **C1 with the choice pinned** (a report-only build, not committed):
+  - every one of the 19 non-date proposals stays, with the same key and property;
+  - one is new: "[S] received the [O]" → award_received (2 / 4);
+  - "died in" loses its year links: 11 / 19 → 11 / 15 (41 → 28 pairs);
+  - pooled dev precision of the non-date proposals: 77 / 121 = 0.636 [0.548, 0.717] → 79 / 120 = 0.658 [0.570, 0.737].
+- **C2, now the dev choice:** 21 proposals, none of them dates; pooled dev precision 87 / 142 = 0.613 [0.531, 0.689]. Before the skip, C2 (pinned) had 27 proposals, 8 of them dates holding 322 of 459 pairs.
+  - Its proposals reach relations C1 never proposed: developer ("developed by", 3 / 5), headquarters ("based in", "headquartered in"), member_of ("fellow of", 4 / 7), country ("territory of", 3 / 4), spouse ("his wife", "wife was") and death_place ("settled in").
+  - They were in C2 before the skip too. **C1 won S11a's dev choice because of the date pairs:** they made 344 of C1's 419 holding pairs.
+
+### Decision (registered rule)
+
+- Rule 1 holds: 19 of 19 date proposals are gone.
+- Rule 2 holds on C1: every non-date C1 proposal stays.
+- **Rule 3 fails:** the dev choice moves from C1 to C2.
+- **So G11 keeps its current reader.** The skip is not in G11's code, and S11a's test numbers stand. No G11 test read was made.
+- **For Odin:** the date pairs also decided S11a's choice between C1 and C2. A new registered read, the skip with the choice as it falls (C2), with one S15 test read, would settle G11. That is a larger change than this fix, so it is not made here.
+
+### Predictions, scored
+
+| # | Prediction | Result |
+|---|---|---|
+| D1 | The skip removes 15–40% of the pairs | **Miss:** 14.1% |
+| D2 | 18 or 19 of the 19 date proposals go | **Hit:** 19 |
+| D3 | Every non-date C1 proposal stays, and the choice stays C1 | **Partial:** the proposals stay (C1 pinned); the choice moves to C2 |
+| D4 | The non-date proposals' pooled dev precision rises by 0.01–0.10 | **Hit** on C1: 0.636 → 0.658 (+0.022) |
+| D6 | S3's `--gaps` run and G9's lines byte-identical | **Hit** (G11 unchanged too, since the skip was not adopted) |
+
+D5 is U's (S4b-b).
+
+### Checks
+
+- `--gen-concepts` (all parts, dev only) with the final tool: stdout (timings masked) and its two pool files byte-identical to main's tool.
+- S3's `--gaps` run: gap map `a77678d8ef7dfdef`, its cells and demand files and the v2 store files byte-identical.

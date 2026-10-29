@@ -516,4 +516,16 @@ inline double ood_topic_distance(const std::vector<double>& v, const std::vector
   return 1.0 - best;
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
+// S4b-b (docs/reports/S4_UNSEEN_AND_FRONTIER.md, "S4b-b"): a link whose display tokens [b, e) lie inside one of a
+// sentence's date candidates is a linked year or day ("[[1882]]" in "January 18, [[1882]]"). The date candidate reads it,
+// so U does not count it as an entity mention.
+
+/// Whether the token span [b, e) lies inside one of the spans (start <= b and e <= end).
+inline bool span_within(int b, int e, const std::vector<std::pair<int, int>>& spans) {
+  for (const auto& [s, t] : spans)
+    if (s <= b && e <= t) return true;
+  return false;
+}
+
 }  // namespace cypha::eval

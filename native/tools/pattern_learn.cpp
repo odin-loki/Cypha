@@ -996,6 +996,17 @@ void gen_cands(const Sent& s, vector<Cand>& out) {
         }
 }
 
+// S4b-b (decided by measurement, PLAN ledger 55; docs/reports/S4_UNSEEN_AND_FRONTIER.md): the token spans of the date
+// candidates among cands (find_dates' K_DATE). A link inside one is a linked year or day; see ecs::span_within. U leaves
+// such links out of its mentions. G11 keeps them (S11a-b: the skip moved G11's dev choice, so it was not adopted there).
+vector<std::pair<int, int>> date_spans(const vector<Cand>& cands) {
+    vector<std::pair<int, int>> d;
+    for (const Cand& c : cands)
+        if (c.kind == K_DATE) d.push_back({c.b, c.e});
+    return d;
+}
+constexpr bool kUSkipDateLinks = true;  // S4b-b: U's mentions leave out links inside date candidates
+
 // ============================================================ type constraints (PLAN 3.2: a capital is a place; a date parses)
 bool name_like(const Cand& c) {
     int n = c.ntok();
@@ -3276,19 +3287,22 @@ struct Signal {
     vector<string> detail[5];
     vector<int> pools{kD, kL};  // the planted pools analysed
     string tag = "S4b";         // in the gap notes
+    string header{};            // S4b-b: a line printed before the signal's analysis (empty: none)
 };
 
-// U: (eligible sentences, parsed ones) of a page.
-std::pair<int, int> unparsed_counts(const Page& p) {
+// U: (eligible sentences, parsed ones) of a page. skip_dates (S4b-b): a link inside a date candidate is not a mention.
+std::pair<int, int> unparsed_counts(const Page& p, bool skip_dates) {
     PageCtx px;
     load_page(*p.src, p.ref, px);
     int n = 0, x = 0;
-    vector<Cand> cands;
+    vector<Cand> cands, dates;
     for (const Sent& s : px.sents) {
         const auto spans = find_subject(s, px.forms);
+        vector<std::pair<int, int>> ds;
+        if (skip_dates) dates.clear(), find_dates(s, dates), ds = date_spans(dates);
         std::set<string> ents;
         for (const Lnk& L : s.l)
-            if (string k = norm_ent(L.target); !k.empty() && k != px.forms.title_key) ents.insert(k);
+            if (string k = norm_ent(L.target); !k.empty() && k != px.forms.title_key && !(skip_dates && ecs::span_within(L.tb, L.te, ds))) ents.insert(k);
         if (ents.size() + (spans.empty() ? 0 : 1) < 2) continue;
         ++n;
         if (spans.empty()) continue;
@@ -3298,6 +3312,45 @@ std::pair<int, int> unparsed_counts(const Page& p) {
         x += fired;
     }
     return {n, x};
+}
+
+// U's signal: q_τ from the calibration set (sets[kC]), units from every set. own: each set's name in a unit's identity.
+// skip_dates as unparsed_counts. Prints the rates over the calibration set and each set's totals (S4b's lines).
+Signal unparsed_signal(const vector<const Page*> (&sets)[4], const char* const (&own)[4], bool skip_dates, const std::function<void(const string&)>& say) {
+    Signal g{"unparsed", "coverage", {"country", "person", "place", "other"}, {}, {}, {}};
+    char b[600];
+    vector<std::pair<int, int>> cnt[4];
+    double sn[4] = {0, 0, 0, 0}, sx[4] = {0, 0, 0, 0};
+    std::size_t pages_t[4] = {0, 0, 0, 0}, with[4] = {0, 0, 0, 0};
+    for (int s = 0; s < 4; ++s)
+        for (const Page* p : sets[s]) {
+            cnt[s].push_back(unparsed_counts(*p, skip_dates));
+            if (s == kC) sn[p->type] += cnt[s].back().first, sx[p->type] += cnt[s].back().second, ++pages_t[p->type], with[p->type] += cnt[s].back().first >= 3;
+        }
+    double q[4];
+    for (int t = 0; t < 4; ++t) {
+        q[t] = sn[t] > 0 ? sx[t] / sn[t] : 0.0;
+        std::snprintf(b, sizeof b, "  SIGNAL_U_RATE C %-7s pages %zu units (n >= 3) %zu | eligible sentences %.0f parsed %.0f | unparsed rate %.4f", g.strata[static_cast<std::size_t>(t)].c_str(),
+                      pages_t[t], with[t], sn[t], sx[t], sn[t] > 0 ? 1.0 - q[t] : 0.0);
+        say(b);
+    }
+    for (int s = 0; s < 4; ++s) {
+        double n_all = 0, x_all = 0;
+        for (std::size_t i = 0; i < sets[s].size(); ++i) {
+            const auto [n, x] = cnt[s][i];
+            n_all += n, x_all += x;
+            if (n < 3) continue;
+            const Page* p = sets[s][i];
+            g.u[s].push_back({ecs::binom_lower_tail_score(static_cast<std::size_t>(n), static_cast<std::size_t>(x), q[p->type]), p->type,
+                              ecs::signal_unit_id(own[s], p->ref.tb)});
+            g.pg[s].push_back(p);
+            g.detail[s].push_back("n " + std::to_string(n) + " parsed " + std::to_string(x));
+        }
+        std::snprintf(b, sizeof b, "  SIGNAL_U_SET %s pages %zu units %zu | eligible sentences %.0f parsed %.0f unparsed rate %.4f", kSetName[s], sets[s].size(), g.u[s].size(), n_all,
+                      x_all, n_all > 0 ? 1.0 - x_all / n_all : 0.0);
+        say(b);
+    }
+    return g;
 }
 
 // V: reads a page's words (S4's: maximal runs of ASCII letters, lower-cased) into the vocabulary; (tokens, new words).
@@ -3483,44 +3536,48 @@ void write_signals(const SignalOpt& O, const string& data, const vector<PageRef>
     units << "signal\tset\tbody_offset\ttitle\tstratum\tscore\tdetail\n";
     vector<Signal> sig;
 
-    // U: the unparsed rate per page type.
-    {
-        Signal g{"unparsed", "coverage", {"country", "person", "place", "other"}, {}, {}, {}};
-        vector<std::pair<int, int>> cnt[4];
-        double sn[4] = {0, 0, 0, 0}, sx[4] = {0, 0, 0, 0};
-        std::size_t pages_t[4] = {0, 0, 0, 0}, with[4] = {0, 0, 0, 0};
-        for (int s = 0; s < 4; ++s)
-            for (const Page* p : set[s]) {
-                cnt[s].push_back(unparsed_counts(*p));
-                if (s == kC) sn[p->type] += cnt[s].back().first, sx[p->type] += cnt[s].back().second, ++pages_t[p->type], with[p->type] += cnt[s].back().first >= 3;
-            }
-        double q[4];
-        for (int t = 0; t < 4; ++t) {
-            q[t] = sn[t] > 0 ? sx[t] / sn[t] : 0.0;
-            std::snprintf(b, sizeof b, "  SIGNAL_U_RATE C %-7s pages %zu units (n >= 3) %zu | eligible sentences %.0f parsed %.0f | unparsed rate %.4f", g.strata[static_cast<std::size_t>(t)].c_str(),
-                          pages_t[t], with[t], sn[t], sx[t], sn[t] > 0 ? 1.0 - q[t] : 0.0);
-            say(b);
+    // S4b-b (docs/reports/S4_UNSEEN_AND_FRONTIER.md, "S4b-b"): --signals-scope u-dev builds U twice, keep (S4b's reader)
+    // and skip (links inside date candidates are not mentions), on S4c's dev split: C's pages before kSignalDevSplit
+    // calibrate, the rest of C is the stream, D's even records and L are the pools. S is never scored; V, Σ and S4c do not run.
+    const bool udev = O.scope == "u-dev";
+    if (udev) {
+        vector<const Page*> ds[4];
+        for (const Page* p : set[kC]) ds[p->ref.tb >= ecs::kSignalDevSplit ? kS : kC].push_back(p);
+        for (const Page* p : set[kD]) {  // "Dolly NNNNN": the record's line number
+            const long line = std::atol(p->ref.title.c_str() + std::min<std::size_t>(6, p->ref.title.size()));
+            if (line % 2 == 0) ds[kD].push_back(p);
         }
-        for (int s = 0; s < 4; ++s) {
-            double n_all = 0, x_all = 0;
-            for (std::size_t i = 0; i < set[s].size(); ++i) {
-                const auto [n, x] = cnt[s][i];
-                n_all += n, x_all += x;
-                if (n < 3) continue;
-                const Page* p = set[s][i];
-                g.u[s].push_back({ecs::binom_lower_tail_score(static_cast<std::size_t>(n), static_cast<std::size_t>(x), q[p->type]), p->type,
-                                  ecs::signal_unit_id(kSetName[s], p->ref.tb)});
-                g.pg[s].push_back(p);
-                g.detail[s].push_back("n " + std::to_string(n) + " parsed " + std::to_string(x));
+        ds[kL] = set[kL];
+        static const char* const own[4] = {"C", "C", "D", "L"};
+        for (const bool skip : {false, true}) {
+            const char* vn = skip ? "skip" : "keep";
+            // The unparsed rate over all of C (S4b's calibration stream), by page type.
+            double sn[4] = {0, 0, 0, 0}, sx[4] = {0, 0, 0, 0};
+            for (const Page* p : set[kC]) {
+                const auto [n, x] = unparsed_counts(*p, skip);
+                sn[p->type] += n, sx[p->type] += x;
             }
-            std::snprintf(b, sizeof b, "  SIGNAL_U_SET %s pages %zu units %zu | eligible sentences %.0f parsed %.0f unparsed rate %.4f", kSetName[s], set[s].size(), g.u[s].size(), n_all,
-                          x_all, n_all > 0 ? 1.0 - x_all / n_all : 0.0);
-            say(b);
+            const char* tn[4] = {"country", "person", "place", "other"};
+            for (int t = 0; t < 4; ++t) {
+                std::snprintf(b, sizeof b, "S4b-b U_RATE_ALL_C %s %-7s | eligible sentences %.0f parsed %.0f | unparsed rate %.4f", vn, tn[t], sn[t], sx[t],
+                              sn[t] > 0 ? 1.0 - sx[t] / sn[t] : 0.0);
+                say(b);
+            }
+            say(string("S4b-b dev split, U ") + vn + ":");
+            Signal g = unparsed_signal(ds, own, skip, say);
+            for (auto& d : g.detail)
+                for (string& x : d) x = string(vn) + " " + x;
+            g.tag = string("S4b-b dev ") + vn;
+            g.header = string("\nS4b-b U ") + vn + " (dev split: stream = C from " + std::to_string(ecs::kSignalDevSplit) + ")";
+            sig.push_back(std::move(g));
         }
-        sig.push_back(std::move(g));
+    } else {
+        // U: the unparsed rate per page type.
+        static const char* const own[4] = {"C", "S", "D", "L"};
+        sig.push_back(unparsed_signal(set, own, kUSkipDateLinks, say));
     }
     // V: new words against Heaps, CyphaLM's view.
-    {
+    if (!udev) {
         Signal g{"vocabulary", "lexical", {"tok50-299", "tok300-1499", "tok1500+"}, {}, {}, {}};
         std::unordered_set<string> vocab;
         vector<double> Np, Vp;
@@ -3563,7 +3620,7 @@ void write_signals(const SignalOpt& O, const string& data, const vector<PageRef>
         sig.push_back(std::move(g));
     }
     // Σ: CyphaLM's surprise, from cyphalm_trie surprise.
-    if (!O.surprise.empty()) {
+    if (!O.surprise.empty() && !udev) {
         Signal g{"surprise", "prediction", {"bytes256-1023", "bytes1024-2047", "bytes2048"}, {}, {}, {}};
         std::map<std::pair<string, std::size_t>, std::pair<std::size_t, double>> sc;
         for (const string& path : O.surprise) {
@@ -3738,7 +3795,10 @@ void write_signals(const SignalOpt& O, const string& data, const vector<PageRef>
     const string gap_path = O.gaps.empty() ? O.dir + "/signal_gaps.tsv" : O.gaps;
     std::ofstream gaps(gap_path), planted(gap_path + ".planted.tsv");
     for (std::ofstream* o : {&gaps, &planted}) *o << "gap_id\tkind\tstatus\tentity\ttype\trelation\tp_exists\tf_store\tf_wd\tp\teig_bits\tdemand\tvoi\tnote\n";
-    for (const Signal& g : sig) analyse(g, gaps, planted, say);
+    for (const Signal& g : sig) {
+        if (!g.header.empty()) say(g.header);
+        analyse(g, gaps, planted, say);
+    }
     say("S4b: units " + O.dir + "/units.tsv, gaps " + gap_path + " (and .planted.tsv); Rule 10: self-assessment only");
 }
 
@@ -10191,7 +10251,7 @@ int main(int argc, char** argv) {
                              "         [--raw] [--join FACTS] [--reach PARSE] [--gaps FILE [--demand ROWS,...] [--parse PARSE] [--gap-floor F] [--demand-weight W]]\n"
                              "         [--frontier FILE [--frontier-test] [--frontier-split B]]\n"
                              "         [--signals DIR [--signals-dolly PAGES.xml] [--surprise SCORES.tsv,...] [--signals-gaps FILE]\n"
-                             "          [--signals-scope dev|test [--signals-plain PAGES.xml] [--signals-vec FILE]]]\n"
+                             "          [--signals-scope dev|test|u-dev [--signals-plain PAGES.xml] [--signals-vec FILE]]]\n"
                              "       pattern_learn --wilson K N\n");
         return 2;
     }
@@ -10232,7 +10292,7 @@ int main(int argc, char** argv) {
         else if (a == "--signals-dolly" && i + 1 < argc) A.signals.dolly = argv[++i];
         else if (a == "--surprise" && i + 1 < argc) A.signals.surprise = split(argv[++i], ',');
         else if (a == "--signals-gaps" && i + 1 < argc) A.signals.gaps = argv[++i];
-        else if (a == "--signals-scope" && i + 1 < argc) A.signals.scope = argv[++i];  // S4c: dev | test
+        else if (a == "--signals-scope" && i + 1 < argc) A.signals.scope = argv[++i];  // S4c: dev | test; S4b-b: u-dev
         else if (a == "--signals-plain" && i + 1 < argc) A.signals.plain = argv[++i];
         else if (a == "--signals-vec" && i + 1 < argc) A.signals.vec = argv[++i];
     }
