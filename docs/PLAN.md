@@ -936,6 +936,9 @@ Everything raised on 2026-10-26, and where this plan covers it.
 | 64 | The text score the decision rules use is SCRIBE v2; surface S is reported alongside (2026-10-29) | [`reports/SCRIBE_V2.md`](reports/SCRIBE_V2.md); HANDOFF §2 rule 5 |
 | 65 | Keep `pattern_learn` as Track S's fact and hypothesis tool; it never answers (2026-10-29) | [`TOOL_PROFILE_PLAN.md`](TOOL_PROFILE_PLAN.md); HANDOFF §5 |
 | 66 | Decided by measurement under row 55 (2026-10-29), open to Odin's veto: the hypothesis loop uses three-way likelihoods; T1's φ comes from the store; the batch step is BH among the supported (selective; whole-batch e-BH remains the guaranteed alternative); confirmed on S15 dev at 0.956 (S7b) | [`reports/S7_HYPOTHESIS_TESTS.md`](reports/S7_HYPOTHESIS_TESTS.md) |
+| 67 | Promotion needs another evidence source: "Get another evidence source. In this situation the result would be to datamine and assess data sources reliability." (2026-10-29) | S8c (running): candidate sources datamined, each one's reliability and independence from Wikidata measured before it may promote |
+| 68 | The batch rule is "not up to scratch yet": "Hybrid or something better. Keep working on it." (2026-10-29) | S7c (running) |
+| 69 | Fix both hp-wrapper bugs: forecast rollouts keep the trained model (its output may change); a vocabulary under 256 is rejected and the codec test uses 256 (2026-10-29) | HPFIX (running); SLOW_TEST_TRIAGE |
 
 ---
 
