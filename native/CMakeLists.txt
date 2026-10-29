@@ -2466,6 +2466,20 @@ add_test(NAME native_scribe_selftest COMMAND "$<TARGET_FILE:scribe>" selftest)
 set_tests_properties(native_scribe_selftest PROPERTIES TIMEOUT 120)
 # --- end SCRIBE block ---------------------------------------------------------------------------
 
+# --- 1 TB runs (docs/TRAIN_1TB_RUNBOOK.md): a second streaming trainer and the checkpoint verifier --------------
+# trie_stream_train_v2 trains the live trainer's model (native/tools/trie_stream_train.cpp, not changed) with counts
+# that halve instead of wrapping; trie_ckpt verifies, scores and compares TRI1 / TRI2 checkpoints through
+# include/cypha/cyphalm/stream_trie.hpp and packed_trie.hpp's fixed backoff.
+add_executable(trie_stream_train_v2 tools/trie_stream_train_v2.cpp)
+target_include_directories(trie_stream_train_v2 PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include" "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
+cypha_mingw_apply_exe_link_options(trie_stream_train_v2)
+add_executable(trie_ckpt tools/trie_ckpt.cpp)
+target_include_directories(trie_ckpt PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include" "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
+cypha_mingw_apply_exe_link_options(trie_ckpt)
+add_test(NAME native_trie_ckpt_selftest COMMAND "$<TARGET_FILE:trie_ckpt>" selftest)
+set_tests_properties(native_trie_ckpt_selftest PROPERTIES TIMEOUT 120)
+# --- end 1 TB runs block -------------------------------------------------------------------------------------
+
 # --- Report card (bill of work M1-M4): CyphaLM's evaluation contract on one card ------------------------------
 # scripts/cypha_report_card.sh runs cyphalm_trie qa / context8k / sample and scribe ladder; this tool reads their
 # outputs and writes the card (docs/reports/REPORT_CARD.md). Header-only use of ecs.hpp, lci.hpp and scribe.hpp.
