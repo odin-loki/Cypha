@@ -328,3 +328,188 @@ g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp -o pattern_l
 ./pattern_learn --score-planted /root/work/f2/v2/aug/seeds.tsv /root/work/f2/wikidata/wd_values.tsv out                 # dev, the joint test
 ./pattern_learn --score-planted /root/work/f2/v2/aug/seeds.tsv /root/work/f2/wikidata/wd_values.tsv fresh --read-fresh  # the fresh set (read once)
 ```
+
+---
+
+## S6c: G12's closed form as a support term and as a test kind (registered 2026-10-29, before any run)
+
+**Odin Loch** · 2026-10-29 · HANDOFF §5.20 (Odin: "Continue. Do all.") · follows S6b above and [S11B_ABC_DISCOVERY.md](S11B_ABC_DISCOVERY.md)
+
+(The design, the sets, the rules and the predictions below were written and committed before any S6c run. Results are added under them.)
+
+**Question.** S11b removed G12, but found one part that works: given A and C, the strength of their B links in the 2006 text separates a true value from its false partner (pair AUROC 0.682 on S15 test, popularity 0.472). Does that closed form lift S6's P0 (0.738 on S6b's fresh set, against the 0.75 gate)? And does it earn a place as a test in S7's loop?
+
+**Rule 10.** P0 and the loop rank and test Cypha's own hypotheses. Nothing here answers a question, and nothing reaches `qa` or `chat`.
+
+### The closed form, as used here (fixed now)
+
+- **The text** is S11b's: enwik8's 8,587 articles as documents; each article's entities are its title and the targets of its wiki links, redirects resolved (at most three hops). Years, decades, centuries, days of the year, month names and "List of …" titles are left out of every role.
+- **Configuration:** S11b's dev choice, not tuned again: PPMI weights, hub cap H = 200, a link B needs at least 2 documents.
+- **One change from S11b, so it can score any pair.** S11b read the closed form only on pairs that never share a document. Here, the documents that hold both A and C are left out before counting: N, n_A, n_C, n_B, n_AB and n_BC are all counted on the other documents. score(A, C) = Σ_B ln(N′/n′_B) · PPMI′(A, B) · PPMI′(B, C), over B ∉ {A, C}. On a pair that never shares a document this is S11b's score exactly. So the score never reads a document where A and C appear together: it is indirect evidence only.
+- **Resolving a hypothesis (s, r, o):** s is the article with that title; o is the usable entity with the most documents among those whose surface forms (`norm_ent` of the title and of each redirect title) match `norm_ent(o)`, with at least 2 documents. If either does not resolve, or they resolve to the same entity, the closed form is **not applicable** to that hypothesis. Dates and most years never resolve.
+- **Code:** `native/include/cypha/eval/abc_closed.hpp` (the counts and the score, restored from S11b's `gen_abc.hpp` at `0230741`, the closed form only) and `pattern_learn`'s `namespace s6c` (building the text and resolving names).
+
+### Part 1: a support term in S6's P0
+
+- **P0_abc** = isotonic(z(logit P_assoc) + z(ln(1 + AA)) + w · z_abc) × hard constraint. That is S6b's P0 with one term added.
+  - z_abc = z(ln(1 + score)) for an applicable hypothesis, with the pool from the applicable dev items; **z_abc = 0 when not applicable** (no evidence either way).
+  - The isotonic fit and the other z pools are S6b's (S6's dev half).
+- **Dev (choice):** S6's dev pairs (877). w from {0, 0.25, 0.5, 0.75, 1, 1.5, 2}, by dev AUROC; within 0.001, the smaller w. w = 0 is S6b's P0.
+- **The fresh set (S6c), fixed now and frozen by its hash before the read:**
+  1. Subjects with at least two triples, **except the subjects of S6's dev pairs**, in the store's order, shuffled with `mt19937_64(20261031)`.
+  2. Each subject's triples are shuffled with the same generator. The first triple whose object occurs for another subject, and that **no earlier set held out** (S6's planted set, S6b's fresh set, S7's set C), is held out.
+  3. The reduced store is the full store without these hold-outs. Every earlier hold-out stays in it as a true fact.
+  4. False partners by S6's rule (by triple from the relation in the reduced store, with S6's Wikidata filter), drawn with the continuing generator.
+  5. Every pair is read once. Nothing is fitted on it.
+  - `--score-planted … --s6c-dump` writes the pairs (no scores) before the read; their SHA-256 goes into this report first.
+- **S15's pairs:** S8b's read 4 (one S15 pair per subject, its slot removed, z pools and isotonic fits on S15 dev's pairs) with P0_abc beside S6b's P0, w as chosen on S6's dev. S15 test's pairs read once for this change, logged in S15's Reads table. S15 is used for nothing else here.
+
+### Part 2: a test kind in S7's loop (T7, "indirect links")
+
+- **Outcome on (s, r, o):** not applicable → inconclusive; score ≥ τ → positive; score = 0 (no B links o to s at all) → negative; otherwise inconclusive.
+  - τ is a quantile of the applicable dev scores, q ∈ {0.5, 0.6, 0.7, 0.8, 0.9}, chosen on S7's dev (sets U and C, S6's labels) by the mutual information between the outcome and the label, S7's choice statistic.
+- **It runs only when T4 is inconclusive.** T4 reads s's own article; T7 never reads a document holding both s and o. They read the same 2006 text, so they are not treated as independent of each other. T7 is run only where T4 is silent, and its three-way likelihoods are measured on dev **given T4 inconclusive**. Then P(T4, T7 | h) = P(T4 | h) · P(T7 | T4 inconclusive, h) exactly, with no independence assumed between them.
+- **Not independent evidence.** Links in other articles include the infobox links the store was built from. So T7 is never the independent evidence `decide` needs (I4): it can lower or raise a posterior, never support alone.
+- **Dependence on T1 and T6:** on dev, within true and within false hypotheses, the odds ratio of T7 positive against each of T1 and T6 positive is printed.
+- **The loop read (once), on the S6c fresh set:** T1 (φ_store), T6, T4 with S7b's three-way likelihoods from S7's dev, the prior S7's P0 (S7's dev fit) on the fresh reduced store; with and without T7 last. T5 is left out: S6's Wikidata filter makes it negative on every false partner by construction. Supported precision, refuted precision, decided share, Brier, with `decide` alone and with S7b's batch step.
+
+### Decision rules (fixed now)
+
+1. **P0 term:** adopted if, on the S6c fresh set, P0_abc − P0 has its paired bootstrap 95% interval above 0, no canary falls, and LCI ≥ 0.95 (PLAN §8):
+   - P_gain = P(ΔAUROC > ε = 0.005), Bayesian bootstrap over pairs, 4,000 draws;
+   - n_eff = fresh pairs (LCI capped at 0.5 below 200);
+   - r: canaries are the four relation groups on the fresh set and S15 test's pairs; r = 1 if each has P(Δ > −0.01) ≥ 0.95;
+   - γ = min(1, (fresh gain / dev gain) / 0.5), clipped to [0, 1];
+   - c = 1 if P0's Brier score on the fresh set does not rise, else 0.5;
+   - σ = 1 if the gain has the same sign in three blocks of subjects (FNV-1a mod 3), else 0.5;
+   - κ = 1 if the run stays within 15 minutes and 3 GB.
+   - "Adopted" means S6's P0 includes the term (`--score-planted … --abc ENWIK8`). Other modes take it at their next change, so their reads stay reproducible.
+   - If w = 0 on dev, the term is not adopted and its fresh read is not made.
+2. **T7:** adopted if its dev LR+ (given T4 inconclusive) is at least 3, and on the fresh read the loop's supported and refuted precision with T7 are not below those without it, and the Brier score does not rise.
+3. **If neither is adopted,** the code goes in its own commit and this section keeps the numbers. If one is, only what it needs stays.
+4. Nothing is changed after a read.
+
+### Predictions (registered before any run)
+
+| # | Prediction |
+|---|---|
+| E1 | The closed form is applicable to 45–70% of S6's dev hypotheses (dates and many lexical values do not resolve) |
+| E2 | Alone, on dev pairs where both members are applicable, its pair AUROC is 0.60–0.75 |
+| E3 | w on dev is 0.5, 0.75 or 1; P0_abc's dev AUROC is 0.01–0.04 above S6b's P0 (0.7639) |
+| E4 | On the fresh set, P0_abc − P0 is +0.01 to +0.04 with the interval above 0, and P0_abc reaches 0.74–0.78 |
+| E5 | Dates do not move (not applicable); places gain the most (+0.03 to +0.08) |
+| E6 | On S15 test's pairs, P0_abc − P0 is 0.00 to +0.03 and S6's gate stays missed there |
+| E7 | T7 is consulted (T4 inconclusive) on 50–85% of S7's dev hypotheses; its LR+ there is 2–4 |
+| E8 | Within each label, the odds ratios of T7 against T1 and T6 are between 0.5 and 2 |
+| E9 | On the fresh loop read, T7 changes no supported count (it cannot support) and adds refutations, with refuted precision ≥ 0.80 |
+| E10 | The closed form adds under 60 s and under 300 MB to a run |
+
+### S6c results (2026-10-29)
+
+**Odin Loch** · 2026-10-29 · code `0d99896` (all new parts behind flags)
+
+**Outcome.** Neither is adopted. On S6's dev pairs the closed form is at chance (0.504), and every weight above 0 lowers P0. So w = 0, and by rule 1 the fresh read is not made. As T7, its LR+ on dev is 1.28, below rule 2's 3. Its "no links" outcome points the wrong way: it is 5.3 times as likely for a true hypothesis as for a false one. By rule 3 the code stays in its own commit, off unless its flags are given. No frozen set was read.
+
+#### Part 1: the P0 term, on S6's dev pairs
+
+- **Coverage.** The closed form applies to 1,151 of 1,754 dev items (65.6%). Both members of a pair apply in 474 of 877 pairs.
+- **Alone,** on those 474 pairs: AUROC 0.504 [0.480, 0.529], pair accuracy 0.524.
+- **The weight sweep (P0_abc on all 877 dev pairs):**
+
+| w | AUROC | 95% interval | Pair accuracy |
+|---|---|---|---|
+| 0 (S6b's P0) | 0.7639 | [0.7442, 0.7837] | 0.7930 |
+| 0.25 | 0.7447 | [0.7245, 0.7651] | 0.7794 |
+| 0.5 | 0.7291 | [0.7101, 0.7487] | 0.7600 |
+| 0.75 | 0.7147 | [0.6954, 0.7345] | 0.7577 |
+| 1 | 0.6996 | [0.6797, 0.7187] | 0.7509 |
+| 1.5 | 0.6849 | [0.6656, 0.7039] | 0.7360 |
+| 2 | 0.6719 | [0.6517, 0.6911] | 0.7263 |
+
+- **Choice:** w = 0. Rule 1: "If w = 0 on dev, the term is not adopted and its fresh read is not made." So the S6c fresh set was not read for P0, and S15 test's pairs were not read (that read was tied to the chosen w). S15's Reads table is unchanged.
+
+#### Part 2: T7, on S7's dev (sets U and C)
+
+- **Consulted.** T4 is inconclusive on 2,253 of 2,950 dev hypotheses (76.4%). The closed form applies to 1,601 of them.
+- **τ by mutual information** (given T4 inconclusive):
+
+| q | τ | MI (bits) | True: pos / neg / inc | False: pos / neg / inc |
+|---|---|---|---|---|
+| 0.5 | 1,529 | 0.0600 | 311 / 196 / 377 | 490 / 56 / 823 |
+| 0.6 | 2,357 | 0.0621 | 263 / 196 / 425 | 378 / 56 / 935 |
+| 0.7 | 3,870 | 0.0619 | 204 / 196 / 484 | 277 / 56 / 1,036 |
+| **0.8** | **6,403** | **0.0624** | 145 / 196 / 543 | 176 / 56 / 1,137 |
+| 0.9 | 13,066 | 0.0582 | 70 / 196 / 618 | 91 / 56 / 1,222 |
+
+- **Likelihoods at q = 0.8:** true pos 0.165, neg 0.222, inc 0.613; false pos 0.129, neg 0.042, inc 0.829. LR+ 1.28, LR− 5.35, LR(inc) 0.74. **LR+ is below 3, so rule 2's dev part fails.**
+- **The negative outcome is reversed.** A score of 0 (no B link at all) comes up for 196 of 884 true hypotheses (22.2%) and 56 of 1,369 false ones (4.1%). The loop uses measured likelihoods, so it reads this outcome as support. But the test was meant to refute with it.
+- **Dependence on T1 and T6** (odds ratio of T7 positive, within each label):
+
+| Label | Against | T7 positive when the other is positive | Otherwise | Odds ratio |
+|---|---|---|---|---|
+| True | T1 | 0 of 9 | 145 of 875 | 0.26 |
+| True | T6 | 30 of 144 | 115 of 740 | 1.44 |
+| False | T1 | 0 of 3 | 176 of 1,366 | 0.96 |
+| False | T6 | 7 of 46 | 169 of 1,323 | 1.29 |
+
+T1 is rarely positive where T4 is silent (12 hypotheses), so the T1 rows say little.
+
+- **The loop on dev, with T7 last** (for reference only: its likelihoods were measured on these same hypotheses). `decide` alone, S7b's kinds:
+  - supported 572, precision 0.976 [0.959, 0.985], with and without T7;
+  - refuted 113 → 143, precision 0.965 [0.913, 0.986] → 0.937 [0.885, 0.967];
+  - decided share 0.232 → 0.242; Brier 0.156 → 0.141.
+  - The same holds without T5 (refuted 109 → 138, precision 0.963 → 0.935) and with S7b's batch step (supported 571 either way).
+  - So T7 adds about 30 refutations at lower precision.
+- **The fresh loop read was not made.** The registration planned it. But rule 2 needs dev LR+ ≥ 3 *and* the fresh read, and the dev part has failed, so the read could decide nothing. I applied rule 1's logic here too, so the fresh set stays unread for a later change. This is the one departure from the registered plan.
+
+#### Why it fails (dev only; likely cause, not measured directly)
+
+The leave-out rule removes every document that holds both s and o. In S6's and S7's sets, a true value was read from s's own article, and that article links to o. So for a true hypothesis, s's own article is left out. That is the document holding most of s's links. For a false partner the article stays. The score therefore drops for true pairs, often to 0. S11b read the closed form only on pairs that never share a document, so its leave-out never fired: S15's values are mostly not in the 2006 text. On facts read from the same text, the closed form as registered does not work.
+
+A follow-up would first count, on dev, how often the leave-out removes s's own article, by label. Then it could register the closed form only for hypotheses whose pair shares no document. But whether a pair applies would then itself depend on the label. That needs its own design.
+
+#### The S6c fresh set (frozen, unread)
+
+2,027 subjects; 1,106 held out (921 skipped: every eligible triple already held out by an earlier set); 1,071 pairs (35 dropped: object gone). Reduced store 21,677 of 22,783 triples. Checksum (FNV-1a over label, subject, relation, object) `44ead1453d05697c`. No score was read on it. A later change can use it as fresh.
+
+#### Predictions scored
+
+| # | Prediction | Result | Score |
+|---|---|---|---|
+| E1 | Applicable to 45–70% of dev hypotheses | 65.6% | Hit |
+| E2 | Alone, AUROC 0.60–0.75 | 0.504 [0.480, 0.529] | Miss |
+| E3 | w 0.5–1; dev +0.01 to +0.04 | w = 0; every w > 0 is lower (0.7447 at 0.25) | Miss |
+| E4 | Fresh +0.01 to +0.04, interval above 0 | Not read (rule 1) | Not scored |
+| E5 | Dates unmoved; places +0.03 to +0.08 | Not read | Not scored |
+| E6 | S15 test 0.00 to +0.03; gate missed | Not read | Not scored |
+| E7 | Consulted on 50–85%; LR+ 2–4 | 76.4%; LR+ 1.28 | Miss (share in range) |
+| E8 | Odds ratios 0.5–2 | 0.26, 1.44, 0.96, 1.29 | Miss (3 of 4; the miss rests on 9 hypotheses) |
+| E9 | Fresh loop: no supported change; refuted precision ≥ 0.80 | Not read | Not scored |
+| E10 | Under 60 s and 300 MB added | 14.7 s and +57 MB in `--test-kinds` | Hit |
+
+Two hits, four misses, four not scored.
+
+**Cost.** In `--test-kinds`, building the text and scoring 5,746 hypotheses took 14.7 s; peak memory rose from 266 to 323 MB. In `--score-planted`, the S6c block took 177 s and peak memory rose from 74 to 318 MB. That mode reads the 100 MB text (S6 alone does not) and rebuilds three earlier hold-out sets to exclude them; the split was not timed. The machine ran at a load of about 30 on 4 cores.
+
+#### Checks
+
+- `epistemic_test`: 1,325 checks, 0 failed. S6c adds 32 (`test_abc_closed_S6c`).
+- The nine CTests of HANDOFF §4.4 pass.
+- Planted bugs in `abc_closed.hpp`, each caught: shared documents not left out (7 checks fail); hub cap exclusive (2); counters not reset between calls (2).
+- Flags off, the new build against the base build (`4331619`):
+  - `--score-planted`: output and `planted.tsv` byte-identical.
+  - `--test-kinds … --s7c`: output identical except the timing line; all five TSVs identical.
+  - `--gen-links`: output identical except three timing lines; all six TSVs identical.
+  - S3's `--gaps` run: `gap_map.tsv`, cells and demand byte-identical (sha256 `a77678d8ef7dfdef`).
+
+#### How to reproduce S6c
+
+```
+g++ -O2 -std=c++20 -I native/include -pthread native/tools/pattern_learn.cpp -o pl
+F=f2; W=$F/wikidata/wd_values.tsv
+./pl --score-planted $F/v2/aug/seeds.tsv $W OUT --abc enwik8              # Part 1, dev (w sweep)
+./pl --test-kinds enwik8 $F/v2/aug/seeds.tsv $W $F/v2/aug/patterns.tsv OUT \
+     --phi-wd $F/wikidata/phi.tsv --s15 bench/eval/temporal_holdout_dev.tsv --s7c --s6c   # Part 2, dev
+```
+
+`--s6c-dump`, `--read-s6c-fresh` and `--gen-links … --abc-w W` exist but were not run (no read was made).

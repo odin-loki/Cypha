@@ -3,6 +3,7 @@
 // among the supported), gap_map.hpp (S3: 3.2, 3.5), gen_links.hpp (S8b: G6, G7), gen_rules.hpp (S8a: G2, G14), sources.hpp
 // (S8c: evidence sources), worlds.hpp (S9) and curiosity.hpp (S10); S7c's batch rules.
 // Returns nonzero if any check fails.
+#include "cypha/eval/abc_closed.hpp"
 #include "cypha/eval/curiosity.hpp"
 #include "cypha/eval/epistemic.hpp"
 #include "cypha/eval/gap_map.hpp"
@@ -3344,6 +3345,57 @@ static void test_laws_deep_S12a() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// S6c: G12's closed form, documents holding both left out (abc_closed.hpp)
+// ---------------------------------------------------------------------------
+
+static void test_abc_closed_S6c() {
+  namespace ab = cypha::eval::abc;
+  // Entities: A 0, C 1, B1 2, B2 3, B3 4, X 5, Y 6. Document 4 holds both A and C (and B1, B3).
+  const std::vector<std::vector<std::uint32_t>> docs = {{0, 2}, {2, 1}, {0, 3}, {3, 1}, {0, 1, 2, 4}, {4, 5}, {2, 5}, {6}};
+  const ab::Cooc c = ab::Cooc::build(docs, 7);
+  CHECK(c.n_docs() == 8 && c.df(0) == 3 && c.df(2) == 4 && c.df(6) == 1);
+  CHECK(c.shared(0, 1) == std::vector<std::uint32_t>{4} && c.shared(0, 5).empty());
+  const std::vector<char> all(7, 1);
+  const ab::Closed cl(c, all, 200, 2);
+  // Left out: document 4. N' 7, n'_A 2, n'_C 2; B1 has 3 documents left (0, 1, 6), B2 has 2; B3 is in no other
+  // document of A, so the strong link inside document 4 counts for nothing.
+  const double b1 = std::log(7.0 / 3.0) * std::log(7.0 / 6.0) * std::log(7.0 / 6.0);
+  const double b2 = std::log(7.0 / 2.0) * std::log(7.0 / 4.0) * std::log(7.0 / 4.0);
+  const ab::ClosedResult r = cl.score(0, 1);
+  CHECK_NEAR(r.score, b1 + b2, 1e-12);
+  CHECK(r.links == 2 && r.left_out == 1);
+  CHECK(r.top.size() == 2 && r.top[0].first == 3 && r.top[1].first == 2);
+  CHECK_NEAR(cl.score(1, 0).score, r.score, 1e-12);  // symmetric
+  CHECK(cl.score(0, 0).score == 0.0 && cl.score(0, 0).links == 0);
+  // A pair that never shares a document is S11b's closed form: (A, X) over all 8 documents. B1's link to X has
+  // PPMI ln(8 * 1 / (4 * 2)) = 0, so only B3 counts.
+  const ab::ClosedResult rx = cl.score(0, 5);
+  CHECK(rx.left_out == 0 && rx.links == 1);
+  CHECK_NEAR(rx.score, std::log(4.0) * std::log(8.0 / 6.0) * std::log(2.0), 1e-12);
+  // The hub cap is inclusive (B1 with 3 documents stays at cap 3, goes at cap 2); min_df; usable.
+  CHECK_NEAR(ab::Closed(c, all, 3, 2).score(0, 1).score, b1 + b2, 1e-12);
+  CHECK_NEAR(ab::Closed(c, all, 2, 2).score(0, 1).score, b2, 1e-12);
+  CHECK_NEAR(ab::Closed(c, all, 200, 3).score(0, 1).score, b1, 1e-12);
+  std::vector<char> no_b2 = all;
+  no_b2[3] = 0;
+  CHECK_NEAR(ab::Closed(c, no_b2, 200, 2).score(0, 1).score, b1, 1e-12);
+  // The counters are reset between calls: the same pair twice, and another pair in between.
+  CHECK_NEAR(cl.score(0, 1).score, r.score, 1e-15);
+  // An entity whose only documents are shared ones has nothing left.
+  const ab::Cooc c2 = ab::Cooc::build({{0, 1}, {0, 1, 2}, {2}}, 3);
+  CHECK(ab::Closed(c2, std::vector<char>(3, 1), 200, 1).score(0, 1).score == 0.0);
+  CHECK_NEAR(ab::ppmi(8, 1, 2, 2), std::log(2.0), 1e-15);
+  CHECK(ab::ppmi(8, 1, 4, 2) == 0.0 && ab::ppmi(8, 0, 1, 1) == 0.0);
+  // Titles kept out of every role, and wiki links.
+  for (const char* t : {"1952", "300 BC", "AD 79", "1990s", "19th century", "March 4", "4 March", "June", "List of rivers"}) CHECK(ab::date_or_list_title(t));
+  for (const char* t : {"Paris", "War of 1812", "1984 (novel)", "May Day"}) CHECK(!ab::date_or_list_title(t));
+  const auto lt = ab::link_targets("[[Paris|the city]] and [[france#History]], [[Category:X]] [[:fr:Paris]] [[new_york]]");
+  CHECK(lt.size() == 3 && lt[0] == "Paris" && lt[1] == "France" && lt[2] == "New york");
+  const std::unordered_map<std::string, std::string> red = {{"UK", "United Kingdom"}, {"U.K.", "UK"}};
+  CHECK(ab::resolve("U.K.", red) == "United Kingdom" && ab::resolve("Paris", red) == "Paris");
+}
+
 static void test_gap_map() {
   // The gap id CyphaLM writes (cyphalm_trie dktext rows and its dev tags).
   CHECK_STR(gap_id("Honduras", "capital"), "G-AEC1");
@@ -3589,6 +3641,7 @@ int main() {
   test_analogy_S11c();
   test_fragile_S9b();
   test_laws_deep_S12a();
+  test_abc_closed_S6c();
   std::printf("epistemic_test: %d checks, %d failed\n", g_checks, g_failed);
   return g_failed == 0 ? 0 : 1;
 }

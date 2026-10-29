@@ -160,6 +160,7 @@
 //
 // Author: Odin Loch
 
+#include "cypha/eval/abc_closed.hpp"
 #include "cypha/eval/curiosity.hpp"
 #include "cypha/eval/ecs.hpp"
 #include "cypha/eval/epistemic.hpp"
@@ -4377,6 +4378,142 @@ int selftest() {
 
 }  // namespace f2b
 
+// ============================================================ S6c: G12's closed form for S6's P0 and S7's T7
+// (docs/reports/S6_HYPOTHESIS_SCORING.md, "S6c"; abc_closed.hpp). The 2006 articles as S11b's G12 read them: each
+// article's title and its link targets (redirects resolved), dates and lists kept out of the B role. score(s, o) is the
+// leave-out closed form (PPMI, hub cap 200, S11b's dev choice): it never reads a document holding both. Scoring Cypha's
+// own hypotheses only: it answers nothing (PLAN rule 10).
+namespace s6c {
+namespace abc = cypha::eval::abc;
+
+struct Text {
+    vector<string> names;                                 // entity id -> title
+    std::unordered_map<string, std::uint32_t> id;         // title -> entity id
+    std::unordered_map<string, vector<std::uint32_t>> by_form;  // norm_ent of a title or a redirect title -> entities
+    vector<char> article, usable;
+    abc::Cooc cooc;
+    std::unique_ptr<abc::Closed> closed;
+    std::uint32_t intern(const string& t) {
+        const auto it = id.find(t);
+        if (it != id.end()) return it->second;
+        const auto k = static_cast<std::uint32_t>(names.size());
+        id.emplace(t, k), names.push_back(t);
+        return k;
+    }
+};
+
+// Redirect pages of the dump: title -> target (the first link target of the text).
+std::unordered_map<string, string> load_redirects(const string& data) {
+    std::unordered_map<string, string> out;
+    for (std::size_t pos = 0;;) {
+        const std::size_t pb = data.find("<page>", pos);
+        if (pb == npos) break;
+        const std::size_t pe = data.find("</page>", pb);
+        if (pe == npos) break;
+        pos = pe + 7;
+        const std::size_t tb = data.find("<title>", pb), te = data.find("</title>", tb);
+        if (tb == npos || te == npos || te > pe) continue;
+        const std::size_t xb = data.find("<text", te);
+        if (xb == npos || xb > pe) continue;
+        const std::size_t xg = data.find('>', xb);
+        const std::size_t xe = data.find("</text>", xg);
+        if (xg == npos || xe == npos || xe > pe) continue;
+        const string head = lower(trim(data.substr(xg + 1, std::min<std::size_t>(40, xe - xg - 1))));
+        if (head.compare(0, 9, "#redirect") != 0) continue;
+        const auto t = abc::link_targets(xml_decode(data.substr(xg + 1, std::min<std::size_t>(400, xe - xg - 1))));
+        if (!t.empty()) out[xml_decode(data.substr(tb + 7, te - tb - 7))] = t[0];
+    }
+    return out;
+}
+
+void build(const string& data, const vector<PageRef>& pages, Text& T) {
+    const auto red = load_redirects(data);
+    vector<vector<std::uint32_t>> docs;
+    vector<std::uint32_t> arts;
+    for (const PageRef& pg : pages) {
+        const string raw = xml_decode(data.substr(pg.tb, pg.te - pg.tb));
+        vector<std::uint32_t> d;
+        const std::uint32_t a = T.intern(pg.title);
+        arts.push_back(a);
+        d.push_back(a);
+        for (const string& t : abc::link_targets(raw)) d.push_back(T.intern(abc::resolve(t, red)));
+        docs.push_back(std::move(d));
+    }
+    T.cooc = abc::Cooc::build(std::move(docs), T.names.size());
+    vector<vector<string>> forms(T.names.size());
+    for (std::uint32_t e = 0; e < T.names.size(); ++e) {
+        const string k = norm_ent(T.names[e]);
+        if (!k.empty()) forms[e].push_back(k);
+    }
+    for (const auto& [from, to] : red) {
+        const auto it = T.id.find(abc::resolve(to, red));
+        if (it == T.id.end()) continue;
+        const string k = norm_ent(from);
+        auto& f = forms[it->second];
+        if (k.size() >= 3 && std::find(f.begin(), f.end(), k) == f.end()) f.push_back(k);
+    }
+    for (std::uint32_t e = 0; e < T.names.size(); ++e)
+        for (const string& f : forms[e]) T.by_form[f].push_back(e);
+    T.article.assign(T.names.size(), 0);
+    for (std::uint32_t a : arts) T.article[a] = 1;
+    T.usable.assign(T.names.size(), 0);
+    for (std::uint32_t e = 0; e < T.names.size(); ++e) T.usable[e] = !abc::date_or_list_title(T.names[e]);
+    T.closed = std::make_unique<abc::Closed>(T.cooc, T.usable, 200, 2);
+}
+
+// An object's entity: among the usable entities whose surface form matches norm_ent(v), with at least 2 documents,
+// the one with the most documents (the lower id on a tie); -1 if none (S11b's rule).
+long entity_of(const Text& T, const string& v) {
+    const auto it = T.by_form.find(norm_ent(v));
+    if (it == T.by_form.end()) return -1;
+    long best = -1;
+    for (std::uint32_t e : it->second)
+        if (T.usable[e] && T.cooc.df(e) >= 2 && (best < 0 || T.cooc.df(e) > T.cooc.df(static_cast<std::uint32_t>(best)))) best = e;
+    return best;
+}
+
+// The closed form of (s, o): s the article with that title, o its entity. -1 when not applicable.
+double score(const Text& T, const string& s, const string& o) {
+    const auto ait = T.id.find(s);
+    if (ait == T.id.end() || !T.article[ait->second]) return -1.0;
+    const long c = entity_of(T, o);
+    if (c < 0 || static_cast<std::uint32_t>(c) == ait->second) return -1.0;
+    return T.closed->score(ait->second, static_cast<std::uint32_t>(c)).score;
+}
+
+// Pooled AUROC with pair weights: v[k] = (true score, false score) of pair k, both members weighted w[k]. Ties count
+// one half.
+double weighted_auroc(const vector<std::pair<double, double>>& v, const vector<double>& w) {
+    vector<std::pair<double, std::pair<int, std::size_t>>> it;  // (score, (label, pair))
+    for (std::size_t k = 0; k < v.size(); ++k) it.push_back({v[k].first, {1, k}}), it.push_back({v[k].second, {0, k}});
+    std::sort(it.begin(), it.end(), [](const auto& x, const auto& y) { return x.first < y.first; });
+    double below = 0, num = 0, pw = 0, nw = 0;
+    for (std::size_t i = 0; i < it.size();) {
+        std::size_t j = i;
+        double gp = 0, gn = 0;
+        while (j < it.size() && it[j].first == it[i].first) (it[j].second.first ? gp : gn) += w[it[j].second.second], ++j;
+        num += gp * (below + 0.5 * gn), below += gn, pw += gp, nw += gn;
+        i = j;
+    }
+    return pw > 0 && nw > 0 ? num / (pw * nw) : 0.5;
+}
+
+// LCI's P_gain (PLAN 8.2): Bayesian bootstrap over pairs (Dirichlet(1) weights, `draws` draws), the share of draws in
+// which the pooled AUROC of v1 exceeds that of v0 by more than eps.
+double p_gain(const vector<std::pair<double, double>>& v0, const vector<std::pair<double, double>>& v1, double eps, int draws, std::uint64_t seed) {
+    std::mt19937_64 g(seed);
+    std::exponential_distribution<double> ex(1.0);
+    int hit = 0;
+    vector<double> w(v0.size());
+    for (int d = 0; d < draws; ++d) {
+        for (double& x : w) x = ex(g);
+        if (weighted_auroc(v1, w) - weighted_auroc(v0, w) > eps) ++hit;
+    }
+    return draws > 0 ? static_cast<double>(hit) / draws : 0.0;
+}
+
+}  // namespace s6c
+
 // ============================================================ S6: scoring a planted set (docs/reports/S6_HYPOTHESIS_SCORING.md)
 //
 // pattern_learn --score-planted SEEDS.tsv WD_VALUES.tsv OUT_PREFIX [--subjects N] [--read-test] [--read-fresh]
@@ -4395,6 +4532,7 @@ struct Item {
     bool dev = true;
     double base = 0, p = 0, p_nocopy = 0, aa = 0, hard = 1, bridging = 0, impact = 0;
     double p0 = 0, nov = 0, dl = 0, inter = 0, prio = 0;
+    double abc = -1, p0abc = 0;  // S6c: G12's closed form (abc_closed.hpp; -1 when not applicable) and P0 with it
 };
 using Score = std::function<double(const Item&)>;
 
@@ -4483,9 +4621,10 @@ struct PlantedSet {
 // The planted-set rule on the shuffled subjects from `from` on: each subject's triples are shuffled and the first whose
 // object occurs for another subject is held out, until held + skipped reaches `limit`; then the reduced store (the full
 // store without these hold-outs) and the false partners. Returns where the next set starts. Every draw is from `rng`.
+// S6c: a triple in `exclude` (an earlier set's hold-out) is never held out again.
 std::size_t build_set(PlantedSet& ps, const vector<string>& subj, std::size_t from, std::size_t limit,
                       std::map<string, vector<std::pair<string, string>>>& by_subj, const ecs::TripleStore& full,
-                      std::unordered_map<string, std::set<string>>& wd, std::mt19937_64& rng) {
+                      std::unordered_map<string, std::set<string>>& wd, std::mt19937_64& rng, const std::set<string>* exclude = nullptr) {
     auto shuffle = [&](auto& v) { for (std::size_t i = v.size(); i > 1; --i) std::swap(v[i - 1], v[rng() % i]); };
     struct Held { string s, r, o; };
     vector<Held> held;
@@ -4496,7 +4635,7 @@ std::size_t build_set(PlantedSet& ps, const vector<string>& subj, std::size_t fr
         shuffle(fs);
         bool got = false;
         for (const auto& [r, o] : fs)
-            if (full.count(r, o) >= 2) {
+            if (full.count(r, o) >= 2 && !(exclude && exclude->count(subj[i] + '\x1f' + r + '\x1f' + o))) {
                 held.push_back({subj[i], r, o});
                 held_keys.insert(subj[i] + '\x1f' + r + '\x1f' + o);
                 got = true;
@@ -4548,6 +4687,48 @@ std::size_t build_set(PlantedSet& ps, const vector<string>& subj, std::size_t fr
     return i;
 }
 
+// S6c's fresh set (the report's "S6c"), built the same way by --score-planted and --test-kinds. S6's planted and fresh
+// sets and S7's set C are rebuilt with their seeds. The qualifying subjects outside S6's dev pairs are shuffled with
+// mt19937_64(20261031); each gives its first triple (shuffled, the same generator) whose object occurs for another
+// subject and that none of those sets held out. Then S6's rule: the reduced store without these hold-outs, and false
+// partners with S6's Wikidata filter.
+void s6c_fresh(PlantedSet& G, std::map<string, vector<std::pair<string, string>>>& by_subj, const ecs::TripleStore& full,
+               std::unordered_map<string, std::set<string>>& wd) {
+    std::mt19937_64 rng6(20261028);
+    vector<string> subj;
+    for (const auto& [s, fs] : by_subj)
+        if (fs.size() >= 2) subj.push_back(s);
+    for (std::size_t i = subj.size(); i > 1; --i) std::swap(subj[i - 1], subj[rng6() % i]);
+    PlantedSet A, F;
+    const std::size_t next = build_set(A, subj, 0, 2000, by_subj, full, wd, rng6);
+    build_set(F, subj, next, std::numeric_limits<std::size_t>::max(), by_subj, full, wd, rng6);
+    std::map<string, std::pair<string, string>> h6;
+    std::set<string> earlier, dev_subj;
+    for (const auto* ps : {&A, &F})
+        for (const auto& x : ps->it)
+            if (x.label) h6[x.s] = {x.r, x.o}, earlier.insert(x.s + '\x1f' + x.r + '\x1f' + x.o);
+    for (const auto& x : A.it)
+        if (x.dev) dev_subj.insert(x.s);
+    std::mt19937_64 rng7(20261029);  // S7's set C, as S7 builds it
+    for (const string& s : subj) {
+        const auto it6 = h6.find(s);
+        if (it6 == h6.end()) continue;
+        auto fs = by_subj[s];
+        for (std::size_t i = fs.size(); i > 1; --i) std::swap(fs[i - 1], fs[rng7() % i]);
+        for (const auto& [r, o] : fs)
+            if (!(r == it6->second.first && o == it6->second.second) && full.count(r, o) >= 2) {
+                earlier.insert(s + '\x1f' + r + '\x1f' + o);
+                break;
+            }
+    }
+    vector<string> gs;
+    for (const auto& [s, fs] : by_subj)
+        if (fs.size() >= 2 && !dev_subj.count(s)) gs.push_back(s);
+    std::mt19937_64 rng(20261031);
+    for (std::size_t i = gs.size(); i > 1; --i) std::swap(gs[i - 1], gs[rng() % i]);
+    build_set(G, gs, 0, std::numeric_limits<std::size_t>::max(), by_subj, full, wd, rng, &earlier);
+}
+
 int run(int argc, char** argv) {
     if (argc < 5) {
         std::fprintf(stderr, "usage: pattern_learn --score-planted SEEDS.tsv WD_VALUES.tsv OUT_PREFIX [--subjects N] [--read-test] [--read-fresh]\n");
@@ -4557,11 +4738,16 @@ int run(int argc, char** argv) {
     const string out = argv[4];
     std::size_t nsub = 2000;
     bool read_test = false, read_fresh = false;
+    string abc_path;                          // S6c: --abc ENWIK8 (the closed form as a P0 term, w chosen on dev)
+    bool s6c_dump = false, read_s6c = false;  // S6c: --s6c-dump (the fresh set's pairs, no scores); --read-s6c-fresh (read once)
     for (int i = 5; i < argc; ++i) {
         const string a = argv[i];
         if (a == "--subjects" && i + 1 < argc) nsub = static_cast<std::size_t>(std::atoll(argv[++i]));
         else if (a == "--read-test") read_test = true;
         else if (a == "--read-fresh") read_fresh = true;
+        else if (a == "--abc" && i + 1 < argc) abc_path = argv[++i];
+        else if (a == "--s6c-dump") s6c_dump = true;
+        else if (a == "--read-s6c-fresh") read_s6c = true;
         else { std::fprintf(stderr, "unknown option %s\n", a.c_str()); return 2; }
     }
     // The store: distinct seed triples of a known relation.
@@ -4699,6 +4885,165 @@ int run(int argc, char** argv) {
               << x.o << '\t' << x.base << '\t' << x.p << '\t' << x.aa << '\t' << x.hard << '\t' << x.p0 << '\t' << x.nov << '\t' << x.dl << '\t' << x.bridging << '\t'
               << x.impact << '\t' << x.inter << '\t' << x.prio << "\n";
         }
+    // ---- S6c (the report's "S6c"): G12's closed form as a P0 term, w chosen on S6's dev pairs; S6c's fresh set read
+    // once with --read-s6c-fresh. Without --abc nothing below runs.
+    if (!abc_path.empty()) {
+        const double t6c = now_s();
+        string data;
+        if (!read_file(abc_path, data)) { std::fprintf(stderr, "cannot read %s\n", abc_path.c_str()); return 1; }
+        long total = 0, redirects = 0;
+        const vector<PageRef> pages = list_pages(data, total, redirects);
+        s6c::Text T;
+        s6c::build(data, pages, T);
+        PlantedSet G;
+        s6c_fresh(G, by_subj, full, wd);
+        for (auto& x : G.it) x.p0 = p0(x);
+        for (auto* ps : {&A, &G})
+            for (auto& x : ps->it) x.abc = s6c::score(T, x.s, x.o);
+        std::snprintf(b, sizeof b, "S6C TEXT articles %zu entities %zu | built and scored in %.1f s", pages.size(), T.names.size(), now_s() - t6c);
+        std::cout << b << "\n";
+        std::snprintf(b, sizeof b, "S6C FRESH SET subjects %zu, held out %zu (skipped: no unused seen object %zu) | reduced store %zu of %zu | pairs %zu (dropped: object gone %zu, no false partner %zu)",
+                      G.subjects, G.held, G.skipped_unseen, G.st.size(), full.size(), G.it.size() / 2, G.dropped_gone, G.dropped_nofalse);
+        std::cout << b << "\n";
+        {
+            std::uint64_t chk = 1469598103934665603ULL;
+            for (const auto& x : G.it) chk = (chk ^ fnv(std::to_string(x.label) + '\x1f' + x.s + '\x1f' + x.r + '\x1f' + x.o)) * 1099511628211ULL;
+            std::snprintf(b, sizeof b, "S6C FRESH SET pairs %zu | reduced store %zu | checksum %016llx", G.it.size() / 2, G.st.size(), static_cast<unsigned long long>(chk));
+            std::cout << b << "\n";
+        }
+        vector<std::size_t> gt, gf;
+        for (std::size_t i = 0; i + 1 < G.it.size(); i += 2) gt.push_back(i), gf.push_back(i + 1);
+        if (s6c_dump) {
+            std::ofstream d(out + ".s6c_fresh_pairs.tsv");
+            d << "pair\tlabel\tsubject\trelation\tobject\n";
+            for (const auto& x : G.it) d << x.pair << '\t' << x.label << '\t' << x.s << '\t' << x.r << '\t' << x.o << '\n';
+        }
+        // dev: coverage, the closed form alone, and P0 with the term for each w
+        std::size_t app = 0, both = 0;
+        vector<std::size_t> bt, bf;
+        for (std::size_t k = 0; k < dt.size(); ++k) {
+            const auto &xt = A.it[dt[k]], &xf = A.it[df[k]];
+            app += (xt.abc >= 0) + (xf.abc >= 0);
+            if (xt.abc >= 0 && xf.abc >= 0) ++both, bt.push_back(dt[k]), bf.push_back(df[k]);
+        }
+        const Score abc_raw = [](const Item& x) { return x.abc < 0 ? -1.0 : std::log1p(x.abc); };
+        {
+            const Read r = read(A.it, bt, bf, abc_raw);
+            std::snprintf(b, sizeof b, "S6C DEV applicable %zu of %zu items (%.3f) | pairs with both members applicable %zu of %zu | the closed form alone on them: auroc %.4f ci95 %.4f %.4f pair_acc %.4f",
+                          app, 2 * dt.size(), dt.empty() ? 0.0 : static_cast<double>(app) / (2.0 * dt.size()), both, dt.size(), r.auc, r.lo, r.hi, r.pair_acc);
+            std::cout << b << "\n";
+        }
+        vector<double> va;
+        for (std::size_t i : dt)
+            for (std::size_t j : {i, i + 1})
+                if (A.it[j].abc >= 0) va.push_back(std::log1p(A.it[j].abc));
+        const auto zab = ecs::pool_stats(va);
+        auto zabc = [zab](const Item& x) { return x.abc < 0 ? 0.0 : ecs::zscore(std::log1p(x.abc), zab); };
+        const double kW[7] = {0, 0.25, 0.5, 0.75, 1, 1.5, 2};
+        double bw = 0, bauc = -1;
+        vector<double> dev_auc(7);
+        for (int k = 0; k < 7; ++k) {
+            const double w = kW[k];
+            const Score pw = fit([=](const Item& x) { return s_full(x) + w * zabc(x); }, true);
+            const Read r = read(A.it, dt, df, pw);
+            dev_auc[static_cast<std::size_t>(k)] = r.auc;
+            std::snprintf(b, sizeof b, "S6C DEV w %.2f P0_abc auroc %.4f ci95 %.4f %.4f pair_acc %.4f", w, r.auc, r.lo, r.hi, r.pair_acc);
+            std::cout << b << "\n";
+            if (r.auc > bauc + 0.001) bauc = r.auc, bw = w;
+        }
+        const Score p0abc = fit([=](const Item& x) { return s_full(x) + bw * zabc(x); }, true);
+        const Read dgain = read(A.it, dt, df, p0abc, &p0);
+        std::snprintf(b, sizeof b, "S6C CHOICE w %.2f (dev auroc %.4f) | P0_abc minus P0 on dev %+.4f ci95 %+.4f %+.4f", bw, bauc, dgain.auc, dgain.lo, dgain.hi);
+        std::cout << b << "\n";
+        for (const char* g : {"dates", "places", "lexical", "people"}) {
+            vector<std::size_t> pt, pf;
+            for (std::size_t k = 0; k < dt.size(); ++k)
+                if (string(group_of(A.it[dt[k]].r)) == g) pt.push_back(dt[k]), pf.push_back(df[k]);
+            const Read r0 = read(A.it, pt, pf, p0), r1 = read(A.it, pt, pf, p0abc);
+            std::snprintf(b, sizeof b, "S6C DEV group %-8s pairs %4zu P0 %.4f P0_abc %.4f", g, pt.size(), r0.auc, r1.auc);
+            std::cout << b << "\n";
+        }
+        if (read_s6c && bw > 0) {
+            for (auto& x : G.it) x.p0abc = p0abc(x);
+            const Score q1 = [](const Item& x) { return x.p0abc; }, q0 = [](const Item& x) { return x.p0; };
+            const Read r0 = read(G.it, gt, gf, q0), r1 = read(G.it, gt, gf, q1), d = read(G.it, gt, gf, q1, &q0);
+            std::snprintf(b, sizeof b, "S6C FRESH P0 auroc %.4f ci95 %.4f %.4f pair_acc %.4f | P0_abc auroc %.4f ci95 %.4f %.4f pair_acc %.4f", r0.auc, r0.lo, r0.hi,
+                          r0.pair_acc, r1.auc, r1.lo, r1.hi, r1.pair_acc);
+            std::cout << b << "\n";
+            std::snprintf(b, sizeof b, "S6C FRESH P0_abc minus P0 %+.4f ci95 %+.4f %+.4f | S6's gate (P0_abc >= 0.75): %s", d.auc, d.lo, d.hi, r1.auc >= 0.75 ? "met" : "missed");
+            std::cout << b << "\n";
+            {
+                std::size_t ga = 0;
+                for (const auto& x : G.it) ga += x.abc >= 0;
+                vector<std::size_t> ct, cf;
+                for (std::size_t k = 0; k < gt.size(); ++k)
+                    if (G.it[gt[k]].abc >= 0 && G.it[gf[k]].abc >= 0) ct.push_back(gt[k]), cf.push_back(gf[k]);
+                const Read ra = read(G.it, ct, cf, abc_raw);
+                std::snprintf(b, sizeof b, "S6C FRESH applicable %zu of %zu items | the closed form alone on %zu pairs with both applicable: auroc %.4f ci95 %.4f %.4f",
+                              ga, G.it.size(), ct.size(), ra.auc, ra.lo, ra.hi);
+                std::cout << b << "\n";
+            }
+            auto pairs_of = [&](const vector<std::size_t>& pt, const vector<std::size_t>& pf, const Score& f) {
+                vector<std::pair<double, double>> v;
+                for (std::size_t k = 0; k < pt.size(); ++k) v.push_back({f(G.it[pt[k]]), f(G.it[pf[k]])});
+                return v;
+            };
+            // LCI (PLAN 8.2) on the fresh set; S15's canary is read by --gen-links (S8b's read 4) and joined in the report.
+            const double pg = s6c::p_gain(pairs_of(gt, gf, q0), pairs_of(gt, gf, q1), 0.005, 4000, 20261031);
+            double r_ok = 1.0;
+            for (const char* g : {"dates", "places", "lexical", "people"}) {
+                vector<std::size_t> pt, pf;
+                for (std::size_t k = 0; k < gt.size(); ++k)
+                    if (string(group_of(G.it[gt[k]].r)) == g) pt.push_back(gt[k]), pf.push_back(gf[k]);
+                const Read r0g = read(G.it, pt, pf, q0), r1g = read(G.it, pt, pf, q1), dg = read(G.it, pt, pf, q1, &q0);
+                const double pnf = s6c::p_gain(pairs_of(pt, pf, q0), pairs_of(pt, pf, q1), -0.01, 4000, 20261031);
+                if (pnf < 0.95) r_ok = 0.0;
+                std::snprintf(b, sizeof b, "S6C FRESH group %-8s pairs %4zu P0 %.4f P0_abc %.4f minus %+.4f ci95 %+.4f %+.4f | canary P(delta > -0.01) %.4f", g, pt.size(),
+                              r0g.auc, r1g.auc, dg.auc, dg.lo, dg.hi, pnf);
+                std::cout << b << "\n";
+            }
+            const double gain_dev = dgain.auc, gain_fresh = d.auc;
+            const double gam = gain_dev > 0 ? std::min(1.0, std::max(0.0, gain_fresh / gain_dev) / 0.5) : (gain_fresh > 0 ? 1.0 : 0.0);
+            double br0 = 0, br1 = 0, ece0 = 0, ece1 = 0;
+            {
+                double n0[10] = {}, s0[10] = {}, y0[10] = {}, n1[10] = {}, s1[10] = {}, y1[10] = {};
+                for (const auto& x : G.it) {
+                    br0 += (x.p0 - x.label) * (x.p0 - x.label), br1 += (x.p0abc - x.label) * (x.p0abc - x.label);
+                    const int k0 = std::min(9, static_cast<int>(x.p0 * 10)), k1 = std::min(9, static_cast<int>(x.p0abc * 10));
+                    n0[k0] += 1, s0[k0] += x.p0, y0[k0] += x.label, n1[k1] += 1, s1[k1] += x.p0abc, y1[k1] += x.label;
+                }
+                const double n = std::max<double>(1, G.it.size());
+                br0 /= n, br1 /= n;
+                for (int k = 0; k < 10; ++k) ece0 += std::fabs(s0[k] - y0[k]) / n, ece1 += std::fabs(s1[k] - y1[k]) / n;
+            }
+            const double cc = br1 <= br0 && ece1 <= ece0 + 0.01 ? 1.0 : 0.5;
+            int sg[3] = {0, 0, 0};
+            for (int blk = 0; blk < 3; ++blk) {
+                vector<std::size_t> pt, pf;
+                for (std::size_t k = 0; k < gt.size(); ++k)
+                    if (fnv(G.it[gt[k]].s) % 3 == static_cast<std::uint64_t>(blk)) pt.push_back(gt[k]), pf.push_back(gf[k]);
+                const double dd = auroc(G.it, [&] { vector<std::size_t> a; for (std::size_t k = 0; k < pt.size(); ++k) a.push_back(pt[k]), a.push_back(pf[k]); return a; }(), q1) -
+                                  auroc(G.it, [&] { vector<std::size_t> a; for (std::size_t k = 0; k < pt.size(); ++k) a.push_back(pt[k]), a.push_back(pf[k]); return a; }(), q0);
+                sg[blk] = dd > 0 ? 1 : dd < 0 ? -1 : 0;
+            }
+            const double sig = (sg[0] == sg[1] && sg[1] == sg[2] && sg[0] != 0) ? 1.0 : 0.5;
+            struct rusage ru6;
+            getrusage(RUSAGE_SELF, &ru6);
+            const double kap = (now_s() - t0) < 900 && ru6.ru_maxrss < 3 * 1024 * 1024 ? 1.0 : 0.0;
+            double lci = pg * r_ok * gam * cc * sig * kap;
+            if (gt.size() < 200) lci = std::min(lci, 0.5);
+            std::snprintf(b, sizeof b,
+                          "S6C FRESH LCI P_gain %.4f (eps 0.005, 4,000 draws) | n_eff %zu | r(fresh groups) %.0f | gamma %.3f (gain dev %+.4f fresh %+.4f) | c %.1f (Brier P0 %.4f P0_abc %.4f, ECE %.4f %.4f) | "
+                          "sigma %.1f (blocks %+d %+d %+d) | kappa %.0f | LCI %.4f (before S15's canary)",
+                          pg, gt.size(), r_ok, gam, gain_dev, gain_fresh, cc, br0, br1, ece0, ece1, sig, sg[0], sg[1], sg[2], kap, lci);
+            std::cout << b << "\n";
+            std::ofstream fo(out + ".s6c_fresh.tsv");
+            fo << "pair\tlabel\tsubject\trelation\tobject\tabc\tP0\tP0_abc\n";
+            for (const auto& x : G.it) fo << x.pair << '\t' << x.label << '\t' << x.s << '\t' << x.r << '\t' << x.o << '\t' << x.abc << '\t' << x.p0 << '\t' << x.p0abc << '\n';
+        } else if (read_s6c) {
+            std::cout << "S6C FRESH not read: w = 0 on dev, so the term is not adopted (rule 1)\n";
+        }
+    }
     struct rusage ru;
     getrusage(RUSAGE_SELF, &ru);
     std::snprintf(b, sizeof b, "S6 seconds %.1f max_rss_mb %.1f", now_s() - t0, static_cast<double>(ru.ru_maxrss) / 1024.0);
@@ -4738,6 +5083,8 @@ struct Item {
     char cat = ' ';                           // S7b, S15 items: the category (a, b, c, u)
     bool reach = false;                       // S7b, S15 items: both members' objects occur for r in the store
     TestOutcome t1_reg = kInc;                // S7b, S15 items: T1 with phi re-estimated on the S15-reduced store (registered)
+    double abc = -1;                          // S6c: G12's closed form (-1 not applicable)
+    TestOutcome t7 = kInc;                    // S6c: T7, run only where T4 is inconclusive
 };
 
 bool functional_rel(const string& r) {
@@ -5026,6 +5373,7 @@ struct LoopKind {
     std::function<TestOutcome(const Item&)> f;
     double s, c;
     ecs::OutcomeLikelihoods lik;
+    std::function<bool(const Item&)> run_if = {};  // S6c: when set, the test runs only where it holds (else it is not run)
 };
 enum Batch { B0_ALL, B1_SUPPORTED, B2_RELATION, B_NONE };
 const char* const kBatchName[4] = {"B0_all", "B1_among_supported", "B2_per_relation", "none"};
@@ -5072,6 +5420,7 @@ LoopStats loop2(const vector<Item>& it, const vector<std::size_t>& idx, const ve
         if (!log.register_plan(*hs.find(h.id))) continue;
         for (std::size_t k = 0; k < kinds.size(); ++k) {
             if (hs.find(h.id)->state != ecs::HypState::Queued) break;
+            if (kinds[k].run_if && !kinds[k].run_if(x)) continue;
             hs.transition(h.id, ecs::HypState::UnderTest, "next test");
             hs.record_outcome(h.id, k, kinds[k].f(x), &log);
         }
@@ -5435,7 +5784,8 @@ int run(int argc, char** argv) {
     if (argc < 7) {
         std::fprintf(stderr, "usage: pattern_learn --test-kinds ENWIK8 SEEDS.tsv WD_VALUES.tsv PATTERNS.tsv OUT_PREFIX [--read-test]\n"
                      "       [--phi-wd PHI.tsv] [--s15 TEMPORAL_HOLDOUT_DEV.tsv [--read-confirm]]   (S7b)\n"
-                     "       [--s7c [--read-c2]]   (S7c: batch rules with a guarantee; C2 read once)\n");
+                     "       [--s7c [--read-c2]]   (S7c: batch rules with a guarantee; C2 read once)\n"
+                     "       [--s6c [--read-s6c-fresh]]   (S6c: T7, G12's closed form as a test; the loop on S6c's fresh set read once)\n");
         return 2;
     }
     const double t0 = now_s();
@@ -5443,6 +5793,7 @@ int run(int argc, char** argv) {
     bool read_test = false, read_confirm = false;
     string phi_wd_path, s15_path;  // S7b
     bool s7c = false, read_c2 = false;  // S7c
+    bool s6c_on = false, read_s6c = false;  // S6c
     for (int i = 7; i < argc; ++i) {
         if (string(argv[i]) == "--read-test") read_test = true;
         else if (string(argv[i]) == "--read-confirm") read_confirm = true;
@@ -5450,6 +5801,8 @@ int run(int argc, char** argv) {
         else if (string(argv[i]) == "--s15" && i + 1 < argc) s15_path = argv[++i];
         else if (string(argv[i]) == "--s7c") s7c = true;
         else if (string(argv[i]) == "--read-c2") read_c2 = true;
+        else if (string(argv[i]) == "--s6c") s6c_on = true;
+        else if (string(argv[i]) == "--read-s6c-fresh") read_s6c = true;
         else { std::fprintf(stderr, "unknown option %s\n", argv[i]); return 2; }
     }
     char b[1024];
@@ -5883,6 +6236,131 @@ int run(int argc, char** argv) {
         std::snprintf(b, sizeof b, "S7B CHOICE loop %s%s", cfg_name(chosen).c_str(), best >= 0 ? "" : " (none qualifies: S7's configuration stays)");
         std::cout << b << "\n";
         if (best >= 0) loop2(it, dev_idx, lk, chosen.three, chosen.batch, out + ".s7b_dev.prereg.tsv");
+        // ---- S6c (the S6 report's "S6c"): T7, G12's closed form as a test. It runs only where T4 is inconclusive, and its
+        // three-way likelihoods are measured on dev given T4 inconclusive, so P(T4, T7 | h) = P(T4 | h) P(T7 | T4 silent, h)
+        // with no independence assumed between them. It is never independent evidence (I4). With --read-s6c-fresh, the
+        // loop on S6c's fresh set (T1, T6, T4; T5 left out) with and without T7, read once. S7b's lines are unchanged.
+        if (s6c_on) {
+            const double t6c = now_s();
+            s6c::Text T6c;
+            s6c::build(data, pages, T6c);
+            for (Item& x : it) x.abc = s6c::score(T6c, x.s, x.o);
+            vector<double> sc;
+            std::size_t ndev = 0, ninc = 0;
+            for (const Item& x : it) {
+                if (!x.dev || (!x.label && x.wd_true)) continue;
+                ++ndev, ninc += x.t4[k4] == kInc;
+                if (x.abc >= 0 && x.t4[k4] == kInc) sc.push_back(x.abc);
+            }
+            std::sort(sc.begin(), sc.end());
+            auto t7_of = [](double abc, double tau) { return abc < 0 ? kInc : abc == 0 ? kNeg : abc >= tau ? kPos : kInc; };
+            auto tally7 = [&](double tau) {
+                ecs::TestTally t;
+                for (const Item& x : it)
+                    if (x.dev && !(!x.label && x.wd_true) && x.t4[k4] == kInc) t.add(x.label == 1, t7_of(x.abc, tau));
+                return t;
+            };
+            std::snprintf(b, sizeof b, "S6C T7 text built and scored in %.1f s | dev hypotheses %zu, T4 inconclusive %zu (%.3f; T7 consulted) | closed form applicable there %zu",
+                          now_s() - t6c, ndev, ninc, ndev ? static_cast<double>(ninc) / ndev : 0.0, sc.size());
+            std::cout << b << "\n";
+            const double kQ[5] = {0.5, 0.6, 0.7, 0.8, 0.9};
+            double tau = 0, bmi7 = -1;
+            for (double q : kQ) {
+                const double tq = sc.empty() ? 1.0 : std::max(1e-9, sc[std::min(sc.size() - 1, static_cast<std::size_t>(q * static_cast<double>(sc.size())))]);
+                const auto t = tally7(tq);
+                std::snprintf(b, sizeof b, "T7_q%.1f_tau%.1f", q, tq);
+                std::cout << line_of("S6C DEV", b, t) << "\n";
+                if (t.mutual_information_bits() > bmi7 + 1e-12) bmi7 = t.mutual_information_bits(), tau = tq;
+            }
+            for (Item& x : it) x.t7 = t7_of(x.abc, tau);
+            const ecs::TestTally t7d = tally7(tau);
+            const ecs::OutcomeLikelihoods L7 = ecs::likelihoods_from(t7d);
+            std::snprintf(b, sizeof b, "S6C CHOICE T7 tau %.2f (dev MI %.4f bits) | three-way given T4 inconclusive: true pos %.4f neg %.4f inc %.4f, false pos %.4f neg %.4f inc %.4f | "
+                          "LR+ %.3f LR- %.3f LR_inc %.3f -> %s",
+                          tau, bmi7, L7.t[0], L7.t[1], L7.t[2], L7.f[0], L7.f[1], L7.f[2], L7.t[0] / L7.f[0], L7.t[1] / L7.f[1], L7.t[2] / L7.f[2],
+                          L7.t[0] / L7.f[0] >= 3.0 ? "LR+ >= 3 (rule 2's dev part holds)" : "LR+ < 3 (rule 2's dev part fails)");
+            std::cout << b << "\n";
+            // dependence on T1 and T6 within each label (dev, T4 inconclusive): odds ratio of T7 positive against each positive
+            for (const int lab : {1, 0})
+                for (int which = 0; which < 2; ++which) {
+                    double c[2][2] = {{0, 0}, {0, 0}};
+                    for (const Item& x : it) {
+                        if (!x.dev || (!x.label && x.wd_true) || x.t4[k4] != kInc || x.label != lab) continue;
+                        const bool o = (which == 0 ? x.t1v[kphi] : x.t6[k6]) == kPos;
+                        c[o][x.t7 == kPos] += 1;
+                    }
+                    const double orr = ((c[1][1] + 0.5) * (c[0][0] + 0.5)) / ((c[1][0] + 0.5) * (c[0][1] + 0.5));
+                    std::snprintf(b, sizeof b, "S6C DEV dependence %s hypotheses: T7 positive by %s positive: %.0f of %.0f, otherwise %.0f of %.0f | odds ratio %.3f",
+                                  lab ? "true" : "false", which == 0 ? "T1" : "T6", c[1][1], c[1][0] + c[1][1], c[0][1], c[0][0] + c[0][1], orr);
+                    std::cout << b << "\n";
+                }
+            const LoopKind k7{"T7 indirect links", "corpus links", false, false, [](const Item& x) { return x.t7; },
+                              (t7d.t_pos + 1) / (t7d.t_pos + t7d.t_neg + 2), (t7d.f_neg + 1) / (t7d.f_pos + t7d.f_neg + 2), L7,
+                              [k4](const Item& x) { return x.t4[k4] == kInc; }};
+            vector<LoopKind> lk_n5, lk_n57;  // T5 left out (as on S15), then T7 last
+            for (const LoopKind& K : lk)
+                if (string(K.name) != "T5 Wikidata") lk_n5.push_back(K);
+            lk_n57 = lk_n5;
+            lk_n57.push_back(k7);
+            vector<LoopKind> lk7 = lk;
+            lk7.push_back(k7);
+            for (const Batch bt : {B_NONE, chosen.batch}) {
+                std::cout << loop_line("S6C DEV", string("S7b's kinds, ") + kBatchName[bt], loop2(it, dev_idx, lk, true, bt)) << "\n";
+                std::cout << loop_line("S6C DEV", string("S7b's kinds + T7, ") + kBatchName[bt], loop2(it, dev_idx, lk7, true, bt)) << "\n";
+                std::cout << loop_line("S6C DEV", string("no T5, ") + kBatchName[bt], loop2(it, dev_idx, lk_n5, true, bt)) << "\n";
+                std::cout << loop_line("S6C DEV", string("no T5 + T7, ") + kBatchName[bt], loop2(it, dev_idx, lk_n57, true, bt)) << "\n";
+            }
+            // S6c's fresh set as loop items: every test reads its reduced store; the prior is S7's (dev z pools and fit).
+            s6::PlantedSet G;
+            s6::s6c_fresh(G, by_subj, full, wd6);
+            std::uint64_t chk = 1469598103934665603ULL;
+            for (const auto& x : G.it) chk = (chk ^ fnv(std::to_string(x.label) + '\x1f' + x.s + '\x1f' + x.r + '\x1f' + x.o)) * 1099511628211ULL;
+            std::snprintf(b, sizeof b, "S6C FRESH SET pairs %zu | reduced store %zu | checksum %016llx", G.it.size() / 2, G.st.size(), static_cast<unsigned long long>(chk));
+            std::cout << b << "\n";
+            if (read_s6c) {
+                vector<Item> itf;
+                const ecs::LinkPredictor lpf(G.st, {});
+                std::map<string, PageScan> scans;
+                for (const auto& g : G.it) {
+                    Item y;
+                    y.s = g.s, y.r = g.r, y.o = g.o, y.label = g.label, y.pair = g.pair, y.set = 'F', y.dev = false;
+                    const int ri = rel_index(y.r);
+                    y.t1v[kphi] = t1_phi(G.st, y.s, y.r, y.o, ph[kphi]);
+                    y.p = lpf.prob(y.s, y.r, y.o);
+                    y.aa = ecs::adamic_adar(G.st, y.s, y.o);
+                    y.dl_others = ecs::compression_gain_bits(lpf, G.st, y.s, y.r, y.o) - std::log2(std::max(1e-12, y.p));
+                    for (int k = 0; k < 4; ++k) y.t6[k] = y.dl_others > kEps[k] ? kPos : y.dl_others < -kEps[k] ? kNeg : kInc;
+                    y.t5 = kInc;
+                    const auto pit = page_of.find(y.s);
+                    if (pit != page_of.end()) {
+                        const string sk = y.s + '\x1f' + y.r;
+                        auto sit = scans.find(sk);
+                        if (sit == scans.end()) sit = scans.emplace(sk, scan_rel(data, pages[static_cast<std::size_t>(pit->second)], ri)).first;
+                        t4(sit->second, ri, y.o, y.t4);
+                    }
+                    y.p0 = std::min(0.98, std::max(0.02, cal.predict(raw(y))));
+                    y.abc = s6c::score(T6c, y.s, y.o);
+                    y.t7 = t7_of(y.abc, tau);
+                    itf.push_back(y);
+                }
+                vector<std::size_t> fidx(itf.size());
+                std::iota(fidx.begin(), fidx.end(), 0);
+                std::size_t finc = 0;
+                for (const Item& y : itf) finc += y.t4[k4] == kInc;
+                std::snprintf(b, sizeof b, "S6C FRESH LOOP hypotheses %zu | T4 inconclusive (T7 consulted) %zu", itf.size(), finc);
+                std::cout << b << "\n";
+                std::cout << line_of("S6C FRESH", "T7_given_T4_inconclusive", [&] {
+                    ecs::TestTally t;
+                    for (const Item& y : itf)
+                        if (y.t4[k4] == kInc) t.add(y.label == 1, y.t7);
+                    return t;
+                }()) << "\n";
+                for (const Batch bt : {B_NONE, chosen.batch}) {
+                    std::cout << loop_line("S6C FRESH", string("no T5, ") + kBatchName[bt], loop2(itf, fidx, lk_n5, true, bt, out + ".s6c_fresh_noT7_" + kBatchName[bt] + ".prereg.tsv")) << "\n";
+                    std::cout << loop_line("S6C FRESH", string("no T5 + T7, ") + kBatchName[bt], loop2(itf, fidx, lk_n57, true, bt, out + ".s6c_fresh_T7_" + kBatchName[bt] + ".prereg.tsv")) << "\n";
+                }
+            }
+        }
         S7cS15 s7c15;  // S7c: the S15 choose half's reads, for the choice below
         // ---- S15's dev half (T5 left out: S15's labels are current Wikidata)
         if (!s15_path.empty()) {
@@ -6691,7 +7169,9 @@ int run(int argc, char** argv) {
     const string out = argv[8];
     bool read_test = false, fresh_confirm = false;  // --fresh-confirm: S8d's fresh G6/G7 set (docs/reports/S8D_PROMOTION.md)
     bool fresh_test = false;  // --fresh-test-half: S10's gate set, the same on S15 test's bit-17 half (docs/reports/S10_CURIOSITY_SCHEDULER.md)
+    double abc_w = 0;         // --abc-w W: S6c, the GATE read with G12's closed form in P0 (the S6 report's "S6c")
     for (int i = 9; i < argc; ++i) {
+        if (string(argv[i]) == "--abc-w" && i + 1 < argc) { abc_w = std::atof(argv[++i]); continue; }
         if (string(argv[i]) == "--read-test") read_test = true;
         else if (string(argv[i]) == "--fresh-confirm") fresh_confirm = true;
         else if (string(argv[i]) == "--fresh-test-half") fresh_test = true;
@@ -7277,6 +7757,66 @@ int run(int argc, char** argv) {
             std::snprintf(b, sizeof b, "GATE %s P0_prime_minus_P0 %.4f [%.4f, %.4f] | S6's gate (P0_prime >= 0.75): %s", tag, d, bs.empty() ? 0.0 : bs[49],
                           bs.empty() ? 0.0 : bs[1949], g1.auc >= 0.75 ? "met" : "missed");
             std::cout << b << "\n";
+        }
+        // S6c (the S6 report's "S6c"): S6b's P0 with G12's closed form added at weight w (chosen on S6's dev pairs); z pool
+        // and isotonic fit on dev pairs, as above. Without --abc-w nothing here runs.
+        if (abc_w > 0) {
+            s6c::Text T;
+            s6c::build(C.data, C.pages, T);
+            vector<double> at(kept.size(), -1.0), af(kept.size(), -1.0), za_v;
+            for (std::size_t k = 0; k < kept.size(); ++k) {
+                if (!kept[k].dev && !read_test) continue;
+                at[k] = s6c::score(T, kept[k].s, kept[k].ot), af[k] = s6c::score(T, kept[k].s, kept[k].of);
+                if (kept[k].dev)
+                    for (double v : {at[k], af[k]})
+                        if (v >= 0) za_v.push_back(std::log1p(v));
+            }
+            const auto zab = ecs::pool_stats(za_v);
+            auto zabc = [&](double v) { return v < 0 ? 0.0 : ecs::zscore(std::log1p(v), zab); };
+            auto raw2 = [&](std::size_t k, bool t) { return t ? raw0(kept[k].lp_t, kept[k].aa_t) + abc_w * zabc(at[k]) : raw0(kept[k].lp_f, kept[k].aa_f) + abc_w * zabc(af[k]); };
+            ecs::IsotonicCalibrator c2;
+            {
+                vector<double> x2;
+                vector<int> y;
+                for (std::size_t k = 0; k < kept.size(); ++k)
+                    if (kept[k].dev) x2.push_back(raw2(k, true)), y.push_back(1), x2.push_back(raw2(k, false)), y.push_back(0);
+                c2.fit(x2, y);
+            }
+            for (const bool dev : {true, false}) {
+                if (!dev && !read_test) continue;
+                vector<std::pair<double, double>> v0, v2, va;
+                std::size_t app = 0;
+                for (std::size_t k = 0; k < kept.size(); ++k) {
+                    if (kept[k].dev != dev) continue;
+                    const GPair& p = kept[k];
+                    v0.push_back({p.p0_t, p.p0_f});
+                    v2.push_back({ecs::plausibility_prior(1.0, c2.predict(raw2(k, true)), p.hard_t), ecs::plausibility_prior(1.0, c2.predict(raw2(k, false)), p.hard_f)});
+                    app += (at[k] >= 0) + (af[k] >= 0);
+                    if (at[k] >= 0 && af[k] >= 0) va.push_back({at[k], af[k]});
+                }
+                const char* tag = dev ? "DEV" : "TEST";
+                const PairRead r0 = pair_auroc(v0), r2 = pair_auroc(v2), ra = pair_auroc(va);
+                std::mt19937_64 rng3(20261028);
+                vector<double> bs;
+                auto flat = [](const vector<std::pair<double, double>>& v, const vector<std::size_t>& idx) {
+                    vector<std::pair<double, int>> f;
+                    for (std::size_t k : idx) f.push_back({v[k].first, 1}), f.push_back({v[k].second, 0});
+                    return auroc_of(f);
+                };
+                for (int rep = 0; rep < 2000 && !v0.empty(); ++rep) {
+                    vector<std::size_t> idx;
+                    for (std::size_t k = 0; k < v0.size(); ++k) idx.push_back(rng3() % v0.size());
+                    bs.push_back(flat(v2, idx) - flat(v0, idx));
+                }
+                std::sort(bs.begin(), bs.end());
+                const double canary = s6c::p_gain(v0, v2, -0.01, 4000, 20261031);
+                std::snprintf(b, sizeof b,
+                              "S6C GATE %s pairs %zu | applicable %zu of %zu items | closed form alone on %zu pairs with both applicable %.4f [%.4f, %.4f] | P0 %.4f [%.4f, %.4f] | "
+                              "P0_abc (w %.2f) %.4f [%.4f, %.4f] | minus %+.4f [%+.4f, %+.4f] | canary P(delta > -0.01) %.4f | S6's gate (P0_abc >= 0.75): %s",
+                              tag, v0.size(), app, 2 * v0.size(), va.size(), ra.auc, ra.lo, ra.hi, r0.auc, r0.lo, r0.hi, abc_w, r2.auc, r2.lo, r2.hi, r2.auc - r0.auc,
+                              bs.empty() ? 0.0 : bs[49], bs.empty() ? 0.0 : bs[1949], canary, r2.auc >= 0.75 ? "met" : "missed");
+                std::cout << b << "\n";
+            }
         }
         std::ofstream f(out + ".gate.tsv");
         f << "split\tsubject\trelation\ttrue\tfalse\tLP_t\tLP_f\tAA_t\tAA_f\thard_t\thard_f\tG7_t\tG7_f\tP0_t\tP0_f\tP0prime_t\tP0prime_f\n";
