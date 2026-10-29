@@ -388,3 +388,174 @@ D5 is U's (S4b-b).
 
 - `--gen-concepts` (all parts, dev only) with the final tool: stdout (timings masked) and its two pool files byte-identical to main's tool.
 - S3's `--gaps` run: gap map `a77678d8ef7dfdef`, its cells and demand files and the v2 store files byte-identical.
+
+## S11d: G11 with the skip, and G9 on a richer store (registered 2026-10-29, before any run)
+
+**Odin Loch** · 2026-10-29 · follows S11a and S11a-b above · Odin, 2026-10-29: "Continue. Do all." (HANDOFF §5.19)
+
+(The definitions, reads, rules and predictions below were written and committed before any S11d run. Results are added under them.)
+
+**Question.** Two re-reads that S11a-b left open. (a) G11 with the date-link skip, with the clustering choice as S11a's own rule makes it on dev: what holds on test? (b) G9 on a store that knows more than occupations, with S15's added relations as attributes, against classes it has never been tested on: does it rediscover them?
+
+**Rule 10.** Both generators write hypotheses and relation proposals for Cypha's own store. Nothing here answers a question. G11's relation names (P10) need Odin or a teacher: this read lists the dev property of each proposal as a proposed name, as data only. Nothing enters F2.
+
+### (a) G11 with the skip
+
+- **The change:** S11a-b's skip, behind a new flag `--g11-skip-dates`. A (subject mention, link) pair whose link sits inside one of the sentence's date candidates (`date_spans`, `ecs::span_within`) is not a pair. Everything else is S11a's G11: keys, C1 and C2, the ≥ 5-pair guard, the dev grade, the proposal rule, the test grade.
+- **Dev choice:** S11a's rule, unchanged: C2 if it has at least 10% more distinct dev pairs holding their cluster's property, else C1. S11a-b measured 87 against 78 on dev, so the rule is expected to pick C2; whatever it picks is read.
+- **Test read (once, logged in S15's Reads table):** each proposal's dev property on its test-subject pairs, as S11a. Reported as S11a: proposals, proposals that hold (≥ 3 gradable test pairs and precision ≥ 0.5), pooled precision with Wilson 95%, split by `pattern_learn`'s relations and S15's added relations.
+- **Proposed names:** a TSV `OUT.g11_proposals.tsv` (key, proposed name = dev property, kind, dev and test counts). Data only.
+- **Baseline for the rule:** S11a's test read without its 19 date proposals: 19 non-date proposals, 8 hold, pooled 58 / 107 = 0.542.
+- **Decision rule (fixed now).** The skip becomes G11's default reader when its one test read gives both:
+  1. at least 8 proposals that hold; and
+  2. pooled test precision at least 0.542.
+  Otherwise the flag stays opt-in and S11a's reader stays the default. If adopted, `--g11-keep-dates` gives S11a's reader, and S11a's test read reproduces with it.
+
+### (b) G9 on a richer store (attributes A3)
+
+- **The store.** Store K (S11a's, unchanged) plus the **added facts**: every row of an S15 file with label 1, an entity value (`value_item` not empty) and a relation `pattern_learn` does not know (`rel_index` < 0). These are 14 relations: award_received, chairperson, director_manager, educated_at, employer, head_of_government, head_of_state, headquarters, member_of, member_of_political_party, member_of_sports_team, owned_by, parent_organization, position_held. The value is `norm_ent(value)`, as for store K. The date relation `dissolved` has no entity value and does not enter.
+- **Which files.** Dev runs read the added facts from `temporal_holdout_dev.tsv` only. The one test run (`--read-test`) reads them from both files. That reads S15 test's labels for these 14 relations, once, as G9's input; it is logged in S15's Reads table.
+- **Attributes A3:** A1 (store K's direct attributes) plus every added fact as an attribute (r, v), kept by the same support guard (at least 10 subjects). Everything else in G9 is S11a's: closed concepts, candidate classes, class rules, P5's test.
+- **Fresh held-out classes.** The A3 attributes with 15 to 500 subjects that are not among S11a's 143 held-out classes (the A1 attributes of store K in that range). Store K is unchanged, so these are exactly the added-relation attributes in the range. A fresh class is **dev** when bit 21 of FNV-1a(r + "\x1f" + v) is 0, else **test**. The class sets are computed on the store of the run (dev: added facts from S15 dev; test run: from both files).
+- **For each held-out class H:** every fact with relation r and value v is removed, from store K and from the added facts. G9 runs on the rest with A3. J_new, J_named, J_kept and the null are S11a's, with the null's pool drawn from the context entities holding a value of r in store K or the added facts, seed `mt19937_64(20261103 + i)`.
+- **The gate (S11a's, unchanged):** on the fresh test classes, the rediscovery rate's (J_new ≥ 0.5) Wilson lower bound is above the null rate's Wilson upper bound.
+- **Strict count, registered now as part of the decision.** A rediscovered class that is also redundant (J_named ≥ 0.5) is one the store already names closely. **Strict rediscovery** = J_new ≥ 0.5 and J_named < 0.5.
+- **Secondary (decides nothing):** S11a's 60 test classes, read again on the A3 store of the test run (S11a's sign test and mean J_new − null, amendment 1). And S11a's 83 dev classes on the dev runs.
+- **Decision rule (fixed now).** G9 with A3 is S11's concept generator, by measurement under PLAN ledger 55 and open to Odin's veto, when the gate is met **and** the strict rate's Wilson lower bound is above the null's Wilson upper bound. Otherwise it is reported and nothing changes. `--attrs A3` is a new option; A1 stays the default either way, so S11a's runs reproduce.
+- **No dev choices.** Nothing is tuned on dev: the dev runs check the code and set expectations.
+
+### (b2) G9's promotion read on A3
+
+- S11a's read 2, unchanged except the store: slots (S15 bit 17 = 0 halves, `pattern_learn`'s non-date relations), hidden store K facts, the dev plan, the loop, `decide`, BH among the supported. The added facts stay in the store; they are other relations.
+- If G9 makes hypotheses: the pool files in S8d's fresh-set format (`OUT.fresh_g9.hyps.tsv`, its log), S8d's source stage (`--sources … --fresh POOL EMPTY`, S8d's calibration), and the grade after it (`--pool-grade s15 temporal_holdout_test.tsv 0 …`). Reported against S8's gate (≥ 0.9 on at least 20 graded). Nothing is adopted from it.
+
+### Predictions (registered before any run)
+
+| # | Prediction |
+|---|---|
+| F1 | G11 with the skip: the dev rule picks C2 |
+| F2 | G11 test: 12–25 proposals; 6–14 hold |
+| F3 | G11 test: pooled precision 0.45–0.70 |
+| F4 | G11 test: at least 2 of developer, headquarters, member_of, spouse, country (as proposed names) hold |
+| F5 | G11: the rule adopts the skip as the default reader |
+| F6 | G9 A3, dev run: 10–30 fresh dev classes |
+| F7 | G9 A3, test: 25–70 fresh test classes; rediscovery rate 15–50% |
+| F8 | Most rediscovered fresh classes are redundant: the strict count is under half the rediscovered count |
+| F9 | The null rate is at most 5%; the gate is met; the strict part fails, so G9 A3 is not adopted |
+| F10 | S11a's 60 test classes on A3: 0–3 rediscovered |
+| F11 | Read 2 on A3, test: 1–500 hypotheses; fewer than 20 graded supported after the source stage |
+
+### Dev (2026-10-29)
+
+Run: `/root/work/s11d/runs/dev.out` (commit c6227d2, `--attrs A3 --g11-skip-dates`, no `--read-test`). Nothing here reads S15 test.
+
+- **Added facts (S15 dev):** 7,432 over 920 subjects. The A3 context has 278 attributes over 2,613 entities: 806 → 1,086 closed concepts, 575 → 735 candidate classes. Its 22 kept class rules are all occupations, as on A1.
+- **Fresh dev classes: 18.** Rediscovered 11 (0.611 [0.386, 0.797]); **strict 0** (0.000 [0.000, 0.176]); null 0; redundant 12.
+  - The 11 are all memberships of countries in international bodies (Interpol, UNESCO, WHO, the World Bank's agencies, …). Each is close to another single membership (J_named 0.58–1.00), and a conjunction of three or four memberships reaches it.
+  - The others are not reached: the Rock and Roll Hall of Fame (0.444, by "composer & guitarist & musician & singer & songwriter"), the Bavarian Academy of Sciences (0.478), the National Academy of Sciences (0.429), the Royal Society (0.308), the Hollywood Walk of Fame (0.180), the two US parties (0.17, 0.12).
+- **S11a's 83 dev classes on A3:** 0 rediscovered, as on A1 (sign test 69 against 13, mean J_new − null +0.126).
+- **Read 2 on A3, dev:** 786 of 2,129 slots have their subject in the context; the 8 kept rules (all occupations) predict **none** of them. No hypotheses.
+- **G11 with the skip, dev:** 46,475 pairs with a key; C1 414 clusters, 20 proposals, 78 dev pairs holding; C2 993 clusters, 21 proposals, 87. **The rule picks C2** (87 ≥ 1.1 × 78). Its 21 proposals: educated_at ×3 ("attended", "educated at", "graduated from"), death_place ×2 ("died in", "settled in"), headquarters ×3 ("are in", "based in", "headquartered in"), spouse ×3 ("sister ,", "his wife", "wife was"), country ×3 ("territory of", "area of", "language in"), developer, located_in ("seat of"), birth_place ("born at"), founder, member_of ("fellow of"), author ("novel by"), language.
+- **Default output unchanged:** `--gen-concepts` without the new flags (dev) gives stdout (timings masked) and pool files byte-identical to main's tool (wip/integ13, 4331619).
+
+### Results: the test read (2026-10-29)
+
+One run with `--attrs A3 --g11-skip-dates --read-test` at commit 64068c5 (`/root/work/s11d/runs/test.out`; 118 s, 176 MB). Logged in S15's Reads table.
+
+#### G11 with the skip (C2, chosen on dev by S11a's rule)
+
+| Proposals for | Proposals | Hold on test | Pooled test pairs holding | Precision [Wilson 95%] |
+|---|---:|---:|---:|---|
+| `pattern_learn`'s relations | 14 | 4 | 34 / 68 | 0.500 [0.384, 0.616] |
+| S15's added relations | 7 | 2 | 30 / 62 | 0.484 [0.364, 0.606] |
+| All | 21 | 6 | 64 / 130 | 0.492 [0.408, 0.577] |
+
+- **Proposals that hold** (proposed name = the dev property; data for P10, nothing enters F2):
+
+| Phrase (C2 connector) | Proposed name | Test |
+|---|---|---|
+| "[S] … attended [O]" | educated_at | 14 / 23 |
+| "[S] … educated at [O]" | educated_at | 8 / 13 |
+| "[S] … died in [O]" | death_place | 8 / 13 |
+| "[S] … born at [O]" | birth_place | 7 / 10 |
+| "[S] … seat of [O]" | located_in | 6 / 8 |
+| "[S] … territory of [O]" | country | 3 / 3 |
+
+- **Ones that fail:** developer ("developed by", 3 / 14: it also links techniques to their field); headquarters ("based in" 1 / 8, "are in" 2 / 6, "headquartered in" 1 / 3); founder ("founded by", 0 / 5); educated_at ("graduated from", 3 / 7); spouse ("sister ,", 0 / 3). Seven more have under 3 gradable test pairs, among them member_of ("fellow of", 1 / 2) and spouse ("his wife" 0 / 2, "wife was" 1 / 1).
+- **Against S11a's read without its date proposals** (8 hold, 58 / 107 = 0.542): fewer hold (6) at a lower pooled precision (0.492). "died in" now holds (8 / 13; it failed at 7 / 19 with its year links), and country ("territory of") is new. The relations C2 reached on dev (developer, headquarters, spouse, member_of) do not hold on test.
+- **The rule:** 6 < 8 and 0.492 < 0.542. **The skip stays opt-in** (`--g11-skip-dates`); S11a's reader stays the default.
+- The proposals with their names are in `OUT.g11_proposals.tsv`.
+
+#### G9 on A3: fresh classes (the gate)
+
+The test run's store: store K plus 15,015 added facts over 1,877 subjects (S15 dev and test). The A3 context has 370 attributes over 2,685 entities: 1,995 closed concepts, 1,401 candidate classes, 3,300 candidate class rules of which BH keeps 5 (4 kept classes).
+
+| Fresh test classes (42) | Count | Rate [Wilson 95%] |
+|---|---:|---|
+| Rediscovered (J_new ≥ 0.5) | 14 | 0.333 [0.210, 0.484] |
+| **Strict** (and J_named < 0.5) | **2** | **0.048 [0.013, 0.158]** |
+| Null (random classes) | 0 | 0.000 [0.000, 0.084] |
+| Redundant (J_named ≥ 0.5) | 14 | |
+| Rediscovered by kept classes | 1 | |
+
+- **S11a's gate is met** on the fresh classes: 0.210 > 0.084.
+- **The strict part is not:** 0.013 < 0.084. **So G9 with A3 is not adopted** (registered rule). `--attrs A3` stays an option; A1 stays the default.
+- **What is rediscovered.** 12 of the 14 are memberships of countries in international bodies (the UN, the ITU, the Universal Postal Union, the World Bank, the African Union, …) and one is "ancient Roman senator". Each has a single named attribute close to it (J_named 0.55–1.00): the store already names the class.
+- **The two strict ones:**
+  - "foreign member of the Royal Society" (award_received), 0.567, by "member_of = National Academy of Sciences & member_of = Royal Society";
+  - "International Civil Defence Organization" (member_of), 0.500, at the bar.
+- **Near misses:** the Copley Medal 0.455 (by "Academy of Sciences of Turin & Royal Society"), the Göttingen Academy 0.458, the Royal Swedish Academy 0.487, the Prussian Academy 0.475. Awards such as the Nobel Prize in Literature (0.185) or the Legion of Honour (0.12) get no close class.
+- **Secondary (amendment 1's measures):** G9's best class is closer than the null's on 34 fresh test classes and further on 8 (sign test p 3.4e-05); mean J_new − null +0.317 [+0.227, +0.408].
+- **By relation:** member_of 12 of 23 (1 strict); award_received 1 of 12 (strict); position_held 1 of 3; educated_at 0 of 3; headquarters 0 of 1.
+
+#### Secondary: S11a's classes on A3
+
+- **S11a's 60 test classes:** 1 rediscovered (0.017 [0.003, 0.089]), strictly: "occupation = producer", 0.500, by "award_received = Star on the Hollywood Walk of Fame & occupation = director …". On A1 it was 0.464. Sign test 52 against 4; mean J_new − null +0.120 [+0.093, +0.148] (A1: +0.113 [+0.086, +0.142]).
+- **S11a's 83 dev classes:** 1 rediscovered, not strictly: "occupation = statesperson", 0.632, by "occupation = politician & position_held = President of the United States".
+- So the added facts move a few occupations near the bar, but the occupation classes stay out of reach.
+
+#### G9's promotion read on A3
+
+- **Dev:** 906 of 2,129 slots have their subject in the context; 4 kept rules; **0 predictions.**
+- **Test:** 867 of 2,124 slots; 3 kept rules; **0 hypotheses.**
+- With more candidate rules (3,300), BH keeps fewer (5 on the full store), and every kept rule still predicts an occupation from other occupations. A hidden slot removes all of a subject's occupations, so nothing is predicted. **No pool for S10**; the pool files hold only their header.
+
+### Predictions, scored
+
+| # | Prediction | Result |
+|---|---|---|
+| F1 | The dev rule picks C2 | **Hit** (87 against 78) |
+| F2 | 12–25 proposals; 6–14 hold | **Hit:** 21; 6 |
+| F3 | Pooled precision 0.45–0.70 | **Hit:** 0.492 |
+| F4 | At least 2 of developer, headquarters, member_of, spouse, country hold | **Miss:** only country |
+| F5 | The rule adopts the skip | **Miss:** 6 hold, 0.492 |
+| F6 | 10–30 fresh dev classes (dev run) | **Hit:** 18 |
+| F7 | 25–70 fresh test classes; rediscovery 15–50% | **Hit:** 42; 0.333 |
+| F8 | Strict under half of rediscovered | **Hit:** 2 of 14 |
+| F9 | Null ≤ 5%; gate met; strict fails; not adopted | **Hit** |
+| F10 | S11a's 60 test classes on A3: 0–3 rediscovered | **Hit:** 1 |
+| F11 | Read 2, test: 1–500 hypotheses | **Miss:** 0 |
+
+8 hits, 3 misses.
+
+### Decisions (registered rules)
+
+- **G11:** the skip stays opt-in. With it, S11a's own choice rule moves to C2, and C2's proposals hold no better on test than C1's non-date ones. The six that hold are listed above for naming.
+- **G9 with A3:** not adopted. The richer store lets G9 pass S11a's gate, but only on classes the store already names; strictly it rediscovers 2 of 42. G9 still makes no hypotheses for hidden slots.
+- Nothing else changes. Without the new flags `--gen-concepts` reproduces S11a's test read byte for byte.
+
+### Checks
+
+- **The test read was made once**, at commit 64068c5, before the run was stopped by an interrupt at 07:18 UTC. It was not repeated; the results above are that run as it stands.
+- **The 9 CTests** (HANDOFF §4.4) pass on the branch build. `epistemic_test` runs 1,302 checks, 0 failed (S11a's 1,293 plus 9 for S11d).
+- **Four planted bugs**, each in `gen_concepts.hpp`, each fails `epistemic_test`:
+
+| Planted bug | Checks failed |
+|---|---:|
+| Strict ignores redundancy (drops J_named < 0.5) | 3 of 1,302 |
+| Adoption rule strict on precision (`>` for `>=`) | 1 of 1,302 |
+| Gate compares lower bounds (null's lower for its upper) | 1 of 1,302 |
+| Fresh split on hash bit 19, not 21 | 1 of 1,302 |
+
+- **S3's `--gaps` run** with the branch tool: all 10 files byte-identical to S4's (`/root/work/s4/runs/test`); gap map `a77678d8ef7dfdef`.
+- **Flags off:** `--gen-concepts --read-test` without `--attrs A3` and `--g11-skip-dates` gives S11a's test read: stdout identical once timings and paths are masked, and its four pool files byte-identical.

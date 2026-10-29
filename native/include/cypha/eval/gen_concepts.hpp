@@ -33,6 +33,7 @@
 #include <utility>
 #include <vector>
 
+#include "cypha/eval/ecs.hpp"
 #include "cypha/eval/gen_rules.hpp"
 #include "cypha/eval/lci.hpp"
 
@@ -364,6 +365,44 @@ inline ClusterGrade grade_cluster(const OpenCluster& c,
   for (const auto& [p, n] : cnt)
     if (n > g.hits) g.hits = n, g.prop = p;  // map order: ties go to the first name
   return g;
+}
+
+// ---------------------------------------------------------------------------
+// S11d: the rediscovery tally and G11's rule for the date-link skip
+// ---------------------------------------------------------------------------
+
+/// One held-out class as read: J_new (best candidate class), J_named (best single attribute), J_kept (best kept class)
+/// and the null's J_new.
+struct ClassRead {
+  double j_new = 0, j_named = 0, j_kept = 0, j_null = 0;
+};
+
+/// Counts over held-out classes at the bar (0.5): rediscovered (J_new), redundant (J_named), strict (rediscovered and
+/// not redundant), rediscovered by kept classes, and the null.
+struct RediscoveryTally {
+  double n = 0, red = 0, redun = 0, strict = 0, kept = 0, null = 0;
+  void add(const ClassRead& c, double bar = 0.5) {
+    n += 1;
+    red += c.j_new >= bar;
+    redun += c.j_named >= bar;
+    strict += c.j_new >= bar && c.j_named < bar;
+    kept += c.j_kept >= bar;
+    null += c.j_null >= bar;
+  }
+  /// S11a's gate: the rediscovery rate's Wilson lower bound is above the null rate's Wilson upper bound.
+  bool gate_met() const { return n > 0 && wilson_lower(red, n) > wilson_upper(null, n); }
+  /// S11d: the same for the strict count.
+  bool strict_met() const { return n > 0 && wilson_lower(strict, n) > wilson_upper(null, n); }
+};
+
+/// S11d's fresh classes are dev when bit 21 of the caller's FNV-1a hash of r + "\x1f" + v is 0.
+inline bool fresh_class_is_dev(std::uint64_t h) { return ((h >> 21) & 1) == 0; }
+
+/// S11d's rule for G11's date-link skip: it becomes the default reader when its one test read gives at least `min_hold`
+/// proposals that hold and a pooled precision of at least `min_precision` (S11a's test read without its date proposals:
+/// 8 hold, 58 / 107).
+inline bool adopt_g11_skip(double holds, double pooled_hits, double pooled_n, double min_hold = 8.0, double min_precision = 58.0 / 107.0) {
+  return holds >= min_hold && pooled_n > 0 && pooled_hits / pooled_n >= min_precision;
 }
 
 }  // namespace cypha::eval::concepts

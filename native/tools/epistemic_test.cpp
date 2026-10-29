@@ -2679,6 +2679,27 @@ static void test_concepts_S11a() {
   CHECK(g.gradable == 5.0 && g.hits == 3.0);
   const cc::ClusterGrade gf = cc::grade_cluster(cl[0], props, gradable, "employer");
   CHECK(gf.gradable == 5.0 && gf.hits == 1.0);
+
+  // S11d: the rediscovery tally (S11a's gate and the strict count), fresh classes' split, G11's rule for the skip.
+  {
+    cc::RediscoveryTally t;
+    t.add({0.62, 0.70, 0.10, 0.05});  // rediscovered, redundant: not strict
+    t.add({0.55, 0.20, 0.55, 0.00});  // rediscovered and strict, also by a kept class
+    t.add({0.50, 0.49, 0.00, 0.50});  // at the bar: rediscovered and strict; the null reaches the bar too
+    t.add({0.49, 0.90, 0.00, 0.10});  // just under the bar, redundant
+    CHECK(t.n == 4.0 && t.red == 3.0 && t.strict == 2.0 && t.redun == 2.0 && t.kept == 1.0 && t.null == 1.0);
+    CHECK(!t.gate_met() && !t.strict_met());  // 3 of 4 against 1 of 4: the intervals overlap
+    cc::RediscoveryTally big;
+    for (int i = 0; i < 40; ++i) big.add({i < 30 ? 0.6 : 0.1, i < 25 ? 0.6 : 0.1, 0.0, 0.0});
+    CHECK(big.red == 30.0 && big.strict == 5.0 && big.null == 0.0);
+    CHECK(big.gate_met());                // 30 / 40 against 0 / 40
+    CHECK(!big.strict_met());             // 5 / 40: lower bound 0.055 < the null's upper bound 0.088
+    cc::RediscoveryTally none;
+    CHECK(!none.gate_met() && !none.strict_met());
+    CHECK(cc::fresh_class_is_dev(0) && !cc::fresh_class_is_dev(std::uint64_t{1} << 21) && cc::fresh_class_is_dev(std::uint64_t{1} << 19));
+    CHECK(cc::adopt_g11_skip(8, 58, 107) && !cc::adopt_g11_skip(7, 90, 100) && !cc::adopt_g11_skip(12, 57, 107));
+    CHECK(cc::adopt_g11_skip(9, 60, 100) && !cc::adopt_g11_skip(9, 0, 0));
+  }
 }
 
 // ---------------------------------------------------------------------------

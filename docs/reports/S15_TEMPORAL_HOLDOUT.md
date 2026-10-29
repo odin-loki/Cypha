@@ -201,6 +201,7 @@ Every read of `temporal_holdout_test.tsv` by a generator is logged here, with it
 | 2026-10-29 | G12 literature-based discovery, Swanson's ABC (S11b) | read once, the setting chosen on dev (PPMI, hub cap 200; commit 0230741): open-form precision@k and the closed form on S15 test's subjects, and promotion of its typed pool | [S11B_ABC_DISCOVERY.md](S11B_ABC_DISCOVERY.md) |
 | 2026-10-29 | G3, G4, G5 (S11c) | read once with the settings chosen on dev (commit 804d77c): G4 and G5's ranks of `b` and `c` facts on the 2006-text store (all of test), and the promotions of G3, G4 and G5 on a fresh set built on test's bit-17 = 0 half (pool hashes committed first) | [S11C_ANALOGY_ANOMALY_ABDUCTION.md](S11C_ANALOGY_ANOMALY_ABDUCTION.md) |
 | 2026-10-29 | G1 deep deduction, G19 refinement, G20 the wild tier (S12a) | read once (commit 6307b17): G1 and G19 on S8a's R1 hide with S15 test's rows in the grader, G1 on store T for S15 test's subjects, and the G1 and G20 pools on test's bit-17 = 0 half (the half S11c's pools used) | [S12A_DEDUCTION_LAWS_REFINEMENT.md](S12A_DEDUCTION_LAWS_REFINEMENT.md) |
+| 2026-10-29 | G11 with the date-link skip (C2 by S11a's rule) and G9 on a richer store (S11d) | read once (commit 64068c5): G11's proposals on test subjects' rows; G9's A3 store takes S15 test's true rows of the 14 added relations as attributes (fresh classes, S11a's 60 classes again); G9's promotion read on the bit 17 = 0 half (0 hypotheses) | [S11A_CONCEPTS_AND_OPEN_RELATIONS.md](S11A_CONCEPTS_AND_OPEN_RELATIONS.md) |
 
 ## How to rebuild
 
