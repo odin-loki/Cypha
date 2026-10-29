@@ -109,6 +109,7 @@ Cypha is Odin Loch's own C++ AI. **CyphaLM** is its language model: a packed byt
 | **hp-wrapper fixes** (Odin: "fix both") | Forecast rollouts read the trained model (8 min → 6 s); vocabularies other than 256 rejected; `cypha_slow` 56 / 56 | `SLOW_TEST_TRIAGE.md` |
 | **S8d promotion** (decided by measurement, ledger 71) | `decide` needs an independent yes; sources promote only where LR+ ≥ 10 on the generators' errors (DBpedia dates, places, links; GeoNames places); a fresh read: 25 graded at 0.880 [0.700, 0.958], gate (0.9) not met; the 3 misses are S15 name or grain mismatches | `S8D_PROMOTION.md` |
 | **S4b unknown-unknown signals** | One alarm rule; the vocabulary signal alarms on new page types (95.5% within 50 pages); surprise and unparsed do not pass; nothing sees an unseen domain in plain prose | `S4_UNSEEN_AND_FRONTIER.md` |
+| **S4c out-of-scope signal** | No candidate passes: topic distance 38% within 50 pages on Dolly (gate 90%); the markup control holds; Dolly's long answers are mostly in scope by content | `S4_UNSEEN_AND_FRONTIER.md` |
 | **M17 lowered index freed after `--save`** | C1L + defaults with `--save` 204.5 → 186.7 MB; lossless | `RAM_PROFILE.md` |
 | Tool profile P2–P4 | Tagger and word-vector class tables cut from the class expert (the tagger stays as the question parser); `cypha_gate` deleted; `pattern_learn` fails the Q/A cut, flagged for Odin | `TOOL_PROFILE_P2_GRID.md` |
 | S-1b learned contexts | Cypha's own learner reaches PPMI-SVD's level (0.683 / 0.246 / 0.669); gates failed on rare words | `S1B_LEARNED_CONTEXTS.md` |
@@ -153,7 +154,7 @@ Odin asked on 2026-10-28 to reduce CyphaLM's RAM. Every cut was measured against
 
 ### 4.4 CTests
 
-Run these on every change: `native_cyphalm_trie_selftest`, `native_fm_infinigram_test`, `native_epistemic_test`, `native_thought_test`, `native_geometry_test`, `native_ecs_lci_test`, `native_scribe_selftest`, `native_cyphalm_neural_smoke`, `native_class_context_test`. `native_fm_infinigram_test` runs 191,885 checks (locate included), `native_epistemic_test` 1,073 (S4, S4b, S6, S7, S7b, S7c, S8a, S8b, S8c, S8d, S9), `native_class_context_test` 1,043 (M15). `pattern_learn` builds with `g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp`; its S3 `--gaps` run must stay byte-identical. `pattern_learn --signals DIR` (S4b) runs after S3's passes; without it the run is byte-identical.
+Run these on every change: `native_cyphalm_trie_selftest`, `native_fm_infinigram_test`, `native_epistemic_test`, `native_thought_test`, `native_geometry_test`, `native_ecs_lci_test`, `native_scribe_selftest`, `native_cyphalm_neural_smoke`, `native_class_context_test`. `native_fm_infinigram_test` runs 191,885 checks (locate included), `native_epistemic_test` 1,119 (S4, S4b, S4c, S6, S7, S7b, S7c, S8a, S8b, S8c, S8d, S9), `native_class_context_test` 1,043 (M15). `pattern_learn` builds with `g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp`; its S3 `--gaps` run must stay byte-identical. `pattern_learn --signals DIR` (S4b) runs after S3's passes; without it the run is byte-identical. `--signals-scope dev|test` (S4c) runs after S4b's signals; without it the output is S4b's.
 
 ### 4.5 CI
 
@@ -185,6 +186,7 @@ Run these on every change: `native_cyphalm_trie_selftest`, `native_fm_infinigram
 14. **S9's questions:** DISCOVERY §4.4 use 1 (answering Odin's what-if questions) breaks rule 10, so nothing answers; drop it, or keep cards as data only? May a confirm-only test (T2: LR 3.35 dev, 10.5 S15) enter the loop by its three-way LR? Count Wikidata as one source or per claim (its 62% blast radius)? Merge S9's single points of failure into S3's gap map (it changes S3's output)?
 15. **When the 1 TB run ends:** move `trie_stream_train.cpp` onto `packed_trie.hpp` (and `pack()`, M4).
 16. **S4b's alarm threshold:** runs of pages on one topic raise false alarms (taxonomy pages for vocabulary, American football pages for surprise; 1 each in about 1,600 pages). Should such runs open gaps? A threshold of 100,000 instead of 20,000 silences both, at about 5 more pages of delay for the vocabulary signal.
+17. **S4c's questions:** should the out-of-scope gate be read on Dolly's own-voice answers (brainstorming, creative writing) or on another corpus, since most of S4b's Dolly pages are encyclopedic prose? Adopt TF-IDF novelty beside the vocabulary signal for new page types (100% within 50 pages, median 16, against 95.5%, median 24)? Add a scope gap kind to DISCOVERY §3.2?
 
 ---
 
@@ -193,7 +195,7 @@ Run these on every change: `native_cyphalm_trie_selftest`, `native_fm_infinigram
 1. **S8, promotion:** after Odin's calls (§5.13): a grader that knows Wikidata's names and places inside places, then a new fresh read; then S9's consequence tests need confident rules into single-valued slots (a larger store); then S10 (the curiosity scheduler). (S8d, S4b, M17, S7b, S7c, S8a, S8b, S8c, S9, M16, A4d, the hp fixes and the slow-test cut were done 2026-10-29; S1, S4, S6, S7, S15, the echo fix, A4c, M15 and serving from stored files 2026-10-28.)
 2. **RAM:** nothing open. Every built and served `qa` configuration is under 190 MB (M17). A blockwise BWT only if a larger corpus needs it.
 3. **Forecast's event vocabulary** on a byte model (§5.10), after Odin's call.
-4. **Similar-context expert:** a cap or window on online keys before streams pass a few MiB (they cost 5.3 MB per MiB read). **S4b:** a content-level out-of-domain signal (no signal sees an unseen domain written in plain prose); source-trust shifts once source reliability is refit over time (§5.16 first).
+4. **Similar-context expert:** a cap or window on online keys before streams pass a few MiB (they cost 5.3 MB per MiB read). **S4c:** no content signal sees Dolly, because most of it is in scope; a new planted pool needs Odin's call (§5.17). Source-trust shifts once source reliability is refit over time.
 5. **On Odin's PC:** the 8B QE0 gate and timing, QE2 probe vectors, QE3, QE4 `pairs`, teacher Q/A text (QWEN3_EMBEDDING_DISSECTION §9).
 6. **Bill of work upkeep** with every commit.
 
