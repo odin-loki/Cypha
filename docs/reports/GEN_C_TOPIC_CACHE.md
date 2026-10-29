@@ -152,3 +152,130 @@ scribe ladder --pack enwik:enwik8:16:48 --ref enwik:enwik8:48:56 --test enwik:en
 ```
 
 Run from the repository root (the topic part reads `data/cyphalm/simvec_ppmi32.bin`). Runs are in `/root/work/genc/runs`.
+
+## GEN-C2: the document experts where only prediction counts (registered 2026-10-29, before any run)
+
+**Odin Loch** · 2026-10-29 · the read GEN-C's rule 3 left open
+
+**Question.** GEN-C's document experts lower held-out bits a byte by 0.043, but `sample` does not take them, because SCRIBE's sentence form falls. `context8k` and `qa`'s holdout lines are read by bits a byte alone. Do the document experts earn a default there, under the LM rules?
+
+**Where they would go.**
+- `context8k`: its holdout chain (trie + InfiniGram + class + similar-context + copy), then the document experts, as a new `_doc` line. Its answers are written by trie + InfiniGram alone (`gen`), so they cannot change.
+- `qa`: its holdout lines (trie + InfiniGram + class + similar-context + copy), then the document experts. `qa`'s answers are written by their own mixers, which are never given the document experts. So the rows cannot change; this is checked against main's rows (`/root/work/a4e/runs/parity/QB.rows.tsv`, byte for byte).
+- Never inside an answer, never in `sample` (GEN-C's flag stays as it is), `chat`, `probe` or `bpc`.
+
+**The read's tool.** `cyphalm_trie cls <enwik8> shape --doc V1;V2;…`, a new branch of `cls`, as A4c's and A4d's fresh reads were made there. The model is trained on wiki train [0, 7 MiB) only. The chain is `qa`'s order and defaults: trie + InfiniGram (cap 8192), class (`shape`), similar-context (`default`, online keys on), copy (m 8), then the document experts. The document experts' words and triggers come from [0, 7 MiB) only (GEN-C).
+
+**Variants (dev):** V1 `trig`; V2 `cache`; V3 `trig,cache`; V4 `trig,cache,topic`. (`frozen` changes only sampling, so it is not read.)
+
+**Dev read.** The holdout's second half [7.5, 8 MiB). Every expert's lambdas are fit on the first half. Per variant: bits a byte before and after, and the paired change over 4 KiB blocks (block bootstrap, 2,000 resamples, seed 7): mean, 95% interval, P(change < 0).
+
+**Fresh read (once, for the chosen variant).** enwik8 [54,530,849, 56,628,001): 2 MiB from the first `<page>` line at or after 52 MiB; 274 page starts. `cls … --sim-stream 54530849:2097152` places it right after the holdout. Every expert's lambdas are fit on the whole holdout [7, 8 MiB), read as one stream that goes on into the fresh slice (the similar-context expert's online keys and the copy window carry over, as in A4e's stream; the document experts start again at the slice's first `<page>`). The paired change over 4 KiB blocks (4,000 resamples, seed 11), as A4d's fresh read.
+- **Who has read this slice.** No CyphaLM bits-a-byte read and no CyphaLM choice. SCRIBE's reference ladder ([48, 56) MiB) reads it as human text, and S4c's and S4d's pools (pages after byte 50,000,000) read its pages with content signals only. The shipped similar-context vectors were built on enwik8 without [7, 9) MiB, so they have seen it; that is the same in both arms of the paired read.
+
+**Rules (fixed now).**
+1. **Dev choice.** Among V1–V4, those whose dev 95% interval is below 0. The one with the lowest dev bits a byte is chosen, unless a variant with fewer parts is within 0.001 of it; then that one is. If none qualifies: no fresh read, nothing is wired, and the branch is removed (rule 4).
+2. **Fresh.** The chosen variant's fresh change has mean below 0 and P(change < 0) ≥ 0.95 (LCI).
+3. **Defaults.** If rule 2 holds, the chosen variant becomes the default in `context8k`'s chain and `qa`'s holdout lines only, with `--no-doc` to leave it out. Conditions, all checked before the switch: `qa`'s rows byte-identical to main's; built and served `qa` peak under 200 MB; `context8k`'s answer lines unchanged and its peak reported. If the RAM condition fails, the switch waits, and the read is reported as passed.
+4. **Code debt.** If rule 1 or 2 fails, the new `cls --doc` branch is removed and `--doc` stays `sample`'s flag alone.
+
+**Predictions.**
+
+| # | Prediction | Falsified if |
+|---|---|---|
+| D1 | Over the full `qa` chain the cache variants gain less than GEN-C's −0.043 (InfiniGram and class already hold some of it): V3's dev change is between −0.035 and −0.010 | outside that range |
+| D2 | V1 (triggers alone) changes dev by less than 0.003 in size, with its interval below 0 | size 0.003 or more, or interval not below 0 |
+| D3 | V4 adds less than 0.002 over V3 | V4 − V3 below −0.002 |
+| D4 | The rule picks V2 (cache alone): V3 is within 0.001 of it | another variant is chosen |
+| D5 | The fresh change is below 0 with LCI ≥ 0.95, and within ±50% of the chosen variant's dev change | LCI below 0.95, or outside ±50% |
+| D6 | `qa`'s rows are byte-identical with the document experts on | any byte differs |
+| D7 | `qa`'s headline holdout (1.7895) falls by 0.010–0.035 | outside that range |
+| D8 | Built and served `qa` stay under 200 MB | either at 200 MB or more |
+
+### GEN-C2 dev results (2026-10-29, before the fresh read)
+
+Tool: `cyphalm_trie` at befd5ec. Command: `cyphalm_trie cls enwik8 shape --doc 'trig;cache;trig,cache;trig,cache,topic'`, run from the repository root. Wall time 2,182 s under load; peak 303 MB (the `cls` tool holds per-byte arrays for every expert; this is not `qa`'s peak).
+
+The chain is trie + InfiniGram + class + similar-context + copy, the model trained on wiki train only: 1.802237 bits a byte on the holdout's second half. Each variant goes on last; the change is paired over 4 KiB blocks.
+
+| Variant | Parts | After | Change [95% interval] | P(change < 0) |
+|---|---|---:|---|---:|
+| V1 | trig | 1.801014 | −0.0012 [−0.0017, −0.0008] | 1.000 |
+| **V2** | **cache** | **1.766556** | **−0.0357 [−0.0411, −0.0305]** | 1.000 |
+| V3 | trig, cache | 1.768024 | −0.0342 [−0.0397, −0.0290] | 1.000 |
+| V4 | trig, cache, topic | 1.767519 | −0.0347 [−0.0403, −0.0295] | 1.000 |
+
+- The cache does almost all of it, as in GEN-C. Over this chain it gains −0.036, against −0.041 over `sample`'s chain (no InfiniGram, no class).
+- The triggers hurt a little in front of the cache: V3 is 0.0015 worse than V2. Their lambdas are fit first, over the chain without the cache.
+- The gain is the same under and over 4 KiB into a page (−0.0354 and −0.0359 for V2).
+- Building the cache takes 1.3 s and fitting it 33 s here.
+
+**Dev choice (rule 1).** Every variant's interval is below 0. V2 has the lowest bits a byte and the fewest parts, so **V2 (`cache`) is chosen**. The fresh read is made once, for V2 alone.
+
+### GEN-C2 fresh read (2026-10-29, read once)
+
+Command: `cyphalm_trie cls enwik8 shape --doc cache --sim-stream 54530849:2097152` at befd5ec, from the repository root. Wall time 5,784 s under load; peak 514 MB (`cls` holds per-byte arrays for the holdout and the 2 MiB stream).
+
+| Read | Chain | With the cache | Change [95% interval] | P(change < 0) |
+|---|---:|---:|---|---:|
+| Holdout's second half (dev, reproduced) | 1.802237 | 1.766556 | −0.0357 [−0.0411, −0.0305] | 1.000 |
+| **Fresh, enwik8 [54,530,849, 56,628,001)** | **1.915952** | **1.857202** | **−0.0588 [−0.0618, −0.0559]** | **1.000** |
+
+- The chain is trie + InfiniGram + class + similar-context + copy, every lambda fit on the whole holdout; the cache goes on last.
+- The fresh gain is larger than on dev. It holds under and over 4 KiB into a page (−0.063 and −0.057).
+- The cache's lambdas refit on the whole holdout are close to the first half's (0.79 against 0.83 at the top bucket).
+
+**Rule 2 holds:** the mean change is below 0 and P(change < 0) = 1.000 ≥ 0.95. Rule 3's conditions are checked next, before any default changes.
+
+### GEN-C2 rule 3 and the decision (2026-10-29)
+
+**First wiring, before BKN2 (main 4c47cf2 + DK2, A4e, GEN-E).** The cache was built before `qa`'s per-byte holdout arrays and fit with `fit_doc`.
+- `qa`'s rows are byte-identical to main's, built, `--save` and served (`QB.rows.tsv`).
+- `qa`'s headline holdout falls 1.789464 → 1.756115 (−0.0333; LCI P(gain > 0.005) = 1.000 over 256 blocks).
+- `context8k` falls 1.7897 → 1.7555, and its answer lines are unchanged.
+- **But built `qa` peaked at 204.3 MB** (main 184.7), over the 200 MB rule. Served `qa` was 193.3 MB, `--save` 202.6 and `context8k` 202.5.
+
+**Final wiring (b2816b4).**
+- The cache is built after `qa`'s per-byte holdout arrays are freed, in their memory, and freed again before the answers.
+- `mix_doc_into` keeps each part's predictions over the first half only and mixes the second half as it streams. The selftest checks that it gives `fit_doc`'s numbers exactly, and a planted bug (the second half mixed wrongly) fails it.
+- `context8k` uses it too.
+
+**With BKN2's defaults (main c756ee3; byte Kneser–Ney on).** This is the configuration that decides.
+
+| Path | Without the cache (BKN2) | With the cache | Peak, BKN2 | Peak, with the cache | Rows / answer lines |
+|---|---:|---:|---:|---:|---|
+| `qa` built (`--save`) | 1.727340 | **1.698891** (−0.0284; LCI 1.000) | 196.8–197.1 MB | **197.2 MB** | byte-identical to BKN2's R1 |
+| `qa` served (`--model`) | 1.727340 | **1.698891** | 196.4 MB | **196.5 MB** | byte-identical to BKN2's R2 |
+| `context8k` | 1.7276 | **1.6985** | 218.9 MB | 219.1 MB | identical to BKN2's C8 |
+
+- Built `qa`'s peak comes before the cache's stage (197.18 MB already reached). The stage adds under 0.1 MB.
+- The frozen-test configuration (BKN2: 199.9 MB) was not run. The test split is not read again for a change that cannot touch answers.
+- The fresh read was made before BKN2. Its paired gain with BKN on, on the same fresh text, was not read: the session's budget was short. With BKN on, the gain on `qa`'s holdout is −0.0284 (LCI 1.000) and on `context8k`'s −0.0291.
+
+**Decision (rule 3 holds).** The document experts' cache is the default in `context8k`'s chain and `qa`'s holdout lines. `--no-doc` leaves it out, and `--doc SPEC` reads another setting. `sample` keeps GEN-C's default (no cache). No answer changes: no answer mixer is given the cache.
+
+**Predictions, scored.**
+
+| # | Result |
+|---|---|
+| D1 | **Hit:** V3 −0.0342, inside [−0.035, −0.010] |
+| D2 | **Hit:** V1 −0.0012, interval below 0 |
+| D3 | **Hit:** V4 − V3 = −0.0005 |
+| D4 | **Hit** on the choice (V2). The reason given was wrong: V3 is 0.0015 behind V2, not within 0.001 |
+| D5 | **Partial:** LCI 1.000, but the fresh gain (−0.0588) is 65% larger than dev's (−0.0357), outside ±50% |
+| D6 | **Hit:** rows byte-identical in every run |
+| D7 | **Hit:** 1.7895 → 1.7561 (−0.0333) before BKN2 |
+| D8 | **Miss** with the first wiring (built 204.3 MB); **hit** with the final one (197.2 / 196.5 MB with BKN) |
+
+**Checks.** `cyphalm_trie selftest` passes, with the new equivalence check. The other CTests were not run for this report.
+
+**How to reproduce.**
+
+```bash
+cyphalm_trie cls enwik8 shape --doc 'trig;cache;trig,cache;trig,cache,topic'           # dev
+cyphalm_trie cls enwik8 shape --doc cache --sim-stream 54530849:2097152                # fresh, once
+cyphalm_trie qa enwik8 dolly.jsonl $C1LD --save DIR --out rows.tsv; cyphalm_trie qa ... --model DIR
+cyphalm_trie context8k enwik8 dolly.jsonl [--no-doc]
+```
+
+Runs are in `/root/work/genc2/runs` (`dev`, `fresh`, `adopt/` before BKN2, `bkn/` with it).
