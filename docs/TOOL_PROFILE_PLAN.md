@@ -107,4 +107,4 @@ A tool stays only if **all** of these hold:
 2. **P1:** one adapter per tool, each at most about 200 lines: tag-context expert, class-context expert, fact-text shard writer, teacher-text shard writer, abstain gate.
 3. **P2:** the grid (section 4), plus the leakage check.
 4. **P3:** decisions (section 5). The frozen test runs once, on the final kept set only. **Done 2026-10-28** ([report](reports/TOOL_PROFILE_P2_GRID.md)).
-5. **P4:** delete what failed, fold what passed into the library, and write a dated report with every number and every cut. **Done 2026-10-28:** `cypha_gate` deleted; `pattern_learn` flagged for Odin.
+5. **P4:** delete what failed, fold what passed into the library, and write a dated report with every number and every cut. **Done 2026-10-28:** `cypha_gate` deleted; `pattern_learn` flagged for Odin. **Odin, 2026-10-29: keep `pattern_learn`** as Track S's fact and hypothesis tool (PLAN ledger 65); it never answers.

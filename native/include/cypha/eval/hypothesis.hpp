@@ -9,6 +9,8 @@
 //         distance (bridging), novelty, compression gain, impact, z-scored interestingness
 //   7.2   Bayes-factor updating and the decision rule; 7.4 promotion through ECS on independent evidence only;
 //   7.5   refutation: kept, counted against the generator and the rule, blocks regeneration while cooling
+//   7.1-7.3 (S7) test outcomes (positive, negative, inconclusive), the pre-registration log (I5, I6), e-values and
+//         Benjamini-Hochberg batch control, T1's functional check, T3's held-out rule check, measured s and c
 //   11    invariants I1 (no hypothetical item in answers), I4 (independent evidence), I7 (refuted kept, blocks), I8 (labels)
 //
 // Nothing here answers a question. The stores are bookkeeping about what Cypha knows and does not (PLAN rules 9 and 10).
@@ -18,9 +20,11 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <deque>
 #include <map>
 #include <optional>
+#include <set>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -28,6 +32,7 @@
 #include <vector>
 
 #include "cypha/eval/epistemic.hpp"
+#include "cypha/eval/lci.hpp"
 
 namespace cypha::eval {
 
@@ -385,6 +390,7 @@ struct HypTest {
   bool positive = false;
   double bayes_factor = 1.0;
   double posterior_after = 0.0;
+  bool inconclusive = false;     // S7: the test ran and could not tell (BF 1)
 };
 
 struct HypHistory {
@@ -416,9 +422,10 @@ struct Hypothesis {
   std::vector<HypHistory> history;
 };
 
-/// I4: evidence counts as independent only when the test says so and does not come from the generator itself.
+/// I4: evidence counts as independent only when the test says so and does not come from the generator itself. An
+/// inconclusive result (S7) is no evidence.
 inline bool independent_evidence(const Hypothesis& h, const HypTest& t) {
-  return t.done && t.independent && t.source != h.generator;
+  return t.done && !t.inconclusive && t.independent && t.source != h.generator;
 }
 
 inline bool has_independent_evidence(const Hypothesis& h) {
@@ -472,6 +479,269 @@ inline HypState decide(const Hypothesis& h, const HypothesisConfig& cfg = {}) {
   }
   if (done >= cfg.irreducible_k && moved < cfg.irreducible_move) return HypState::Irreducible;
   return HypState::Queued;
+}
+
+// ---------------------------------------------------------------------------
+// 7.1-7.3 S7: test outcomes, pre-registration (I5, I6), e-values and batch control
+// ---------------------------------------------------------------------------
+
+/// A test's result. Inconclusive: the test ran and could not tell (no constraint applied, no source covers the slot).
+enum class TestOutcome { Positive, Negative, Inconclusive };
+
+inline const char* test_outcome_name(TestOutcome o) {
+  return o == TestOutcome::Positive ? "positive" : o == TestOutcome::Negative ? "negative" : "inconclusive";
+}
+
+/// BF of a three-way result: as bayes_factor for positive and negative, 1 for inconclusive.
+inline double bayes_factor(TestOutcome o, double s, double c) {
+  return o == TestOutcome::Inconclusive ? 1.0 : bayes_factor(o == TestOutcome::Positive, s, c);
+}
+
+/// The e-value of a hypothesis against its null (h false): the product of its results' Bayes factors. With the tests'
+/// true s and c and results independent given the truth, its expectation under the null is 1, so it is a valid e-value
+/// at every stopping point (7.2 step 4).
+inline double e_value(const Hypothesis& h) {
+  double e = 1.0;
+  for (const HypTest& t : h.tests)
+    if (t.done) e *= t.bayes_factor;
+  return e;
+}
+
+/// 7.3 batch control: Benjamini-Hochberg at level q on p = min(1, 1/e) (lci.hpp). True where the null is rejected.
+inline std::vector<bool> bh_reject_e(const std::vector<double>& e_values, double q = 0.1) {
+  std::vector<double> p;
+  p.reserve(e_values.size());
+  for (double e : e_values) p.push_back(e_to_p(e));
+  return benjamini_hochberg(p, q).reject;
+}
+
+/// One entry of the pre-registration log (7.2 step 1). A plan is written before any of its tests runs; a result is
+/// appended against it. Entries are only ever appended. Each carries an FNV-1a 64 hash of its fields and of the previous
+/// entry's hash, so an edit, a dropped entry or a reordering breaks the chain (I5).
+struct PreregEntry {
+  std::size_t seq = 0;
+  std::string kind;    // "plan" or "result"
+  std::string hyp_id;
+  std::string text;    // plan: the tests; result: "k outcome"
+  std::uint64_t prev = 0, hash = 0;
+};
+
+/// The pre-registration log: the experiment DB's preregistration and result tables (native/sql/experiment_schema.sql)
+/// as an append-only, hash-chained list.
+///   I5: a test runs only under a registered plan, its result is recorded once, and a plan cannot change once any of
+///       its tests has a result. A plan registered again before any result supersedes the earlier one; both stay.
+///   I6: a plan is refused unless one of its tests searches for disconfirming evidence.
+class PreregLog {
+ public:
+  bool register_plan(const Hypothesis& h, std::string* why = nullptr) {
+    auto no = [&](const char* w) {
+      if (why) *why = w;
+      return false;
+    };
+    if (h.id.empty() || h.tests.empty()) return no("an empty plan");
+    bool disconfirm = false;
+    for (const HypTest& t : h.tests) disconfirm = disconfirm || t.disconfirmation;
+    if (!disconfirm) return no("I6: no test searches for disconfirming evidence");
+    if (has_result(h.id)) return no("I5: a test of this plan already has a result");
+    std::string text;
+    for (std::size_t k = 0; k < h.tests.size(); ++k) {
+      const HypTest& t = h.tests[k];
+      if (k) text += '\x1e';
+      text += t.kind + '\x1f' + t.source + '\x1f' + t.predicted + '\x1f' + t.refuted_if + '\x1f' + (t.disconfirmation ? "1" : "0") +
+              '\x1f' + (t.independent ? "1" : "0") + '\x1f' + num(t.sensitivity) + '\x1f' + num(t.specificity);
+    }
+    append("plan", h.id, text);
+    plans_[h.id] = h.tests;
+    return true;
+  }
+
+  bool record(const std::string& hyp_id, std::size_t k, TestOutcome o, std::string* why = nullptr) {
+    auto no = [&](const char* w) {
+      if (why) *why = w;
+      return false;
+    };
+    const auto it = plans_.find(hyp_id);
+    if (it == plans_.end()) return no("I5: the test was not pre-registered");
+    if (k >= it->second.size()) return no("I5: the test is not in the registered plan");
+    if (!results_.insert(hyp_id + '\x1f' + std::to_string(k)).second) return no("I5: the result is already recorded");
+    append("result", hyp_id, std::to_string(k) + ' ' + test_outcome_name(o));
+    return true;
+  }
+
+  bool registered(const std::string& hyp_id) const { return plans_.count(hyp_id) > 0; }
+  bool has_result(const std::string& hyp_id) const {
+    const auto it = results_.lower_bound(hyp_id + '\x1f');
+    return it != results_.end() && it->compare(0, hyp_id.size() + 1, hyp_id + '\x1f') == 0;
+  }
+  /// The registered plan (its latest registration), or nullptr.
+  const std::vector<HypTest>* plan(const std::string& hyp_id) const {
+    const auto it = plans_.find(hyp_id);
+    return it == plans_.end() ? nullptr : &it->second;
+  }
+
+  /// Recomputes the chain: false when any entry was edited, dropped, inserted or reordered.
+  bool verify() const {
+    std::uint64_t prev = 0;
+    for (std::size_t i = 0; i < entries_.size(); ++i) {
+      const PreregEntry& e = entries_[i];
+      if (e.seq != i || e.prev != prev || e.hash != entry_hash(e)) return false;
+      prev = e.hash;
+    }
+    return true;
+  }
+
+  /// One line per entry: seq, kind, hypothesis id, text, previous hash, hash (tab-separated; tabs, newlines and
+  /// backslashes in a field are escaped).
+  std::string serialize() const {
+    std::string out;
+    for (const PreregEntry& e : entries_)
+      out += std::to_string(e.seq) + '\t' + e.kind + '\t' + esc(e.hyp_id) + '\t' + esc(e.text) + '\t' + std::to_string(e.prev) +
+             '\t' + std::to_string(e.hash) + '\n';
+    return out;
+  }
+
+  /// Reads serialize()'s lines back as they are: the chain is not trusted until verify() says so.
+  static PreregLog parse(const std::string& tsv) {
+    PreregLog log;
+    std::size_t at = 0;
+    while (at < tsv.size()) {
+      std::size_t nl = tsv.find('\n', at);
+      if (nl == std::string::npos) nl = tsv.size();
+      std::vector<std::string> f;
+      std::size_t b = at;
+      for (std::size_t i = at; i <= nl; ++i)
+        if (i == nl || tsv[i] == '\t') f.push_back(tsv.substr(b, i - b)), b = i + 1;
+      at = nl + 1;
+      if (f.size() != 6) continue;
+      PreregEntry e;
+      e.seq = static_cast<std::size_t>(std::stoull(f[0]));
+      e.kind = f[1], e.hyp_id = unesc(f[2]), e.text = unesc(f[3]);
+      e.prev = std::stoull(f[4]), e.hash = std::stoull(f[5]);
+      log.entries_.push_back(e);
+      if (e.kind == "result") log.results_.insert(e.hyp_id + '\x1f' + e.text.substr(0, e.text.find(' ')));
+      if (e.kind == "plan") log.plans_[e.hyp_id] = parse_plan(e.text);
+    }
+    return log;
+  }
+
+  const std::vector<PreregEntry>& entries() const { return entries_; }
+
+ private:
+  static std::uint64_t fnv(const std::string& s, std::uint64_t h) {
+    for (unsigned char c : s) h = (h ^ c) * 1099511628211ULL;
+    return h;
+  }
+  static std::uint64_t entry_hash(const PreregEntry& e) {
+    std::uint64_t h = fnv(std::to_string(e.seq) + '\x1d' + e.kind + '\x1d' + e.hyp_id + '\x1d' + e.text + '\x1d', 1469598103934665603ULL);
+    return fnv(std::to_string(e.prev), h);
+  }
+  static std::string num(double x) {
+    char b[32];
+    std::snprintf(b, sizeof b, "%.17g", x);
+    return b;
+  }
+  static std::string esc(const std::string& s) {
+    std::string o;
+    for (char c : s) o += c == '\\' ? "\\\\" : c == '\t' ? "\\t" : c == '\n' ? "\\n" : std::string(1, c);
+    return o;
+  }
+  static std::string unesc(const std::string& s) {
+    std::string o;
+    for (std::size_t i = 0; i < s.size(); ++i) {
+      if (s[i] != '\\' || i + 1 == s.size()) {
+        o += s[i];
+        continue;
+      }
+      const char n = s[++i];
+      o += n == 't' ? '\t' : n == 'n' ? '\n' : n;
+    }
+    return o;
+  }
+  static std::vector<std::string> cut(const std::string& s, char d) {
+    std::vector<std::string> out;
+    std::size_t b = 0;
+    for (std::size_t i = 0; i <= s.size(); ++i)
+      if (i == s.size() || s[i] == d) out.push_back(s.substr(b, i - b)), b = i + 1;
+    return out;
+  }
+  static std::vector<HypTest> parse_plan(const std::string& text) {
+    std::vector<HypTest> plan;
+    for (const std::string& line : cut(text, '\x1e')) {
+      const auto f = cut(line, '\x1f');
+      if (f.size() != 8) continue;
+      HypTest t;
+      t.kind = f[0], t.source = f[1], t.predicted = f[2], t.refuted_if = f[3];
+      t.disconfirmation = f[4] == "1", t.independent = f[5] == "1";
+      t.sensitivity = std::atof(f[6].c_str()), t.specificity = std::atof(f[7].c_str());
+      plan.push_back(t);
+    }
+    return plan;
+  }
+  void append(const char* kind, const std::string& id, const std::string& text) {
+    PreregEntry e;
+    e.seq = entries_.size();
+    e.kind = kind, e.hyp_id = id, e.text = text;
+    e.prev = entries_.empty() ? 0 : entries_.back().hash;
+    e.hash = entry_hash(e);
+    entries_.push_back(e);
+  }
+
+  std::vector<PreregEntry> entries_;
+  std::map<std::string, std::vector<HypTest>> plans_;
+  std::set<std::string> results_;  // hyp_id \x1f k
+};
+
+/// Measured s and c of a test kind (7.1): its three-way results on known-true and known-false hypotheses.
+/// s = P(positive | true, applicable), c = P(negative | false, applicable); applicable = not inconclusive.
+struct TestTally {
+  double t_pos = 0, t_neg = 0, t_inc = 0;  // on true hypotheses
+  double f_pos = 0, f_neg = 0, f_inc = 0;  // on false hypotheses
+
+  void add(bool truth, TestOutcome o) {
+    double* row = truth ? &t_pos : &f_pos;
+    row[o == TestOutcome::Positive ? 0 : o == TestOutcome::Negative ? 1 : 2] += 1.0;
+  }
+  double sensitivity() const { return t_pos + t_neg > 0 ? t_pos / (t_pos + t_neg) : 0.0; }
+  double specificity() const { return f_pos + f_neg > 0 ? f_neg / (f_pos + f_neg) : 0.0; }
+  double s_lo() const { return wilson_lower(t_pos, t_pos + t_neg); }
+  double s_hi() const { return wilson_upper(t_pos, t_pos + t_neg); }
+  double c_lo() const { return wilson_lower(f_neg, f_pos + f_neg); }
+  double c_hi() const { return wilson_upper(f_neg, f_pos + f_neg); }
+  double total() const { return t_pos + t_neg + t_inc + f_pos + f_neg + f_inc; }
+  double applicable() const { return total() > 0 ? (t_pos + t_neg + f_pos + f_neg) / total() : 0.0; }
+  /// Youden's J = s + c - 1, and a conservative interval from the two Wilson intervals.
+  double youden() const { return sensitivity() + specificity() - 1.0; }
+  double youden_lo() const { return s_lo() + c_lo() - 1.0; }
+  double youden_hi() const { return s_hi() + c_hi() - 1.0; }
+  /// Mutual information between the three-way result and the truth, bits per hypothesis (S7's choice statistic).
+  double mutual_information_bits() const {
+    const double n = total();
+    if (n <= 0) return 0.0;
+    const double cell[2][3] = {{t_pos, t_neg, t_inc}, {f_pos, f_neg, f_inc}};
+    const double row[2] = {t_pos + t_neg + t_inc, f_pos + f_neg + f_inc};
+    double mi = 0.0;
+    for (int j = 0; j < 3; ++j) {
+      const double col = cell[0][j] + cell[1][j];
+      for (int i = 0; i < 2; ++i)
+        if (cell[i][j] > 0) mi += cell[i][j] / n * std::log2(cell[i][j] * n / (row[i] * col));
+    }
+    return mi;
+  }
+};
+
+/// T3, held-out prediction for a rule (7.1): `hits` of `n` hidden cases the rule predicted right. Positive when the
+/// Wilson 95% lower bound of the hidden precision is at least `lo_min`, negative when its upper bound is below `hi_max`,
+/// inconclusive otherwise or with fewer than `min_n` hidden cases.
+inline TestOutcome rule_holdout_test(double hits, double n, double lo_min = 0.3, double hi_max = 0.5, double min_n = 3.0) {
+  if (n < min_n) return TestOutcome::Inconclusive;
+  if (wilson_lower(hits, n) >= lo_min) return TestOutcome::Positive;
+  if (wilson_upper(hits, n) < hi_max) return TestOutcome::Negative;
+  return TestOutcome::Inconclusive;
+}
+
+/// T1's functional part: s already holds another value of r.
+inline bool functional_conflict(const TripleStore& st, const std::string& s, const std::string& r, const std::string& o) {
+  return st.has_relation(s, r) && !st.has(s, r, o);
 }
 
 // ---------------------------------------------------------------------------
@@ -620,6 +890,27 @@ class HypothesisStore {
       generators_[h->generator].observe(false);
       if (!h->rule.empty()) rules_[h->rule].observe(false);
     }
+    return next;
+  }
+
+  /// S7: a three-way result. With a log, the test must be in the hypothesis's registered plan (same kind, same place)
+  /// and the log must accept the result first (I5); otherwise nothing changes. An inconclusive result has BF 1: the
+  /// posterior stays, the test counts as done, and 7.2 step 5 is applied as for any other result.
+  std::optional<HypState> record_outcome(const std::string& id, std::size_t k, TestOutcome outcome, PreregLog* log = nullptr) {
+    Hypothesis* h = find_mut(id);
+    if (!h || h->state != HypState::UnderTest || k >= h->tests.size() || h->tests[k].done) return std::nullopt;
+    if (log) {
+      const std::vector<HypTest>* plan = log->plan(id);
+      if (!plan || k >= plan->size() || (*plan)[k].kind != h->tests[k].kind || !log->record(id, k, outcome)) return std::nullopt;
+    }
+    if (outcome != TestOutcome::Inconclusive) return record_result(id, k, outcome == TestOutcome::Positive);
+    HypTest& t = h->tests[k];
+    t.done = true;
+    t.inconclusive = true;
+    t.bayes_factor = 1.0;
+    t.posterior_after = h->posterior;
+    const HypState next = decide(*h, cfg_);
+    transition(id, next, t.kind + " inconclusive");
     return next;
   }
 
