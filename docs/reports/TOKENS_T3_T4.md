@@ -503,3 +503,144 @@ Command: `arm.sh test K16 --inf-cap 16 --temps 1.0` (`cyphalm_tok_gen gen … --
 3. **A no-copy rule when sampling:** a token is banned when writing it would extend a span already found in the training text past 32 bytes. It is the repeat ban's twin, aimed at the training text. It looks text up, so it needs Odin's ruling under PLAN rule 10 (it gates; it never writes) before it is tried.
 
 **Cost.** About 380 MB peak resident per arm. About 16 minutes per three-temperature arm at load 8 (25–32 minutes with the nucleus, which sorts 4,096 tokens per step); 8.5 minutes for the one-temperature test arm.
+
+## T4c: the nucleus and repeat ban over Kneser–Ney alone, and a wider nucleus (registered 2026-10-29, before any T4c run)
+
+**Odin Loch** · 2026-10-29 · decided by measurement under PLAN ledger 55, open to Odin's veto
+
+**Question.** T4b found that the byte sampler's nucleus 0.9 and repeat ban (NR) lift dev SCRIBE at T 1.0 to 0.181, clear of the byte model, but copy 11.6% of their bytes (the limit is 7.9%). Kneser–Ney alone (K0) copies least. T4b wrote down two next designs: NR over Kneser–Ney alone, and a wider nucleus. T4c reads both on GEN-A's dev split. A no-copy sampling rule is not tried: it looks text up, so it needs Odin's ruling under PLAN rule 10.
+
+**Tool.** `cyphalm_tok_gen` as on main 84c0547 (its source is T4b's 7300e77). No code changes: the flags exist (`--inf-cap`, `--nucleus`, `--no-repeat`, `--temps`). This build reproduces T4b's K0 dev file byte for byte (first 3 prompts, 13 lines) and its continuation bits, so T4b's dev arms are reused as they stand.
+
+**Arms** (BPE-W 4,096, TOK-A's model, as T4 and T4b; only sampling changes):
+
+| Label | Flags | Temperatures | Note |
+|---|---|---|---|
+| NRK0 | `--inf-cap 0 --nucleus 0.9 --no-repeat` | 0.8, 1.0 | NR over Kneser–Ney alone. T 0.6 is not run: K0 alone copies 0.310 there and NR raises copying |
+| N95K0 | `--inf-cap 0 --nucleus 0.95 --no-repeat` | 1.0 | a wider nucleus, no ∞-gram |
+| N97K0 | `--inf-cap 0 --nucleus 0.97 --no-repeat` | 1.0 | |
+| N95K16 | `--inf-cap 16 --nucleus 0.95 --no-repeat` | 1.0 | a wider nucleus, T4b's chosen cap |
+| N97K16 | `--inf-cap 16 --nucleus 0.97 --no-repeat` | 1.0 | |
+
+Reused from T4b (dev, the same binary source and settings): K0, K16 (nucleus 1, no repeat ban), NR (cap 64, nucleus 0.9) and NRK16 (cap 16, nucleus 0.9). So at T 1.0 the grid has nucleus {0.9, 0.95, 0.97, 1} × cap {0, 16}.
+
+**Unchanged by design.** The human continuations are scored by T4's model (cap 64, no nucleus) through the bridge, so every arm's continuation bits per byte must be 2.0260 on dev, with each `.cont.tsv` byte-identical to T4b's.
+
+**The dev choice** (as T4b's):
+1. Each arm is one setting at one temperature. SCRIBE v2 is read pooled at that temperature.
+2. **Eligible:** dev copy share at most the byte comparator's (GEN-A's D0 at T 0.6: 0.0586) + 0.02, that is at most **0.0786**.
+3. **Chosen:** the eligible arm with the highest dev SCRIBE, among the T4c arms and the eligible arms already read (K16 at T 1.0, 0.112; T4's TB at T 1.0, 0.110; K0 0.090; K8 0.085). Within 0.005 (T4b's tie band), the lower copy share wins.
+4. **Test read only if** the chosen arm is a T4c arm and its dev SCRIBE point estimate is above **0.106** (the byte comparator's 0.101 plus the tie band) **and** above **0.117** (K16's 0.112, the best token arm already read on test, plus the tie band). An arm that ties K16 on dev is not a change worth a second frozen-test read; K16's test read already answered that question.
+
+**The test read (once).** The chosen arm at its temperature (`--temps T`) on `gen_prompts_test.tsv`. The byte comparator is T4's B0 test run, reused (the same prompts, binary `cyphalm_trie_91827e1` with no flags, a deterministic sampler). **Gate:** SCRIBE above B0 at T 0.6 (0.106 [0.078, 0.135]) with disjoint 95% intervals, and the copy share at most B0's at T 0.6 + 0.02 (0.0761). Logged in GEN_TRACK's Reads table. A pass makes the sampler a candidate for `sample`'s default; the switch is a later integration step.
+
+**Reported together**, every arm: SCRIBE v2 [95%] with surface S, D_I, kept samples and mean length, continuation bits per byte, copy share, invented-word rate, five samples.
+
+**Commands** (`/root/work/tokd/runs/t4c/arm.sh SPLIT LABEL [gen flags]`, T4b's `arm.sh` with paths changed):
+
+```
+B=/root/work/tokd/build/cyphalm_tok_gen; E=/root/cdata/enwik8; TK=/root/work/toka/runs/tok/t-bpe-4096.tok
+SC=/root/work/gena/runs/scribe_gena; O=/root/work/tokd/runs/t4c/dev
+$B gen $E $TK $O/NRK0.gen.txt --prompts-file bench/eval/gen_prompts_dev.tsv --inf-cap 0 --nucleus 0.9 --no-repeat --temps 0.8,1.0 > $O/NRK0.sample.out
+$SC ladder --pack enwik:$E:16:48 --ref enwik:$E:48:56 --test enwik:$E:56:64 --vectors /root/work/scribe/vec32 \
+   --profile v2 --seed 20261027 --gen-trie $O/NRK0.gen.txt --label NRK0 > $O/NRK0.scribe.md
+python3 -I scripts/gen_eval_summary.py $O NRK0 dev
+$B words $E $O/NRK0.gen.txt
+```
+
+**Predictions** (registered before any run):
+
+| # | Prediction | Falsified if |
+|---|---|---|
+| U1 | NRK0 at T 1.0 copies less than NRK16 at T 1.0 (0.109): the ∞-gram is part of NR's copying | NRK0's T 1.0 copy share is 0.109 or more |
+| U2 | NRK0 at T 1.0 is eligible (copy at most 0.0786). About even odds | Its copy share is above 0.0786 |
+| U3 | NRK0 at T 0.8 is not eligible: K0 alone copies 0.147 at T 0.8 and the nucleus raises copying | Its copy share is at most 0.0786 |
+| U4 | At a fixed cap and T 1.0, widening the nucleus lowers copying: nucleus 0.9 ≥ 0.95 ≥ 0.97 ≥ 1 | Any step up in the nucleus raises copying by more than 0.005 |
+| U5 | At a fixed cap and T 1.0, widening the nucleus lowers SCRIBE: nucleus 0.9 ≥ 0.95 ≥ 0.97 ≥ 1 | Any step up in the nucleus raises SCRIBE by more than 0.01 |
+| U6 | The best eligible T4c arm's dev SCRIBE is in [0.12, 0.17] | Outside, or no T4c arm is eligible |
+| U7 | Every arm's continuation bits per byte is 2.0260, `.cont.tsv` byte-identical to T4b's | Any differs |
+| U8 | Every T4c arm at T 1.0 invents fewer words than TB at T 1.0 (0.104) | Any arm invents 0.104 or more |
+| U9 | If a test read is made, the gate is not met (the intervals overlap). About 60% | The gate is met |
+
+### T4c dev results (2026-10-29, before the test read)
+
+Tool: `cyphalm_tok_gen` built from main 84c0547 (source as T4b's 7300e77). The five arms ran side by side at load 7–10 on 4 cores: NRK0 794 s (two temperatures), the others 583–608 s; ladder 11–27 s each. T4b's arms and the byte comparator D0 are read as they stand.
+
+| Arm, temperature | Nucleus | ∞-gram cap | SCRIBE v2 [95%] | Surface S | Kept / mean bytes | Copy share | Invented words |
+|---|---|---|---|---|---|---|---|
+| D0 byte, T 0.6 (comparator) | 0.9 (byte) | (byte) | 0.101 [0.072, 0.135] | 0.900 | 213 / 328 | 0.0586 | 0.0251 |
+| **NRK0, T 1.0** | **0.9** | **0** | **0.192 [0.157, 0.225]** | 0.811 | 200 / 276 | **0.0728** | 0.0701 |
+| NRK0, T 0.8 | 0.9 | 0 | 0.344 [0.306, 0.384] | 0.868 | 208 / 263 | 0.1945 | 0.0235 |
+| N95K0, T 1.0 | 0.95 | 0 | 0.119 [0.093, 0.147] | 0.786 | 212 / 293 | 0.0647 | 0.0817 |
+| N97K0, T 1.0 | 0.97 | 0 | 0.134 [0.105, 0.164] | 0.776 | 206 / 279 | 0.0590 | 0.0868 |
+| K0, T 1.0 (T4b) | 1 | 0 | 0.090 [0.067, 0.114] | 0.760 | 206 / – | 0.0472 | 0.107 |
+| NRK16, T 1.0 (T4b) | 0.9 | 16 | 0.180 [0.147, 0.216] | 0.803 | 206 / – | 0.109 | 0.071 |
+| N95K16, T 1.0 | 0.95 | 16 | 0.132 [0.106, 0.163] | 0.789 | 211 / 283 | 0.0919 | 0.0806 |
+| N97K16, T 1.0 | 0.97 | 16 | 0.130 [0.104, 0.160] | 0.779 | 211 / 287 | 0.0793 | 0.0850 |
+| K16, T 1.0 (T4b) | 1 | 16 | 0.112 [0.085, 0.141] | 0.756 | 210 / – | 0.0749 | 0.105 |
+
+D_I is 0.00 in every arm. **Continuation bits per byte: 2.0260 [1.9954, 2.0556] in every arm**, each `.cont.tsv` byte-identical to T4b's.
+
+**The dev choice, by the registered steps.**
+1. **Eligible** (copy share at most 0.0786): NRK0 at T 1.0 (0.0728), N95K0 (0.0647), N97K0 (0.0590), and the arms already read (K16, TB, K0, K8 at T 1.0). Not eligible: NRK0 at T 0.8 (0.1945), N95K16 (0.0919) and N97K16 (0.0793, over by 0.0007).
+2. **Chosen:** NRK0 at T 1.0, dev SCRIBE 0.192. The next eligible arm is N97K0 at 0.134, so no tie.
+3. **Test read:** NRK0 is a T4c arm, and 0.192 is above both bars (0.106 and 0.117). The rule calls for the read. On dev its interval [0.157, 0.225] is clear of the byte comparator's [0.072, 0.135].
+
+**What dev shows.**
+- **Dropping the ∞-gram brings the nucleus sampler under the copy limit.** NR copies 0.116 with the full ∞-gram, 0.109 capped at 16 and 0.0728 with none, while SCRIBE stays where it was (0.181, 0.180, 0.192).
+- **A wider nucleus copies less but scores lower.** At either cap, copying falls steadily from nucleus 0.9 to 1. SCRIBE drops sharply from 0.9 to 0.95 (0.192 to 0.119 with no ∞-gram), then moves little. The 0.9 cut is what lifts SCRIBE.
+- **The nucleus sampler invents fewer words** at T 1.0: 0.070 with nucleus 0.9 against 0.107 for KN alone.
+
+### T4c test read (2026-10-29, read once)
+
+Command: `arm.sh test NRK0 --inf-cap 0 --nucleus 0.9 --no-repeat --temps 1.0` (`cyphalm_tok_gen gen … --prompts-file bench/eval/gen_prompts_test.tsv --inf-cap 0 --nucleus 0.9 --no-repeat --temps 1.0`, then the ladder and the summary). 276 s at load about 7. The byte comparator is T4's B0 test run, reused.
+
+| Arm | SCRIBE v2 [95%] | Surface S [95%] | D_I | Kept / mean bytes | Copy share | Invented words |
+|---|---|---|---|---|---|---|
+| **NRK0, T 1.0** | **0.187 [0.155, 0.217]** | 0.809 [0.800, 0.818] | 0.00 | 213 / 280 | **0.0649** | 0.0687 |
+| B0 byte, T 0.6 (T4's run) | 0.106 [0.078, 0.135] | 0.901 [0.893, 0.909] | 0.00 | 206 / 334 | 0.0561 | 0.0243 |
+| B0 byte, T 1.0 (same run, for reference) | 0.046 [0.027, 0.065] | 0.797 | 0.00 | 204 / 290 | 0.0227 | – |
+| T4b's K16, T 1.0 (for reference) | 0.115 [0.091, 0.143] | 0.765 | 0.00 | 198 / 275 | 0.0728 | 0.1017 |
+
+**Continuation bits per byte:** 2.0263 [1.9921, 2.0620], `.cont.tsv` byte-identical to T4b's K16 test run; minus B0, paired: −0.1033 [−0.1142, −0.0927].
+
+**The gate.** SCRIBE 0.187 against 0.106: the intervals are disjoint (0.155 above 0.135). **Met.** Copy share 0.0649 against the limit 0.0761: **met.**
+
+**Decision: the gate is met.** By the registration, NRK0 (the token sampler with the nucleus 0.9 and repeat ban over Kneser–Ney alone, T 1.0) is a candidate for `sample`'s default. The switch is not made here: it is a later integration step, and it is not small. The token sampler is its own tool (`cyphalm_tok_gen`, peak about 380 MB per run), so making it `sample`'s default means bringing the token model and the bridge into `cyphalm_trie sample` (or `sample` calling the token tool), with its own parity and memory checks. No default changed.
+
+**What it is and is not.** The text is still word salad by eye (samples below). SCRIBE rates it above the byte sampler's best and above the token sampler's earlier arms, but far below sentences shuffled across documents (0.344). The gain over T4 and T4b comes from the nucleus cut, with copying held down by dropping the ∞-gram from sampling. The human continuations are still scored by the full token model, 0.10 bits per byte better than the byte model.
+
+**Samples** (dev, T 1.0, cut to 150 bytes):
+- " Gra]]'' (c/ Indust. There is a more conservative members had worked as the [[Indo-European [[zinc]], [[game. Manycher]] and others. The accord of Sund…"
+- " These giant succeeded to have a labor government.org/index.shtml Islam people her own. [[storyID=25, at the court of Pauline, [[super) has neverand t…"
+- " When Karpov over the discontinuela, ammonia or '' in the media]], [[Hungarian [[National emphasizes the city that forms of an exchanged can, it has st…"
+
+Test, T 1.0:
+- " On the six schools of thought maintains of varying completeness theoremi. [[beta (province)|Cabinda]] and middle as immor, also ;dism database, most…"
+- " 1943 | authorlink = Nice is elected a god or, in some, the Government of Alberta website] * [http://www.flight | comment= }} {{Elementbox_isotopes_e…"
+
+### T4c predictions, scored
+
+| # | Prediction | Result |
+|---|---|---|
+| U1 | NRK0 at T 1.0 copies less than NRK16 (0.109) | **Hit:** 0.0728 |
+| U2 | NRK0 at T 1.0 is eligible (copy at most 0.0786) | **Hit:** 0.0728 |
+| U3 | NRK0 at T 0.8 is not eligible | **Hit:** 0.1945 |
+| U4 | At a fixed cap and T 1.0, a wider nucleus copies less | **Hit:** cap 0: 0.0728 / 0.0647 / 0.0590 / 0.0472; cap 16: 0.109 / 0.0919 / 0.0793 / 0.0749 (nucleus 0.9 / 0.95 / 0.97 / 1) |
+| U5 | At a fixed cap and T 1.0, a wider nucleus scores lower | **Miss:** with no ∞-gram, 0.95 → 0.97 rises 0.119 → 0.134 (+0.015). The fall from 0.9 to 0.95 is large (0.192 → 0.119); above 0.95 SCRIBE moves within its intervals |
+| U6 | The best eligible T4c arm's dev SCRIBE is in [0.12, 0.17] | **Miss:** 0.192 |
+| U7 | Every arm's continuation bits per byte is 2.0260, `.cont.tsv` identical to T4b's | **Hit:** byte-identical on dev and on test |
+| U8 | Every T4c arm at T 1.0 invents fewer words than TB (0.104) | **Hit:** 0.070–0.087 |
+| U9 | A test read does not meet the gate | **Miss:** the gate is met |
+
+6 hits, 3 misses.
+
+### T4c status
+
+**Done (2026-10-29). Gate met on test; no default changed.** The token sampler with the byte sampler's nucleus 0.9 and repeat ban, over Kneser–Ney alone (`--inf-cap 0 --nucleus 0.9 --no-repeat`, T 1.0), scores SCRIBE v2 0.187 [0.155, 0.217] on GEN-A's test split against the byte default's 0.106 [0.078, 0.135], copying 0.0649 of its bytes (limit 0.0761). It is the first generation change on this benchmark whose interval clears the byte default's as registered (T4's B0; see the caveat below).
+
+**Next (integration, not run here):** bring the token sampler into `sample` as an option and then a default, with `qa` and `chat` untouched (answers stay the byte model's), parity of `sample`'s other paths, and a memory read (about 380 MB per token run today, against `sample`'s 70 MB). Per PLAN ledger 74, defaults switch on T4; this read is T4's gate met by the T4c sampler. Odin may veto.
+
+**A caveat found at the end (2026-10-29).** While T4c ran, main changed `sample`'s byte default: BKN2 (main c756ee3, PLAN ledger 89) adds byte Kneser–Ney. T4c's registered comparator is T4's B0, the byte default as it was. The new byte default scores 0.157 on GEN-A's dev split at T 0.6 (pooled 0.125 [0.107, 0.143]; BYTE_KN.md), against B0's 0.101. NRK0's dev 0.192 [0.157, 0.225] is not clearly above it. So T4c's pass is against the old byte default only. Before any switch, the token sampler must be compared with the new byte default under its own registration (dev first; the new default has no test read on this benchmark yet).
+
+**Cost.** About 380 MB peak resident per arm. 583–608 s per one-temperature dev arm and 794 s for two temperatures at load 7–10; 276 s for the one-temperature test arm.
