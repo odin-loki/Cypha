@@ -478,9 +478,9 @@ The store with PL is the same on both halves' runs (the split only changes which
 
 **Rule 2 holds.** The leaked entries are gone (no Wikidata person-relation value typed as a country enters the person lexicon); gold-test agreement is unchanged; confirmed facts fall by 0.10% (≤ 1%). **Arm PL is adopted as the default** (decided by measurement under PLAN ledger 55, open to Odin's veto).
 
-- **How it is the default:** the table is committed (`data/f2c/wd_seed_types.tsv`, 98 KB, with its README and `scripts/f2c_fetch_seed_types.py`). `pattern_learn` loads it from the working directory (the repository root, as every run here does) unless `--no-lexicon-type-check` is given. `--lexicon-type-check FILE` names another table; `--lexicon-type-arm P` keeps places as they were.
+- **How it is the default** (at integration it waited behind `--lexicon-type-check FILE` until the references were regenerated; F2c-b below turned it on): the table is committed (`data/f2c/wd_seed_types.tsv`, 98 KB, with its README and `scripts/f2c_fetch_seed_types.py`). `pattern_learn` loads it from the working directory (the repository root, as every run here does) unless `--no-lexicon-type-check` is given. `--lexicon-type-check FILE` names another table; `--lexicon-type-arm P` keeps places as they were.
 - **What changes by default:** S3's gap map becomes `ba221cb2c79cc1ee` (27,752 gaps; was `a77678d8ef7dfdef`, 27,842). With `--no-lexicon-type-check` every output is byte-identical to before.
-- **References to regenerate** (by whoever owns them; not done here). Every mode that rebuilds the type lexicons from Wikidata seeds runs pass 1 through the new check:
+- **References to regenerate** (done in F2c-b, below). Every mode that rebuilds the type lexicons from Wikidata seeds runs pass 1 through the new check:
   - the main run: S3's `--gaps` reference (`/root/work/s4/runs/test/`: `gap_map.tsv`, its cells file, `facts_f2.tsv`, `facts_f2.evidence.tsv`, `facts_wd_check.tsv`, `patterns.tsv`, `sample_admitted.tsv`; `seeds.tsv`, `pages.tsv` and the demand file do not change), the v2 store if it is rebuilt, F2/F2b/D4's reads, S4's frontier and S4b/S4c's `--signals` runs (U reads the store's patterns);
   - `--test-kinds` (S7, S7b, S7c), `--gen-links` (S8b; S8d's `--fresh-confirm` and S10's `--fresh-test-half` pools), `--gen-rules` (S8a, the same pools), `--worlds` (S9), `--gen-concepts` (S11a), `--gen-anomaly` and `--gen-analogy` (S11c);
   - modes that only read those outputs (`--sources`, `--schedule`, `--score-planted`) change only through their inputs.
@@ -513,3 +513,74 @@ E=/root/cdata/enwik8; W=/root/work/f2/wikidata/wd_values.tsv; T=data/f2c/wd_seed
 ./pattern_learn $E A1PL --cv --wikidata $W --f2b-gold-split --f2b-xa                              # A1 with PL
 ./pattern_learn $E T0PL --cv --wikidata $W --f2b-read-test                                        # the test read (once)
 ```
+
+## F2c-b: the type check on by default (2026-10-29)
+
+**Odin Loch** · 2026-10-29 · PLAN ledger 81 (decided by measurement under row 55, open to Odin's veto)
+
+At integration F2c's check stayed behind `--lexicon-type-check FILE`, off by default, until the reference outputs were regenerated. F2c-b turns it on and regenerates them.
+
+### What changed
+
+- `lexfix::take_flags` reads the check's flags before any mode runs. The check is on by default, with arm PL and the committed table `data/f2c/wd_seed_types.tsv`.
+- The table is looked for in `$CYPHA_F2C_TYPES`, then beside the source file the tool was built from, then in the working directory (the repository root, as for `bench/eval`).
+- `--lexicon-type-check FILE` still names another table. `--lexicon-type-arm P|PL` picks the arm. `--no-lexicon-type-check` gives the outputs from before, byte for byte.
+- If no table is found, the first Wikidata seed that needs it stops the run. The message names the places searched. The check never turns itself off. Modes that read no Wikidata seed (for example `--wilson`) run without the table.
+- Every pass-1 lexicon copy already widens through `lexfix::widen_ok`, so one switch governs them all:
+  - the main run (S3, S4b, S4c, S4d, F2b);
+  - `--test-kinds` (S7, S7b, S7c);
+  - `--gen-rules` (S8a);
+  - `--gen-links` (S8b), and through its corpus loader `--gen-anomaly`, `--gen-analogy` (S11c) and `--gen-deep` (S12a);
+  - `--worlds` (S9, S9b);
+  - `--gen-concepts` (S11a, S11d).
+- `--s7d`, `--gen-laws`, `--sources`, `--schedule` and `--score-planted` build no lexicon. They read files, so they change only if their input files are rebuilt.
+
+### Parity: `--no-lexicon-type-check` against main's tool (53f4387)
+
+| Read | Result |
+|---|---|
+| S3 `--gaps` with S4b's signals | 13 of 14 files identical; `stats.txt` and stdout differ only in paths and timings. S3's 10 reference files identical (gap map `a77678d8ef7dfdef`) |
+| `--gen-rules` (S8a, dev) | 8 of 8 files and stdout identical (timings masked) |
+| `--gen-concepts` (S11a, dev, A1) | 2 of 2 files and stdout identical (timings masked) |
+
+### The new reference
+
+`/root/work/s3ref_f2c/`, the S3 `--gaps` command with the default on. Its gap map is `ba221cb2c79cc1ee`, the same as F2c's own PL run, and all 10 files and the blocked-values list equal that run's.
+
+| File | sha256, first 16 | Against the old reference |
+|---|---|---|
+| `gap_map.tsv` | `ba221cb2c79cc1ee` | changed |
+| `gap_map.tsv.cells.tsv` | `0ccb8de4d20671c7` | changed |
+| `gap_map.tsv.demand.tsv` | `dd1c8ddac831dcb6` | same |
+| `facts_f2.tsv` | `0c3df03ee3003ff6` | changed |
+| `facts_f2.evidence.tsv` | `35ad3196e19b1c8b` | changed |
+| `facts_wd_check.tsv` | `ee9ffc41e7d1033b` | changed |
+| `pages.tsv` | `aaf63bba31828c93` | same |
+| `patterns.tsv` | `5aa1de8a40616f64` | changed |
+| `sample_admitted.tsv` | `f9478cfa5bd5ac78` | changed |
+| `seeds.tsv` | `3e958326bf11ddb3` | same |
+
+### What moved (dev reads only)
+
+Main's tool against the new default, on each mode's dev command. No frozen test set was read again: a test read with the new default would be a new read, and none was registered.
+
+| Read | What changed |
+|---|---|
+| S3 (main run) | Person pages 3,429 → 3,283, place pages 4,137 → 4,046 (147 person and 60 place values kept out). Raw new facts 1,435 → 1,428 (birth_place 573 → 571, death_place 118 → 117). Gaps 27,842 → 27,752 (schema 26,333 → 26,250; certainty 1,342 → 1,335). Gap calibration moves by 0.0001–0.0002 Brier. In the top 100 questions, contradiction 45 → 40, schema 15 → 20 |
+| S4b signals | No alarm changes (`signal_gaps.tsv` identical). U: one more eligible sentence (28,660 → 28,661; the rate is unchanged at 0.9927) |
+| S7 / S7b / S7c (`--test-kinds`, dev) | Choices unchanged: φ stays "store", S7c's hybrid keeps K4 for Known. T1 c 0.918 → 0.919 (one more false hypothesis T1 calls negative). S7c dev K4 promoted 572 → 570 (precision 0.976 → 0.975); K1 215 → 214 |
+| S8a (`--gen-rules`, dev) | 7 fewer hypotheses selected, all ungraded (supported 143 → 136, promoted 105 → 98); every graded count and precision is unchanged. R1's T4 c unchanged; R2's T4 c 0.914 → 0.915 |
+| S8b (`--gen-links`, dev) | One more hypothesis refuted (391 → 392, false 334 → 335, precision 0.971) |
+| S9 (`--worlds --s9b`, dev) | One item: "Free software movement" founder "Luxembourg" is now refuted by T1, because the country is no longer in the person lexicon. T1 c 0.911 → 0.912 |
+| S11a (`--gen-concepts`, dev) | G11: one "died in" pair fewer (11/19 → 11/18 holding on dev, 0.579 → 0.611) |
+| S12a (`--gen-deep --fresh-dev`) | Unchanged (the prospective log differs only in its timestamp) |
+| S11c (`--gen-anomaly`, dev) | Unchanged: 2 of 2 files and stdout identical (timings masked) |
+
+Not run: `--gen-analogy`. Its 300-dimension vectors (`ppmi_svd_output/enwik8`) are no longer on this machine. It builds its lexicons through the same loader as `--gen-anomaly`.
+
+### Checks
+
+- `pattern_learn --f2b-selftest`: 32 checks, 0 failed (7 new for F2c-b: on by default, no table found, `--no-lexicon-type-check`, `--lexicon-type-arm P`, a named table, an unreadable named table, a text seed without a table).
+- Four planted bugs each fail it: the default left off (4 checks fail), `--no-lexicon-type-check` ignored (1), a missing table not marked (1), a named table ignored (2).
+- Fail closed: run from a directory without the table and without `$CYPHA_F2C_TYPES`, the S3 command stops with exit 2 and the message; `--wilson` still runs.
+- `native_epistemic_test`: 1,478 checks, 0 failed. `pattern_learn` builds clean with `-Wall`.
