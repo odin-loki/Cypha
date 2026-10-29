@@ -128,6 +128,8 @@ Tool: `native/tools/pattern_learn.cpp` ([D4 report](reports/D4_WIKIDATA_SEEDS_AN
 | Gap map (`--gaps`, [S3/S5 report](reports/S3_S5_GAP_MAP_AND_HYPOTHESES.md)) | 27,842 gaps (schema 26,333, contradiction 128, certainty 1,342, demand 39); 6,062 not parked; P(exists) Brier 0.0301, calibrated. CyphaLM's dev tags name their question's slot 0 / 750 |
 | Unseen estimates (S4, [report](reports/S4_UNSEEN_AND_FRONTIER.md)) | Good–Turing with the page as the unit is within 4% of what held-out pages bring (test half, read once: words 0.968, entities 0.980, facts 1.000); the plain n₁/N undercounts by 20–50%. Store coverage 0.42 of the slots that exist on pages already read (person 0.56, place 0.25, other 0.20); `pattern_learn --frontier` |
 | Hypothesis scoring (S6, [report](reports/S6_HYPOTHESIS_SCORING.md)) | P0 ranks known-true above known-false at 0.738 [0.717, 0.758] on a fresh planted set (gate 0.75 missed); the store's pairwise rules carry it; the hard date constraint lifts dates 0.55 → 0.66 |
+| Hypothesis tests (S7, [report](reports/S7_HYPOTHESIS_TESTS.md)) | Sensitivity / specificity on test, read once: T1 consistency 0.78 / 0.89, T4 corpus 0.99 / 0.83, T5 Wikidata 0.77 / 1.00, T6 compression 0.20 / 0.95, T3 rules 1.00 / 0.67; T2 cut (no consequence rule fired). The §7.2 loop supports 56 (all true) and refutes 115 (92% false); BH at q 0.1 decides only 6% |
+| Temporal holdout (S15, [report](reports/S15_TEMPORAL_HOLDOUT.md)) | Frozen in `bench/eval/`: 38,393 facts about 4,059 enwik8 subjects, each with a false partner; 8,574 true by 2006 but unstated, 1,917 true only after 2006-03-04 (99 deaths); test half unread; the Wikidata cache is committed |
 
 ## Corpus on D:
 

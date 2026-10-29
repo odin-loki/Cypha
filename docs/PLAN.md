@@ -932,6 +932,9 @@ Everything raised on 2026-10-26, and where this plan covers it.
 | 60 | Next work: the echo fix, Track S1 and serving from stored files, "all three in parallel" (2026-10-28) | [`reports/B4C_ECHO_GATE.md`](reports/B4C_ECHO_GATE.md) (class and copy off inside answers, defaults where the rules hold); [`reports/S1_REASON_CODES_AND_EVIDENCE.md`](reports/S1_REASON_CODES_AND_EVIDENCE.md); [`reports/RAM_PROFILE.md`](reports/RAM_PROFILE.md) M10–M14 |
 | 61 | A reason code describes what CyphaLM has read ("You pick. Most honest."); S1's 82% stands: "If the data isn't there, it isn't there. Don't worry about it." (2026-10-28) | HANDOFF §2 and §5.7; S1 report |
 | 62 | Decided by measurement under row 55 (2026-10-28), open to Odin's veto: for text, DISCOVERY §3.3's missing mass counts by page (S4: within 4%, n₁/N undercounts by 20–50%); S6's P0 keeps DISCOVERY §6.1's constraint term, and its parts are judged by one joint test, not one at a time (S6b) | [`reports/S4_UNSEEN_AND_FRONTIER.md`](reports/S4_UNSEEN_AND_FRONTIER.md); [`reports/S6_HYPOTHESIS_SCORING.md`](reports/S6_HYPOTHESIS_SCORING.md) |
+| 63 | Delete the 35 hybrid-era `cypha_slow` tests and the code only they use (2026-10-29: "Delete them") | [`reports/SLOW_TEST_TRIAGE.md`](reports/SLOW_TEST_TRIAGE.md) |
+| 64 | The text score the decision rules use is SCRIBE v2; surface S is reported alongside (2026-10-29) | [`reports/SCRIBE_V2.md`](reports/SCRIBE_V2.md); HANDOFF §2 rule 5 |
+| 65 | Keep `pattern_learn` as Track S's fact and hypothesis tool; it never answers (2026-10-29) | [`TOOL_PROFILE_PLAN.md`](TOOL_PROFILE_PLAN.md); HANDOFF §5 |
 
 ---
 
