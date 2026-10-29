@@ -7,6 +7,7 @@
 #include "cypha/eval/gen_links.hpp"
 #include "cypha/eval/gen_rules.hpp"
 #include "cypha/eval/hypothesis.hpp"
+#include "cypha/eval/worlds.hpp"
 
 #include <cmath>
 #include <cstdio>
@@ -1724,6 +1725,308 @@ static void test_s7c() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// S9: possible worlds, T2 through worlds, reductio, fragility, the card; I9 (worlds are never written back)
+// ---------------------------------------------------------------------------
+static Rule s9_rule(RuleKind k, const std::string& head, const std::string& head_o, const std::string& r1, const std::string& c1,
+                    const std::string& r2, bool inv1, bool inv2, double support, double pca_body, bool kept = true) {
+  Rule R;
+  R.kind = k, R.head = head, R.head_o = head_o, R.r1 = r1, R.c1 = c1, R.r2 = r2, R.inv1 = inv1, R.inv2 = inv2;
+  R.support = support, R.pca_body = pca_body, R.body = pca_body, R.kept = kept;
+  return R;
+}
+
+static void test_worlds_S9() {
+  TripleStore st;
+  st.add("Town1", "country", "Land1");
+  st.add("Town2", "country", "Land2");
+  st.add("Bob", "nationality", "Land2");
+  st.add("Cat", "birth_place", "Town1");
+  st.add("Cat", "nationality", "Land1");
+  st.add("Dan", "occupation", "Artist");
+  st.add("Fay", "language", "Lang9");
+  st.add("Ida", "birth_place", "Town2");
+  st.add("Jo", "birth_place", "Town2");
+  st.add("Jo", "passport", "Land2");
+  const std::vector<Rule> rules = {
+      s9_rule(RuleKind::Const, "occupation", "Artist", "occupation", "Painter", "", false, false, 9, 10),       // 0.9
+      s9_rule(RuleKind::Const, "field", "Art", "occupation", "Artist", "", false, false, 10, 10),               // 1.0
+      s9_rule(RuleKind::Path, "nationality", "", "birth_place", "", "country", false, false, 12, 12),          // 1.0
+      s9_rule(RuleKind::Same, "citizenship", "", "nationality", "", "", false, false, 17, 20),                 // 0.85
+      s9_rule(RuleKind::Const, "language", "Lang2", "citizenship", "Land2", "", false, false, 8, 10),          // 0.8
+      s9_rule(RuleKind::Same, "nationality", "", "passport", "", "", false, false, 9, 10),                    // 0.9
+      s9_rule(RuleKind::Inverse, "successor", "", "predecessor", "", "", false, false, 19, 20),               // 0.95
+      s9_rule(RuleKind::Inverse, "predecessor", "", "successor", "", "", false, false, 18, 20),               // 0.9
+      s9_rule(RuleKind::Const, "field", "Law", "occupation", "Painter", "", false, false, 2, 10, false),      // not kept
+  };
+  const RuleBook book(rules);
+  CHECK(book.rules().size() == 8);  // the rule that was not kept is left out
+  const std::uint64_t fp0 = store_fingerprint(st);
+  const std::size_t n0 = st.size();
+
+  // Functional slots: nationality and language. A fact conflicts when its slot holds other values (the fact itself aside).
+  auto functional = [](const std::string& r) { return r == "nationality" || r == "language"; };
+  ConflictChecks cc;
+  cc.held = [&](const World& w, const Triple& t, Triple& culprit, std::string& kind) {
+    if (!functional(t.r)) return false;
+    bool other = false;
+    for (const auto& f : w.held_facts_of(t.s)) {
+      if (f.r != t.r || f.o == t.o) continue;
+      if (!other) culprit = Triple{t.s, t.r, f.o};
+      other = true;
+    }
+    if (other) kind = "functional";
+    return other;
+  };
+  cc.pair = [&](const Triple& a, const Triple& b) { return functional(a.r) && a.r == b.r && a.o != b.o; };
+
+  // The overlay: assumptions are held in the world, retractions hide stored facts, the store is untouched.
+  {
+    World w(st);
+    w.add("Ann", "occupation", "Painter");
+    w.retract("Cat", "nationality", "Land1");
+    CHECK(w.held(Triple{"Ann", "occupation", "Painter"}));
+    CHECK(!w.held(Triple{"Cat", "nationality", "Land1"}));
+    CHECK(st.has("Cat", "nationality", "Land1") && !st.has("Ann", "occupation", "Painter"));
+    CHECK(w.values("Cat", "nationality").empty());
+    CHECK(w.values("Ann", "occupation").size() == 1);
+    CHECK(w.subjects_with("occupation", "Painter").size() == 1);
+  }
+
+  // Forward chaining, depth and confidence: Painter -> Artist (0.9) -> field Art (0.9 x 1.0).
+  {
+    World w(st);
+    w.add("Ann", "occupation", "Painter");
+    const ChainResult r = chain(w, book, ChainConfig{3, 0.8}, cc);
+    CHECK(r.derived.size() == 2 && r.confirmed.empty() && r.contradictions.empty() && r.direct.empty());
+    if (r.derived.size() == 2) {
+      CHECK(r.derived[0].t == (Triple{"Ann", "occupation", "Artist"}) && r.derived[0].depth == 1);
+      CHECK_NEAR(r.derived[0].conf, 0.9, 1e-12);
+      CHECK(r.derived[1].t == (Triple{"Ann", "field", "Art"}) && r.derived[1].depth == 2);
+      CHECK_NEAR(r.derived[1].conf, 0.9, 1e-12);
+      CHECK(r.derived[1].premises.size() == 1 && r.derived[1].premises[0] == r.derived[0].t);
+    }
+    World w1(st);
+    w1.add("Ann", "occupation", "Painter");
+    CHECK(chain(w1, book, ChainConfig{1, 0.8}, cc).derived.size() == 1);
+  }
+  // A path, a same and a const rule: depth 3, confidence 1.0 x 0.85 x 0.8. Depth 2 stops one short.
+  {
+    World w(st);
+    w.add("Eve", "birth_place", "Town2");
+    const ChainResult r = chain(w, book, ChainConfig{3, 0.8}, cc);
+    CHECK(r.derived.size() == 3);
+    if (r.derived.size() == 3) {
+      CHECK(r.derived[0].t == (Triple{"Eve", "nationality", "Land2"}) && r.derived[0].premises.size() == 2);
+      CHECK(r.derived[0].premises.size() == 2 && r.derived[0].premises[1] == (Triple{"Town2", "country", "Land2"}));
+      CHECK(r.derived[2].t == (Triple{"Eve", "language", "Lang2"}) && r.derived[2].depth == 3);
+      CHECK_NEAR(r.derived[1].conf, 0.85, 1e-12);
+      CHECK_NEAR(r.derived[2].conf, 0.85 * 0.8, 1e-12);
+    }
+    World w2(st);
+    w2.add("Eve", "birth_place", "Town2");
+    CHECK(chain(w2, book, ChainConfig{2, 0.8}, cc).derived.size() == 2);
+    // The path rule from its second atom: a new country for Town1 reaches Cat (born there).
+    World w3(st);
+    w3.add("Town1", "country", "Land3");
+    const ChainResult r3 = chain(w3, book, ChainConfig{1, 0.8}, cc);
+    CHECK(r3.derived.size() == 1 && r3.derived[0].t == (Triple{"Cat", "nationality", "Land3"}));
+    CHECK(r3.contradictions.size() == 1 && r3.contradictions[0].culprit == (Triple{"Cat", "nationality", "Land1"}));
+    // The inverse rule.
+    World w4(st);
+    w4.add("Q", "predecessor", "P");
+    const ChainResult r4 = chain(w4, book, ChainConfig{3, 0.8}, cc);
+    CHECK(r4.derived.size() == 1 && r4.derived[0].t == (Triple{"P", "successor", "Q"}));
+    // At depth 2 the inverse rule leads back to the assumption: held, so a confirmation, but not the store's.
+    CHECK(r4.confirmed.size() == 1 && r4.confirmed[0].t == (Triple{"Q", "predecessor", "P"}) && !r4.confirmed[0].by_store);
+    CHECK(t2_world(st, book, Triple{"Q", "predecessor", "P"}, ChainConfig{}, cc) == TestOutcome::Inconclusive);
+  }
+
+  // T2 through worlds. Positive: Dan painter -> Dan artist, which the store holds.
+  {
+    ChainResult r;
+    CHECK(t2_world(st, book, Triple{"Dan", "occupation", "Painter"}, ChainConfig{}, cc, &r) == TestOutcome::Positive);
+    CHECK(r.confirmed.size() == 1 && r.confirmed[0].t == (Triple{"Dan", "occupation", "Artist"}) && r.derived.empty());
+    CHECK(r.confirmed.size() == 1 && r.confirmed[0].by_store);
+    // Negative: Bob born in Town1 makes him Land1's, but the store holds Land2 in a functional slot.
+    CHECK(t2_world(st, book, Triple{"Bob", "birth_place", "Town1"}, ChainConfig{}, cc, &r) == TestOutcome::Negative);
+    CHECK(r.contradictions.size() == 1);
+    if (!r.contradictions.empty()) {
+      CHECK(r.contradictions[0].fact == (Triple{"Bob", "nationality", "Land1"}));
+      CHECK(r.contradictions[0].culprit == (Triple{"Bob", "nationality", "Land2"}));
+      CHECK_STR(r.contradictions[0].kind, "functional");
+      CHECK(!r.contradictions[0].among_derived);
+    }
+    // Below the confidence floor a clash is not a contradiction: Fay's derived language (0.68) clashes with Lang9.
+    CHECK(t2_world(st, book, Triple{"Fay", "birth_place", "Town2"}, ChainConfig{3, 0.8}, cc, &r) == TestOutcome::Inconclusive);
+    CHECK(r.derived.size() == 3 && r.contradictions.empty());
+    CHECK(t2_world(st, book, Triple{"Fay", "birth_place", "Town2"}, ChainConfig{3, 0.6}, cc) == TestOutcome::Negative);
+    CHECK(t2_world(st, book, Triple{"Fay", "birth_place", "Town2"}, ChainConfig{2, 0.6}, cc) == TestOutcome::Inconclusive);
+    // h's own conflict is T1's: reported apart, not a T2 negative.
+    CHECK(t2_world(st, book, Triple{"Bob", "nationality", "Land1"}, ChainConfig{}, cc, &r) == TestOutcome::Inconclusive);
+    CHECK(r.direct.size() == 1 && r.contradictions.empty());
+    // Two derived values in one functional slot.
+    World w(st);
+    w.add("Hal", "birth_place", "Town1");
+    w.add("Hal", "birth_place", "Town2");
+    const ChainResult rp = chain(w, book, ChainConfig{1, 0.8}, cc);
+    CHECK(rp.contradictions.size() == 1 && rp.contradictions[0].among_derived && rp.contradictions[0].kind == "derived pair");
+    // A planted bug would show: with no checks there is nothing to contradict.
+    CHECK(t2_world(st, book, Triple{"Bob", "birth_place", "Town1"}, ChainConfig{}, ConflictChecks{}) == TestOutcome::Inconclusive);
+  }
+
+  // Reductio: minimal conflicting subsets, supersets pruned.
+  const std::vector<Triple> as = {{"Bob", "birth_place", "Town1"}, {"Hal", "birth_place", "Town1"},
+                                  {"Hal", "birth_place", "Town2"}, {"Ann", "occupation", "Painter"}};
+  const auto mcs = minimal_conflicting_subsets(st, book, as, ChainConfig{}, cc);
+  CHECK(mcs.size() == 2);
+  if (mcs.size() == 2) {
+    CHECK(mcs[0] == std::vector<std::size_t>({0}));
+    CHECK(mcs[1] == std::vector<std::size_t>({1, 2}));
+  }
+  CHECK(minimal_conflicting_subsets(st, book, {{"Ann", "occupation", "Painter"}}, ChainConfig{}, cc).empty());
+
+  // Consequences that disappear when a fact is retracted: Ida's three; Jo keeps his through the passport rule.
+  {
+    World w(st);
+    w.retract("Ida", "birth_place", "Town2");
+    const auto v = vanished(w, book, ChainConfig{});
+    CHECK(v.size() == 3);
+    if (v.size() == 3) CHECK(v[2] == (Triple{"Ida", "language", "Lang2"}));
+    World wj(st);
+    wj.retract("Jo", "birth_place", "Town2");
+    CHECK(vanished(wj, book, ChainConfig{}).empty());
+    CHECK(derivable(wj, book, Triple{"Jo", "language", "Lang2"}, 3));
+    CHECK(!derivable(wj, book, Triple{"Jo", "language", "Lang2"}, 2));
+  }
+
+  // The card: labelled, data, ends with the closing line once.
+  {
+    World w(st);
+    w.add("Bob", "birth_place", "Town1");
+    const ChainResult r = chain(w, book, ChainConfig{}, cc);
+    WorldCard c;
+    c.added = w.assumed_added();
+    c.consequences = r.derived;
+    c.contradictions = r.contradictions;
+    c.minimal_conflicts = {{as[0]}};
+    const std::string text = format_world_card(c);
+    CHECK(is_labelled(text));
+    CHECK(starts_with(text, "HYPOTHETICAL"));
+    const std::string close = "Nothing here is stored.\n";
+    CHECK(text.size() > close.size() && text.compare(text.size() - close.size(), close.size(), close) == 0);
+    CHECK(text.find("Nothing here is stored.") == text.rfind("Nothing here is stored."));
+    CHECK(text.find("Minimal conflicting subsets: {Bob birth_place Town1}") != std::string::npos);
+    CHECK(text.find("Bob nationality Land1 vs Bob nationality Land2 (functional)") != std::string::npos);
+    CHECK(text.find("Tainted:") != std::string::npos);
+  }
+
+  // I9: no world writes back. The store is byte-identical after every world above, write_back refuses, and what a world
+  // exports is tainted, so answer mode never sees it even with a confident opinion.
+  {
+    World w(st);
+    w.add("Eve", "birth_place", "Town2");
+    w.retract("Cat", "nationality", "Land1");
+    chain(w, book, ChainConfig{}, cc);
+    TripleStore target = st;
+    CHECK(!w.write_back(target));
+    CHECK(store_fingerprint(target) == fp0 && target.size() == n0);
+    CHECK(store_fingerprint(st) == fp0 && st.size() == n0);
+    CHECK(!st.has("Eve", "nationality", "Land2") && st.has("Cat", "nationality", "Land1"));
+    KnowledgeStore ks;
+    ks.add(KnowledgeItem{"store:" + Triple{"Town2", "country", "Land2"}.key(), opinion_from_counts(100, 0), std::nullopt, false, {}});
+    const auto items = w.export_items();
+    CHECK(items.size() == 4);  // one assumption, three derived facts
+    for (auto it : items) {
+      CHECK(it.hypothetical);
+      it.opinion = opinion_from_counts(100, 0);
+      if (!it.premises.empty()) it.hypothetical = false;  // a planted bug: a derived item's flag dropped. Its premises still carry the taint.
+      ks.add(it);
+    }
+    for (const auto& it : items) CHECK(ks.tainted(it.id));
+    CHECK(ks.answer_view().size() == 1);  // only the observed store item
+    // The fingerprint does catch a change: one more triple, or one changed object.
+    TripleStore more = st;
+    more.add("Eve", "nationality", "Land2");
+    CHECK(store_fingerprint(more) != fp0);
+    TripleStore other;
+    for (const auto& [s, fs] : st.subjects())
+      for (const auto& f : fs) other.add(s, f.r, s == "Bob" ? "Land9" : f.o);
+    CHECK(other.size() == n0 && store_fingerprint(other) != fp0);
+  }
+
+  // Fragility (7.6). tau = Beta(20, 1)'s mean for every source; W = 2, a = 0.5.
+  {
+    const double tau = prior_infobox().mean();
+    auto src = [&](std::size_t id, double t) { SourceItem s; s.source = id; s.item.tau = t; return s; };
+    std::vector<FragFact> F(12);
+    for (std::size_t i = 0; i < F.size(); ++i) F[i].s = "S" + std::to_string(i), F[i].r = "r", F[i].o = "o";
+    F[0].sources = {src(0, tau)};                       // one source: a single point of failure
+    F[1].sources = {src(1, tau), src(2, tau)};          // two sources
+    F[2].sources = {src(3, tau)};                       // a source and a strong derivation from fact 0
+    F[2].derivations = {FactDerivation{0, {0}, 0.9}};
+    F[3].sources = {src(4, tau)};                       // a source and a weak derivation from fact 0
+    F[3].derivations = {FactDerivation{0, {0}, 0.5}};
+    F[4].sources = {src(5, tau), src(6, tau), src(7, tau)};  // a functional slot, rival fact 5
+    F[4].rivals = {5}, F[4].phi = 1.0;
+    F[5].sources = {src(8, tau)};
+    F[5].rivals = {4}, F[5].phi = 1.0;
+    F[6].sources = {src(9, tau)};                       // source 9 holds facts 6-9
+    F[6].hard = 1;                                      // a hard violation: contested
+    F[7].sources = {src(9, tau)};
+    F[8].sources = {src(9, tau)};
+    F[9].sources = {src(9, tau), src(10, tau)};
+    F[10].sources = {src(11, 0.3)};                     // a weak source and a derivation from fact 7
+    F[10].derivations = {FactDerivation{0, {7}, 1.0}};
+    F[11].sources = {src(12, tau)};
+    const FragilityModel M(F);
+    const Retraction none;
+    const double r1 = tau, P1 = (r1 + 1.0) / (r1 + 2.0);  // b + a u with W = 2, a = 0.5
+    CHECK_NEAR(M.direct(0, none).P, P1, 1e-12);
+    CHECK(M.state(0, none) == EpistemicState::Believed);
+    CHECK(M.top_source(0) && *M.top_source(0) == 0);
+    auto f0 = M.fragility(0);
+    CHECK(f0.worlds == 1 && f0.drops == 1 && f0.top_dropped && f0.value() == 1.0);
+    auto f1 = M.fragility(1);
+    CHECK(f1.worlds == 1 && f1.drops == 0);
+    // Fact 2: r = tau + 0.9 P1. Neither world drops it.
+    const double r2 = tau + 0.9 * P1;
+    CHECK_NEAR(M.full(2, none).P, (r2 + 1.0) / (r2 + 2.0), 1e-12);
+    CHECK(M.weakest_premise(2) && *M.weakest_premise(2) == 0);
+    auto f2 = M.fragility(2);
+    CHECK(f2.worlds == 2 && f2.premise_world && f2.drops == 0);
+    // Fact 3: with its source gone only 0.5 P1 is left: u >= 0.8, Ignorant. Half fragile.
+    auto f3 = M.fragility(3);
+    CHECK(f3.worlds == 2 && f3.drops == 1 && f3.top_dropped && !f3.premise_dropped);
+    Retraction r3;
+    r3.sources.insert(4);
+    CHECK(M.state(3, r3) == EpistemicState::Ignorant);
+    // Rivals: fact 4 is believed against its weaker rival; fact 5 is not held (Very low -> Ignorant).
+    CHECK(M.state(4, none) == EpistemicState::Believed);
+    CHECK(M.state(5, none) == EpistemicState::Ignorant);
+    CHECK(M.fragility(5).worlds == 0);
+    CHECK_NEAR(M.direct(4, none).s, tau, 1e-12);  // phi x the rival's mass
+    Retraction r8;
+    r8.sources.insert(8);
+    CHECK(M.direct(4, r8).P > M.direct(4, none).P);
+    CHECK(M.dropped_by(r8).empty());
+    // A hard violation: d >= 0.5, Contested.
+    CHECK(M.state(6, none) == EpistemicState::Contested);
+    // Blast radius of source 9: facts 7 and 8 (their only source) and fact 10 one level on (its derivation's premise).
+    Retraction r9;
+    r9.sources.insert(9);
+    CHECK(M.dropped_by(r9) == std::vector<std::size_t>({7, 8, 10}));
+    CHECK(M.state(9, r9) == EpistemicState::Believed);
+    CHECK(M.state(7, r9) == EpistemicState::Vacuous);
+    // The drop table.
+    CHECK(drops(EpistemicState::Known, EpistemicState::Believed));
+    CHECK(!drops(EpistemicState::Believed, EpistemicState::Believed));
+    CHECK(drops(EpistemicState::Believed, EpistemicState::Contested));
+    CHECK(!drops(EpistemicState::Ignorant, EpistemicState::Vacuous));
+  }
+  CHECK(store_fingerprint(st) == fp0 && st.size() == n0);  // I9 again, after everything
+}
+
 static void test_gap_map() {
   // The gap id CyphaLM writes (cyphalm_trie dktext rows and its dev tags).
   CHECK_STR(gap_id("Honduras", "capital"), "G-AEC1");
@@ -1824,6 +2127,7 @@ int main() {
   test_links_S8b();
   test_gen_rules_S8a();
   test_s7c();
+  test_worlds_S9();
   test_gap_map();
   std::printf("epistemic_test: %d checks, %d failed\n", g_checks, g_failed);
   return g_failed == 0 ? 0 : 1;

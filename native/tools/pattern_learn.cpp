@@ -90,6 +90,11 @@
 //   (S15) on the 2006-text store, S7's tests (T2 back) and loop deciding the rules' predictions, and G14 explaining
 //   contested slots. Cypha's own hypotheses only.
 //
+// S9 (2026-10-29, docs/reports/S9_WORLDS_AND_FRAGILITY.md):
+//   --worlds ENWIK8 SEEDS WD_VALUES FACTS_F2 S15_DEV OUT [--read-confirm]: possible worlds (worlds.hpp). T2 through worlds
+//   on S7's dev set and, once, on S15 dev's choose half; fragility of the v2 store (single points of failure, blast radius
+//   per source); hypothetical cards as data; I9 checked on every world. Bookkeeping only: it answers nothing.
+//
 // Build: g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp -o pattern_learn
 // Usage: pattern_learn <enwik8> <outdir> [--cv] [--folds K] [--min-train N] [--base-rate A] [--sample N] [--seed S]
 //          [--wikidata FILE [--wikidata-gold-only]] [--phi FILE] [--shard FILE --dev DEV --test TEST [--slice-end B] [--holdout-from B]]
@@ -109,6 +114,7 @@
 #include "cypha/eval/gap_map.hpp"
 #include "cypha/eval/gen_links.hpp"
 #include "cypha/eval/gen_rules.hpp"
+#include "cypha/eval/worlds.hpp"
 
 #include <sys/resource.h>
 
@@ -6979,11 +6985,856 @@ int run(int argc, char** argv) {
 
 }  // namespace s8a
 
+// pattern_learn --worlds ENWIK8 SEEDS.tsv WD_VALUES.tsv FACTS_F2.tsv S15_DEV.tsv OUT_PREFIX [--read-confirm]
+// (DISCOVERY 4.4, 7.2 T2, 7.6, 12 I9; docs/reports/S9_WORLDS_AND_FRAGILITY.md). Possible worlds (worlds.hpp). T2 through
+// worlds on S7's dev set (S7's reduced store, rules mined on it): six variants (depth 1-3, type check on or off), chosen
+// by mutual information, three-way likelihoods with Wilson and pair-bootstrap intervals, S8a's T2 beside it. The fresh
+// confirm read on S15 dev's choose half only with --read-confirm. Fragility of the v2 store (seeds and admitted facts):
+// states, each held fact's top source and weakest premise retracted, single points of failure as certainty gaps, blast
+// radius per source instance, and hypothetical cards as data. Every base store's fingerprint is checked after every
+// world (I9). Nothing here answers a question: worlds are Cypha's bookkeeping about its own store (PLAN rule 10).
+namespace s9 {
+
+using ecs::TestOutcome;
+constexpr TestOutcome kPos = TestOutcome::Positive, kNeg = TestOutcome::Negative, kInc = TestOutcome::Inconclusive;
+using s7::PhiTable;
+
+int date_kind(const string& n) {
+    return n == "birth_year" || n == "birth_date" ? 1 : n == "death_year" || n == "death_date" ? 2 : n == "founded" ? 3 : 0;
+}
+
+// S7's T1 checks (t1_phi) applied to a fact against the world's held facts (stored or assumed, the fact itself aside):
+// a functional slot (phi >= 0.9) holding only other values (same_value), a date slot's other year when functional, the
+// lifespan checks, then (with type_check) the type checks. The type check is tried last, so a "type" clash is one no
+// other check found.
+ecs::ConflictChecks world_checks(const PhiTable& phi, bool type_check) {
+    ecs::ConflictChecks cc;
+    cc.held = [phi, type_check](const ecs::World& w, const ecs::Triple& t, ecs::Triple& culprit, string& kind) {
+        const int ri = rel_index(t.r);
+        if (ri < 0) return false;
+        const bool functional = phi[static_cast<std::size_t>(ri)] >= 0.9;
+        const auto facts = w.held_facts_of(t.s);
+        if (is_datey(ri)) {
+            const int k = date_kind(kRel[ri].name);
+            const Date D = parse_date_str(t.o);
+            if (k && D.ok())
+                for (const auto& f : facts) {
+                    if (f.r == t.r && f.o == t.o) continue;
+                    const int kf = date_kind(f.r);
+                    if (!kf) continue;
+                    const Date F = parse_date_str(f.o);
+                    if (!F.ok()) continue;
+                    if (kf == k && F.y != D.y && functional) {
+                        culprit = {t.s, f.r, f.o}, kind = "date slot";
+                        return true;
+                    }
+                    if ((k == 1 && kf == 2 && (F.y < D.y || F.y - D.y > 125)) || (k == 2 && kf == 1 && (D.y < F.y || D.y - F.y > 125))) {
+                        culprit = {t.s, f.r, f.o}, kind = "lifespan";
+                        return true;
+                    }
+                }
+        } else if (functional) {
+            bool other = false, same = false;
+            ecs::Triple c;
+            for (const auto& f : facts) {
+                if (f.r != t.r || f.o == t.o) continue;
+                if (s8a::same_value(ri, f.o, t.o)) same = true;
+                else if (!other) other = true, c = {t.s, f.r, f.o};
+            }
+            if (other && !same) {
+                culprit = c, kind = "functional";
+                return true;
+            }
+        }
+        if (type_check) {
+            const string k = norm_ent(t.o);
+            const RT ty = kRel[ri].type;
+            if ((ty == T_PLACE || ty == T_PLACE_LINK) && g_person.count(k) && !g_place.count(k)) {
+                culprit = {t.o, "page_type", "person"}, kind = "type";
+                return true;
+            }
+            if (ty == T_PERSON && (g_place.count(k) || g_country.count(k)) && !g_person.count(k)) {
+                culprit = {t.o, "page_type", "place"}, kind = "type";
+                return true;
+            }
+        }
+        return false;
+    };
+    cc.pair = [phi](const ecs::Triple& a, const ecs::Triple& b) {
+        const int ri = rel_index(a.r);
+        return a.r == b.r && ri >= 0 && phi[static_cast<std::size_t>(ri)] >= 0.9 && !s8a::same_value(ri, a.o, b.o);
+    };
+    cc.confirmed = [](const ecs::World& w, const ecs::Triple& t) {  // the store holds a same value (an assumption confirms nothing)
+        const int ri = rel_index(t.r);
+        for (const auto& f : w.store().facts_of(t.s))
+            if (f.r == t.r && w.in_store({t.s, f.r, f.o}) && s8a::same_value(ri, f.o, t.o)) return true;
+        return false;
+    };
+    return cc;
+}
+
+// The six variants: depth 1-3 x the type check off (0) or on (1). The registered default is depth 3 with the type check.
+constexpr int kDefD = 2, kDefT = 1;
+string variant_name(int d, int ty) { return "T2 world d" + std::to_string(d + 1) + (ty ? "+type" : " notype"); }
+
+struct Item {
+    string s, r, o;
+    int label = 0, pair = 0;
+    char set = 'U', cat = ' ';
+    bool dev = true, wd_true = false, reach = false;
+    TestOutcome t2[3][2];  // [depth - 1][type check]
+    TestOutcome t2_s8a = kInc, t1 = kInc;
+    std::size_t derived3 = 0, confirmed3 = 0;
+    string clash3;  // the default variant's first contradiction kind
+    std::set<string> soft3;  // exploratory: relations where a derived fact (default variant, conf >= 0.8) meets other held values, any phi
+};
+
+// T2 through worlds for every variant of one item. The contradictions with kind "type" count only with the type check.
+// Each world's base store is fingerprinted after it (I9).
+struct I9Count {
+    std::size_t worlds = 0, changed = 0;
+};
+void t2_item(Item& x, const ecs::TripleStore& st, std::uint64_t fp, const ecs::RuleBook& book, const ecs::ConflictChecks& cc, I9Count& i9) {
+    const ecs::Triple h{x.s, x.r, x.o};
+    for (int d = 0; d < 3; ++d) {
+        ecs::ChainResult res;
+        ecs::t2_world(st, book, h, ecs::ChainConfig{d + 1, 0.8}, cc, &res);
+        ++i9.worlds;
+        i9.changed += ecs::store_fingerprint(st) != fp;
+        bool neg_any = false, neg_notype = false;
+        for (const auto& c : res.contradictions) neg_any = true, neg_notype = neg_notype || c.kind != "type";
+        bool pos = false;
+        for (const auto& c : res.confirmed) pos = pos || c.by_store;
+        x.t2[d][1] = neg_any ? kNeg : pos ? kPos : kInc;
+        x.t2[d][0] = neg_notype ? kNeg : pos ? kPos : kInc;
+        if (d == kDefD) {
+            x.derived3 = res.derived.size();
+            for (const auto& c : res.confirmed) x.confirmed3 += c.by_store;
+            if (!res.contradictions.empty()) x.clash3 = res.contradictions[0].kind;
+            for (const auto& c : res.derived) {  // exploratory: the slot holds other values, whatever its phi
+                if (c.conf < 0.8) continue;
+                const int ri = rel_index(c.t.r);
+                bool other = false, same = false;
+                auto look = [&](const string& v) { (s8a::same_value(ri, v, c.t.o) ? same : other) = true; };
+                for (const auto& f : st.facts_of(c.t.s))
+                    if (f.r == c.t.r) look(f.o);
+                if (h.s == c.t.s && h.r == c.t.r) look(h.o);
+                if (other && !same) x.soft3.insert(c.t.r);
+            }
+        }
+    }
+}
+
+// Items counted: S6's labels (a false member Wikidata lists is left out), as S7's tallies.
+bool counted(const Item& x) { return x.label == 1 || !x.wd_true; }
+
+template <class F>
+ecs::TestTally tally(const vector<Item>& it, const vector<std::size_t>& idx, F&& outcome) {
+    ecs::TestTally t;
+    for (std::size_t i : idx)
+        if (counted(it[i])) t.add(it[i].label == 1, outcome(it[i]));
+    return t;
+}
+
+// Three-way likelihoods (add-one) with Wilson intervals on the raw proportions, and pair-bootstrap intervals of the
+// likelihood ratios (2,000 resamples of pairs, seed 20261029).
+template <class F>
+string lik_lines(const string& tag, const string& name, const vector<Item>& it, const vector<std::size_t>& idx, F&& outcome, double lr_out[3]) {
+    const ecs::TestTally t = tally(it, idx, outcome);
+    const ecs::OutcomeLikelihoods L = ecs::likelihoods_from(t);
+    std::map<int, vector<std::size_t>> pairs;
+    for (std::size_t i : idx)
+        if (counted(it[i])) pairs[it[i].pair].push_back(i);
+    vector<const vector<std::size_t>*> pv;
+    for (const auto& [k, v] : pairs) pv.push_back(&v);
+    std::mt19937_64 rng(20261029);
+    vector<double> lr[3];
+    for (int b = 0; b < 2000 && !pv.empty(); ++b) {
+        ecs::TestTally tb;
+        for (std::size_t j = 0; j < pv.size(); ++j)
+            for (std::size_t i : *pv[rng() % pv.size()]) tb.add(it[i].label == 1, outcome(it[i]));
+        const ecs::OutcomeLikelihoods Lb = ecs::likelihoods_from(tb);
+        for (int o = 0; o < 3; ++o) lr[o].push_back(Lb.t[o] / Lb.f[o]);
+    }
+    const double nt = t.t_pos + t.t_neg + t.t_inc, nf = t.f_pos + t.f_neg + t.f_inc;
+    const double ct[3] = {t.t_pos, t.t_neg, t.t_inc}, cf[3] = {t.f_pos, t.f_neg, t.f_inc};
+    const char* on[3] = {"pos", "neg", "inc"};
+    string s;
+    char b[512];
+    for (int o = 0; o < 3; ++o) {
+        std::sort(lr[o].begin(), lr[o].end());
+        const double lo = lr[o].empty() ? 0 : lr[o][static_cast<std::size_t>(0.025 * (lr[o].size() - 1))];
+        const double hi = lr[o].empty() ? 0 : lr[o][static_cast<std::size_t>(0.975 * (lr[o].size() - 1))];
+        lr_out[o] = L.t[o] / L.f[o];
+        std::snprintf(b, sizeof b, "%s LIK %-18s %s seen %4.0f | P(.|true) %.4f raw %.4f [%.4f, %.4f] | P(.|false) %.4f raw %.4f [%.4f, %.4f] | LR %.3f [%.3f, %.3f]\n",
+                      tag.c_str(), name.c_str(), on[o], ct[o] + cf[o], L.t[o], nt > 0 ? ct[o] / nt : 0.0, ecs::wilson_lower(ct[o], nt), ecs::wilson_upper(ct[o], nt), L.f[o],
+                      nf > 0 ? cf[o] / nf : 0.0, ecs::wilson_lower(cf[o], nf), ecs::wilson_upper(cf[o], nf), lr_out[o], lo, hi);
+        s += b;
+    }
+    return s;
+}
+
+const char* oname(TestOutcome o) { return ecs::test_outcome_name(o); }
+
+int run(int argc, char** argv) {
+    if (argc < 8) {
+        std::fprintf(stderr, "usage: pattern_learn --worlds ENWIK8 SEEDS.tsv WD_VALUES.tsv FACTS_F2.tsv S15_DEV.tsv OUT_PREFIX [--read-confirm]\n");
+        return 2;
+    }
+    const double t0 = now_s();
+    const string out = argv[7];
+    bool read_confirm = false;
+    for (int i = 8; i < argc; ++i) {
+        if (string(argv[i]) == "--read-confirm") read_confirm = true;
+        else { std::fprintf(stderr, "unknown option %s\n", argv[i]); return 2; }
+    }
+    char b[2048];
+    // ---- the article text and its type lexicons (S7's setup)
+    string data;
+    if (!read_file(argv[2], data)) { std::fprintf(stderr, "cannot read %s\n", argv[2]); return 1; }
+    g_dump = &data;
+    long total = 0, redirects = 0;
+    const vector<PageRef> pages = list_pages(data, total, redirects);
+    std::unordered_map<string, int> page_of;
+    for (std::size_t i = 0; i < pages.size(); ++i) page_of[pages[i].title] = static_cast<int>(i);
+    for (const PageRef& pg : pages) {
+        PageFlags fl;
+        scan_page(data, pg, fl);
+        const string nk = norm_ent(pg.title);
+        g_titles.insert(nk);
+        if (fl.place) g_place.insert(nk);
+        if (fl.person) g_person.insert(nk);
+        if (fl.country) g_country.insert(nk);
+    }
+    {
+        long ns = 0, ng = 0;
+        if (!load_wikidata(argv[4], false, page_of, ns, ng)) { std::fprintf(stderr, "cannot read %s\n", argv[4]); return 1; }
+    }
+    for (const Seed& sd : g_seeds) {
+        const RT ty = kRel[sd.rel].type;
+        if (ty == T_PLACE || ty == T_PLACE_LINK) { g_place.insert(sd.o.k1); if (!sd.o.k2.empty()) g_place.insert(sd.o.k2); }
+        if (ty == T_PERSON) g_person.insert(sd.o.k1);
+        if (ty == T_LEX && sd.o.k1.size() >= 3) g_lex[sd.o.k1] |= 1ULL << sd.rel;
+        if (string(kRel[sd.rel].name) == "located_in") g_loc[norm_ent(sd.subj)].insert(sd.o.k1);
+    }
+    // ---- the store (S7's), its seed rows with their sources, and the Wikidata values
+    struct Row {
+        string s, r, o, source;
+        std::size_t off = 0;
+    };
+    vector<Row> seed_rows;
+    std::map<string, vector<std::pair<string, string>>> by_subj;
+    std::set<string> seen, wd_src;
+    {
+        std::ifstream f(argv[3]);
+        string l;
+        std::getline(f, l);
+        while (std::getline(f, l)) {
+            const auto c = split(l, '\t');
+            if (c.size() != 6 || rel_index(c[1]) < 0 || c[0].empty() || c[2].empty()) continue;
+            seed_rows.push_back({c[0], c[1], c[2], c[3], static_cast<std::size_t>(std::strtoull(c[5].c_str(), nullptr, 10))});
+            if (c[3] == "wikidata") wd_src.insert(c[0] + '\x1f' + c[1]);
+            if (seen.insert(c[0] + '\x1f' + c[1] + '\x1f' + c[2]).second) by_subj[c[0]].push_back({c[1], c[2]});
+        }
+    }
+    ecs::TripleStore full;
+    for (auto& [s, fs] : by_subj) {
+        std::sort(fs.begin(), fs.end());
+        for (const auto& [r, o] : fs) full.add(s, r, o);
+    }
+    std::unordered_map<string, std::set<string>> wd6;
+    {
+        std::ifstream f(argv[4]);
+        string l;
+        std::getline(f, l);
+        while (std::getline(f, l)) {
+            const auto c = split(l, '\t');
+            if (c.size() < 3) continue;
+            for (const auto& x : split(c[2], '|')) wd6[c[0] + '\x1f' + c[1]].insert(lower(x));
+        }
+    }
+    const s7::WdObjs wd = s7::load_wd_objs(argv[4]);
+    // ---- S7's dev set, rebuilt with S7's code and seeds (S6's sets, then U and C hold-outs, the reduced store, false partners)
+    std::mt19937_64 rng6(20261028);
+    vector<string> subj;
+    for (const auto& [s, fs] : by_subj)
+        if (fs.size() >= 2) subj.push_back(s);
+    for (std::size_t i = subj.size(); i > 1; --i) std::swap(subj[i - 1], subj[rng6() % i]);
+    std::map<string, std::pair<string, string>> h6;
+    {
+        s6::PlantedSet A, F;
+        const std::size_t next = s6::build_set(A, subj, 0, 2000, by_subj, full, wd6, rng6);
+        s6::build_set(F, subj, next, std::numeric_limits<std::size_t>::max(), by_subj, full, wd6, rng6);
+        for (const auto* ps : {&A, &F})
+            for (const auto& x : ps->it)
+                if (x.label) h6[x.s] = {x.r, x.o};
+    }
+    struct Held {
+        string s, r, o;
+        char set;
+    };
+    vector<Held> held;
+    std::set<string> held_keys;
+    for (const auto& [s, fs] : by_subj) {
+        if (fs.size() != 1) continue;
+        if (full.count(fs[0].first, fs[0].second) < 2) continue;
+        held.push_back({s, fs[0].first, fs[0].second, 'U'});
+    }
+    std::mt19937_64 rng7(20261029);
+    for (const string& s : subj) {
+        const auto it6 = h6.find(s);
+        if (it6 == h6.end()) continue;
+        auto fs = by_subj[s];
+        for (std::size_t i = fs.size(); i > 1; --i) std::swap(fs[i - 1], fs[rng7() % i]);
+        for (const auto& [r, o] : fs)
+            if (!(r == it6->second.first && o == it6->second.second) && full.count(r, o) >= 2) {
+                held.push_back({s, r, o, 'C'});
+                break;
+            }
+    }
+    for (const auto& h : held) held_keys.insert(h.s + '\x1f' + h.r + '\x1f' + h.o);
+    ecs::TripleStore st;  // S7's reduced store
+    std::unordered_map<string, vector<string>> objects_of_rel;
+    for (const auto& [s, fs] : by_subj)
+        for (const auto& [r, o] : fs)
+            if (!held_keys.count(s + '\x1f' + r + '\x1f' + o)) st.add(s, r, o), objects_of_rel[r].push_back(o);
+    std::mt19937_64 rngf(20261030);
+    vector<Item> it;
+    std::size_t n_pairs = 0;
+    for (const auto& h : held) {
+        if (st.count(h.r, h.o) == 0) continue;
+        const auto& pool = objects_of_rel[h.r];
+        const int ri = rel_index(h.r);
+        const Date hd = is_datey(ri) ? parse_date_str(h.o) : Date{};
+        string neg;
+        for (int t = 0; t < 100 && neg.empty(); ++t) {
+            const string& c = pool[rngf() % pool.size()];
+            if (c == h.o || c == h.s || full.has(h.s, h.r, c)) continue;
+            if (is_datey(ri)) {
+                const Date cd = parse_date_str(c);
+                if (cd.ok() && hd.ok() && cd.y == hd.y) continue;
+            }
+            neg = c;
+        }
+        if (neg.empty()) continue;
+        const int pr = static_cast<int>(n_pairs++);
+        const bool dev = ((fnv(h.s) >> 11) & 1) == 0;
+        if (!dev) continue;  // S7's test half is not read
+        const auto wit = wd.find(h.s + '\x1f' + h.r);
+        Item a, x;
+        a.s = x.s = h.s, a.r = x.r = h.r, a.o = h.o, x.o = neg, a.label = 1, x.label = 0;
+        a.pair = x.pair = pr;
+        a.set = x.set = h.set;
+        x.wd_true = wit != wd.end() && s7::wd_match(ri, neg, wit->second);
+        it.push_back(a), it.push_back(x);
+    }
+    std::size_t nu = 0, nc = 0, nwd = 0;
+    for (std::size_t i = 0; i < it.size(); i += 2) (it[i].set == 'U' ? nu : nc)++, nwd += it[i + 1].wd_true;
+    std::snprintf(b, sizeof b, "S9 SET S7's dev pairs %zu (U %zu, C %zu) of %zu pairs | false members Wikidata lists %zu | reduced store %zu of %zu", it.size() / 2, nu, nc,
+                  n_pairs, nwd, st.size(), full.size());
+    std::cout << b << "\n";
+    // ---- rules mined on the reduced store (S8a's defaults), the store's phi (S7b's choice), the checks
+    const ecs::RuleIndex ix(st);
+    const vector<ecs::Rule> rules = ecs::mine_rules(ix);
+    const ecs::RuleBook book(rules);
+    const ecs::RuleSet rs(ix, rules);
+    const PhiTable phi = s7::phi_from_store(st);
+    const ecs::ConflictChecks cc = world_checks(phi, true);
+    {
+        std::map<string, int> kinds;
+        for (const auto& R : book.rules()) kinds[ecs::rule_kind_name(R.kind)]++;
+        string ks;
+        for (const auto& [k, v] : kinds) ks += " " + k + " " + std::to_string(v);
+        std::snprintf(b, sizeof b, "S9 DEV RULES mined %zu kept %zu:%s", rules.size(), book.rules().size(), ks.c_str());
+        std::cout << b << "\n";
+    }
+    // ---- T2 through worlds on every dev item, S8a's T2 and T1 (phi_store) beside it
+    I9Count i9;
+    const std::uint64_t fp_st = ecs::store_fingerprint(st);
+    const double t_dev = now_s();
+    for (Item& x : it) {
+        t2_item(x, st, fp_st, book, cc, i9);
+        x.t2_s8a = s8a::t2(ix, rs, x.s, x.r, x.o);
+        x.t1 = s7::t1_phi(st, x.s, x.r, x.o, phi);
+    }
+    std::snprintf(b, sizeof b, "S9 DEV worlds %zu in %.1f s", i9.worlds, now_s() - t_dev);
+    std::cout << b << "\n";
+    vector<std::size_t> all_idx, u_idx, c_idx;
+    for (std::size_t i = 0; i < it.size(); ++i) all_idx.push_back(i), (it[i].set == 'U' ? u_idx : c_idx).push_back(i);
+    double mi[3][2];
+    for (int d = 0; d < 3; ++d)
+        for (int ty = 0; ty < 2; ++ty) {
+            auto f = [d, ty](const Item& x) { return x.t2[d][ty]; };
+            const auto t = tally(it, all_idx, f);
+            mi[d][ty] = t.mutual_information_bits();
+            std::cout << s7::line_of("S9 DEV", variant_name(d, ty), t) << "\n";
+            std::cout << s7::line_of("S9 DEV U", variant_name(d, ty), tally(it, u_idx, f)) << "\n";
+            std::cout << s7::line_of("S9 DEV C", variant_name(d, ty), tally(it, c_idx, f)) << "\n";
+        }
+    std::cout << s7::line_of("S9 DEV", "T2 S8a (d1, hand phi)", tally(it, all_idx, [](const Item& x) { return x.t2_s8a; })) << "\n";
+    std::cout << s7::line_of("S9 DEV", "T1 phi_store", tally(it, all_idx, [](const Item& x) { return x.t1; })) << "\n";
+    // The highest MI wins. A tie keeps the registered default, or else the tied variant closest to it: the default's type
+    // setting first, then the deeper.
+    int cd = kDefD, ct = kDefT;
+    double best_mi = -1;
+    for (int d = 0; d < 3; ++d)
+        for (int ty = 0; ty < 2; ++ty) best_mi = std::max(best_mi, mi[d][ty]);
+    if (mi[kDefD][kDefT] < best_mi - 1e-12) {
+        int bd = -1, bt = -1;
+        for (const int ty : {kDefT, 1 - kDefT})
+            for (int d = 2; d >= 0; --d)
+                if (bd < 0 && mi[d][ty] >= best_mi - 1e-12) bd = d, bt = ty;
+        cd = bd, ct = bt;
+    }
+    auto chosen = [cd, ct](const Item& x) { return x.t2[cd][ct]; };
+    const ecs::TestTally tc = tally(it, all_idx, chosen);
+    const bool earns = tc.applicable() >= 0.05 && tc.youden_lo() > 0.0;
+    std::snprintf(b, sizeof b, "S9 CHOICE %s (MI %.5f bits; registered default %s MI %.5f) | EARN applicable %.3f J %+.3f [%+.3f, %+.3f] -> %s", variant_name(cd, ct).c_str(),
+                  mi[cd][ct], variant_name(kDefD, kDefT).c_str(), mi[kDefD][kDefT], tc.applicable(), tc.youden(), tc.youden_lo(), tc.youden_hi(),
+                  earns ? "earns its place" : "cut");
+    std::cout << b << "\n";
+    double lr_dev[3], lr_tmp[3];
+    std::cout << lik_lines("S9 DEV", variant_name(cd, ct), it, all_idx, chosen, lr_dev);
+    if (cd != kDefD || ct != kDefT) std::cout << lik_lines("S9 DEV", variant_name(kDefD, kDefT), it, all_idx, [](const Item& x) { return x.t2[kDefD][kDefT]; }, lr_tmp);
+    std::cout << lik_lines("S9 DEV", "T2 S8a", it, all_idx, [](const Item& x) { return x.t2_s8a; }, lr_tmp);
+    {  // the default variant's contradiction kinds, and T1 x T2 (chosen) on dev
+        std::map<string, std::array<int, 2>> kinds;
+        for (const Item& x : it)
+            if (counted(x) && !x.clash3.empty()) kinds[x.clash3][x.label == 1]++;
+        for (const auto& [k, v] : kinds) {
+            std::snprintf(b, sizeof b, "S9 DEV CLASH %-11s true %d false %d", k.c_str(), v[1], v[0]);
+            std::cout << b << "\n";
+        }
+        int joint[3][3][2] = {};
+        for (const Item& x : it)
+            if (counted(x)) joint[static_cast<int>(x.t1)][static_cast<int>(chosen(x))][x.label == 1]++;
+        for (int a = 0; a < 3; ++a)
+            for (int c = 0; c < 3; ++c) {
+                std::snprintf(b, sizeof b, "S9 DEV JOINT T1 %-12s T2 %-12s true %4d false %4d", oname(static_cast<TestOutcome>(a)), oname(static_cast<TestOutcome>(c)), joint[a][c][1],
+                              joint[a][c][0]);
+                std::cout << b << "\n";
+            }
+    }
+    {  // exploratory (dev only, no choice made on it): why T2 cannot say no. The kept rules, the derived facts' slots, and
+       // what a soft contradiction (a derived fact meeting other held values in a slot with phi >= theta) would do.
+        s8a::write_rules(out + ".dev_rules.tsv", book.rules());
+        std::map<string, std::array<int, 2>> rel_items;
+        for (const Item& x : it)
+            if (counted(x))
+                for (const string& r : x.soft3) rel_items[r][x.label == 1]++;
+        for (const auto& [r, v] : rel_items) {
+            std::snprintf(b, sizeof b, "S9 DEV EXPLORE SLOT %-13s phi_store %.3f | items whose derived fact meets other held values: true %d false %d", r.c_str(),
+                          phi[static_cast<std::size_t>(rel_index(r))], v[1], v[0]);
+            std::cout << b << "\n";
+        }
+        for (const double th : {0.5, 0.7, 0.8, 0.85}) {
+            auto soft = [&](const Item& x) {
+                for (const string& r : x.soft3)
+                    if (phi[static_cast<std::size_t>(rel_index(r))] >= th) return kNeg;
+                return x.t2[kDefD][kDefT];
+            };
+            std::snprintf(b, sizeof b, "S9 DEV EXPLORE soft phi>=%.2f", th);
+            std::cout << s7::line_of(b, "T2 d3 soft", tally(it, all_idx, soft)) << "\n";
+        }
+    }
+    {  // the dev items
+        std::ofstream f(out + ".dev_items.tsv");
+        f << "pair\tset\tlabel\twd_true\tsubject\trelation\tobject\tT1\tT2_d1_notype\tT2_d1_type\tT2_d2_notype\tT2_d2_type\tT2_d3_notype\tT2_d3_type\tT2_S8a\tderived_d3\tconfirmed_d3\tclash_d3\n";
+        for (const Item& x : it) {
+            f << x.pair << '\t' << x.set << '\t' << x.label << '\t' << x.wd_true << '\t' << x.s << '\t' << x.r << '\t' << x.o << '\t' << oname(x.t1);
+            for (int d = 0; d < 3; ++d)
+                for (int ty = 0; ty < 2; ++ty) f << '\t' << oname(x.t2[d][ty]);
+            f << '\t' << oname(x.t2_s8a) << '\t' << x.derived3 << '\t' << x.confirmed3 << '\t' << x.clash3 << '\n';
+        }
+    }
+    std::ofstream cards(out + ".cards.txt");
+    {  // cards: the first 20 dev worlds (item order) whose chosen T2 reached a contradiction
+        const ecs::ConflictChecks ccv = world_checks(phi, ct == 1);
+        int n = 0;
+        for (const Item& x : it) {
+            if (n >= 20) break;
+            if (chosen(x) != kNeg) continue;
+            const ecs::Triple h{x.s, x.r, x.o};
+            ecs::World w(st);
+            w.add(h.s, h.r, h.o);
+            const ecs::ChainResult r = ecs::chain(w, book, ecs::ChainConfig{cd + 1, 0.8}, ccv);
+            ++i9.worlds, i9.changed += ecs::store_fingerprint(st) != fp_st;
+            ecs::WorldCard c;
+            c.added = w.assumed_added();
+            c.consequences = r.derived;
+            c.contradictions = r.contradictions;
+            c.depth = cd + 1;
+            const vector<ecs::Triple> as{h};
+            for (const auto& v : ecs::minimal_conflicting_subsets(st, book, as, ecs::ChainConfig{cd + 1, 0.8}, ccv)) {
+                c.minimal_conflicts.emplace_back();
+                for (std::size_t k : v) c.minimal_conflicts.back().push_back(as[k]);
+            }
+            cards << "# dev pair " << x.pair << " (" << (x.label ? "true" : "false") << " member)\n" << ecs::format_world_card(c) << "\n";
+            ++n;
+        }
+        std::snprintf(b, sizeof b, "S9 CARDS dev worlds with a contradiction %d", n);
+        std::cout << b << "\n";
+        int np = 0;  // illustrations: the first five dev worlds where T2 (chosen) is positive
+        for (const Item& x : it) {
+            if (np >= 5) break;
+            if (chosen(x) != kPos) continue;
+            ecs::World w(st);
+            w.add(x.s, x.r, x.o);
+            const ecs::ChainResult r = ecs::chain(w, book, ecs::ChainConfig{cd + 1, 0.8}, ccv);
+            ++i9.worlds, i9.changed += ecs::store_fingerprint(st) != fp_st;
+            ecs::WorldCard c;
+            c.added = w.assumed_added();
+            c.consequences = r.derived;
+            c.depth = cd + 1;
+            string conf;
+            for (const auto& q : r.confirmed)
+                if (q.by_store) conf += (conf.empty() ? "" : "; ") + q.t.text();
+            cards << "# dev pair " << x.pair << " (" << (x.label ? "true" : "false") << " member), T2 positive: confirms " << conf << "\n" << ecs::format_world_card(c) << "\n";
+            ++np;
+        }
+    }
+    // ---- the fresh confirm read: S15 dev's choose half (bit 17 = 0) on S7b's S15-reduced store, the dev phi table as is
+    std::uint64_t fp15 = 0;
+    ecs::TripleStore st15;
+    if (read_confirm) {
+        const vector<s7::S15Pair> sp = s7::load_s15(argv[6], page_of);
+        std::set<string> drop;
+        for (const s7::S15Pair& p : sp) {
+            const int ri = rel_index(p.r);
+            for (const auto& f : full.facts_of(p.s))
+                if (f.r == p.r && s7::same_value(ri, f.o, p.vt)) drop.insert(p.s + '\x1f' + p.r + '\x1f' + f.o);
+        }
+        std::unordered_map<string, std::map<string, std::map<string, int>>> surf;
+        for (const auto& [s, fs] : by_subj)
+            for (const auto& [r, o] : fs)
+                if (!drop.count(s + '\x1f' + r + '\x1f' + o)) st15.add(s, r, o), surf[r][norm_ent(o)][o] += 1;
+        auto form = [&](const string& r, const string& v) -> string {
+            if (is_datey(rel_index(r))) return v;
+            const auto ir = surf.find(r);
+            if (ir == surf.end()) return v;
+            const auto ik = ir->second.find(norm_ent(v));
+            if (ik == ir->second.end()) return v;
+            string bs;
+            int bc = -1;
+            for (const auto& [o, c] : ik->second)
+                if (c > bc) bc = c, bs = o;
+            return bs;
+        };
+        vector<Item> it15;
+        int pr = 0;
+        for (const s7::S15Pair& p : sp) {
+            Item a, x;
+            a.s = x.s = p.s, a.r = x.r = p.r;
+            a.o = form(p.r, p.vt), x.o = form(p.r, p.vf);
+            if (a.o == x.o) continue;
+            const int pair = pr++;
+            if (((fnv(p.s) >> 17) & 1) != 0) continue;  // the confirm half (S7b's) is not read
+            a.label = 1, x.label = 0;
+            a.pair = x.pair = pair;
+            a.set = x.set = 'S';
+            a.cat = x.cat = p.cat;
+            a.reach = x.reach = st15.count(p.r, a.o) >= 1 && st15.count(p.r, x.o) >= 1;
+            it15.push_back(a), it15.push_back(x);
+        }
+        const ecs::RuleIndex ix15(st15);
+        const vector<ecs::Rule> rules15 = ecs::mine_rules(ix15);
+        const ecs::RuleBook book15(rules15);
+        const ecs::RuleSet rs15(ix15, rules15);
+        fp15 = ecs::store_fingerprint(st15);
+        for (Item& x : it15) {
+            t2_item(x, st15, fp15, book15, cc, i9);  // every variant computed; only the chosen one is judged
+            x.t2_s8a = s8a::t2(ix15, rs15, x.s, x.r, x.o);
+            x.t1 = s7::t1_phi(st15, x.s, x.r, x.o, phi);
+        }
+        vector<std::size_t> idx_all, idx_reach;
+        for (std::size_t i = 0; i < it15.size(); ++i) {
+            idx_all.push_back(i);
+            if (it15[i].reach) idx_reach.push_back(i);
+        }
+        std::snprintf(b, sizeof b, "S9 CONFIRM S15 choose half pairs %zu (reachable %zu) | S15-reduced store %zu of %zu | rules kept %zu", it15.size() / 2,
+                      idx_reach.size() / 2, st15.size(), full.size(), book15.rules().size());
+        std::cout << b << "\n";
+        bool holds = true;
+        for (const bool reach : {true, false}) {
+            const auto& idx = reach ? idx_reach : idx_all;
+            const string tag = reach ? "S9 CONFIRM REACH" : "S9 CONFIRM ALL";
+            std::cout << s7::line_of(tag.c_str(), variant_name(cd, ct), tally(it15, idx, chosen)) << "\n";
+            std::cout << s7::line_of(tag.c_str(), "T2 S8a (d1, hand phi)", tally(it15, idx, [](const Item& x) { return x.t2_s8a; })) << "\n";
+            double lr[3];
+            std::cout << lik_lines(tag, variant_name(cd, ct), it15, idx, chosen, lr);
+            if (!reach) continue;
+            const ecs::TestTally t = tally(it15, idx, chosen);
+            const double seen_pos = t.t_pos + t.f_pos, seen_neg = t.t_neg + t.f_neg;
+            const bool pos_ok = seen_pos < 5 || lr[0] > 1.0, neg_ok = seen_neg < 5 || lr[1] < 1.0;
+            holds = pos_ok && neg_ok;
+            std::snprintf(b, sizeof b, "S9 CONFIRM RULE positive seen %.0f LR %.3f (%s) | negative seen %.0f LR %.3f (%s) | dev LR pos %.3f neg %.3f -> %s", seen_pos, lr[0],
+                          seen_pos < 5 ? "not judged" : pos_ok ? "holds" : "fails", seen_neg, lr[1], seen_neg < 5 ? "not judged" : neg_ok ? "holds" : "fails", lr_dev[0], lr_dev[1],
+                          holds ? "directions hold" : "directions fail");
+            std::cout << b << "\n";
+        }
+        std::ofstream f(out + ".confirm_items.tsv");
+        f << "pair\tcategory\treachable\tlabel\tsubject\trelation\tobject\tT1\tT2_chosen\tT2_S8a\tderived_d3\tclash_d3\n";
+        for (const Item& x : it15)
+            f << x.pair << '\t' << x.cat << '\t' << x.reach << '\t' << x.label << '\t' << x.s << '\t' << x.r << '\t' << x.o << '\t' << oname(x.t1) << '\t' << oname(chosen(x)) << '\t'
+              << oname(x.t2_s8a) << '\t' << x.derived3 << '\t' << x.clash3 << '\n';
+    }
+    // ---- fragility (7.6) on the v2 store: every seed row and every admitted text fact
+    vector<string> src_name;
+    std::unordered_map<string, std::size_t> src_id;
+    auto sid = [&](const string& n) {
+        auto [p, ins] = src_id.emplace(n, src_name.size());
+        if (ins) src_name.push_back(n);
+        return p->second;
+    };
+    vector<ecs::FragFact> F;
+    std::unordered_map<string, std::size_t> fidx;
+    std::set<std::pair<std::size_t, std::size_t>> fact_src;
+    const double tau_text = ecs::prior_infobox().mean(), tau_wd = ecs::prior_wikidata().mean();
+    auto add_row = [&](const string& s, const string& r, const string& o, const string& source, double tau) {
+        const string k = s + '\x1f' + r + '\x1f' + o;
+        auto [p, ins] = fidx.emplace(k, F.size());
+        if (ins) {
+            F.emplace_back();
+            F.back().s = s, F.back().r = r, F.back().o = o;
+        }
+        const std::size_t i = p->second, so = sid(source);
+        if (!fact_src.insert({i, so}).second) return;
+        ecs::SourceItem si;
+        si.source = so;
+        si.item.tau = tau;
+        F[i].sources.push_back(si);
+    };
+    auto page_at = [&](std::size_t off) -> string {
+        auto pit = std::upper_bound(pages.begin(), pages.end(), off, [](std::size_t v, const PageRef& p) { return v < p.tb; });
+        return pit == pages.begin() ? string("?") : std::prev(pit)->title;
+    };
+    std::size_t n_text_rows = 0;
+    for (const Row& w : seed_rows) {
+        if (w.source == "wikidata") add_row(w.s, w.r, w.o, "wikidata", tau_wd);
+        else add_row(w.s, w.r, w.o, w.source + "|" + page_at(w.off), tau_text);
+    }
+    {
+        std::ifstream f(argv[5]);
+        string l;
+        std::getline(f, l);
+        while (std::getline(f, l)) {
+            const auto c = split(l, '\t');
+            if (c.size() < 9 || rel_index(c[1]) < 0 || c[0].empty() || c[2].empty()) continue;
+            add_row(c[0], c[1], c[2], "text|" + c[7], tau_text);
+            ++n_text_rows;
+        }
+    }
+    ecs::TripleStore v2;
+    for (const auto& x : F) v2.add(x.s, x.r, x.o);
+    const std::uint64_t fp_v2 = ecs::store_fingerprint(v2);
+    const PhiTable phi2 = s7::phi_from_store(v2);
+    const ecs::RuleIndex ix2(v2);
+    const vector<ecs::Rule> rules2 = ecs::mine_rules(ix2);
+    const ecs::RuleBook book2(rules2);
+    std::size_t n_deriv = 0, n_rival_pairs = 0, n_hard = 0;
+    auto idx_of = [&](const string& s, const string& r, const string& o) -> long {
+        const auto p = fidx.find(s + '\x1f' + r + '\x1f' + o);
+        return p == fidx.end() ? -1 : static_cast<long>(p->second);
+    };
+    for (std::size_t i = 0; i < F.size(); ++i) {  // depth-1 derivations from other stored facts
+        const ecs::FragFact& x = F[i];
+        for (std::size_t k : book2.with_head(x.r)) {
+            const ecs::Rule& R = book2.rules()[k];
+            vector<vector<std::size_t>> inst;
+            auto one = [&](long p) {
+                if (p >= 0 && static_cast<std::size_t>(p) != i) inst.push_back({static_cast<std::size_t>(p)});
+            };
+            if (R.kind == ecs::RuleKind::Const) {
+                if (x.o == R.head_o) one(idx_of(x.s, R.r1, R.c1));
+            } else if (R.kind == ecs::RuleKind::Same) one(idx_of(x.s, R.r1, x.o));
+            else if (R.kind == ecs::RuleKind::Inverse) one(idx_of(x.o, R.r1, x.s));
+            else {
+                vector<string> zs;
+                if (R.inv1) zs = v2.subjects_with(R.r1, x.s);
+                else
+                    for (const auto& f : v2.facts_of(x.s))
+                        if (f.r == R.r1) zs.push_back(f.o);
+                for (const string& Z : zs) {
+                    if (Z == x.o) continue;
+                    const long p1 = R.inv1 ? idx_of(Z, R.r1, x.s) : idx_of(x.s, R.r1, Z);
+                    const long p2 = R.inv2 ? idx_of(x.o, R.r2, Z) : idx_of(Z, R.r2, x.o);
+                    if (p1 >= 0 && p2 >= 0 && static_cast<std::size_t>(p1) != i && static_cast<std::size_t>(p2) != i)
+                        inst.push_back({static_cast<std::size_t>(p1), static_cast<std::size_t>(p2)});
+                }
+            }
+            for (auto& v : inst) F[i].derivations.push_back(ecs::FactDerivation{k, std::move(v), R.pca_conf()}), ++n_deriv;
+        }
+    }
+    for (const auto& [s, fs] : v2.subjects()) {  // rivals in functional slots, and lifespan violations
+        std::map<string, vector<std::size_t>> slot;
+        for (const auto& f : fs) slot[f.r].push_back(static_cast<std::size_t>(idx_of(s, f.r, f.o)));
+        for (const auto& [r, v] : slot) {
+            const int ri = rel_index(r);
+            const double ph = phi2[static_cast<std::size_t>(ri)];
+            if (ph < 0.9) continue;
+            for (std::size_t a : v) {
+                F[a].phi = ph;
+                for (std::size_t c : v)
+                    if (a != c && !s8a::same_value(ri, F[a].o, F[c].o)) F[a].rivals.push_back(c), ++n_rival_pairs;
+            }
+        }
+        for (const auto& f : fs) {
+            const int k = date_kind(f.r);
+            if (k != 1) continue;
+            const Date B = parse_date_str(f.o);
+            if (!B.ok()) continue;
+            for (const auto& g : fs) {
+                if (date_kind(g.r) != 2) continue;
+                const Date D = parse_date_str(g.o);
+                if (!D.ok() || !(D.y < B.y || D.y - B.y > 125)) continue;
+                F[static_cast<std::size_t>(idx_of(s, f.r, f.o))].hard++, F[static_cast<std::size_t>(idx_of(s, g.r, g.o))].hard++, ++n_hard;
+            }
+        }
+    }
+    const ecs::FragilityModel M(std::move(F));
+    const ecs::Retraction none;
+    std::map<string, std::size_t> by_state;
+    std::size_t n_held = 0, n_known = 0, n_bel_low = 0, n_contested = 0;
+    vector<ecs::EpistemicState> s0(M.size());
+    for (std::size_t i = 0; i < M.size(); ++i) {
+        s0[i] = M.state(i, none);
+        by_state[ecs::state_name(s0[i])]++;
+        if (ecs::held_state(s0[i])) ++n_held;
+        if (s0[i] == ecs::EpistemicState::Known) ++n_known;
+        if (s0[i] == ecs::EpistemicState::Contested) ++n_contested;
+        if (s0[i] == ecs::EpistemicState::Believed && M.full(i, none).grade == ecs::Grade::Low) ++n_bel_low;
+    }
+    {
+        std::map<string, int> kinds;
+        for (const auto& R : book2.rules()) kinds[ecs::rule_kind_name(R.kind)]++;
+        string ks, ss;
+        for (const auto& [k, v] : kinds) ks += " " + k + " " + std::to_string(v);
+        for (const auto& [k, v] : by_state) ss += " " + k + " " + std::to_string(v);
+        std::snprintf(b, sizeof b,
+                      "S9 FRAG store v2 facts %zu (seed rows %zu, text facts %zu) | source instances %zu | rules kept %zu:%s | derivations %zu | rival pairs %zu | "
+                      "lifespan violations %zu | states:%s | held %zu (Believed Low %zu = %.4f; Known %zu) | Contested %.4f of stored",
+                      M.size(), seed_rows.size(), n_text_rows, src_name.size(), book2.rules().size(), ks.c_str(), n_deriv, n_rival_pairs, n_hard, ss.c_str(), n_held, n_bel_low,
+                      n_held ? static_cast<double>(n_bel_low) / n_held : 0.0, n_known, M.size() ? static_cast<double>(n_contested) / M.size() : 0.0);
+        std::cout << b << "\n";
+    }
+    std::size_t n_spof = 0, n_prem = 0, n_prem_drop = 0, n_top_drop = 0;
+    std::map<string, std::array<std::size_t, 2>> spof_by_kind;  // the top source's kind -> held, single points of failure
+    {
+        std::ofstream ff(out + ".fragility.tsv"), fs(out + ".spof.tsv");
+        ff << "subject\trelation\tobject\tstate\tgrade\tP\tsources\tderivations\trivals\tworlds\tdrops\tfragility\ttop_source\ttop_dropped\tweakest_premise\tpremise_dropped\n";
+        fs << "gap_id\tkind\tstatus\tentity\trelation\tobject\tp\ttop_source\tnote\n";
+        for (std::size_t i = 0; i < M.size(); ++i) {
+            if (!ecs::held_state(s0[i])) continue;
+            const auto& x = M.facts()[i];
+            const auto fr = M.fragility(i);
+            const auto top = M.top_source(i);
+            const auto wp = M.weakest_premise(i);
+            const ecs::Opinion o = M.full(i, none);
+            const string tn = top ? src_name[*top] : "";
+            const string tk = tn.substr(0, tn.find('|'));
+            spof_by_kind[tk][0]++;
+            n_top_drop += fr.top_dropped;
+            if (fr.premise_world) ++n_prem, n_prem_drop += fr.premise_dropped;
+            const bool spof = fr.worlds > 0 && fr.drops == fr.worlds;
+            if (spof) {
+                ++n_spof, spof_by_kind[tk][1]++;
+                fs << ecs::gap_id(x.s, x.r) << "\tcertainty\topen\t" << x.s << '\t' << x.r << '\t' << x.o << '\t' << o.P << '\t' << tn << "\tsingle point of failure: "
+                   << (fr.top_dropped ? "its top source" : "") << (fr.top_dropped && fr.premise_dropped ? " and " : "") << (fr.premise_dropped ? "its weakest premise" : "")
+                   << " retracted, it is no longer held\n";
+            }
+            ff << x.s << '\t' << x.r << '\t' << x.o << '\t' << ecs::state_name(s0[i]) << '\t' << ecs::grade_name(o.grade) << '\t' << o.P << '\t' << x.sources.size() << '\t'
+               << x.derivations.size() << '\t' << x.rivals.size() << '\t' << fr.worlds << '\t' << fr.drops << '\t' << fr.value() << '\t' << tn << '\t' << fr.top_dropped << '\t'
+               << (wp ? M.facts()[*wp].s + " " + M.facts()[*wp].r + " " + M.facts()[*wp].o : "") << '\t' << fr.premise_dropped << '\n';
+        }
+    }
+    std::snprintf(b, sizeof b,
+                  "S9 FRAG held %zu | single points of failure %zu (%.4f) | top-source worlds drop %zu | premise worlds %zu (%.4f of held), drop %zu (%.4f of those)", n_held,
+                  n_spof, n_held ? static_cast<double>(n_spof) / n_held : 0.0, n_top_drop, n_prem, n_held ? static_cast<double>(n_prem) / n_held : 0.0, n_prem_drop,
+                  n_prem ? static_cast<double>(n_prem_drop) / n_prem : 0.0);
+    std::cout << b << "\n";
+    for (const auto& [k, v] : spof_by_kind) {
+        std::snprintf(b, sizeof b, "S9 FRAG top source %-9s held %5zu single points of failure %5zu (%.4f)", k.c_str(), v[0], v[1], v[0] ? static_cast<double>(v[1]) / v[0] : 0.0);
+        std::cout << b << "\n";
+    }
+    // ---- blast radius per source instance (one level of cascade)
+    vector<std::pair<std::size_t, std::size_t>> blast;  // (radius, source)
+    std::map<string, std::array<std::size_t, 3>> blast_kind;  // kind -> instances, total radius, max radius
+    for (std::size_t s = 0; s < src_name.size(); ++s) {
+        ecs::Retraction R;
+        R.sources.insert(s);
+        const std::size_t n = M.dropped_by(R).size();
+        blast.push_back({n, s});
+        const string k = src_name[s].substr(0, src_name[s].find('|'));
+        auto& bk = blast_kind[k];
+        bk[0]++, bk[1] += n, bk[2] = std::max(bk[2], n);
+    }
+    std::sort(blast.begin(), blast.end(), [](const auto& a, const auto& c) { return a.first != c.first ? a.first > c.first : a.second < c.second; });
+    {
+        std::ofstream fb(out + ".blast.tsv");
+        fb << "source\tfacts\tradius\tshare_of_held\n";
+        for (const auto& [n, s] : blast)
+            fb << src_name[s] << '\t' << M.facts_of_source(s).size() << '\t' << n << '\t' << (n_held ? static_cast<double>(n) / n_held : 0.0) << '\n';
+    }
+    std::size_t max_other = 0;
+    string max_other_name;
+    for (const auto& [n, s] : blast)
+        if (src_name[s] != "wikidata" && n > max_other) max_other = n, max_other_name = src_name[s];
+    for (std::size_t i = 0; i < blast.size() && i < 10; ++i) {
+        std::snprintf(b, sizeof b, "S9 BLAST %2zu %-50s facts %5zu radius %5zu (%.4f of held)", i + 1, src_name[blast[i].second].c_str(), M.facts_of_source(blast[i].second).size(),
+                      blast[i].first, n_held ? static_cast<double>(blast[i].first) / n_held : 0.0);
+        std::cout << b << "\n";
+    }
+    for (const auto& [k, v] : blast_kind) {
+        std::snprintf(b, sizeof b, "S9 BLAST kind %-9s instances %5zu mean radius %.2f max %zu", k.c_str(), v[0], v[0] ? static_cast<double>(v[1]) / v[0] : 0.0, v[2]);
+        std::cout << b << "\n";
+    }
+    std::snprintf(b, sizeof b, "S9 BLAST largest instance other than Wikidata: %s radius %zu", max_other_name.c_str(), max_other);
+    std::cout << b << "\n";
+    {  // cards: the five source instances with the largest blast radius, as worlds over the v2 store
+        const ecs::ConflictChecks cc2 = world_checks(phi2, true);
+        for (std::size_t q = 0; q < blast.size() && q < 5; ++q) {
+            const std::size_t s = blast[q].second;
+            ecs::World w(v2);
+            ecs::Retraction R;
+            R.sources.insert(s);
+            for (std::size_t i : M.facts_of_source(s))
+                if (!M.alive(i, R)) w.retract(M.facts()[i].s, M.facts()[i].r, M.facts()[i].o);
+            ecs::WorldCard c;
+            c.retracted = w.assumed_retracted();
+            c.depth = 3;
+            c.disappeared = ecs::vanished(w, book2, ecs::ChainConfig{3, 0.8});
+            for (std::size_t i : M.dropped_by(R)) c.held_drops.push_back({M.facts()[i].s, M.facts()[i].r, M.facts()[i].o});
+            ++i9.worlds, i9.changed += ecs::store_fingerprint(v2) != fp_v2;
+            cards << "# source instance retracted: " << src_name[s] << " (" << c.retracted.size() << " facts lose their only source)\n" << ecs::format_world_card(c) << "\n";
+        }
+    }
+    // ---- I9: every base store unchanged; a write-back attempt on purpose
+    {
+        ecs::World w(st);
+        w.add("Cypha", "country", "Nowhere");
+        const bool wrote = w.write_back(st);
+        ++i9.worlds;
+        const bool same = ecs::store_fingerprint(st) == fp_st && ecs::store_fingerprint(v2) == fp_v2 && (!read_confirm || ecs::store_fingerprint(st15) == fp15);
+        std::snprintf(b, sizeof b, "S9 I9 worlds %zu, base store changed after %zu | write-back attempt %s | fingerprints at the end %s (S7 reduced %016llx, v2 %016llx%s)", i9.worlds,
+                      i9.changed, wrote ? "ACCEPTED" : "refused", same ? "unchanged" : "CHANGED", static_cast<unsigned long long>(fp_st), static_cast<unsigned long long>(fp_v2),
+                      read_confirm ? ", S15 reduced checked" : "");
+        std::cout << b << "\n";
+    }
+    struct rusage ru;
+    getrusage(RUSAGE_SELF, &ru);
+    std::snprintf(b, sizeof b, "S9 seconds %.1f max_rss_mb %.1f", now_s() - t0, static_cast<double>(ru.ru_maxrss) / 1024.0);
+    std::cout << b << "\n";
+    return 0;
+}
+
+}  // namespace s9
+
 int main(int argc, char** argv) {
     if (argc >= 2 && string(argv[1]) == "--score-planted") return s6::run(argc, argv);  // S6 (hypothesis scoring)
     if (argc >= 2 && string(argv[1]) == "--test-kinds") return s7::run(argc, argv);  // S7 (testing hypotheses)
     if (argc >= 2 && string(argv[1]) == "--gen-links") return s8b::run(argc, argv);  // S8b (link prediction, G6 and G7)
     if (argc >= 2 && string(argv[1]) == "--gen-rules") return s8a::run(argc, argv);  // S8a (G2 rules, G14 contradictions)
+    if (argc >= 2 && string(argv[1]) == "--worlds") return s9::run(argc, argv);  // S9 (possible worlds, T2, fragility)
     if (argc >= 4 && string(argv[1]) == "--wilson") {
         double k = std::atof(argv[2]), n = std::atof(argv[3]);
         std::printf("%.0f/%.0f = %.3f  Wilson95 [%.3f, %.3f]\n", k, n, n > 0 ? k / n : 0.0, ecs::wilson_lower(k, n), ecs::wilson_upper(k, n));
