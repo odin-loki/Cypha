@@ -206,6 +206,7 @@ Run these on every change: `native_cyphalm_trie_selftest`, `native_fm_infinigram
 
 ## 6. Next work, in order
 
+0. **Generation (Odin's aim: coherent text, PLAN ledger 72).** Running: GEN-A (frozen generation benchmark, clean training text), GEN-B (sentence gate), GEN-E (content-plan expert). Next: word and topic experts (B3, B5). Then **CyphaLM over tokens** ([`TOKENS_PLAN.md`](TOKENS_PLAN.md), ledger 73, queued): tokenizers learned by counting, token count models, the byte–token bridge, generation at the token level, superwords. SCRIBE v2 today: default samples 0.063; sentences shuffled across docs 0.344; human 0.923.
 1. **S8, promotion:** after Odin's calls (§5.13): a grader that knows Wikidata's names and places inside places, then a new fresh read; then S9's consequence tests need confident rules into single-valued slots (a larger store); S10 waits for larger pools (§5.18). (S10, S4c, S8d, S4b, M17, S7b, S7c, S8a, S8b, S8c, S9, M16, A4d, the hp fixes and the slow-test cut were done 2026-10-29; S1, S4, S6, S7, S15, the echo fix, A4c, M15 and serving from stored files 2026-10-28.)
 2. **RAM:** nothing open. Every built and served `qa` configuration is under 190 MB (M17). A blockwise BWT only if a larger corpus needs it.
 3. **Forecast's event vocabulary** on a byte model (§5.10), after Odin's call.
