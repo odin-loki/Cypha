@@ -206,7 +206,7 @@ The D17 number **2.664 BPC** in `bench/BASELINE_LOCK.json` is a bench lock for t
 
 ## Plan: train the trie on about 1 TB
 
-**Runbook (2026-10-29): [`TRAIN_1TB_RUNBOOK.md`](TRAIN_1TB_RUNBOOK.md).** The live trainer's 32-bit counts wrap on a large corpus; `trie_ckpt verify` checks the last model for this, `scripts/run_train_v2.sh` trains a second model with counts that halve instead of wrapping, and `scripts/verify_compare_1tb.sh` compares the two on held-out text.
+**Runbook (2026-10-29): [`TRAIN_1TB_RUNBOOK.md`](TRAIN_1TB_RUNBOOK.md).** The live trainer's 32-bit counts wrap on a large corpus; `bash scripts/train_model.sh` verifies model 1 (the live run), trains model 2 with counts that halve instead of wrapping, verifies it and compares the two on held-out text.
 
 This is Track A of [`PLAN.md`](PLAN.md). The experiments A1–A8 and predictions P-A1 to P-A5 are recorded there.
 
