@@ -22,7 +22,7 @@ Canonical research journal. Historical subsystem names (CyphaDIF / CyphaLM) appe
 | **cypha_som** | Archived, default OFF | Failed experiment -- [`archive/failed_experiments/cypha_som/`](archive/failed_experiments/cypha_som/README.md) |
 | **Bench harness** | 17 domains | Configs + lock under `bench/`; historical traces in `data/archive/` |
 | **cypha_qt_shell / cypha_rest** | Working | `/predict`, `/update`, `/generate`, `/sample`, `/retrieve`, `/sequence/*`, `/forecast/run` |
-| **Event forecasting** | Shipped (2026-08) | Phases 1–9 in `native/include/cypha/forecast/`; see [`research/forecasting/README.md`](research/forecasting/README.md) |
+| **Event forecasting** | Under repair (2026-10-29) | A scaffold: the committed CSVs are UTF-16 and never read; on readable data the sequence model throws; the VIEWS score reads the holdout ([FC0](reports/FC0_FORECAST_AUDIT.md)). Plan: [`FORECAST_PLAN.md`](FORECAST_PLAN.md); module: [`research/forecasting/README.md`](research/forecasting/README.md) |
 
 ---
 

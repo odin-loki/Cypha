@@ -255,7 +255,7 @@ Full diagnostic run documented in [`docs/archive/reports/DIAGNOSTIC_REPORT.md`](
 - **Nonlinear decision boundaries:** Linear LLR caps XOR near chance; **latent RFF** closes most of the sklearn gap (~76.3% vs ~79%). See [`docs/RESEARCH_STATUS.md`](docs/RESEARCH_STATUS.md) Priority 1.
 - **Theoretical backbone lives elsewhere.** The harmonic-spectrum / `σ_k ∝ 1/k` / `α ≈ 0.85` claims belong to [`../Compression Algorithms/NMP_neural_compression_research_paper.md`](../Compression%20Algorithms/NMP_neural_compression_research_paper.md), not to Cypha itself. Cypha is the implementation leg.
 - **Optional CUDA.** Infer-only local flag (`-DCYPHA_ENABLE_CUDA=ON`); no CUDA CI. Training stays on CPU — GPU training is slower here, so it is not a gap. Future CPU speed path is portable SIMD via xsimd — [`docs/FUTURE.md`](docs/FUTURE.md) §1b, [`docs/native/ACCEL_CUDA.md`](docs/native/ACCEL_CUDA.md).
-- **Status / next.** Release **v2.5.0** (Linux + Windows + macOS arm64) + hp CyphaLM (train/serve/generate); gate24 **~1.61 BPC** enwik quality bar; forecasting Phases 1–9; latent-RFF XOR default; CI green. See [`CYPHA_BILL_OF_WORK.md`](CYPHA_BILL_OF_WORK.md), [`docs/native/CYPHALM_SERVE.md`](docs/native/CYPHALM_SERVE.md), [`docs/FUTURE.md`](docs/FUTURE.md).
+- **Status / next.** Release **v2.5.0** (Linux + Windows + macOS arm64) + hp CyphaLM (train/serve/generate); gate24 **~1.61 BPC** enwik quality bar; forecasting is a scaffold under repair ([FC0](docs/reports/FC0_FORECAST_AUDIT.md), [plan](docs/FORECAST_PLAN.md)); latent-RFF XOR default; CI green. See [`CYPHA_BILL_OF_WORK.md`](CYPHA_BILL_OF_WORK.md), [`docs/native/CYPHALM_SERVE.md`](docs/native/CYPHALM_SERVE.md), [`docs/FUTURE.md`](docs/FUTURE.md).
 
 ---
 

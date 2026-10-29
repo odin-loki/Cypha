@@ -18,6 +18,18 @@ milestone or a significant self-contained change.
 - **Question answering that did not use CyphaLM** (PLAN rule 10, [record](docs/reports/REMOVED_NON_CYPHALM_QA.md)): `copied_answer()` in `trie_chat.cpp` (a string search), `native/tools/qa_infobox.cpp` (hand-written fact lookup) and `native/tools/chat_index.cpp` (BM25 retrieval). Their Q/A numbers are not CyphaLM results. The frozen question sets stay as CyphaLM's test and dev data.
 
 ### Changed
+- **Forecasting's status corrected to "under repair"; a plan to parity** ([FC0 report](docs/reports/FC0_FORECAST_AUDIT.md); [FORECAST_PLAN](docs/FORECAST_PLAN.md), PLAN ledger 75).
+  - **What FC0 found:**
+    - Six of the seven CSVs under `bench/data/forecast/` have been UTF-16 since their first commit. The loaders read UTF-8, so no row has ever been read: 57 identical MID rows, 51 events as one token, 0 UCDP and 0 ICB rows.
+    - On readable data, the sequence model throws (9 of 13 event ids ≥ 256).
+    - `cypha_holdout` sets its forecast from the held-out value it is scored on.
+    - `crps()` gives 100 where the exact CRPS is 470.
+    - The drift backtest injects hand-set scores.
+  - **Retracted** in RESEARCH_STATUS, README, MODEL_CARD, the forecasting README and the 2026-08-08 plan's banner: node accuracy 1.0, the 1,569-node tree, the VIEWS scores and leaderboard, the drift claim, and the XOR table.
+  - **Added:**
+    - Track FC (FC0–FC16) with its design, data and evaluation documents (`docs/research/forecasting/ARCHITECTURE.md`, `DATA.md`, `EVALUATION.md`).
+    - PLAN ledger 75 and HANDOFF §5.24.
+  - **No code changed.**
 - **S4b-b: the unparsed signal no longer counts a linked year or day as an entity mention** ([report](docs/reports/S4_UNSEEN_AND_FRONTIER.md), S4b-b; decided by measurement, PLAN ledger 55). A link inside one of the reader's date candidates is left out of U's mentions (`span_within`, `unknown_signals.hpp`); `--signals-scope u-dev` compares both readers on S4c's dev split. Dev: eligible sentences −5.9%, alarms 0 → 0; its one test read keeps S4b's conclusions. G11 keeps its reader ([S11a-b](docs/reports/S11A_CONCEPTS_AND_OPEN_RELATIONS.md)): the skip removed all 19 date proposals but moved its dev choice from C1 to C2. `native_epistemic_test` 1,246 checks.
 - **S8d: support needs a positive independent result; sources are calibrated on the generators' errors** ([report](docs/reports/S8D_PROMOTION.md); decided by measurement, PLAN ledger 71). `decide` and the null model's walk support a hypothesis only on an independent yes. A negative still lowers the posterior and enters ECS as Oppose. A source may promote only where its LR+ on the generators' graded errors is at least 10: DBpedia infobox for dates, places and links, GeoNames for places; not Wikipedia leads, not DBpedia occupations and genres. New: `pattern_learn --sources --calibrate` / `--fresh`, `--gen-rules` / `--gen-links --fresh-confirm`, and calibration helpers in `sources.hpp`. A fresh confirm-half set, read once: 25 graded promotions at 0.880 [0.700, 0.958]; S8's gate (0.9) is not met. `native_epistemic_test` 1,029 checks.
 - **M17: `qa --save` frees the lowered index once the store is written** ([RAM_PROFILE](docs/reports/RAM_PROFILE.md) M17): C1L + defaults with `--save` 204.5 → 186.7 MB; stores, rows and output byte-identical.

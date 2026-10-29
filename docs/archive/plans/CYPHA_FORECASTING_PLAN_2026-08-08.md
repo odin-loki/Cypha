@@ -1,5 +1,7 @@
 # Cypha Event-Forecasting Framework — Design & Upgrade Plan
 
+> **Status corrected 2026-10-29.** "Shipped" below was not true of the results. The committed data was never read, the sequence model throws on real events, and the VIEWS score read the holdout ([FC0](../../reports/FC0_FORECAST_AUDIT.md)). The design stands; the work to parity is [`FORECAST_PLAN.md`](../../FORECAST_PLAN.md) (Track FC). This file is kept as history.
+
 **Status:** Shipped v1 (2026-08-08) — Phases 1–9 implemented under `native/include/cypha/forecast/`; see [`docs/research/forecasting/README.md`](docs/research/forecasting/README.md).
 
 | Phase | Status |
