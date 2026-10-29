@@ -3467,6 +3467,7 @@ int cmd_qa(const Args& a, const QaOpts& o) {
         std::cerr << "class table built\n";
     }
     if (!a.save.empty() && !save_qa(a.save, record, pm, w, cfg, wf, all_followers, fam_cut, ig, low.get(), cc.get())) return 1;
+    if (!a.save.empty() && fam_on && fam_k > 0 && a.cards.empty()) low.reset();  // M17: written; nothing below reads it (M14)
     // A4: the similar-context expert, keys over wiki train + chat (src=all: InfiniGram's bytes) or wiki train only
     // (src=wiki). M13: built here, before the per-byte holdout arrays, so its build does not sit on them; its lambdas
     // and lines come after the class expert's, below.
