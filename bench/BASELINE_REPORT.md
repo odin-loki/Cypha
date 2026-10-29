@@ -1,17 +1,17 @@
 # Cypha Bench Baseline Report
 
-Generated: 2026-09-23 08:05 UTC
+Generated: 2026-10-29 00:52 UTC
 
 Default parameters only — no hyperparameter tuning.
 
 ## Executive Summary
 
-- Domains run: **25**
+- Domains run: **2**
 - Cross-domain analyses: **4**
 
 ## D03
 
-*Timestamp:* 2026-09-23T08:04:34.581+00:00
+*Timestamp:* 2026-10-29T00:51:39.494+00:00
 
 ### backend
 
@@ -27,42 +27,42 @@ Default parameters only — no hyperparameter tuning.
 
 ## D14
 
-*Timestamp:* 2026-09-23T08:04:45.223+00:00
+*Timestamp:* 2026-10-29T00:51:41.235+00:00
 
 ### 14A_feynman_all_equations
 
 | Metric | Value |
 | --- | --- |
-| `kernel_basis` | linear |
-| `mean_r2` | -0.2852 |
-| `mean_rmse` | 11808469921.1805 |
-| `per_equation.Stefan_Boltzmann.crps` | 180.4743 |
+| `kernel_basis` | rff |
+| `kernel_blend` | 0.5000 |
+| `mean_r2` | -1.2259 |
+| `mean_rmse` | 13035532136.8749 |
+| `per_equation.Stefan_Boltzmann.crps` | 220.8091 |
 | `per_equation.Stefan_Boltzmann.expert_count` | 10.0000 |
-| `per_equation.Stefan_Boltzmann.interval_coverage_90` | 0.9100 |
-| `per_equation.Stefan_Boltzmann.mae` | 245.4912 |
-| `per_equation.Stefan_Boltzmann.mean_epistemic_var` | 68653.0672 |
-| `per_equation.Stefan_Boltzmann.r2` | 0.3233 |
-| `per_equation.Stefan_Boltzmann.residual_autocorr_lag1` | -0.0054 |
-| `per_equation.Stefan_Boltzmann.residual_spectral_flatness` | 0.5662 |
+| `per_equation.Stefan_Boltzmann.interval_coverage_90` | 0.8200 |
+| `per_equation.Stefan_Boltzmann.kernel_basis` | rff |
+| `per_equation.Stefan_Boltzmann.mae` | 277.3035 |
+| `per_equation.Stefan_Boltzmann.mean_epistemic_var` | 46894.6486 |
+| `per_equation.Stefan_Boltzmann.r2` | 0.0493 |
+| `per_equation.Stefan_Boltzmann.residual_autocorr_lag1` | -0.0089 |
+| `per_equation.Stefan_Boltzmann.residual_spectral_flatness` | 0.5624 |
+| `per_equation.Stefan_Boltzmann.rff_dim` | 256.0000 |
 | `per_equation.Stefan_Boltzmann.ridge_rmse` | 530.0391 |
-| `per_equation.Stefan_Boltzmann.rmse` | 439.3194 |
-| `per_equation.bernoulli.crps` | 5.9225 |
+| `per_equation.Stefan_Boltzmann.rmse` | 520.7229 |
+| `per_equation.bernoulli.crps` | 7.0776 |
 | `per_equation.bernoulli.expert_count` | 10.0000 |
-| `per_equation.bernoulli.interval_coverage_90` | 0.8100 |
-| `per_equation.bernoulli.mae` | 7.8455 |
-| `per_equation.bernoulli.mean_epistemic_var` | 73.5006 |
-| `per_equation.bernoulli.r2` | 0.1106 |
-| `per_equation.bernoulli.residual_autocorr_lag1` | 0.1460 |
-| `per_equation.bernoulli.residual_spectral_flatness` | 0.5671 |
+| `per_equation.bernoulli.interval_coverage_90` | 0.7600 |
+| `per_equation.bernoulli.kernel_basis` | rff |
+| `per_equation.bernoulli.mae` | 8.9525 |
+| `per_equation.bernoulli.mean_epistemic_var` | 49.7121 |
+| `per_equation.bernoulli.r2` | -0.1661 |
+| `per_equation.bernoulli.residual_autocorr_lag1` | 0.1436 |
+| `per_equation.bernoulli.residual_spectral_flatness` | 0.5326 |
+| `per_equation.bernoulli.rff_dim` | 256.0000 |
 | `per_equation.bernoulli.ridge_rmse` | 12.6637 |
-| `per_equation.bernoulli.rmse` | 11.6314 |
-| `per_equation.capacitor_energy.crps` | 4.9199 |
+| `per_equation.bernoulli.rmse` | 13.3187 |
+| `per_equation.capacitor_energy.crps` | 6.0783 |
 | `per_equation.capacitor_energy.expert_count` | 10.0000 |
-| `per_equation.capacitor_energy.interval_coverage_90` | 0.7000 |
-| `per_equation.capacitor_energy.mae` | 6.7443 |
-| `per_equation.capacitor_energy.mean_epistemic_var` | 30.1655 |
-| `per_equation.capacitor_energy.r2` | 0.3890 |
-| `per_equation.capacitor_energy.residual_autocorr_lag1` | 0.0057 |
 
 ### 14B_extrapolation_uncertainty
 
@@ -89,130 +89,6 @@ Default parameters only — no hyperparameter tuning.
 ### backend
 
 - result: cypha_core
-
-## D18
-
-_No experiments recorded._
-
-## D20
-
-*Timestamp:* 2026-09-22T23:54:14.978+00:00
-
-### backend
-
-- result: cypha_cell_hypothesis_sweep --overnight-sweep-smoke --intelligence-profile
-
-### intelligence_profile
-
-- result: true
-
-### kappa_ranked_variants
-
-- result: [{"id":"B2","kappa":0.8971428571428571},{"id":"H06","kappa":0.8971428571428571},{"id":"H14","kappa":0.8971428571428571}]
-
-### n_eval
-
-- result: 32.0000
-
-### n_train
-
-- result: 80.0000
-
-### overnight_sweep_smoke
-
-- result: [{"bench_mode":"hybrid","bpc":6.483989642920271,"id":"B2","kappa":0.8971428571428571,"n_train":80},{"bench_mode":"hybrid","bpc":6.483989642920271,"id":"H06","kappa":0.8971428571428571,"n_train":80},{"bench_mode":"hybrid","bpc":6.483989642920271,"id":"H14","kappa":0.8971428571428571,"n_train":80}]
-
-### pareto_ranked_variants
-
-- result: [{"bpc":6.483989642920271,"id":"B2","kappa":0.8971428571428571,"nondominated":true,"normalized_bpc":0.0,"pareto_score":0.8971428571428571},{"bpc":6.483989642920271,"id":"H06","kappa":0.8971428571428571,"nondominated":true,"normalized_bpc":0.0,"pareto_score":0.8971428571428571},{"bpc":6.483989642920271,"id":"H14","kappa":0.8971428571428571,"nondominated":true,"normalized_bpc":0.0,"pareto_score":0.8971428571428571}]
-
-### variant_count
-
-- result: 3.0000
-
-## D22
-
-_No experiments recorded._
-
-## D23
-
-_No experiments recorded._
-
-## D24
-
-_No experiments recorded._
-
-## D25
-
-_No experiments recorded._
-
-## D26
-
-_No experiments recorded._
-
-## D27
-
-_No experiments recorded._
-
-## D28
-
-_No experiments recorded._
-
-## D29
-
-_No experiments recorded._
-
-## D30
-
-_No experiments recorded._
-
-## D31
-
-_No experiments recorded._
-
-## D32
-
-_No experiments recorded._
-
-## D33
-
-_No experiments recorded._
-
-## D34
-
-_No experiments recorded._
-
-## D35
-
-_No experiments recorded._
-
-## D36
-
-_No experiments recorded._
-
-## D37
-
-_No experiments recorded._
-
-## D38
-
-_No experiments recorded._
-
-## D42
-
-_No experiments recorded._
-
-## D43
-
-_No experiments recorded._
-
-## D56
-
-_No experiments recorded._
-
-## D57
-
-_No experiments recorded._
 
 ## Cross-Domain Analyses
 
