@@ -720,7 +720,7 @@ These are written as CTests and checked on every build:
 - **C (vectors):** G5 and similarity.
 - **E (tagger, parser):** G11 and question parsing.
 - **H (teacher mining):** G16 and T7.
-- **Forecasting module:** G18.
+- **Forecasting module:** G18. It is under repair (2026-10-29, [FC0](reports/FC0_FORECAST_AUDIT.md)); G18 waits for FORECAST_PLAN FC15, the `Forecaster` interface with intervals.
 - **Track A:** surprise signals and prospective tests.
 
 ---

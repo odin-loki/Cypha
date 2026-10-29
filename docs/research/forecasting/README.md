@@ -1,87 +1,84 @@
-# Cypha Event-Forecasting Framework
+# Cypha event forecasting
 
-Implementation of Phases 1–9. Design writeup (shipped): [`docs/archive/plans/CYPHA_FORECASTING_PLAN_2026-08-08.md`](../../archive/plans/CYPHA_FORECASTING_PLAN_2026-08-08.md).
+**Odin Loch** · rewritten 2026-10-29 · [FORECAST_PLAN](../../FORECAST_PLAN.md) · audit: [FC0](../../reports/FC0_FORECAST_AUDIT.md)
 
-## Components
+> **Under repair (2026-10-29).** The module is a scaffold. Its committed data has never been read (the CSVs are UTF-16; the loaders read UTF-8). On readable data, the sequence model throws on any event outside Taiwan and Global. The VIEWS score reads the held-out value it is scored on, and the CRPS function is wrong. [FC0](../../reports/FC0_FORECAST_AUDIT.md) has the evidence. [FORECAST_PLAN](../../FORECAST_PLAN.md) (Track FC) is the way to parity.
 
-| Phase | Module | Path |
-|-------|--------|------|
-| 1 | OrthogonalRffEncoder + ORF/SORF | `native/include/cypha/orthogonal_rff_encoder.hpp` |
-| 2 | Event vocabulary + CAMEO mapping | `native/include/cypha/forecast/event_vocabulary.hpp` |
-| 3 | Node estimators (MID) | `native/include/cypha/forecast/node_estimator.hpp` |
-| 4 | Sequence training (GDELT tokens) | `forecast_pipeline.cpp` |
-| 5 | Guided rollout tree | `native/include/cypha/forecast/rollout_tree.hpp` |
-| 6 | Interpretability paths | `native/include/cypha/forecast/interpretability.hpp` |
-| 7 | Per-theater isolation + EWC | `native/include/cypha/forecast/theater_models.hpp` |
-| 8 | VIEWS CRPS/ignorance | `native/include/cypha/forecast/views_scoring.hpp` |
-| 9 | GDELT drift monitor | `native/include/cypha/forecast/gdelt_monitor.hpp` |
+**Numbers retracted.** These were made from placeholder rows the loader could not read, or by code that does not compute what it was named for. No result depends on them.
 
-## APIs added
+| Number | Where it appeared | Why it is withdrawn |
+|---|---|---|
+| Node eval accuracy **1.0** | Smoke, REST, bench | All 57 rows identical, one class (FC0 A1) |
+| Scenario tree **1569 nodes** | Smoke | Built on an untrained model before `5619cb7`, from one repeated token (E5, A1) |
+| VIEWS CRPS and ignorance, the leaderboard | REST, bench | The forecast reads the holdout (C1); the CRPS is wrong (D1); the ignorance is not VIEWS's (D2) |
+| Drift alarms "on Feb 2025 MID shock events" | This README | The backtest injects hand-set scores (C4) |
+| XOR 0.438 / 0.688 / 0.513 (iid / SORF / ORF) | This README | Do not reproduce: 0.500 / 0.6125 / 0.5875 on 2026-10-29 (I1) |
 
-- `active_query_score_from_probs()` - entropy x (1 - max p)
-- `Cypha::drift_score()` - world-prior drift EMA
-- `Cypha::active_query_score()` - from last predict
+---
 
-## Sample data
+## Status by part
 
-`bench/data/forecast/` - MID (`sample_mid.csv`, `gml_mid.csv`), UCDP, ICB, GDELT, VIEWS CSV samples.
+| Part | Path | State |
+|---|---|---|
+| ORF/SORF encoder | `native/include/cypha/orthogonal_rff_encoder.hpp` | Built; SORF on in `everyday_profile.json`; promotion rule to recheck (FC16) |
+| Event vocabulary | `native/include/cypha/forecast/event_vocabulary.hpp` | Built; 842 ids do not fit the 256-byte model (FC4); CAMEO level map wrong (FC0 F1) |
+| Data loaders | `native/include/cypha/forecast/dispute_data.hpp` | Read no rows of the committed files; UCDP and ICB never load (FC2) |
+| Escalation estimator | `native/include/cypha/forecast/node_estimator.hpp` | Same-year inputs, shuffled split (FC5) |
+| Sequence training | `native/src/forecast/forecast_pipeline.cpp` | Throws on real events (FC4) |
+| Rollout tree | `native/include/cypha/forecast/rollout_tree.hpp` | Reads the trained model (since `5619cb7`); no time steps, no uncertainty, bonus added to reported numbers (FC8) |
+| Interpretability | `native/include/cypha/forecast/interpretability.hpp` | Path probability is one edge (FC8) |
+| Theater bank | `native/include/cypha/forecast/theater_models.hpp` | Trains one class, unused, writes temp files (FC10) |
+| VIEWS scoring | `native/include/cypha/forecast/views_scoring.hpp` | CRPS wrong; IGN not VIEWS's (FC6) |
+| VIEWS baselines | `native/include/cypha/forecast/views_baselines.hpp` | Simplified stand-ins (FC7) |
+| Drift monitor | `native/include/cypha/forecast/gdelt_monitor.hpp` | EMA of a caller's number (FC9) |
+| Save and load | — | None (FC11) |
+| REST | `native/apps/cyphalm_rest_routes.cpp` | Retrains per call; no forecasts returned (FC12) |
 
-```powershell
-.\scripts\fetch_forecast_data.ps1          # ensure sample aliases (gml_mid, gdelt_events)
-.\scripts\fetch_forecast_data.ps1 -Bulk    # fetch public GDELT + CoW MID snapshots (best-effort)
-.\scripts\fetch_forecast_data.ps1 -Repair  # fix corrupted UTF-16/alias CSVs from sample sources
+---
+
+## Documents
+
+| Document | What it is |
+|---|---|
+| [FORECAST_PLAN](../../FORECAST_PLAN.md) | Track FC: parity, rules, work items FC0–FC16, predictions, decisions |
+| [ARCHITECTURE](ARCHITECTURE.md) | Target design: types, tokens, tree, estimator, forecaster, monitor, bundle, routes |
+| [DATA](DATA.md) | Sources, versions, licences, file schemas, manifest, CAMEO level map, theater rules, fetch |
+| [EVALUATION](EVALUATION.md) | Tasks, splits, scores and their exact definitions, baselines, shocks, freezing rule, planted bugs |
+| [FC0 audit](../../reports/FC0_FORECAST_AUDIT.md) | What was measured on 2026-10-29, and how to reproduce it |
+| [2026-08-08 design](../../archive/plans/CYPHA_FORECASTING_PLAN_2026-08-08.md) | The original design; history |
+
+---
+
+## Running it today
+
+These run, but the numbers they print are not results (see above).
+
+```bash
+cmake -S native -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+ninja -C build forecast_smoke cypha_forecast_run forecast_drift_backtest views_leaderboard_bench orf_encoder_bench
+build/forecast_smoke --data bench/data/forecast      # passes only because no row is read
+build/orf_encoder_bench                              # the encoder bench; real, small eval set
 ```
 
-Bulk loaders (`load_gml_mid_csv`, `load_gdelt_csv`, `load_views_csv`) accept header-based column names; `load_dispute_data` prefers `gml_mid.csv` / `gdelt_events.csv` when present. Bench/REST/leaderboard tools prefer `views_bulk.csv` over `sample_views.csv` when bulk fetch has run.
+- **The one real check.** `forecast_smoke`'s first half (`rollout_check`) trains on a planted cycle and checks that rollouts follow it, learn nothing and are reproducible from a seed. It passes, and it tests real machinery.
+- **The rest of the smoke** runs the pipeline on unreadable data.
 
-**Manual bulk:** full VIEWS replication sets are also at [viewsforecasting.org/data](https://viewsforecasting.org/data/). `fetch_forecast_data.ps1 -Bulk` pulls UCDP GED fatalities from the public [VIEWS API](https://api.viewsforecasting.org) (`predictors_fatalities*` runs) into `views_bulk.csv` (falls back to `sample_views.csv` scaffold on failure).
+---
 
-VIEWS CSV supports optional `split` column (`train` / `holdout`) for `validate_views_holdout`.
+## Data
 
-## Run
+`bench/data/forecast/` holds placeholder CSVs, not extracts of MID, UCDP, ICB, GDELT or VIEWS. Six of the seven are UTF-16. FC2 re-encodes them and renames them `synthetic_*`. FC3 adds real extracts with a manifest (DATA §3, §4).
 
-```powershell
-forecast_smoke
-cypha_forecast_run --data bench/data/forecast
-orf_encoder_bench
-forecast_drift_backtest --data bench/data/forecast
-views_leaderboard_bench --data bench/data/forecast
-cypha_bench_run --domain-tag forecast
-.\scripts\fetch_forecast_data.ps1
-```
+`scripts/fetch_forecast_data.ps1 -Bulk` exists, but carries the faults listed in FC0 G1–G4. Do not use its output for results until FC3.
 
-## Phase 1 smoke (XOR linear, 400 samples, RFF D=256, 8 passes)
-
-| Projection | Accuracy |
-|------------|----------|
-| iid Gaussian | 0.438 |
-| **SORF** | **0.688** |
-| ORF (dense QR) | 0.513 |
+---
 
 ## REST
 
-`POST /forecast/run` with optional `{"data_dir":"bench/data/forecast"}`.
+| Route | What it does today |
+|---|---|
+| `POST /forecast/run` | Retrains the whole pipeline from `data_dir` on every call; returns counts and scores, no forecast |
+| `POST /forecast/ingest` | Adds a caller's own `drift` and `anomaly` numbers to an EMA |
+| `POST /forecast/monitor/reset` | Resets that EMA |
 
-## Phase 1 promotion
-
-`orf_encoder_bench` gates promotion: XOR +5pp and D01 golden within 2pp of pin **or** +30pp lift vs iid on the same harness. **SORF enabled in `everyday_profile.json`**; full D01 pin verified via `CYPHA_BENCH_USE_PROFILE=1`.
-
-## Live GDELT monitoring
-
-`forecast_gdelt_poll` tails `gdelt_events.csv` and runs `GdeltMonitor`. REST: `POST /forecast/ingest` (event + drift/anomaly scores), `POST /forecast/monitor/reset`.
-
-## Drift backtest
-
-`forecast_drift_backtest` verifies alarms fire on Feb 2025 MID shock events in sample GDELT.
-
-## End-to-end smoke
-
-`forecast_smoke` on sample data: node eval acc **1.0**, scenario tree **1569 nodes**, VIEWS CRPS scored.
-
-## Bench domain
-
-`cypha_bench_run --domain-tag forecast` runs the full `ForecastPipeline` on `bench/data/forecast/` and records node accuracy, sequence BPC, tree size, VIEWS holdout CRPS, drift alarms, and leaderboard CRPS vs Conflictology / Markov / NegBin baselines.
-
-## VIEWS leaderboard
-
-`views_leaderboard_bench` scores simplified published-style baselines (historical mean, observed Markov, negative-binomial GLMM) against the Cypha holdout forecaster on `sample_views.csv` train/holdout splits.
+FC12 replaces these with `/forecast/load`, `/forecast/predict` and a scoring `/forecast/ingest` (ARCHITECTURE §10).

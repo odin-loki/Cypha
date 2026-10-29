@@ -1,6 +1,6 @@
 # Handoff for Claude Code: Cypha / CyphaLM
 
-**Odin Loch** · rewritten 2026-10-28 at the end of the second working session of the day; updated the same day for B4c, S1, RAM M10–M15, S4, S6 and A4c, and on 2026-10-29 for S7–S9, S15, A4d, M16, M17, S4b and S8d · repo `odin-loki/Cypha` (branch `main`)
+**Odin Loch** · rewritten 2026-10-28 at the end of the second working session of the day; updated the same day for B4c, S1, RAM M10–M15, S4, S6 and A4c, and on 2026-10-29 for S7–S9, S15, A4d, M16, M17, S4b, S8d and FC0 · repo `odin-loki/Cypha` (branch `main`)
 
 Read this first. Then read the documents in §3 for whatever you are working on. The goal, the rules and Odin's standing instructions are in §1–§2 and are not optional.
 
@@ -68,6 +68,7 @@ Cypha is Odin Loch's own C++ AI. **CyphaLM** is its language model: a packed byt
 | `docs/SEMANTICS.md` | Core Cypha as the meaning layer. S-1 failed; S-1b reached PPMI-SVD's level but failed its gates |
 | `docs/EMBEDDING_GEOMETRY.md` | Copying Qwen3-Embedding's geometry into Cypha. QE0–QE2 inputs done from the weights; the rest on Odin's PC |
 | `docs/CYPHALM_ANSWERING.md` | How CyphaLM answers by itself: routes R1–R3, steps A0–A5 with results |
+| `docs/FORECAST_PLAN.md` | Track FC: the forecasting module to parity, FC0–FC16. FC0 audit and FC1 status done; design, data and evaluation in `docs/research/forecasting/` |
 | `docs/TOOL_PROFILE_PLAN.md` | How support tools earn their place; P1–P4 done |
 | `docs/GGUF_MINING.md`, `scripts/gguf_mine.py` | Mining a GGUF teacher |
 | `docs/reports/RAM_PROFILE.md` | CyphaLM's memory, M1–M8, every cut measured |
@@ -119,6 +120,7 @@ Cypha is Odin Loch's own C++ AI. **CyphaLM** is its language model: a packed byt
 | **K4/K5 thought bindings** | All primitives bound; rule-10 guard; first processes beat their baselines (diagnosis −22% cost, ach +0.25, CUSUM 3.4× faster on 1σ); DIF applicability not adopted (LCI 0.50) | `K4_K5_THOUGHT_BINDINGS.md` |
 | **M17 lowered index freed after `--save`** | C1L + defaults with `--save` 204.5 → 186.7 MB; lossless | `RAM_PROFILE.md` |
 | Tool profile P2–P4 | Tagger and word-vector class tables cut from the class expert (the tagger stays as the question parser); `cypha_gate` deleted; `pattern_learn` fails the Q/A cut, flagged for Odin | `TOOL_PROFILE_P2_GRID.md` |
+| **FC0 forecasting audit** (Odin: "bring this into parity") | The committed CSVs are UTF-16 and no row was ever read; on readable data the sequence model throws (9 of 13 event ids ≥ 256); the VIEWS score reads the holdout; `crps()` gives 100 where the exact value is 470; the drift test cannot fail. Plan FC0–FC16 with ARCHITECTURE, DATA and EVALUATION; status lines corrected (FC1) | `FC0_FORECAST_AUDIT.md` |
 | S-1b learned contexts | Cypha's own learner reaches PPMI-SVD's level (0.683 / 0.246 / 0.669); gates failed on rare words | `S1B_LEARNED_CONTEXTS.md` |
 | S5 hypothesis store, S3 gap map | `hypothesis.hpp` (I1, I4, I7, I8), `gap_map.hpp`, `pattern_learn --gaps`: 27,842 gaps with VOI. CyphaLM's dev tags name their question's slot 0 / 750 | `S3_S5_GAP_MAP_AND_HYPOTHESES.md` |
 | Qwen3-Embedding, weights only | QE0 hit on 0.6B; QE1 static dissection of 0.6B and 8B (Q4 hit); the hashed probe set and its builder in `mined/probe/` | `QWEN3_EMBEDDING_DISSECTION.md` |
@@ -181,7 +183,7 @@ Run these on every change: `native_cyphalm_trie_selftest`, `native_fm_infinigram
 7. **Track S:** where gap demand comes from; Wikidata's type-level rate as P(exists); finer entity types (S3/S5 report). Answered 2026-10-28: the reason code describes what CyphaLM has read ("most honest"), and S1 stays at 82% ("if the data isn't there, it isn't there").
 8. **PPMI-SVD without the evaluation bytes** as the standard vector file (its leak is worth 0.001 BPC).
 9. **Decided by measurement (PLAN ledger 62), open to Odin's veto:** DISCOVERY §3.3's missing mass for text is Good–Turing with the page as the unit (S4: within 4%; n₁/N undercounts by 20–50%); S6's P0 keeps the constraint term and judges its parts by one joint test (S6b).
-10. ~~hp wrapper semantics.~~ **Fixed 2026-10-29** (PLAN ledger 69). New: forecast's event vocabulary has 842 ids, but hp reads bytes, so an event id ≥ 256 (any theater after Taiwan) throws during training. Map events onto bytes, or give forecast a model that is not byte-level?
+10. ~~hp wrapper semantics.~~ **Fixed 2026-10-29** (PLAN ledger 69). New: forecast's event vocabulary has 842 ids, but hp reads bytes, so an event id ≥ 256 (any theater after Taiwan) throws during training. Map events onto bytes, or give forecast a model that is not byte-level? FC0 found why the smoke still passes: the CSVs are UTF-16 and no row is read. [FORECAST_PLAN](FORECAST_PLAN.md) §9.1 recommends one byte per (theater, CAMEO root): 140 ids plus specials (§5.24).
 11. **S15 defaults, open to Odin's veto:** the Wikidata response cache (2.35 MB) is committed for audit; D4's T-QA exclusion is kept, so the benchmark is thin on CyphaLM's own 8 MiB slice (105 train subjects).
 12. **S7c's choice, open to Odin's veto** (PLAN ledger 70, answering ledger 68): the Known tier is null-model BH (K4), chosen over conformal selection (K3) by the registered tie order; they promoted the same sets on every read. K3's guarantee needs no model, only a labelled calibration set drawn like the batch; K4's rests on the null likelihoods, which run high for plausible false hypotheses. Switch to K3? Should fusion also use the store's φ (S7b)?
 13. **S8's promotion gate** (ledger 67, 71; S8c and S8d done). `decide` now needs an independent yes, and a source promotes only where its LR+ on the generators' own errors is at least 10 (decided by measurement, open to veto). A fresh confirm-half set, read once: 25 graded at 0.880 [0.700, 0.958], so the gate (0.9) is not met. The 3 misses are S15 name or grain mismatches: Brussels for City of Brussels, Los Angeles for Century City, Chicago for Edgewater Hospital. Open:
@@ -206,6 +208,16 @@ Run these on every change: `native_cyphalm_trie_selftest`, `native_fm_infinigram
 21. **S11c's questions:** use G13's anomalies only as questions for the source stage, never as verdicts (through the sources they were right 21 of 21)? Keep A6 (spouse gaps) for a larger store, or cut it? Drop G3's rule term from its order (the link predictor alone ranks the right fact first more often)? Stop G4 carrying dates as constants (every carried date was wrong)? Both halves of S15 test now carry a pool read, so a future fresh set needs new slots (S8e builds them).
 22. **Byte-level Kneser–Ney for the byte model** (Tokens T0–T2): on the dev holdout, Kneser–Ney over bytes at order 8–12 with the ∞-gram beats the byte trie + InfiniGram by 0.18–0.19 bits per byte (order 12 costs 1.3 GB unpacked). Being measured as a byte-model change with its own registered rule and fresh read (BKN), open to veto.
 23. **K5's open choices:** try a calibration map (or θ from it) for the DIF applicability classifier under a registered read; benchmarks with known answers for `fermi_estimate` and the planning processes; wire traces to the experiment DB.
+24. **Forecasting to parity** ([FORECAST_PLAN](FORECAST_PLAN.md) §9, PLAN ledger 75; [FC0](reports/FC0_FORECAST_AUDIT.md)). Nine calls, each with a recommendation:
+    - **Event ids:** one byte per (theater, root).
+    - **Time step:** theater-week.
+    - **Headline output:** VIEWS-protocol fatality distributions first, the tree second.
+    - **Data:** commit real derived extracts with a manifest.
+    - **Theater bank:** measure, then cut if pooled is not worse.
+    - **Training over REST:** move it out of `cypha_rest` into the CLI.
+    - **Qt and Studio:** no panels until FC12.
+    - **PR gate:** add the fast forecast set to it.
+    - **Public wording:** "under repair" until FC14.
 
 ---
 
@@ -214,7 +226,10 @@ Run these on every change: `native_cyphalm_trie_selftest`, `native_fm_infinigram
 0. **Generation (Odin's aim: coherent text, PLAN ledger 72).** Running: GEN-A (frozen generation benchmark, clean training text), GEN-B (sentence gate), GEN-E (content-plan expert). Next: word and topic experts (B3, B5). Also **CyphaLM over tokens** ([`TOKENS_PLAN.md`](TOKENS_PLAN.md), ledger 73–74, started: TOK-A, TOK-B): tokenizers learned by counting, token count models, the byte–token bridge, generation at the token level, superwords. SCRIBE v2 today: default samples 0.063; sentences shuffled across docs 0.344; human 0.923.
 1. **S8, promotion:** after Odin's calls (§5.13): a grader that knows Wikidata's names and places inside places, then a new fresh read; then S9's consequence tests need confident rules into single-valued slots (a larger store); S10 waits for larger pools (§5.18). (S10, S4c, S8d, S4b, M17, S7b, S7c, S8a, S8b, S8c, S9, M16, A4d, the hp fixes and the slow-test cut were done 2026-10-29; S1, S4, S6, S7, S15, the echo fix, A4c, M15 and serving from stored files 2026-10-28.)
 2. **RAM:** nothing open. Every built and served `qa` configuration is under 190 MB (M17). A blockwise BWT only if a larger corpus needs it.
-3. **Forecast's event vocabulary** on a byte model (§5.10), after Odin's call.
+3. **Forecasting to parity** ([`FORECAST_PLAN.md`](FORECAST_PLAN.md), ledger 75):
+   - **Now:** FC2 (a data layer that fails closed) can start; it needs no decision.
+   - **After Odin's calls** (§5.10, §5.24): FC4 (events on bytes) and FC3 (real extracts, fetched on Odin's PC).
+   - **Agents:** FC-DATA, FC-SCORE, FC-SEQ, FC-EST and FC-SERVE, each with its own files (FORECAST_PLAN §8).
 4. **Similar-context expert:** a cap or window on online keys before streams pass a few MiB (they cost 5.3 MB per MiB read). **S4c:** no content signal sees Dolly, because most of it is in scope; a new planted pool needs Odin's call (§5.17). Source-trust shifts once source reliability is refit over time.
 5. **On Odin's PC:** the 8B QE0 gate and timing, QE2 probe vectors, QE3, QE4 `pairs`, teacher Q/A text (QWEN3_EMBEDDING_DISSECTION §9).
 6. **Bill of work upkeep** with every commit.

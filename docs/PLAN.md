@@ -944,6 +944,7 @@ Everything raised on 2026-10-26, and where this plan covers it.
 | 72 | The generation track (2026-10-29: "That's ok to do what you suggested"): clean training text, a sentence-level gate, word and topic experts, and a content-plan expert in which the fact store steers through a next-byte expert while CyphaLM writes every byte; off inside answers; each step adopted only on a registered SCRIBE v2 read | GEN-A, GEN-B, GEN-E (running) |
 | 73 | Plan CyphaLM over tokens (2026-10-29: "Just queue to do a plan … take tokens next level") | [`TOKENS_PLAN.md`](TOKENS_PLAN.md) |
 | 74 | Token plan's questions (2026-10-29: "You pick for the questions"): subwords with word boundaries then superwords; beside the byte model, defaults switch only on T4 and T10; started now as its own tool `cyphalm_tok`; T11 on Odin's PC after T4, never competing with Track A | TOK-A, TOK-B (running) |
+| 75 | Bring forecasting to parity with the other Cypha features (2026-10-29: "Make a plan for it. Do docs for it. Go crazy on it. I want to bring this into parity with other Cypha features.") | [`FORECAST_PLAN.md`](FORECAST_PLAN.md) (Track FC); [FC0](reports/FC0_FORECAST_AUDIT.md) done; decisions in FORECAST_PLAN §9, HANDOFF §5.24 |
 
 ---
 
