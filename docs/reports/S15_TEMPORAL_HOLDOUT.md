@@ -196,8 +196,9 @@ Every read of `temporal_holdout_test.tsv` by a generator is logged here, with it
 |---|---|---|---|
 | 2026-10-29 | G6 and G7 link prediction, their combination (S8b) | read once, the final setting chosen on dev (commit d50fdcd): Hits by category on the 2006-text store, and promotion through S7's loop | [S8B_LINK_PREDICTION.md](S8B_LINK_PREDICTION.md) |
 | 2026-10-29 | G2 rule induction and G14 contradiction resolution (S8a), on the 2006-text store | the first read; the registered setting, commit 10bef62 | [S8A_RULES_AND_CONTRADICTIONS.md](S8A_RULES_AND_CONTRADICTIONS.md) |
-| 2026-10-29 | G9 concept formation and G11 open relations (S11a) | read once (commit 913d2a7): G9's promotion read on test's bit 17 = 0 half (slots only: it made no hypotheses, so no label was used), and G11's 38 proposals graded on test subjects' rows | [S11A_CONCEPTS_AND_OPEN_RELATIONS.md](S11A_CONCEPTS_AND_OPEN_RELATIONS.md) |
 | 2026-10-29 | S10 curiosity scheduler (P2's allocator over G2 and G6/G7) | read once on a fresh set built on test's bit-17 half (commit dc2e632); bit 17 = 0 untouched. Whether a scheduler's read counts under rule 3 is open (HANDOFF §5.18) | [S10_CURIOSITY_SCHEDULER.md](S10_CURIOSITY_SCHEDULER.md) |
+| 2026-10-29 | G9 concept formation and G11 open relations (S11a) | read once (commit 913d2a7): G9's promotion read on test's bit 17 = 0 half (slots only: it made no hypotheses, so no label was used), and G11's 38 proposals graded on test subjects' rows | [S11A_CONCEPTS_AND_OPEN_RELATIONS.md](S11A_CONCEPTS_AND_OPEN_RELATIONS.md) |
+| 2026-10-29 | G12 literature-based discovery, Swanson's ABC (S11b) | read once, the setting chosen on dev (PPMI, hub cap 200; commit 0230741): open-form precision@k and the closed form on S15 test's subjects, and promotion of its typed pool | [S11B_ABC_DISCOVERY.md](S11B_ABC_DISCOVERY.md) |
 
 ## How to rebuild
 
