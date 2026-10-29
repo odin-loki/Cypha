@@ -192,7 +192,7 @@ bool measure_teacher_forced_recall(cypha::cyphalm::CyphaLMModel& model, const Ch
     const int suffix_begin = 2 + prefix_len;
     const int suffix_end = 2 + static_cast<int>(canary.size());
 
-    model.reset_context();
+    model.reset_stream(false);  // hp: reset_context() builds a cold, untrained predictor (HpSequenceBackend::reset)
     predicted_suffix.clear();
     std::vector<int> pred_ids;
     bool ok = true;

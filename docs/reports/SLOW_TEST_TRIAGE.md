@@ -85,6 +85,46 @@ FAIL: mixer should beat cold neural on repetitive stream mix=0.241022 neural=0.2
 2. **The hp wrapper's small-vocabulary defects** (out-of-vocabulary generation; canary recall 0/6): fix, or retire `CyphaLMModel`'s non-byte vocabularies? hp is comparison-only now.
 3. **The forecast pipeline:** trace the kernel-time churn (4 min 57 s of 6 min 4 s), use a smaller hp tier or the packed trie, or set a longer limit?
 
+## Cut (2026-10-29)
+
+Odin ruled on question 1: "Delete them".
+
+**What was removed**
+
+| Part | Removed |
+|---|---|
+| CTests | The 35 class-d tests (`native_cyphalm_bench_intelligence_profile` and the d39–d76 domain smokes except d42, d43, d56 and d57): 316 lines of `native/CMakeLists.txt` |
+| `native/src/bench/bench_domains.cpp` | The 34 `run_dNN_*` domain functions, their 34 entries in the domain table, the 2 helpers and 8 constants only they used: 3,685 lines (10,458 → 6,773) |
+| `bench/config/` | The 34 `dNN_*_profile.json` files (1,015 lines) and their 34 entries in `profiles_index.json` (238 lines) |
+
+In all, 5,255 lines out and 3 in: a one-line comment in `native/cmake/CyphaCTest.cmake`, and a note at the top of `bench/MATH_INTEGRATION_REPORT.md`, which names the removed gates and is kept as written. Git history keeps everything.
+
+**How "only they use" was checked**
+
+- Every removed function, constant and profile name was searched across the tree: `native/`, `scripts/`, `.github/`, `bench/` and the docs. The two helpers and eight constants were found by compiling `bench_domains.cpp` with `-Wunused-function -Wunused-const-variable=2` after the 34 functions were gone, until no unused symbol was left.
+- The four kept domains (d42, d43, d56, d57) read no output of a removed one.
+- `cyphalm_bench_native --intelligence-profile` stays: `cypha_baseline_lock`, d18, d22 and d43 still use it.
+- The PowerShell scripts (`cypha_native_validate_all.ps1`, `finalize_production_overnight.ps1`) run a domain only when its profile exists (`Test-DomainTagExists`), so they now skip the removed ones. They were not edited (no PowerShell here to test them).
+- Old CHANGELOG entries and archived plans and reports that name the tests are history and were not edited. No README row or link pointed at a removed file.
+
+**The four kept tests** (not covered by the ruling; they pass): d42 (`math_integration_production_ready` over `bench/BASELINE_LOCK.json`, 0.04 s), d43 (`math_integration_lock_ready`: the lock's sweep with `--math-integration --intelligence-profile`, 0.04 s), d56 and d57 (the cell-hypothesis sweep's math-integration and production certificate statuses, 7.5 s and 7.2 s). They belong to the same hybrid-era series and check lock and sweep files, not the hybrid model's statistics.
+
+**Verification**
+
+- A Release build of every target (Linux): no errors, 41 warnings, the same count as the triage build before the cut, none in changed code.
+- `ctest -N`: 226 → 191 tests; the 35 gone are exactly the class-d list; `cypha_slow` 91 → 56; CI's set (`-LE cypha_slow`) 135, unchanged.
+- CI's set: 135 of 135 pass (TLS and CUDA skipped as before), 204 s.
+- `ctest -L cypha_slow -j1`: 56 tests, 2 fail: `native_predictive_codec_smoke` and `native_forecast_smoke` (timeout). The canary test passes with the fix below; without it, it is the third failure.
+- Windows: no source file was removed from a CMake list, the MSVC job checks only executables that still build, and no MSVC-only code names a removed symbol.
+
+**What the remaining failures are** (class a′ and a″, followed up)
+
+All three share one cause. In the hp wrapper, `CyphaLMModel::reset_context()` calls `HpSequenceBackend::reset()`, which builds a cold, untrained predictor. In the hybrid era it only cleared the recurrent state. The predictive codec relies on the cold reset (encoder and decoder must start alike), but callers written for the hybrid model use it to start a new sequence and lose all training.
+
+- **Canary (fixed, separate commit).** `cyphalm_memorization_canary` (2026-07-17) trains, then calls `reset_context()` before each recall check, so it measured an untrained model: 0 of 6. Calling `reset_stream(false)` instead keeps the trained tables and starts a new stream: 6 of 6, and `native_memorization_canary_smoke` passes. The change is one line in the tool, and the test's threshold (at least 1 of 6) is unchanged.
+- **Codec, out-of-vocabulary tokens (not fixed).** `apply_hp_production_recipe` sets `vocab_size = 256` (since `0653e25`: "hp models bytes"), so `init_default_sequence(64, 32)` builds a 256-symbol model and generation emits bytes ≥ 64. Whether a smaller requested vocabulary should be honoured (hp's bit tree can mask to it) or rejected is a design call. The "mixer should beat cold neural" check also measures a cold-reset model on both sides.
+- **Forecast, time (not fixed).** `rollout_tree.cpp`'s `sync_model_context()` calls `reset_context()` before every rollout and every new tree node, about 1,200 times a run. Each call builds a new production-size hp predictor (table bits 22): that is the 4 min 57 s of kernel time. It also means the rollouts sample from an untrained model. Using `reset_stream(false)` there would change the forecast module's output, so it is left for Odin.
+
 ## How to reproduce
 
 ```
