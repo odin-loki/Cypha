@@ -108,6 +108,13 @@ int infer_field_dim(const CNode& root) {
             }
         }
     }
+    // Without an embedded field (it is in a separate f_field_json), the field's own state gives its size, as in
+    // Cypha::load. The old fallback (a "field_dim" key, else 24) rejected such checkpoints at any other size.
+    if (const CNode* fh = map_get(root, "field_h")) {
+        if (fh->kind == CNode::Tensor && !fh->tensor.empty()) {
+            return static_cast<int>(fh->shape.empty() ? fh->tensor.size() : fh->shape[0]);
+        }
+    }
     if (const CNode* fd = map_get(root, "field_dim")) {
         if (fd->kind == CNode::Int) {
             return static_cast<int>(fd->i);
@@ -308,6 +315,21 @@ std::string BranchARouter::save_checkpoint(const std::string& base) {
         model_root_.kind == CNode::Map ? clone_cnode(model_root_) : create_fresh_model_root(fmp);
     if (mem_) {
         save_root = CyphaDifMemoryState::merge_state_into_root_for_save(save_root, *mem_);
+        // A checkpoint loaded with a separate f_field_json has no world.F_field, and the merge only rewrites keys that
+        // exist: embed the field the router holds, so the saved model file is complete (as Cypha::save writes it).
+        const std::size_t want = static_cast<std::size_t>(mem_->d_latent) * static_cast<std::size_t>(mem_->field_dim);
+        if (mem_->f_field.size() == want && want > 0) {
+            for (auto& kv : save_root.map) {
+                if (kv.first != "world" || kv.second.kind != CNode::Map || map_get(kv.second, "F_field") != nullptr) {
+                    continue;
+                }
+                CNode ff;
+                ff.kind = CNode::Tensor;
+                ff.shape = {static_cast<std::uint32_t>(mem_->d_latent), static_cast<std::uint32_t>(mem_->field_dim)};
+                ff.tensor = mem_->f_field;
+                kv.second.map.push_back({"F_field", std::move(ff)});
+            }
+        }
     }
     save_cypha_file(cypha_path.string().c_str(), save_root);
 

@@ -79,6 +79,10 @@ class BranchARouter {
 
     nlohmann::json summary() const;
 
+    /// Read-only views of the loaded model, for checks (``native_branch_a_router_save_load_test``). Null before a load.
+    const CyphaInferModel* infer_model() const { return model_.get(); }
+    const CyphaDifMemoryState* memory_state() const { return mem_.get(); }
+
  private:
     void ensure_trained() const;
     std::vector<double> embed_text_unlocked(const std::string& text, EmbedMeta* meta_out = nullptr) const;
