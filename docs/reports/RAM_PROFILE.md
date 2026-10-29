@@ -839,3 +839,7 @@ Peaks are VmHWM in MB (kB / 1000); the unchanged tool is main aca60a5, the new o
 | M17c | Stores, rows and stdout byte-identical | **Hit**, both configurations |
 
 **Decision.** Lossless, and C1L + defaults with `--save` falls 17.8 MB, far beyond the 0.2 MB repeat spread (two runs 0.05 MB apart): M17 is adopted. Every built and served `qa` configuration is now under 190 MB.
+
+## BKN (2026-10-29)
+
+Packed byte Kneser–Ney 6:4:2:1 is 13.8 MB on the wiki bytes and 24.3 MB on `qa`'s training text; its build alone peaks at 69 MB. Inside `qa` it adds 23.7 MB served and 99.8 MB to the built peak (186.7 → 286.5 MB), because the build ran while the index, class table and lowered index were resident, on a second copy of the text. BKN2 moves the build after the lowered index is freed ([report](BYTE_KN.md)).
