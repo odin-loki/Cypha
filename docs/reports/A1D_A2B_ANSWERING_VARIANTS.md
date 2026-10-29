@@ -895,6 +895,7 @@ The trie model's test lines equal A1d's: 74 abstained, 0.635 / 0.94.
 | 2026-10-28 | R3raw (A1d) | TEST_R3raw | above (A1d) |
 | 2026-10-29 | `ent_bold` in the token (ANS, rule 2) | TBOLD | trie 0.963 / 0.52; gated 0 / 0 |
 | 2026-10-29 | entity frame + `--copy-dk` (ANS, rule 3) | TDKC | tags name the entity 49 of 50; gated 0 / 0 |
+| 2026-10-29 | byte Kneser–Ney default (BKN2) | T4 (`/root/work/bkn/runs/bkn2`) | gated 0 right / 3 wrong (was 0 / 0); trie + IG raw 2 right, 96 wrong, 102 abstained |
 
 The two changes were read separately. Their combination (`ent_bold` with DKC) has not been read.
 

@@ -4,6 +4,8 @@
 
 (The design, the reads, the rules and the predictions below were written and committed before any BKN run. Results are added under them.)
 
+**Update, BKN2 (2026-10-29).** Kneser–Ney is now built inside `qa` under 200 MB (built 196.8 / 197.1 MB, served 196.4), with the same tables. By BKN2's registered reads, 6:4:2:1, way (b), is the default of `qa`, `sample` and `context8k` (`--no-bkn` turns it off). See the BKN2 sections at the end. The "Decision (rule 3)" below is the earlier one, before BKN2.
+
 **Question.** TOK-A found that interpolated modified Kneser–Ney over single bytes (V = 256) at order 8–12, mixed with the ∞-gram, beats CyphaLM's byte trie + InfiniGram by 0.18–0.19 bits per byte on the dev holdout (order 8 1.8951, order 12 1.8831, against 2.0725). Its tables were unpacked: 526 MB at order 8, 1.3 GB at order 12. Can a packed, pruned Kneser–Ney keep most of that gain inside Odin's RAM budget (built and served `qa` under 200 MB)? Does it hold on fresh text, and on top of the class, similar-context and copy experts?
 
 **Rule 10.** Kneser–Ney is an expert inside CyphaLM. Nothing here answers a question.
@@ -188,3 +190,199 @@ $B sample $E dev.txt fresh.txt --sim default,online=1,probe=128 --bkn 6:4:2:1 --
 ```
 
 Runs are in `/root/work/bkn/runs` (dev, fresh, `qa/`, `sb/`).
+
+## BKN2: Kneser–Ney built inside `qa` under 200 MB (registered 2026-10-29, before any run)
+
+**Odin Loch** · 2026-10-29 · follows the decision above
+
+**Question.** Building Kneser–Ney inside `qa` raised the built peak from 186.7 to 286.5 MB. Served, it costs only its tables (+23.7 MB, 196.0 MB). Can the build fit under 200 MB with the same tables? If it can, does Kneser–Ney pass the rest of rule 3 and become the default?
+
+**Where the 100 MB comes from** (read from the code; not yet placed by a trace).
+- The default similar-context expert keys the wiki bytes only (`src=wiki`), so the index takes T and T is not resident. Kneser–Ney is built on a second copy of T from the index (about 21 MB).
+- It is built after the index, the class table and the lowered index (about 26 MB, kept for the store) are resident.
+- One group is still large. In T, the group of positions after a space holds about 3–4 million positions. Its entries take 24 bytes each (context key, left-extension key, byte): about 80–100 MB.
+- The pairs made from them grow by doubling. The output arrays also grow by doubling, and `shrink_to_fit` copies them at the end of each order.
+- Positions are gathered 4 Mi at a time (16 MB).
+
+**The change to the build** (`byte_kn.hpp`; the tables must come out the same).
+1. **Parts by key.** Each group is cut into P parts by its context key: part p holds the contexts whose key k has ⌊k·P / 2⁶⁴⌋ = p, with P = ⌈group size / 2¹⁹⌉. Parts run in key order, so contexts come out in today's order. A context never spans two parts.
+2. **Slices inside a part.** A part's positions are read in slices of 2¹⁹. Each slice's entries are sorted and merged into the part's running set, which keeps only distinct entries: (context, byte, left byte) below the top order, (context, byte) with summed counts at the top order. A part holds its distinct entries, not one per position. This keeps orders 2–3 small, where a few contexts fill a whole group.
+3. **The left byte, not its key.** Below the top order an entry keeps the left extension's byte in place of its 64-bit key. For a fixed context the key step is one-to-one in the byte, so the distinct count is the same. Entries shrink from 24 to 16 bytes.
+4. **Positions.** Gathered 1 Mi at a time (4 MB). A group bigger than that is not gathered: each of its parts scans the text.
+5. **Exact sizes.** Pass 1 also counts the contexts and children that pruning keeps. Pass 2 reserves the arrays at that size, so nothing doubles and nothing is copied at the end.
+- The part and slice size is a parameter of `build` (default 2¹⁹), so the self-test can force many parts and slices.
+
+**The change to `qa`** (`cyphalm_trie.cpp`, only when Kneser–Ney is built).
+- **The lowered index leaves early.** With `--save`, under M17's condition (an entity statistic in the token, no `--cards`), the lowered index is written to `low.fm` and freed at M14's point, before the chat text is trained. `save_qa` then lists `low.fm` without writing it again. Nothing after M14's point reads it (M14's argument).
+- **One copy of T.** Kneser–Ney is built right after the class table, from the copy of T the class build already takes from the index, before that copy is freed. When the similar-context expert keeps T (`src=all`), from T itself, as before.
+- It is not moved before the index. Its 24 MB of tables would then sit through the index build (M16: 178.5 MB in C1L + defaults).
+
+**Checks (lossless).**
+- In the same `qa` configuration, `kn.bkn` from the new build is byte-identical to the old build's (`/root/work/bkn/runs/qa/store_on/kn.bkn`), and so is every other store file.
+- Harness (`ByteKN` alone, 6:4:2:1 on 21 MB of enwik8): old and new tables byte-identical; each one's peak and time.
+- `cyphalm_trie bkn $E 6:4:2:1` prints the same numbers as before (1.932358 for (b) + InfiniGram).
+- Self-test: the build with parts and slices of 64 and of 1,000 entries gives the same tables as one part, at orders 1, 3 and 6, pruned and not.
+- Without `--bkn`, `qa`'s rows and output (timings aside) equal the merge commit's (a1f218a).
+
+**Reads, in this order.**
+0. The old tool (a1f218a), `qa` with `--save --bkn 6:4:2:1`, under M15's trace (`/root/work/ram2/prof.sh`: `VmRSS` every 0.25 s beside the progress lines), once: where its 286.5 MB peak is, and the level after the build with the tables resident.
+1. The new tool, the same command under the trace. If its peak is within 5 MB of 200, a second run.
+2. The same model served (`--model`).
+
+`qa` is C1L as A4d ran it (the merge check's flags) with the defaults (class, similar-context, copy).
+
+**If the built and served peaks are both under 200 MB,** 6:4:2:1, way (b), is wired as the default of `qa`, `sample` and `context8k`; `--no-bkn` turns it off. Then:
+
+3. Dev answers (from read 1): the cross-validated gate keeps at least as many right answers as without (2), at a wrong rate of 2% or less.
+4. The frozen Q/A test, read once with the new default, in A1d's test configuration (`--test bench/eval/t_qa_wiki.tsv --parse parse_all_span.tsv`, `ent_title`, the low-only token). Gated: wrong rate 2% or less, and at least as many right as A1d's TEST_C1L (0). Logged in A1D_A2B's table of test reads.
+5. `sample` on GEN-A's dev benchmark (`scripts/gen_eval.sh dev`): pooled SCRIBE v2 at least the default's 95% lower bound (default 0.079 [0.064, 0.096]), and the copy share at most the default's + 0.02 (GEN-A's rule; default 0.0414).
+6. `context8k`: its lines and peak, recorded. Its peak is not under the 200 MB rule: it is 202.3 MB without Kneser–Ney (M16).
+7. With `--no-bkn`, `qa`'s rows, `sample`'s file and `context8k`'s lines equal the tool's before the switch.
+
+**Rule.** The default stays switched only if reads 1–5 and 7 hold. If any fails, Kneser–Ney stays behind `--bkn`, and the report says which read failed. If the built peak is over 200 MB and lies after the Kneser–Ney build (the tables resident through the later phases), nothing more is tried here.
+
+**Predictions.**
+
+| # | Prediction |
+|---|---|
+| K8 | Every store file and the harness tables are byte-identical to the old build's |
+| K9 | Read 0 peaks inside the Kneser–Ney build, 270–300 MB |
+| K10 | In read 1, the Kneser–Ney build adds at most 40 MB above what is resident when it starts (its tables included) |
+| K11 | Read 1 peaks at 190–199 MB, after the Kneser–Ney build (the similar-context build or the holdout arrays), not inside it |
+| K12 | The harness build takes at most twice its old time |
+| K13 | Served `qa` peaks at 196 ± 1 MB, as before |
+| K14 | The frozen test, gated: 0–2 right, wrong rate 2% or less |
+| K15 | GEN-A's dev: pooled SCRIBE v2 0.10–0.14, the copy share within ±0.01 of the default's |
+| K16 | `context8k`'s last chain line falls by 0.04–0.08 bits per byte; its peak rises by 20–40 MB |
+
+### Results: BKN2 (2026-10-29)
+
+- **Tools.**
+  - Old: the merge commit a1f218a.
+  - New build: 0b3c017.
+  - Default switch: 50fa5f4. Its binary is identical to the one the reads after the gate used (same md5 before and after the commit).
+- **Units.** Peaks are `VmHWM` in kB / 1000.
+- **Traces.** M15's wrapper polled `VmRSS` every 0.25 s beside the progress lines.
+- **Times are rough.** Other tracks shared the machine (load 14–22 on 4 cores).
+- **`qa` configuration.** C1L as A4d ran it, with the defaults (class, similar-context, copy).
+
+#### The build is lossless
+
+| Check | Result |
+|---|---|
+| Harness, 6:4:2:1 on 21 MiB of enwik8 | Tables byte-identical (sha256 `e25012f7…`). Build peak **144.7 → 66.0 MB**; time 85.6 → 145.4 s |
+| Harness on 2 MB: order 3, order 6, 6:4:2:1 | Tables byte-identical; peaks 19.1 / 34.5 / 23.9 → 13.7 / 27.5 / 20.0 MB |
+| Self-test | Parts and slices of 64 and of 1,000 entries give the one-part tables at K = 1, 3, 6, pruned and not. A planted bug fails it (the merge drops earlier slices) |
+| `qa` store, read 1 against read 0 | All six files byte-identical; `kn.bkn` also equals the pre-merge store's. Rows and stdout (timings masked) identical |
+| `cyphalm_trie bkn $E 6:4:2:1`, new build | Every line identical (timings aside): (b) + InfiniGram **1.932358**. Peak 207.5 → 194.5 MB |
+
+#### Where the peak was, and where it is now
+
+Phases of `qa --save --bkn 6:4:2:1` (MB). Each phase runs from one progress line to the next.
+
+| Phase | Read 0 (old tool) | Read 1 | Read 1, second run |
+|---|---:|---:|---:|
+| Wiki trained → chat trained (the lowered index's build) | 184.9 | 184.9 | 184.6 |
+| Chat trained → index built (T and the index) | 180.3 | 178.9 | 178.8 |
+| Index built → class table built | 169.2 | 151.3 | 155.9 |
+| **Class table built → Kneser–Ney built** | **286.9** (+117.7) | **160.5** (+9.2) | **160.6** (+4.8) |
+| Store written | 217.2 | 176.1 | 176.2 |
+| Similar-context build, holdout, answers (to the end) | 219.4 | 196.8 | 197.1 |
+| **Peak** | **286.9** | **196.8** | **197.1** |
+
+- **The old peak** was inside the Kneser–Ney build: +117.7 MB over what was resident when it began. After it, the freed scratch stayed in the heap, so the later phases ran at 217–219 MB.
+- **The new build** adds 5–9 MB, its 24.3 MB of tables included. Its scratch fits in heap the class build had freed.
+- **Freeing the lowered index early** lowers the class build's phase by 13–18 MB.
+- **The new peak** comes at the very end of the run, while the answers are written. It is not at the similar-context build or the holdout arrays. The tables (24.3 MB) are resident from their build on.
+- **Kneser–Ney build time inside `qa`:** 153–160 s, against 170 s for the old build.
+
+#### Reads 1–7
+
+| Read | Without Kneser–Ney | With Kneser–Ney 6:4:2:1 (b) | Rule | Holds |
+|---|---:|---:|---|---|
+| 1. Built `qa`, `--save` | 186.7 MB (M17) | **196.8 / 197.1 MB** (old build: 286.9) | under 200 | Yes |
+| 2. Served `qa` | 172.3 MB | **196.4 MB** (pre-merge 196.0); rows equal the built rows | under 200 | Yes |
+| 3. Dev answers, cross-validated gate (chat, trie + IG) | 2 right, 0 wrong | **3 right, 2 wrong** (wrong rate 0.0154); full-dev gate 3 → 4 right | not fewer right; wrong ≤ 2% | Yes |
+| 4. **Frozen test, once**, gated | 0 right, 0 wrong (TEST_C1L) | **0 right, 3 wrong** (wrong rate 0.015, Wilson upper 0.043) | wrong ≤ 2%; right ≥ 0 | Yes |
+| 5. GEN-A dev, SCRIBE v2 pooled | 0.079 [0.064, 0.096] | **0.125 [0.107, 0.143]** | ≥ 0.064 | Yes |
+| 5. GEN-A dev, copy share (copy32, pooled) | 0.0414 | **0.0428** | ≤ 0.0614 | Yes |
+| 6. `context8k`, last chain line (+ class + similar-context + copy) | 1.7897 | **1.7276** | recorded | — |
+| 6. `context8k` peak | 202.5 MB | **218.9 MB** | recorded (not under the rule) | — |
+| 7. `--no-bkn` equals the tool before the switch | — | `qa` rows and stdout (timings masked) = the merge check's; `sample` 10 prompts = the merge tool's file; `sample` on GEN-A's dev prompts = GEN-A's D0 file byte for byte; `context8k` every line | identical | Yes |
+
+**More numbers.**
+
+- **The frozen test, without the gate** (trie + IG):
+  - 2 right, 96 wrong, 102 abstained, against 2 / 101 / 97 (TEST_C1L).
+  - Abstentions: 48 of 50 not-in-slice questions, precision 0.471 (was 0.495). Of the in-slice questions the trie would get wrong, 54 of 150 abstain (was 49).
+  - Tags 73 (was 72).
+  - Test-configuration peak: 199.9 MB, against 184.8 without Kneser–Ney (ANS's TBOLD and TDKC). This configuration is not under the rule, but it is at the edge.
+- **The three gated wrong answers on the test** sit right at the gate's cut (min_lp −1.279, −1.301 and −1.304 against τ = −1.3039):
+  - "The creation of metal is often attributed to the band Black Sabbath."
+  - "Augustus was a leader of the Roman Empire"
+  - "It is the problem of your geography."
+  - The dev gate's cut moved from −0.895 to −1.304, because Kneser–Ney changes the scale of the answers' log-probabilities.
+- **GEN-A dev:**
+  - SCRIBE v2 at T 0.6 / 0.8 / 1.0: 0.101 / 0.088 / 0.047 → 0.157 / 0.136 / 0.080.
+  - Surface S, pooled: 0.855 → 0.895.
+  - BPC of the human continuations under sampling's mixture: 2.1339 [2.1016, 2.1659] → 2.0145 [1.9846, 2.0441].
+  - 624 of 750 samples kept after SCRIBE's cleaning (was 618).
+- **`context8k`:**
+  - trie 2.3199 → 2.0313 with Kneser–Ney; trie + InfiniGram (8192) 2.0715 → 1.9200; + class 1.9940 → 1.8952; + similar-context 1.8404 → 1.7748; + copy 1.7897 → 1.7276.
+  - Its answers use Kneser–Ney (it is part of the byte model). Some answer texts change; every tally is the same (seen 3/3, first letter changed 3/3, held-out Dolly 1/30, the rest 0).
+- **The `qa` holdout stack** is unchanged from BKN's read: 1.7895 → 1.7273.
+
+#### Decision
+
+Reads 1–5 and 7 hold, so **byte Kneser–Ney 6:4:2:1, way (b), is now the default** of `qa`, `sample` and `context8k`.
+- `--no-bkn` turns it off, and each subcommand then prints exactly what it printed before.
+- `--bkn SPEC` and `--bkn-way a|b` choose another.
+- A store built without it is served with `--no-bkn`: the store's record names `bkn=`.
+
+**For Odin's veto.**
+- **The frozen test.** Without Kneser–Ney, the gate let nothing through (0 right, 0 wrong). With it, the gate lets 3 wrong answers through and still no right one. That is inside the registered rule (wrong rate 0.015 ≤ 0.02), but it gains no right answer on the test. On dev it gains one right and two wrong.
+- **RAM is close to the limit.** Built `qa` is at 197 MB, and the frozen-test configuration at 199.9 MB. `context8k` (not under the rule) rises from 202.5 to 218.9 MB.
+
+#### Predictions, scored
+
+| # | Prediction | Result |
+|---|---|---|
+| K8 | Store files and harness tables byte-identical | **Hit** |
+| K9 | Read 0 peaks inside the Kneser–Ney build, 270–300 MB | **Hit:** 286.9 |
+| K10 | The new build adds at most 40 MB over what is resident when it starts | **Hit:** +9.2 / +4.8 (old: +117.7) |
+| K11 | Read 1 peaks at 190–199 MB, after the Kneser–Ney build | **Hit:** 196.8 / 197.1. But the place is the run's end (answers), not the similar-context build or the holdout arrays named in the prediction |
+| K12 | The harness build takes at most twice its old time | **Hit:** 1.70× (85.6 → 145.4 s) |
+| K13 | Served `qa` at 196 ± 1 MB | **Hit:** 196.4 |
+| K14 | Frozen test, gated: 0–2 right, wrong rate at most 2% | **Hit:** 0 right, 3 wrong (0.015) |
+| K15 | GEN-A dev SCRIBE v2 0.10–0.14; copy share within ±0.01 | **Hit:** 0.125; +0.0014 |
+| K16 | `context8k` falls 0.04–0.08; peak +20–40 MB | **Partial:** −0.062; peak +16.4 MB |
+
+8 hits, 1 partial.
+
+#### Checks
+
+- **Self-test:** `cyphalm_trie selftest` passes. It now checks the build's parts and slices; a planted merge bug fails it.
+- **Lossless and parity:** every lossless and `--no-bkn` parity check in the tables above holds.
+- **Frozen test:** read once. Its row for A1D_A2B's table of test reads:
+
+  | Date | Change | Run | Result |
+  |---|---|---|---|
+  | 2026-10-29 | byte Kneser–Ney default (BKN2) | T4 (`/root/work/bkn/runs/bkn2`) | gated 0 right / 3 wrong (was 0 / 0); trie + IG raw 2 / 96 / 102 abstained |
+
+#### How to reproduce (BKN2)
+
+```bash
+# the harness (tables old vs new): kn_build FILE BYTES SPEC OUT, compiled against each byte_kn.hpp
+kn_build_old $E 22020096 6:4:2:1 old.bkn; kn_build_new $E 22020096 6:4:2:1 new.bkn; cmp old.bkn new.bkn
+# reads 0-1 (old and new tool), traced; read 2 served from read 1's store
+/root/work/ram2/prof.sh R1 $B qa $E dolly.jsonl $C1LD --bkn 6:4:2:1 --bkn-way b --save DIR --out rows.tsv
+/root/work/ram2/prof.sh R2 $B qa $E dolly.jsonl $C1LD --bkn 6:4:2:1 --bkn-way b --model DIR --out rows.tsv
+# after the switch (Kneser-Ney by default): the frozen test once, GEN-A dev, context8k, and --no-bkn parity
+$B qa $E dolly.jsonl --dev DEV --test bench/eval/t_qa_wiki.tsv --parse parse_all_span.tsv --dk dk_mention.tsv \
+   --dk-ratio 0.20 --fam after --fam-stat ent_title --fam-train low --shard shard_facts.tsv --base a0_rows.tsv --out T4.rows.tsv
+CYPHALM_TRIE=$B scripts/gen_eval.sh dev BKN OUTDIR
+$B context8k $E dolly.jsonl [--no-bkn]
+$B qa $E dolly.jsonl $C1LD --no-bkn --out rows.tsv; $B sample $E dev.txt --prompts 10 --no-bkn
+```
+
+Runs are in `/root/work/bkn/runs/bkn2` (traces `R0`, `R1`, `R1b`, `R2`; `T4`; `gen/`; `C8`, `C8M`, `C87`; `Q7`, `S7`, `S7F`; `H_*`; `BK2`).

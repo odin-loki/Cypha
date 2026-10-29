@@ -32,6 +32,10 @@
 // similar-context, copy; in sample only the copy expert is (SCRIBE v2 falls with the class expert; --cls adds it). Like
 // the similar-context expert they are off inside every answer, so answers are written without them. --no-cls and
 // --no-copy leave them out; with --no-cls --no-copy --no-sim each subcommand prints what it printed before them.
+// BKN2 (docs/reports/BYTE_KN.md): packed byte Kneser-Ney (byte_kn.hpp; spec 6:4:2:1, way b: mixed into the trie
+// mixture by lambda per bucket, before InfiniGram) is a default in qa, sample and context8k, built on each one's
+// training bytes. Unlike the experts above it is on inside answers: it is part of the byte model. --no-bkn leaves it
+// out, and each subcommand then prints what it printed before it; --bkn SPEC and --bkn-way a|b choose another.
 //
 // Subcommands (stdout carries the numbers, stderr the progress):
 //   bpc [wiki] [--negative] [--no-guard]
@@ -319,7 +323,8 @@ struct Args {
     bool no_cls = false, no_copy = false;         // B4C: the class and copy experts off where they are defaults
     std::string plant, part;                      // S4b surprise: the planted pages (D), --part K/N
     bool bkn_fresh = false, bkn_stack = false;    // BKN: also the fresh text / the defaults on top
-    std::string bkn, bkn_way = "b";               // BKN: --bkn K[:m:c:d] in qa and sample; --bkn-way a (replace) | b (add)
+    std::string bkn, bkn_way = "b";               // BKN: --bkn K[:m:c:d] in qa, sample, context8k; --bkn-way a (replace) | b (add)
+    bool no_bkn = false;                          // BKN2: byte Kneser-Ney off where it is a default
     std::string plan;                             // GEN-E: sample's content-plan expert, --plan STOREDIR[,RAWFRAMES]
     std::string plan_drop;                        // GEN-E: --plan-drop LO:HI, the prompts' source bytes (facts there dropped)
     std::string prompts_file;                     // GEN-A: sample's prompts and human continuations
@@ -378,6 +383,7 @@ Args parse(int argc, char** argv, int from) {
         else if (s == "--bkn") a.bkn = next();             // BKN
         else if (s == "--bkn-way") a.bkn_way = next();     // BKN
         else if (s == "--bkn-stack") a.bkn_stack = true;  // BKN
+        else if (s == "--no-bkn") a.no_bkn = true;        // BKN2
         else if (s == "--sim-surface") a.sim_surface = true;
         else if (s == "--sim-stream") a.sim_stream = next();  // A4e
         else if (s == "--sim-bits") a.sim_bits = next();
@@ -746,8 +752,9 @@ void sample_mix(const PackedModel& model, const double w[6], std::size_t limit, 
                 double M[256], const cypha::cyphalm::bkn::ByteKN* kn = nullptr, const double* lkn = nullptr,
                 bool kn_replace = false);
 // BKN (docs/reports/BYTE_KN.md), defined below: --bkn K[:m:c:d] [--bkn-way a|b], packed byte Kneser-Ney replacing (a)
-// or added to (b, the default) the trie mixture in qa and sample; off without the flag.
+// or added to (b, the default) the trie mixture in qa, sample and context8k; on by default (BKN2), off with --no-bkn.
 std::vector<int> bkn_spec(const std::string& s);
+constexpr const char* kBknDefault = "6:4:2:1";  // BKN2: the default of qa, sample and context8k (way b)
 std::unique_ptr<cypha::cyphalm::bkn::ByteKN> make_bkn(const std::string& spec, const std::uint8_t* t, std::size_t n);
 std::vector<double> mix_bkn_into(const cypha::cyphalm::bkn::ByteKN& kn, const std::uint8_t* data, std::size_t train,
                                  std::size_t half, bool replace, std::vector<double>& cur);
@@ -810,9 +817,11 @@ int cmd_context8k(const Args& a) {
     std::cerr << "index built over " << tn << " bytes\n";
     int crc = 0;
     std::unique_ptr<ClassContext> cc;
-    if (!default_cls_spec(a).empty()) {
+    std::unique_ptr<cypha::cyphalm::bkn::ByteKN> kn;  // BKN2: byte Kneser-Ney on the same bytes, from the same copy
+    if (!default_cls_spec(a).empty() || !a.bkn.empty()) {
         const std::vector<std::uint8_t> t = ig.text();
-        cc = default_cls(a, t.data(), t.size(), crc);
+        if (!default_cls_spec(a).empty()) cc = default_cls(a, t.data(), t.size(), crc);
+        if (!crc && !a.bkn.empty() && !(kn = make_bkn(a.bkn, t.data(), t.size()))) return 2;
     }
     if (crc) return crc;
 
@@ -834,6 +843,15 @@ int cmd_context8k(const Args& a) {
     std::cout.setf(std::ios::fixed);
     std::cout.precision(4);
     std::cout << "trie_only_bpc " << bits_trie / static_cast<double>(H - half) << "\n";
+    // BKN2: Kneser-Ney into the trie mixture, first (as qa); the lines below are over trie + Kneser-Ney.
+    const bool kn_rep = a.bkn_way == "a";
+    std::vector<double> lkn;
+    if (kn) {
+        lkn = mix_bkn_into(*kn, data.data(), kTrain, half, kn_rep, pt);
+        double b = 0;
+        for (std::size_t k = half; k < H; ++k) b += -std::log2(pt[k]);
+        std::cout << "trie_plus_bkn_bpc " << b / static_cast<double>(H - half) << "\n";
+    }
 
     const int caps[] = {4, 16, 64, 512, 8192};
     double lam8k[kBuckets] = {0};
@@ -887,7 +905,8 @@ int cmd_context8k(const Args& a) {
     // the similar-context expert (keys over the wiki train bytes), the copy expert (m = --copy-min, over the holdout
     // stream). Each one's lambdas are fit on the first half over the distribution it is mixed into; its line reads the
     // second half. --no-cls, --no-sim and --no-copy leave them out. The answers below are not touched: the experts are
-    // off inside answers (in_answer), and they are written without them.
+    // off inside answers (in_answer), and they are written without them. Kneser-Ney (BKN2) is part of the byte model
+    // above, so the answers use it.
     std::vector<double> base(H);
     for (std::size_t k = 0; k < H; ++k) base[k] = lam8k[bk8k[k]] * pinf8k[k] + (1 - lam8k[bk8k[k]]) * pt[k];
     std::string chain = "trie_plus_context_8192";
@@ -947,6 +966,7 @@ int cmd_context8k(const Args& a) {
             pm.fill_experts(seq.data(), seq.size(), all, Mode::Synth, e, m, pred, false);
             double M[256];
             mix_dist(w, e, m, pred, M);
+            if (kn) bkn_mix(*kn, lkn.empty() ? nullptr : lkn.data(), kn_rep, seq.data(), seq.size(), M);  // BKN2
             const std::size_t len = std::min<std::size_t>(seq.size(), 8192);
             const auto r = ig.query(seq.data() + (seq.size() - len), len, 8192, prev < 0 ? -1 : std::min(prev + 1, 8192),
                                     1, cur);
@@ -3633,7 +3653,8 @@ std::string qa_record(const Args& a, const QaOpts& o, const std::vector<std::uin
 
 bool save_qa(const std::string& dir, const std::string& record, const PackedModel& pm, const double w[6], const Config& cfg,
              const double wf[6], std::size_t all_followers, const std::array<double, kFam>& fam_cut, const FmInfiniGram& ig,
-             const FmInfiniGram* low, const ClassContext* cc, const cypha::cyphalm::bkn::ByteKN* kn = nullptr) {
+             const FmInfiniGram* low, const ClassContext* cc, const cypha::cyphalm::bkn::ByteKN* kn = nullptr,
+             bool low_written = false) {  // BKN2: low.fm already written (and the index freed) before the build
     try {
         std::filesystem::create_directories(dir);
         pm.save(dir + "/model.pk", w, cfg);
@@ -3653,7 +3674,8 @@ bool save_qa(const std::string& dir, const std::string& record, const PackedMode
         reals(wf, 6);
         m << "\nfollower_limit " << all_followers << "\nfam_cut";
         reals(fam_cut.data(), fam_cut.size());
-        m << "\nparts model.pk ig.fm" << (low ? " low.fm" : "") << (cc ? " cls.cc" : "") << (kn ? " kn.bkn" : "") << "\n";
+        m << "\nparts model.pk ig.fm" << (low || low_written ? " low.fm" : "") << (cc ? " cls.cc" : "") << (kn ? " kn.bkn" : "")
+          << "\n";
         const std::string body = m.str();
         std::ofstream f(dir + "/qa.meta", std::ios::binary);
         f << body << "fnv " << std::hex << fnv64(body) << "\n";
@@ -4343,6 +4365,20 @@ int cmd_qa(const Args& a, const QaOpts& o) {
     // M14: with an entity statistic in the token, every dev and test entity was chosen above and is kept (`chosen`), and
     // nothing below reads the lowered index: free it (a store writes it later, so --save keeps it).
     if (fam_on && fam_k > 0 && a.save.empty() && a.cards.empty()) low.reset();  // --cards reads it (S1)
+    // BKN2: when Kneser-Ney is built below, --save writes the store's low.fm here and frees the index (M17's condition),
+    // so it is not resident through the chat training, the index, the class table and Kneser-Ney's build.
+    bool low_written = false;
+    if (!serve && !a.bkn.empty() && !a.save.empty() && fam_on && fam_k > 0 && a.cards.empty() && low) {
+        try {
+            std::filesystem::create_directories(a.save);
+            low->save(a.save + "/low.fm");
+        } catch (const std::exception& e) {
+            std::cerr << "qa --save: " << e.what() << "\n";
+            return 1;
+        }
+        low_written = true;
+        low.reset();
+    }
     auto with_tok = [&](const std::string& prompt, const std::string& tok) {
         // prompt ends in "Assistant: "; "before" puts the token in front of it, "after" behind it.
         if (!fam_on) return prompt;
@@ -4399,28 +4435,30 @@ int cmd_qa(const Args& a, const QaOpts& o) {
     FmInfiniGram ig = serve ? std::move(*st.ig) : sim_reads_t ? FmInfiniGram(T.data(), T.size()) : FmInfiniGram(std::move(T));
     std::cerr << (serve ? "served" : "index built") << "\n";  // S1: not const, --cards builds locate on it
     std::unique_ptr<ClassContext> cc = std::move(st.cc);
-    if (!serve && !o.cls.empty()) {
-        cc = make_class_context(o.cls);
-        if (!cc) return 1;
-        if (!sim_reads_t) T = ig.text();  // M16: one walk through the index, so T was never copied
-        cc->build(T.data(), T.size());
-        if (!sim_reads_t) std::vector<std::uint8_t>().swap(T);
-        std::cerr << "class table built\n";
-    }
-    // BKN (--bkn): byte Kneser-Ney on T (wiki train + chat), after the index and the class table, from the text the index
-    // gives back (M16's order; T itself when the similar-context expert keeps it); a served model loads it.
+    // BKN (--bkn): byte Kneser-Ney on T (wiki train + chat), after the index and the class table, from the same copy
+    // of T the class build takes from the index (BKN2: one copy; T itself when the similar-context expert keeps it).
+    // A served model loads it.
     std::unique_ptr<cypha::cyphalm::bkn::ByteKN> kn = std::move(st.kn);
     const bool kn_rep = a.bkn_way == "a";
-    if (!serve && !a.bkn.empty()) {
-        if (sim_reads_t) kn = make_bkn(a.bkn, T.data(), T.size());
-        else {
-            const std::vector<std::uint8_t> TK = ig.text();
-            kn = make_bkn(a.bkn, TK.data(), TK.size());
+    const bool kn_build = !serve && !a.bkn.empty();
+    if (!serve && (!o.cls.empty() || kn_build)) {
+        if (!sim_reads_t) T = ig.text();  // M16: one walk through the index, so T was never copied
+        if (!o.cls.empty()) {
+            cc = make_class_context(o.cls);
+            if (!cc) return 1;
+            cc->build(T.data(), T.size());
+            std::cerr << "class table built\n";
         }
-        if (!kn) return 2;
-        std::cerr << "byte Kneser-Ney built: " << kn->bytes() << " bytes\n";
+        if (kn_build) {
+            kn = make_bkn(a.bkn, T.data(), T.size());
+            if (!kn) return 2;
+            std::cerr << "byte Kneser-Ney built: " << kn->bytes() << " bytes\n";
+        }
+        if (!sim_reads_t) std::vector<std::uint8_t>().swap(T);
     }
-    if (!a.save.empty() && !save_qa(a.save, record, pm, w, cfg, wf, all_followers, fam_cut, ig, low.get(), cc.get(), kn.get())) return 1;
+    if (!a.save.empty() &&
+        !save_qa(a.save, record, pm, w, cfg, wf, all_followers, fam_cut, ig, low.get(), cc.get(), kn.get(), low_written))
+        return 1;
     if (!a.save.empty() && fam_on && fam_k > 0 && a.cards.empty()) low.reset();  // M17: written; nothing below reads it (M14)
     // A4: the similar-context expert, keys over wiki train + chat (src=all: InfiniGram's bytes) or wiki train only
     // (src=wiki). M13: built here, before the per-byte holdout arrays, so its build does not sit on them; its lambdas
@@ -5777,7 +5815,8 @@ int cmd_selftest() {
         }
     }
     {  // BKN (docs/reports/BYTE_KN.md): byte_kn.hpp equals token_model.hpp's Kneser-Ney over byte ids (to float
-       // storage); prob() equals dist(); every distribution sums to one, pruned or not.
+       // storage); prob() equals dist(); every distribution sums to one, pruned or not; the build's parts (BKN2) do not
+       // change the tables.
         namespace bk = cypha::cyphalm::bkn;
         const std::vector<std::uint8_t> t = tiny_corpus(40'000);
         const std::size_t T = 36'000;
@@ -5804,8 +5843,18 @@ int cmd_selftest() {
                 if (std::fabs(z - 1.0) > 1e-5 || std::fabs(P[t[i]] - kn.prob(t.data(), i, t[i])) > 1e-9) norm = false;
             }
         }
-        if (!same || !norm) {
-            std::cerr << "selftest: byte Kneser-Ney (BKN) differs from token_model.hpp's, or does not sum to one\n";
+        bool parts = true;  // BKN2: a build in parts and slices of 64 or 1,000 entries gives the one-part tables
+        for (int K : {1, 3, 6})
+            for (const bk::Prune& pr : {p0, p2}) {
+                bk::ByteKN one, a, b;
+                one.build(t.data(), T, K, pr, 1u << 30);
+                a.build(t.data(), T, K, pr, 64);
+                b.build(t.data(), T, K, pr, 1000);
+                parts = parts && a.same(one) && b.same(one) && one.contexts() > 0;
+            }
+        if (!same || !norm || !parts) {
+            std::cerr << "selftest: byte Kneser-Ney (BKN) differs from token_model.hpp's, does not sum to one, or its parts "
+                         "change its tables\n";
             return 1;
         }
     }
@@ -6144,7 +6193,8 @@ void usage() {
                  "  surprise <wiki> --out SCORES.tsv [--plant PAGES.xml] [--part K/N]   (S4b: per-page bits per byte)\n"
                  "  selftest\n"
                  "  options: --wiki P --dolly P --train N --sample N; qa, sample, context8k: --sim SPEC | --no-sim,\n"
-                 "           --cls SPEC | --no-cls (sample: no class expert unless --cls), --copy-min N (default 8) | --no-copy\n"
+                 "           --cls SPEC | --no-cls (sample: no class expert unless --cls), --copy-min N (default 8) | --no-copy,\n"
+                 "           --bkn K[:m:c:d] [--bkn-way a|b] (byte Kneser-Ney; default 6:4:2:1, way b) | --no-bkn\n"
                  "  paths default to $CYPHA_WIKI / $CYPHA_DOLLY, then %s and %s\n",
                  kSimDefault, CYPHA_SIMVEC_DEFAULT, kDefaultWiki, kDefaultDolly);
 }
@@ -6160,7 +6210,7 @@ int main(int argc, char** argv) {
     const std::string cmd = argv[1];
     if (cmd == "selftest") return cmd_selftest();
     if (cmd == "simpair") return cmd_simpair(std::vector<std::string>(argv + 2, argv + argc));  // A4e
-    const Args a = parse(argc, argv, 2);
+    Args a = parse(argc, argv, 2);
     if (!a.ok) {
         usage();
         return 2;
@@ -6170,8 +6220,15 @@ int main(int argc, char** argv) {
         usage();
         return 2;
     }
-    if (!a.bkn.empty() && ((cmd != "qa" && cmd != "sample") || (a.bkn_way != "a" && a.bkn_way != "b") || bkn_spec(a.bkn).empty())) {
-        std::cerr << "--bkn K[:m:c:d] is for qa and sample, with --bkn-way a (replace) or b (add)\n";  // BKN
+    // BKN2: byte Kneser-Ney is a default of qa, sample and context8k; --no-bkn leaves it out.
+    const bool kn_cmd = cmd == "qa" || cmd == "sample" || cmd == "context8k";
+    if (a.no_bkn && (!kn_cmd || !a.bkn.empty())) {
+        std::cerr << "--no-bkn is for qa, sample and context8k, without --bkn\n";
+        return 2;
+    }
+    if (kn_cmd && !a.no_bkn && a.bkn.empty()) a.bkn = kBknDefault;
+    if (!a.bkn.empty() && (!kn_cmd || (a.bkn_way != "a" && a.bkn_way != "b") || bkn_spec(a.bkn).empty())) {
+        std::cerr << "--bkn K[:m:c:d] is for qa, sample and context8k, with --bkn-way a (replace) or b (add)\n";  // BKN
         return 2;
     }
     if ((!a.model.empty() || !a.save.empty()) && cmd != "chat" && cmd != "sample" && cmd != "qa") {
