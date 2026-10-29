@@ -610,6 +610,129 @@ In both modes, each group's occurrences are sorted by the bytes that follow them
 4. **`mode=knn` stays** for comparison: A4's and A4b's numbers use it (`default,mode=knn,k=2048` is A4b's default).
 5. **Next.** At k = 8,192 the 32 probed lists limit the search (recall 0.65): more probed lists is the next dial, at more time per query. Online keys are still open.
 
+## A4d: recall, and keys from the text being read (2026-10-29)
+
+A4c's "Next": the default (dedupe, k 8,192, 2,048 lists, 32 probed) scans about 5,700 distinct keys a query, so it can return at most that many of the 8,192 nearest: its recall against an exact search is 0.65, and k kept paying. Two dials. The design, the rules and the predictions below were written before any A4d run.
+
+**Recall.** More probed lists, other list counts, and a larger k once the search can fill it.
+
+**Online keys (`online=1`).** The contexts of the text already read become keys too.
+- At every word end j of the stream being read that lies before the current anchor, the key of the W words ending at j is made as a stored key is, put in its nearest centroid's list, and kept with j.
+- A search scans the probed lists' online keys beside their stored ones. An online key is one occurrence: it is live while the stream's bytes [j, j + t) equal the tail (t = the bytes since the anchor), and it proposes the byte at j + t, weighted as a stored key is.
+- Every byte an online key reads is already scored: j < anchor and t = n − anchor, so j + t < n, where n is the position being predicted.
+- In `cls` the stream is the stored text's own buffer, from the end of the train bytes on; in `qa`, `sample` and `context8k` it is the text being scored or written, from its start. The store starts again when the stream is not the one read so far.
+- **Leak check (registered).** A selftest reads a random text through two experts: one sees the whole text, the other the same text with every byte from position m on replaced. Their distributions at m must be identical bit for bit, at many m. A planted leak (keys at j = the anchor itself) must fail it.
+
+**Rules (fixed before the runs).**
+1. **Choice, on the holdout's second half** (`cls shape`, keys over wiki train, the shipped vectors; over trie + InfiniGram + class): the lowest BPC; candidates within 0.0005 of it go to the lowest scoring time per byte.
+2. **Default, on fresh text read once** for the chosen candidate, paired against the current default in the same run. It replaces the default only if all of these hold:
+   - fresh trie + InfiniGram + class + sim lower, with P(paired change < 0) ≥ 0.95 over 4 KiB blocks (LCI);
+   - surface S of the change not entirely below 0 (reported alongside, PLAN ledger 64);
+   - SCRIBE v2 of `sample` text not below the current default's 95% interval (0.064 [0.052, 0.078]; SCRIBE v2 is the rules' text score, ledger 64);
+   - cost: scoring time per byte at most 2× the current default's, and inside PLAN §10 (Q/A p50 ≤ 200 ms on one core; the language system ≤ 4 GB).
+3. **Answers (B4B rule 3):** `qa` in B4c's rule-3 configuration: the answer rows byte-identical with the new default and the current one (the expert is off inside answers).
+4. **Code debt.** An option that does not become the default and is not needed for a report's numbers is removed; its numbers reproduce at the commit that measured them.
+
+**Candidates** (all `default,` + …): the current default (the reference, first); `probe=64`; `probe=128`; `probe=256`; `k=16384,probe=128`; `lists=512,probe=16`; `lists=8192,probe=128`; `online=1`; `online=1,probe=128`.
+
+**Predictions.**
+
+| # | Prediction |
+|---|---|
+| D1 | Recall: probe 64 gives 0.85–0.95; probe 128 gives at least 0.95 |
+| D2 | The best recall candidate (no online keys) is better than the current default by 0.0005–0.003 on the holdout: k 8,192 now really returns 8,192 contexts |
+| D3 | k 16,384 at probe 128 gains at most 0.001 over k 8,192 at probe 128 |
+| D4 | Scoring time per byte at probe 128 is 1.3–2.5× the current default's |
+| D5 | Online keys gain 0.000–0.004 over trie + InfiniGram + class + sim on the holdout (the copy expert is not in this read, so repeats within the text can show here) |
+| D6 | The leak check passes, and the planted leak fails it |
+| D7 | The chosen candidate's fresh change is within ±0.002 of its holdout change |
+| D8 | Answers byte-identical (rule 3) |
+| D9 | SCRIBE v2 of `sample` text with the chosen candidate is inside the current default's interval |
+
+### Step 1: the choice (written before the fresh read)
+
+Rule 1 picks **`online=1,probe=128`**: on the holdout's second half it reads 1.856939 over trie + InfiniGram + class + sim, against 1.934176 for the current default; no other candidate is within 0.0005 of it (`online=1` at probe 32: 1.860386; the best without online keys: probe 128, 1.932203). Its scoring time in that run is 1.98× the current default's (422.7 s against 213.7 s). Rule 2's cost is read in the fresh run, as registered: above 2× there, the candidate fails rule 2 and the default stays. The full holdout table is in step 2.
+
+### Step 2: the holdout sweep (rule 1)
+
+`cls shape`, keys over wiki train, the shipped 32-d vectors; three runs on the shared machine (RA, RB: the tool at `main` e6e9b74; RC: with online keys, whose `default` line equals `main`'s to the last digit). Over trie + InfiniGram + class (1.995766). Each change is paired against `default` in the same run (4 KiB blocks, 2,000 resamples). Memory is the expert's index, rows and online keys (`bytes()`); scoring is the whole holdout (1 MiB); recall is against an exact scan, on 200 holdout positions.
+
+| Spec (`default,` + …) | trie + IG + cls + sim | Against `default` (95%), P(< 0) | Memory | Scoring 1 MiB | Query p50 / p99 | Recall |
+|---|---:|---|---:|---:|---|---:|
+| (`default`: probe 32) | 1.934176 | | 19.3 MB | 209–214 s | 0.74 / 1.35 ms | 0.652 |
+| probe 64 | 1.932624 | −0.0016 [−0.0019, −0.0012], 1.00 | 19.3 MB | 306 s | 1.19 / 2.11 ms | 0.849 |
+| probe 128 | 1.932203 | −0.0020 [−0.0023, −0.0016], 1.00 | 19.3 MB | 374 s | 1.46 / 5.59 ms | 0.937 |
+| probe 256 | 1.932030 | −0.0021 [−0.0025, −0.0018], 1.00 | 19.3 MB | 532 s | 1.79 / 7.89 ms | 0.979 |
+| k 16,384, probe 128 | 1.931675 | −0.0025 [−0.0030, −0.0020], 1.00 | 19.3 MB | 1,082 s | 2.66 / 11.98 ms | 0.834 |
+| 512 lists, probe 16 | 1.933235 | −0.0009 [−0.0013, −0.0006], 1.00 | 19.3 MB | 299 s | 1.17 / 2.06 ms | 0.807 |
+| 8,192 lists, probe 128 | 1.933680 | −0.0005 [−0.0009, −0.0001], 1.00 | 19.5 MB | 244 s (build 137 s) | 0.80 / 4.89 ms | 0.659 |
+| `online=1` (probe 32) | 1.860386 | −0.0738 [−0.0855, −0.0632], 1.00 | 24.6 MB | 252 s | 0.95 / 2.17 ms | 0.652 |
+| **`online=1`, probe 128** | **1.856939** | **−0.0772 [−0.0890, −0.0664], 1.00** | 24.6 MB | 423 s | 1.65 / 6.05 ms | 0.937 |
+
+- **Recall pays, a little.** Probing 128 of the 2,048 lists lifts recall from 0.65 to 0.94 and the holdout by 0.0020; 256 adds 0.0002 more. Past that, k 16,384 adds 0.0005 at five times the time. Other list counts are worse at a similar cost.
+- **Keys from the text being read pay a lot.** `online=1` gains 0.074 at 1.2× the time. Most of it is inside words (−0.098 of the summed bits per byte there, against −0.037 at word starts): a name or phrase met earlier in the same article is a similar context the stored text does not hold. This read has no copy expert, which is why the gain is so much larger than predicted (step 4 reads it with copy).
+
+### Step 3: fresh text, read once, surface S and SCRIBE v2 (rule 2)
+
+`cls shape --sim default --sim default,online=1,probe=128 --sim-fresh --sim-surface`: the fresh text `[8388608, 9437184)` read once, paired against `default` in the same run; lambdas on the whole holdout. The stream the online keys come from runs from the holdout's start through the fresh text. Surface S on B4's protocol (200 holdout prompts, 400 bytes). `default`'s fresh line equals A4c's read to the last digit (2.023522).
+
+| Read | `default` | `online=1`, probe 128 | Change (95%), P(< 0) |
+|---|---:|---:|---|
+| Fresh trie + IG + sim | 2.059846 | 1.903987 | |
+| **Fresh trie + IG + class + sim** | 2.023522 | **1.878268** | **−0.1453 [−0.1758, −0.1184], 1.00** |
+| Surface S, trie + sim | 0.8828 | 0.9010 | +0.0182 [+0.0094, +0.0270] |
+| Surface S, trie + class + sim | 0.9292 | 0.9308 | +0.0016 [−0.0049, +0.0079] |
+| Scoring 2 MiB (same run) | 650.8 s | 1,215.9 s | 1.87× |
+
+`sample` text with the candidate (750 GEN lines; the defaults: trie + sim + copy), `scribe ladder --profile v2` as in A4c:
+
+| Text | Kept | SCRIBE v2 (95%) | Surface S | T 0.6 / 0.8 / 1.0 |
+|---|---:|---|---:|---|
+| current default (A4c's run) | 636 | 0.064 [0.052, 0.078] | 0.845 | 0.083 / 0.076 / 0.033 |
+| `online=1`, probe 128 | 608 | **0.063 [0.051, 0.078]** | 0.860 | 0.081 / 0.070 / 0.037 |
+
+- **Every part of rule 2 holds.** Fresh BPC falls by 0.145 with every resample below zero; surface S rises over trie + sim and is unchanged over trie + class + sim; SCRIBE v2 is inside the current default's interval; scoring time is 1.87× (under 2×).
+- **The fresh gain is about twice the holdout's.** By the fresh text the stream holds the holdout and the fresh text read so far (about 2 MiB of keys, against 0.5–1 MiB in the holdout's second half), so more earlier contexts are found.
+- **Text.** SCRIBE v2 does not move; the text is still word salad. Online keys from the model's own sample did not start loops.
+
+### Step 4: answers, the model with copy, and cost (rule 3, PLAN §10)
+
+`qa` in B4c's rule-3 configuration with `--sim default,online=1,probe=128`, against A4c's run with its default (whose rows `main` reproduces):
+
+- **Answers: unchanged.** All 520 rows have the same answer and grade, and every other column is identical except `question_lp` (the question is outside the answer, so the expert reads it).
+- **The holdout of the chat model (second half), with the copy expert:** trie + IG + class + sim 1.914913 → **1.839792**; with copy (the default model) 1.826934 → **1.789464** (−0.037). Online keys and the copy expert overlap (the copy expert's own gain falls from 0.088 to 0.050), but half the gain remains on top of copy.
+- **Cost:** `qa`'s peak 235.1 MB (unchanged; the online keys of a 1 MiB holdout are 5.3 MB); decode p50 (chat, trie + IG) 1.42 ms; `sample` 890 s against 492 s, at a 79.0 MB peak (A4c: 79.1 MB). The online keys grow by 36 bytes per word of the stream read: 5.3 MB a MiB. A stream much longer than a few MiB would need a cap.
+- **`context8k`** with the new default changes only its two expert lines: trie + IG + class + sim 1.9159 → **1.8404**, with copy 1.8271 → **1.7897**. Every other line, its 50 generated answers included, is identical to A4c's run; peak 225.8 MB.
+
+### Step 5: the leak check, and parity
+
+- **Online keys read only bytes already scored.** The selftest reads a random 400-word stream through two experts: one sees the whole stream, the other the same stream with every byte from m on replaced; at every 7th m, in both modes, their distributions at m are identical bit for bit. Online keys are used: the distribution differs from the expert's without them at many positions. A planted leak (keys at j ≤ the anchor instead of j < the anchor) fails the check.
+- **With online keys off, nothing changes:** the tool reprints `main`'s `default` lines to the last digit (runs RC and FD).
+- **`--no-sim` prints what `main` e6e9b74 printed**, byte for byte: `qa` (rows and lines, latencies aside) and `sample` (both files and stdout).
+- **The new default is wired:** `qa` with it gives the explicit spec's rows and lines, and `sample` writes the explicit spec's text byte for byte (only its `MODEL` line names the spec); `sample`'s peak 69.5 MB, 655 s.
+- **The selftest and the 9 CTests of HANDOFF §4.4 pass.**
+
+### Predictions, scored (A4d)
+
+| Prediction | Result | Score |
+|---|---|---|
+| D1. Recall 0.85–0.95 at probe 64; at least 0.95 at probe 128 | 0.849; 0.937 | **Miss** (both just under) |
+| D2. The best recall candidate better by 0.0005–0.003 | −0.0021 (probe 256); −0.0025 with k 16,384 | **Hit** |
+| D3. k 16,384 gains at most 0.001 over k 8,192 at probe 128 | 0.0005 | **Hit** |
+| D4. Scoring time at probe 128 is 1.3–2.5× | 1.78× | **Hit** |
+| D5. Online keys gain 0.000–0.004 | −0.074 | **Miss** (far larger: within-article repeats) |
+| D6. The leak check passes; the planted leak fails it | Both | **Hit** |
+| D7. Fresh change within ±0.002 of the holdout change | −0.145 against −0.077 | **Miss** (the stream is longer by the fresh text) |
+| D8. Answers byte-identical | 520 / 520; only `question_lp` moves | **Hit** |
+| D9. SCRIBE v2 inside the current default's interval | 0.063 inside [0.052, 0.078] | **Hit** |
+
+### Decisions (A4d)
+
+1. **The default spec is now `online=1` with 128 lists probed** (`default` = `W=2,sif=0,k=8192,drop=0,lists=2048,probe=128,src=wiki,mode=dedupe,online=1`), by the "better" route of rule 2: fresh text −0.1453 [−0.1758, −0.1184], surface S not falling, SCRIBE v2 unchanged, answers unchanged, scoring time 1.87×. `qa`, `sample` and `context8k` use it; the gate and `--no-sim` are as before.
+2. **The default model's holdout** (chat model, with copy) improves 1.8269 → **1.7895**.
+3. **Nothing is removed** (rule 4): `probe`, `lists` and `k` were already spec settings, and `online` is the default; `online=0` gives A4c's expert exactly.
+4. **Next.** A cap or a window on the online keys before a stream grows past a few MiB (they cost 5.3 MB a MiB read).
+
 ---
 
 ## Reproduce
@@ -657,6 +780,15 @@ Q="qa enwik8 dolly.jsonl --dev bench/eval/t_qa_wiki_dev.tsv --leak bench/eval/t_
 # step 3: answers (B4c's rule-3 configuration), against --sim default,mode=knn,k=2048
 ./cyphalm_trie qa enwik8 dolly.jsonl --dev bench/eval/t_qa_wiki_dev.tsv --leak bench/eval/t_qa_wiki.tsv --parse parse_dev_span.tsv \
   --dk dk_mention.tsv --dk-ratio 0.20 --fam after --fam-stat ent_title --fam-train low --shard shard_facts.tsv --base a0_rows.tsv --out rows.tsv
+# A4d (the tool at main e6e9b74 for RA and RB; with online keys for RC and after). Step 2: the holdout sweep
+./cyphalm_trie cls enwik8 shape --sim default,online=0,probe=32 --sim default,online=0,probe=64 --sim default,online=0,probe=128 \
+  --sim default,online=0,probe=256 --sim default,online=0,k=16384,probe=128
+./cyphalm_trie cls enwik8 shape --sim default,online=0,probe=32 --sim default,online=0,lists=512,probe=16 --sim default,online=0,lists=8192,probe=128
+./cyphalm_trie cls enwik8 shape --sim default,online=0,probe=32 --sim default,online=1,probe=32 --sim default
+# step 3: fresh text once and surface S (run before the default changed, as --sim default --sim default,online=1,probe=128)
+./cyphalm_trie cls enwik8 shape --sim default,online=0,probe=32 --sim default --sim-fresh --sim-surface
+./cyphalm_trie sample enwik8 dev.txt fresh.txt      # then scribe ladder --gen-trie dev.txt as in B4c
+# step 4: answers, against --sim default,online=0,probe=32 (A4c's default); the same qa command as A4c's step 3
 ```
 
 Output lines: `cls` prints `sim SPEC keys … recall`, `holdout2 …`, the gains with their intervals, `holdout2_split` (silent / word start / inside a word), `…_vs_first_sim` (paired against the first spec), and with the flags `fresh …` and `surface …`. `qa` adds `sim …` and `sim_lci …` (the holdout read), `SIM_LAT`, `LATENCY` (decode time a question) and `SIM_NB` (the three nearest stored contexts at each dev chat prompt). Run outputs, the sweep scripts and the vector files are in `/root/work/r2/` (`runs/`, `vec/`).

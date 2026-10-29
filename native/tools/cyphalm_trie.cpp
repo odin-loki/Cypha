@@ -20,8 +20,9 @@
 // answering here (PLAN rule 10).
 //
 // The similar-context expert (A4, similar_context.hpp; docs/reports/A4_SIMILAR_CONTEXT_EXPERT.md "A4b") is a default in
-// qa, sample and context8k: the spec `default` (W=2, equal word weights, 2048 lists with 32 probed, keys over wiki
-// train; A4c: distinct keys stored once, the k=8192 nearest each pooling its occurrences) with the projected PPMI-SVD file data/cyphalm/simvec_ppmi32.bin, read from $CYPHA_SIMVEC, else from
+// qa, sample and context8k: the spec `default` (W=2, equal word weights, 2048 lists, keys over wiki train; A4c:
+// distinct keys stored once, the k=8192 nearest each pooling its occurrences; A4d: 128 lists probed, and keys from the
+// text being read too) with the projected PPMI-SVD file data/cyphalm/simvec_ppmi32.bin, read from $CYPHA_SIMVEC, else from
 // CYPHA_SIMVEC_DEFAULT (a compile-time path), else from that path under the current directory. It is off inside every
 // answer (in_answer), so answers are written without it. --no-sim leaves it out; without the file those subcommands
 // stop and say so. bpc, chat and probe never build it: bpc's lines are the trie's reference numbers, and chat and
@@ -1403,7 +1404,7 @@ std::unique_ptr<ClassContext> default_cls(const Args& a, const std::uint8_t* tex
 #ifndef CYPHA_SIMVEC_DEFAULT
 #define CYPHA_SIMVEC_DEFAULT "data/cyphalm/simvec_ppmi32.bin"
 #endif
-constexpr const char* kSimDefault = "W=2,sif=0,k=8192,drop=0,lists=2048,probe=32,src=wiki,mode=dedupe";  // A4c
+constexpr const char* kSimDefault = "W=2,sif=0,k=8192,drop=0,lists=2048,probe=128,src=wiki,mode=dedupe,online=1";  // A4c, A4d
 std::string sim_vectors_path() { return env_or("CYPHA_SIMVEC", CYPHA_SIMVEC_DEFAULT); }
 struct SimSpec {
     SimilarContext::Params p;
@@ -1437,6 +1438,7 @@ SimSpec parse_sim(const std::string& spec) {
         else if (k == "tail") s.p.max_tail = static_cast<int>(x);
         else if (k == "gate") s.gate = x != 0;
         else if (k == "mode" && (v == "knn" || v == "dedupe")) s.p.mode = v == "dedupe";  // A4c
+        else if (k == "online") s.p.online = x != 0;  // A4d: keys from the text being read; a query setting
         else return s;
     }
     if (s.vec.empty()) s.vec = sim_vectors_path();
@@ -4417,7 +4419,7 @@ int cmd_selftest() {
                          in_answer(bytes("User: who?\nAssistant: it is "), std::string::npos) &&
                          !in_answer(bytes("User: who?\nAssistant: it.\n\nUser: and "), std::string::npos) &&
                          !in_answer(bytes("the wiki text"), std::string::npos) && in_answer(bytes("Who? "), 5) &&
-                         !in_answer(bytes("Who?"), 5) && dflt.ok && dflt.p.W == 2 && !dflt.p.sif && dflt.p.k == 8192 && dflt.p.mode == 1 &&
+                         !in_answer(bytes("Who?"), 5) && dflt.ok && dflt.p.W == 2 && !dflt.p.sif && dflt.p.k == 8192 && dflt.p.mode == 1 && dflt.p.probe == 128 && dflt.p.online &&
                          dflt.src == "wiki" && dflt.gate && dflt.vec == sim_vectors_path() && dk8.p.k == 8 && !ng.gate &&
                          err.empty() && !err2.empty() && PV.projected() && PV.rows() == 12 && hq.live == 2 && Q1['o'] == 1.0;
         if (!ok2) {
@@ -4458,6 +4460,39 @@ int cmd_selftest() {
             std::cerr << "selftest: similar-context dedupe mode (A4c) disagrees with knn\n";
             return 1;
         }
+        // A4d, online keys read only bytes already scored: an expert that read a text up to m and one that read the same
+        // text with every byte from m on replaced give the same distribution at m, bit for bit (both modes); and the
+        // online keys are used (some position's distribution differs from the expert's without them).
+        const std::string stream = words(400);
+        bool causal = parse_sim("default").p.online && !parse_sim("default,online=0").p.online &&
+                      parse_sim("default,online=0").build == parse_sim("default").build;
+        int differs = 0;
+        for (int mode = 0; mode < 2 && causal; ++mode) {
+            SimilarContext::Params op = ap;
+            op.mode = mode, op.k = 64, op.temp = 0.05, op.lists = 8, op.probe = 2, op.online = true;
+            SimilarContext full(V, op);
+            SimilarContext::Params np = op;
+            np.online = false;
+            SimilarContext none(V, np);
+            for (auto* e : {&full, &none}) e->build(reinterpret_cast<const std::uint8_t*>(big.data()), 600);
+            const auto* sb = reinterpret_cast<const std::uint8_t*>(stream.data());
+            for (std::size_t m = 1; causal && m <= stream.size(); m += 7) {
+                double Pf[256], Pc[256], Pn[256];
+                for (std::size_t n = 1; n <= m; ++n) full.predict(sb, n, Pf);
+                std::string other = stream.substr(0, m);
+                for (std::size_t i = m; i < stream.size(); ++i) other += static_cast<char>('a' + (i * 7 + m) % 26);
+                SimilarContext fresh(V, op);
+                fresh.build(reinterpret_cast<const std::uint8_t*>(big.data()), 600);
+                for (std::size_t n = 1; n <= m; ++n) fresh.predict(reinterpret_cast<const std::uint8_t*>(other.data()), n, Pc);
+                none.predict(sb, m, Pn);
+                causal = std::equal(Pf, Pf + 256, Pc);
+                differs += !std::equal(Pf, Pf + 256, Pn);
+            }
+        }
+        if (!causal || differs < 10) {
+            std::cerr << "selftest: similar-context online keys (A4d) read a byte not yet scored, or are never used\n";
+            return 1;
+        }
     }
     std::cout << "selftest ok\n";
     return 0;
@@ -4473,7 +4508,7 @@ void usage() {
                  "  sample <wiki> <out_dev> [out_fresh] [--prompts 250] [--bytes 600] [--save FILE | --model FILE]\n"
                  "  cls <wiki> <TABLE|shape>[:tail[:orders[:flags]]] [more specs] [--sim SPEC ...] [--sim-fresh] [--sim-surface]\n"
                  "  SPEC: [default,][vec=PREFIX|FILE][,W=8][,k=32][,T=0.05][,min=-1][,sif=1][,dim=64][,drop=1][,lists=512][,probe=8][,tail=32]\n"
-                 "        [,src=all|wiki][,gate=1][,mode=knn|dedupe]   (default = %s; vectors from $CYPHA_SIMVEC, else %s)\n"
+                 "        [,src=all|wiki][,gate=1][,mode=knn|dedupe][,online=0]   (default = %s; vectors from $CYPHA_SIMVEC, else %s)\n"
                  "  qa [wiki] [dolly] --dev DEV.tsv [--test TEST.tsv] [--leak TEST.tsv] [--out ROWS.tsv] [--base A0_ROWS.tsv]\n"
                  "     [--dk DK.tsv --dk-ratio R] [--fam none|before|after] [--parse E1.tsv] [--fam-stat NAME]\n"
                  "     [--fam-train stat|outcome|low] [--fam-only] [--copy] [--copy-min N] [--r3 PATTERNS.tsv]\n"

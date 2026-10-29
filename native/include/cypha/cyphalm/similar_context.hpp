@@ -22,11 +22,18 @@
 ///   same keys as the full vectors, up to the int8 rounding of the rows.
 /// - Params' defaults are the design registered before A4's runs. The settings chosen on the holdout are W 2, equal
 ///   weights, k 2048, drop 0, 2048 lists with 32 probed (PPMI-SVD vectors): fresh text -0.061 BPC over trie +
-///   InfiniGram + class. A4c's default adds mode 1 (dedupe) with k 8192: fresh text a further -0.0040.
+///   InfiniGram + class. A4c's default adds mode 1 (dedupe) with k 8192: fresh text a further -0.0040. A4d's adds 128
+///   probed lists (recall 0.65 -> 0.94) and online keys: fresh text a further -0.145.
 /// - A4c, `mode` 1 (dedupe, the default spec's): each distinct key is stored once with all its occurrences; the k
 ///   nearest distinct keys each pool their occurrences, weighted as a neighbour is. A key's occurrences are sorted by
 ///   the bytes after them, so the ones that agree with the tail are one range, narrowed by binary search. Mode 0 (knn,
 ///   each occurrence a neighbour) is A4's. A4c's counts mode (whole lists pooled) lost and was removed (commit 2849b32).
+/// - A4d, `online` (keys from the text being read): at every word end j of the stream that lies before the current
+///   anchor, the key of the W words ending at j joins its nearest list; a search scans the probed lists' online keys
+///   beside the stored ones. An online key is one occurrence: live while the stream's bytes [j, j + t) equal the tail,
+///   it proposes the byte at j + t. As j < anchor and t = n - anchor, j + t < n: it reads only bytes already scored.
+///   The stream is the stored text's own buffer from its end on (h == the stored text), or the query text from its
+///   start; the online keys start again when the stream is not the one read so far.
 
 #include <algorithm>
 #include <cctype>
@@ -63,6 +70,7 @@ class SimilarContext {
         int iters = 8;          ///< k-means iterations
         std::uint64_t seed = 20261028;
         int mode = 0;           ///< A4c: 0 knn (each occurrence a neighbour), 1 dedupe (see above)
+        bool online = false;    ///< A4d: keys from the text being read too (see above)
     };
     struct Vectors {  ///< word vectors, row r for word id r
         int d = 0;
@@ -228,6 +236,8 @@ class SimilarContext {
         p_.min_sim = q.min_sim;
         p_.probe = q.probe;
         p_.max_tail = p_.mode ? std::min(q.max_tail, sort_tail_) : q.max_tail;  // A4c: groups are sorted that deep
+        p_.online = q.online;  // A4d
+        reset_online(nullptr, 0);
         cache_ = ~std::uint64_t{0};
         restart_ = true;
         lat_us_.clear();
@@ -483,6 +493,7 @@ class SimilarContext {
         Hit hit;
         std::size_t anchor = 0, ctx = 0;
         if (!anchor_of(h, n, anchor, ctx, hit.word)) return hit;
+        ingest(h, anchor);  // A4d
         search_cached(h, ctx, anchor);
         // The live neighbours: when this tail extends the last call's, only that call's survivors are checked.
         const std::size_t t = n - anchor;
@@ -496,15 +507,17 @@ class SimilarContext {
         const std::size_t from = tail_.size();
         std::size_t m = 0;
         for (const std::uint32_t j : live_) {
-            const std::uint32_t pos = nb_pos_[j];
-            if (pos + t < n_ && std::memcmp(text_ + pos + from, tail + from, t - from) == 0) live_[m++] = j;
+            const std::uint32_t e = nb_pos_[j], pos = e & ~kOnline;
+            const std::uint8_t* src = e & kOnline ? h : text_;  // A4d: an online key reads the stream (pos + t < n)
+            if ((e & kOnline || pos + t < n_) && std::memcmp(src + pos + from, tail + from, t - from) == 0) live_[m++] = j;
         }
         live_.resize(m);
         tail_.assign(tail, tail + t);
         if (m == 0) return hit;
         double wsum = 0, mx = 0;
         for (const std::uint32_t j : live_) {
-            P[text_[nb_pos_[j] + t]] += nb_w_[j];
+            const std::uint32_t e = nb_pos_[j];
+            P[(e & kOnline ? h : text_)[(e & ~kOnline) + t]] += nb_w_[j];
             wsum += nb_w_[j];
         }
         for (int s = 0; s < 256; ++s) mx = std::max(mx, P[s] /= wsum);
@@ -521,6 +534,7 @@ class SimilarContext {
         Hit hit;
         std::size_t anchor = 0, ctx = 0;
         if (!anchor_of(h, n, anchor, ctx, hit.word)) return hit;
+        ingest(h, anchor);  // A4d
         search_cached(h, ctx, anchor);
         const std::size_t t = n - anchor;
         const std::uint8_t* tail = h + anchor;
@@ -530,6 +544,7 @@ class SimilarContext {
             ghi_.resize(nb_pos_.size());
             for (std::size_t j = 0; j < live_.size(); ++j) {
                 live_[j] = static_cast<std::uint32_t>(j);
+                if (nb_pos_[j] & kOnline) continue;  // A4d: an online key is one occurrence, read from the stream
                 glo_[j] = grp_[nb_pos_[j]];
                 ghi_[j] = grp_[nb_pos_[j] + std::size_t{1}];
             }
@@ -544,6 +559,10 @@ class SimilarContext {
         };
         std::size_t m = 0;
         for (const std::uint32_t j : live_) {
+            if (nb_pos_[j] & kOnline) {  // A4d: live while the stream after it agrees with the tail
+                if (std::memcmp(h + (nb_pos_[j] & ~kOnline) + from, tail + from, t - from) == 0) live_[m++] = j;
+                continue;
+            }
             auto lo = pos_.begin() + glo_[j], hi = pos_.begin() + ghi_[j];
             if (t > from) {
                 lo = std::partition_point(lo, hi, [&](std::uint32_t p) { return cmp(p) < 0; });
@@ -562,6 +581,12 @@ class SimilarContext {
         std::size_t occ = 0;
         for (const std::uint32_t j : live_) {
             const double w = nb_w_[j];
+            if (nb_pos_[j] & kOnline) {  // A4d
+                P[h[(nb_pos_[j] & ~kOnline) + t]] += w;
+                wsum += w;
+                ++occ;
+                continue;
+            }
             for (auto i = pos_.begin() + glo_[j], e = pos_.begin() + ghi_[j]; i < e;) {
                 const std::uint8_t b = text_[*i + t];
                 const auto f = std::partition_point(i, e, [&](std::uint32_t p) { return text_[p + t] <= b; });
@@ -608,7 +633,8 @@ class SimilarContext {
     /// The index and the word coordinates (keys, positions, centroids, list starts, rows); the word map not counted.
     std::size_t bytes() const {
         return keys_.size() + pos_.size() * 4 + grp_.size() * 4 + cent_.size() + start_.size() * 4 + proj_.size() * 4 + vec_.q.size() +
-               vec_.scale.size() * 4 + vec_.v.size() * 4;
+               vec_.scale.size() * 4 + vec_.v.size() * 4 + on_count_ * (static_cast<std::size_t>(stride_) + 4);  // A4d: the online keys
+
     }
     int dim() const { return dim_; }
     int lists() const { return lists_; }
@@ -775,7 +801,7 @@ class SimilarContext {
         return key_of(ids, q);
     }
 
-    void search(const std::int8_t* q, int probe, std::vector<std::uint32_t>& p, std::vector<float>& s) const {
+    void search(const std::int8_t* q, int probe, std::vector<std::uint32_t>& p, std::vector<float>& s, bool online = false) const {
         p.clear();
         s.clear();
         if (lists_ == 0) return;
@@ -788,6 +814,9 @@ class SimilarContext {
             const int c = cs[static_cast<std::size_t>(l)].second;
             for (std::uint32_t i = start_[static_cast<std::size_t>(c)]; i < start_[static_cast<std::size_t>(c) + 1]; ++i)
                 cand.push_back({dot(q, &keys_[static_cast<std::size_t>(i) * stride_]), i});
+            if (online && !on_pos_.empty())  // A4d: this list's online keys, their stream positions marked kOnline
+                for (std::size_t i = 0; i < on_pos_[static_cast<std::size_t>(c)].size(); ++i)
+                    cand.push_back({dot(q, &on_keys_[static_cast<std::size_t>(c)][i * static_cast<std::size_t>(stride_)]), on_pos_[static_cast<std::size_t>(c)][i]});
         }
         const std::size_t k = std::min<std::size_t>(cand.size(), static_cast<std::size_t>(p_.k));
         std::partial_sort(cand.begin(), cand.begin() + static_cast<std::ptrdiff_t>(k), cand.end(),
@@ -795,21 +824,64 @@ class SimilarContext {
         for (std::size_t j = 0; j < k; ++j) {
             const float sim = static_cast<float>(cand[j].first / (127.0 * 127.0));
             if (sim < p_.min_sim) break;
-            p.push_back(p_.mode == 1 ? cand[j].second : pos_[cand[j].second]);  // A4c dedupe: the distinct key's slot
+            p.push_back(cand[j].second & kOnline ? cand[j].second  // A4d: an online key's stream position
+                        : p_.mode == 1 ? cand[j].second : pos_[cand[j].second]);  // A4c dedupe: the distinct key's slot
             s.push_back(sim);
         }
+    }
+
+    // A4d: the online keys start again for stream h (nullptr: none yet).
+    void reset_online(const std::uint8_t* h, std::size_t from) const {
+        on_keys_.assign(p_.online ? static_cast<std::size_t>(lists_) : 0, {});
+        on_pos_.assign(p_.online ? static_cast<std::size_t>(lists_) : 0, {});
+        on_count_ = 0;
+        on_h_ = h;
+        on_upto_ = from;
+        on_sig_.clear();
+        cache_ = ~std::uint64_t{0};
+    }
+
+    // A4d: the keys at the stream's word ends j with on_upto_ <= j < anchor, each in its nearest list. The stream is the
+    // stored text's buffer from its end on, or h from its start; another buffer, a shorter stream or other bytes just
+    // before on_upto_ start the keys again.
+    void ingest(const std::uint8_t* h, std::size_t anchor) const {
+        if (!p_.online || lists_ == 0) return;
+        const std::size_t from = h == text_ ? n_ : 0;
+        const std::size_t sig = std::min<std::size_t>(on_upto_ - std::min(on_upto_, from), 32);
+        if (h != on_h_ || anchor < on_upto_ || on_upto_ < from || !std::equal(on_sig_.begin(), on_sig_.end(), h + on_upto_ - sig))
+            reset_online(h, from);
+        std::vector<std::int8_t> q(static_cast<std::size_t>(stride_));
+        for (std::size_t j = std::max<std::size_t>(on_upto_, 1); j < anchor; ++j) {
+            if (!is_word(h[j - 1]) || is_word(h[j])) continue;  // j is a word end
+            std::size_t i = j, w = 0;
+            const std::size_t lim = j > 1024 ? j - 1024 : 0;
+            while (i > lim && w < static_cast<std::size_t>(p_.W)) {  // back W words, as anchor_of
+                while (i > lim && is_word(h[i - 1])) --i;
+                ++w;
+                while (i > lim && w < static_cast<std::size_t>(p_.W) && !is_word(h[i - 1])) --i;
+            }
+            if (!query_key(h, i, j, q.data())) continue;
+            const std::size_t L = static_cast<std::size_t>(nearest(q.data(), lists_));
+            on_keys_[L].insert(on_keys_[L].end(), q.begin(), q.end());
+            on_pos_[L].push_back(static_cast<std::uint32_t>(j) | kOnline);
+            ++on_count_;
+        }
+        on_upto_ = std::max(on_upto_, anchor);
+        const std::size_t s2 = std::min<std::size_t>(on_upto_ - from, 32);
+        on_sig_.assign(h + on_upto_ - s2, h + on_upto_);
     }
 
     void search_cached(const std::uint8_t* h, std::size_t ctx, std::size_t anchor) const {
         std::uint64_t key = 0xcbf29ce484222325ull ^ (anchor - ctx);
         for (std::size_t i = ctx; i < anchor; ++i) key = (key ^ h[i]) * 0x100000001b3ull;
+        if (p_.online) key = (key ^ on_count_) * 0x100000001b3ull;  // A4d: new online keys mean a new search
         if (key == cache_) return;
         cache_ = key;
         const auto t0 = std::chrono::steady_clock::now();
         std::vector<std::int8_t> q(static_cast<std::size_t>(stride_));
         nb_pos_.clear();
         nb_sim_.clear();
-        if (query_key(h, ctx, anchor, q.data())) search(q.data(), p_.probe, nb_pos_, nb_sim_);
+        if (query_key(h, ctx, anchor, q.data())) search(q.data(), p_.probe, nb_pos_, nb_sim_, p_.online);
         nb_w_.resize(nb_sim_.size());  // exp((cos - cos_best) / temp); the shift cancels when the live ones are normalised
         for (std::size_t j = 0; j < nb_w_.size(); ++j) nb_w_[j] = p_.temp > 0 ? std::exp((double{nb_sim_[j]} - double{nb_sim_[0]}) / p_.temp) : 1.0;
         restart_ = true;  // predict() starts again from every neighbour
@@ -834,6 +906,12 @@ class SimilarContext {
     mutable std::vector<double> nb_w_;
     mutable std::vector<std::uint8_t> tail_;
     mutable bool restart_ = true;
+    static constexpr std::uint32_t kOnline = 0x80000000u;  // A4d: marks an online key's stream position
+    mutable std::vector<std::vector<std::int8_t>> on_keys_;  // A4d: online keys by list
+    mutable std::vector<std::vector<std::uint32_t>> on_pos_;
+    mutable std::size_t on_count_ = 0, on_upto_ = 0;
+    mutable const std::uint8_t* on_h_ = nullptr;
+    mutable std::vector<std::uint8_t> on_sig_;  // the stream's bytes just before on_upto_
 };
 
 }  // namespace cypha::cyphalm
