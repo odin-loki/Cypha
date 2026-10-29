@@ -90,6 +90,7 @@
 //      [--dk DK.tsv --dk-ratio R] [--fam none|before|after] [--parse E1.tsv] [--fam-stat NAME]
 //      [--fam-train stat|outcome|low] [--fam-only] [--copy] [--copy-min N] [--r3 PATTERNS.tsv]
 //      [--fam-ent FRAMES] [--copy-dk] [--fam-read] [--shard F.tsv] [--shard2 F.tsv] [--cls TABLE|shape[:tail[:orders[:flags]]]] [--sim SPEC] [--cards FILE]
+//      [--dk-plain P] [--fam-ent-at all|answer|start] [--copy-frame]
 //        A0/A1 (docs/CYPHALM_ANSWERING.md §4; TOOL_PROFILE_PLAN §2): trains as chat (wiki, then
 //        two Dolly passes), optionally with don't-know turns spread at share R of all turns and a
 //        familiarity token <|fam=low|mid|high|> before (or after) "Assistant: ". CyphaLM answers
@@ -130,6 +131,13 @@
 //        in every model, with its own lambdas fit on the don't-know turns held out of training; ordinary answers and
 //        text are unchanged. --fam-read prints FAMREAD (each dev question's best span and count per statistic) and
 //        FAMDOLLY (the token each statistic gives the Dolly instructions), report only.
+//        DK2 (docs/reports/DK2_DONT_KNOW_TRAINING.md): --dk-plain P writes share P of the don't-know training turns with
+//        no token (turn j when floor((j+1)P) > floor(jP)), so CyphaLM's own "I don't know" is plain text, not an echoed
+//        token. --fam-ent-at answer|start keeps --fam-ent's frames out of all training text: only prompts it answers (dev,
+//        test, the held-out --copy-dk turns) carry them; answer puts them with the token, start before "User: " on every
+//        question (high too). --copy-frame (with --copy-dk), inside a don't-know answer: the copy expert never
+//        predicts the '|' of a source "|>" while the answer has no open "<|" (a frame's entity is copied without the
+//        frame's end), and inside the open tag the no-repeat rule looks at the tag only (the tag may repeat the message).
 //        A4: --sim SPEC adds the similar-context expert to every model, after the class expert and before the copy
 //        expert (src=all: keys over InfiniGram's bytes, wiki train + chat; src=wiki: wiki train only), lambdas on the
 //        holdout's first half; SIM_NB prints the three nearest stored contexts at each dev chat prompt, LATENCY the
@@ -295,6 +303,9 @@ struct Args {
     std::string fam_ent;                          // ANS: the entity's frames before the token (--fam-ent)
     bool copy_dk = false, fam_read = false;       // ANS: copy inside don't-know answers; FAMREAD / FAMDOLLY
     std::string doc;                              // GEN-C: document experts in sample (--doc SPEC; off by default)
+    double dk_plain = 0;                          // DK2: share of don't-know training turns with no token
+    std::string fam_ent_at = "all";               // DK2: where --fam-ent's frames go (all | answer | start)
+    bool copy_frame = false;                      // DK2: copy a frame's entity, not its end; the tag may repeat the message
 };
 
 std::string env_or(const char* name, const char* fallback) {
@@ -356,6 +367,9 @@ Args parse(int argc, char** argv, int from) {
         else if (s == "--copy-dk") a.copy_dk = true;
         else if (s == "--fam-read") a.fam_read = true;
         else if (s == "--doc") a.doc = next();
+        else if (s == "--dk-plain") a.dk_plain = std::atof(next());  // DK2
+        else if (s == "--fam-ent-at") a.fam_ent_at = next();         // DK2
+        else if (s == "--copy-frame") a.copy_frame = true;           // DK2
         else if (s.rfind("--", 0) == 0) {
             std::cerr << "unknown option " << s << "\n";
             a.ok = false;
@@ -1448,7 +1462,7 @@ std::string reference_code(int in_slice, int prose, int covered) {
 // until B4C (B4B chose 16,384; a Q/A prompt and its answer fit inside either).
 constexpr std::size_t kCopyWin = 16384;
 constexpr int kCopyBuckets = 8;
-int copy_pred(const std::uint8_t* s, std::size_t i, int& n) {
+int copy_pred(const std::uint8_t* s, std::size_t i, int& n, std::size_t* at = nullptr) {  // DK2: at = the source j
     n = 0;
     int pred = -1;
     const std::size_t lo = i > kCopyWin ? i - kCopyWin : 0;
@@ -1458,10 +1472,26 @@ int copy_pred(const std::uint8_t* s, std::size_t i, int& n) {
         if (L > n) {
             n = L;
             pred = s[j];
+            if (at) *at = j;
         }
     }
     if (n < 3) n = 0, pred = -1;
     return pred;
+}
+// DK2 (--copy-frame): the copy source j is the '|' of a "|>" and the answer s[answer_at, i) has no open "<|" (none, or
+// the last one already closed). Copy then predicts nothing: a frame's entity is copied without the frame's end, which
+// ended A1d's E1c messages ("I have nothing about character Spider-Man|>").
+// DK2: where the answer s[answer_at, i) has an open "<|" (its last "<|", not closed by a later "|>"), else npos.
+std::size_t open_token_at(const std::uint8_t* s, std::size_t i, std::size_t answer_at) {
+    std::size_t open = std::string::npos, close = std::string::npos;
+    for (std::size_t k = answer_at; k + 1 < i; ++k) {
+        if (s[k] == '<' && s[k + 1] == '|') open = k;
+        if (s[k] == '|' && s[k + 1] == '>') close = k;
+    }
+    return open != std::string::npos && (close == std::string::npos || close < open) ? open : std::string::npos;
+}
+bool copy_closes_unopened(const std::uint8_t* s, std::size_t i, std::size_t j, std::size_t answer_at) {
+    return j + 1 < i && s[j] == '|' && s[j + 1] == '>' && open_token_at(s, i, answer_at) == std::string::npos;
 }
 int copy_bucket(int n) { return n == 0 ? 0 : n < 4 ? 1 : n < 6 ? 2 : n < 8 ? 3 : n < 12 ? 4 : n < 16 ? 5 : n < 32 ? 6 : 7; }
 // --copy-min m (B4B): copy only from matches of at least m bytes; the lambdas of buckets starting below m become 0.
@@ -1902,6 +1932,7 @@ struct Lm {
     bool cls_gate = false;                // B4C: the class expert off inside an answer
     const double* lc_out = nullptr;       // B4C: the copy expert's lambdas, outside answers only (when lc is null)
     const double* lc_dk = nullptr;        // ANS: the copy expert's lambdas inside a don't-know answer (--copy-dk)
+    bool copy_frame = false;              // DK2: --copy-frame inside a don't-know answer (copy_closes_unopened; decode)
     // ANS: the next byte is inside a don't-know answer: the answer (from answer_at) begins "I don't know", the switch
     // decode already makes to its longer limit. Only with lc_dk; never outside an answer.
     bool in_dont_know(const std::vector<std::uint8_t>& seq) const {
@@ -1939,9 +1970,12 @@ struct Lm {
             const double l = lsim[SimilarContext::bucket(sc->predict(seq.data(), seq.size(), Ps))];
             for (int s = 0; s < 256; ++s) P[s] = l * Ps[s] + (1 - l) * P[s];
         }
-        const double* lcp = in_dont_know(seq) ? lc_dk : lc ? lc : ans ? nullptr : lc_out;
+        const bool idk = in_dont_know(seq);
+        const double* lcp = idk ? lc_dk : lc ? lc : ans ? nullptr : lc_out;
         int n = 0;
-        const int c = lcp ? copy_pred(seq.data(), seq.size(), n) : -1;
+        std::size_t cj = 0;
+        int c = lcp ? copy_pred(seq.data(), seq.size(), n, &cj) : -1;
+        if (c >= 0 && idk && copy_frame && copy_closes_unopened(seq.data(), seq.size(), cj, answer_at)) c = -1;  // DK2
         if (c < 0) return;
         const double l = lcp[copy_bucket(n)];
         for (int s = 0; s < 256; ++s) P[s] *= 1 - l;
@@ -2487,7 +2521,11 @@ Answer decode(const Lm& lm_in, const std::string& prompt, int max_bytes = 80, st
         }
         bool banned[256];
         // ANS: inside a don't-know answer with --copy-dk, as for the copy models: copying from the prompt is allowed.
-        ban_repeats(seq, lm.lc || lm.in_dont_know(seq) ? prompt.size() : 0, banned);
+        // DK2 (--copy-frame): inside the tag of a don't-know answer the rule looks at the tag only, so the tag may
+        // repeat the message's entity (an entity longer than 11 bytes would otherwise be cut in the tag).
+        const std::size_t tag_at = lm.copy_frame && lm.in_dont_know(seq) ? open_token_at(seq.data(), seq.size(), prompt.size())
+                                                                          : std::string::npos;
+        ban_repeats(seq, tag_at != std::string::npos ? tag_at : lm.lc || lm.in_dont_know(seq) ? prompt.size() : 0, banned);
         bool all = true;
         for (int s = 0; s < 256; ++s)
             if (!banned[s]) all = false;
@@ -2770,6 +2808,9 @@ struct QaOpts {
     bool copy_out = false;  // B4C: the default copy expert, off inside answers
     std::string fam_ent;    // ANS: frames before the token, e.g. entity="{E}"
     bool copy_dk = false, fam_read = false;  // ANS
+    double dk_plain = 0;                     // DK2: --dk-plain
+    std::string fam_ent_at = "all";          // DK2: --fam-ent-at
+    bool copy_frame = false;                 // DK2: --copy-frame
 };
 
 constexpr int kFeat = 5;
@@ -2927,6 +2968,15 @@ std::string fam_token(const std::string& level, const std::string& frames, const
     for (std::string f : split(frames, ';'))
         if (!e.empty() && f.find("{E}") != std::string::npos) t += "<|" + f.replace(f.find("{E}"), 3, e) + "|>";
     return t + "<|fam=" + level + "|>";
+}
+// DK2: the frames alone (--fam-ent-at start writes them before "User: ").
+std::string fam_frames(const std::string& frames, const std::string& entity) {
+    const std::string t = fam_token("x", frames, entity);
+    return t.substr(0, t.size() - 9);  // "<|fam=x|>"
+}
+// DK2 (--dk-plain P): don't-know training turn j carries no token; floor(nP) of the first n turns, spread evenly.
+bool dk_plain_turn(std::size_t j, double p) {
+    return std::floor(static_cast<double>(j + 1) * p) > std::floor(static_cast<double>(j) * p);
 }
 
 // A1d (grading only): the entity of the message "... nothing about X in what I've read.", and whether a name is a
@@ -3767,6 +3817,7 @@ int cmd_qa(const Args& a, const QaOpts& o) {
     }
     std::vector<std::string> tok_dolly(turns.size()), tok_dk(dk.size()), tok_dev(dev.size()), tok_test(test.size()),
         tok_sh1(sh1.size()), tok_sh2(sh2.size());
+    std::vector<std::string> pre_dk(dk.size()), pre_dev(dev.size()), pre_test(test.size());  // DK2: start frames
     std::function<std::string(const std::string&)> tokq;
     if (fam_on && fam_k == 0) {
         std::vector<double> fd(turns.size()), fk(dk.size());
@@ -3815,33 +3866,59 @@ int cmd_qa(const Args& a, const QaOpts& o) {
         const bool lo = o.fam_train == "low", oc = o.fam_train == "outcome" || lo;
         // ANS: --fam-ent writes the entity's frames before the level, in every token that is written (A1d's form):
         // a don't-know or shard row's own entity, else the chosen span of the question (computed only when needed).
-        auto tok = [&](const std::string& l, const std::function<std::string()>& ent) {
+        // DK2: --fam-ent-at answer|start: no frame in any training turn (fr_train); answer keeps them in the token of
+        // the prompts the model answers, start writes them before "User: " instead (pre_*). framed: a prompt it answers.
+        const bool fr_train = o.fam_ent_at == "all", fr_tok = o.fam_ent_at != "start";
+        auto tok = [&](const std::string& l, const std::function<std::string()>& ent, bool framed) {
             if (lo && l == "high") return std::string();
-            return fam_token(l, o.fam_ent, o.fam_ent.empty() ? std::string() : ent());
+            const bool f = framed && fr_tok && !o.fam_ent.empty();
+            return fam_token(l, f ? o.fam_ent : std::string(), f ? ent() : std::string());
         };
         std::map<std::string, int> cd, ck;
         std::map<std::string, std::pair<int, int>> cv;
         for (std::size_t i = 0; i < turns.size(); ++i) {
             const std::string l = oc ? "high" : tokq(instruction(i));
             ++cd["<|fam=" + l + "|>"];
-            tok_dolly[i] = tok(l, [&] { return entity_of(instruction(i)); });
+            tok_dolly[i] = tok(l, [&] { return entity_of(instruction(i)); }, fr_train);
         }
         for (std::size_t i = 0; i < dk.size(); ++i) {
             const std::string l = oc ? "low" : tokq(dk[i].q);
             ++ck["<|fam=" + l + "|>"];
-            tok_dk[i] = tok(l, [&] { return dk[i].entity; });
+            // DK2: rows below n_dk are training turns (--dk-plain drops their token); the rest are the held-out turns
+            // --copy-dk fits on, prompts the model answers.
+            const bool train = i < n_dk;
+            tok_dk[i] = train && o.dk_plain > 0 && dk_plain_turn(i, o.dk_plain) ? std::string()
+                                                                                 : tok(l, [&] { return dk[i].entity; }, !train || fr_train);
+            if (!train && !fr_tok && !o.fam_ent.empty()) pre_dk[i] = fam_frames(o.fam_ent, dk[i].entity);
         }
         for (std::size_t i = 0; i < dev.size(); ++i) {
             const std::string l = tokq(dev[i].q);
             (dev[i].in_slice ? cv["<|fam=" + l + "|>"].first : cv["<|fam=" + l + "|>"].second)++;
-            tok_dev[i] = tok(l, [&] { return entity_of(dev[i].q); });
+            tok_dev[i] = tok(l, [&] { return entity_of(dev[i].q); }, true);
+            if (!fr_tok && !o.fam_ent.empty()) pre_dev[i] = fam_frames(o.fam_ent, entity_of(dev[i].q));  // DK2
         }
-        for (std::size_t i = 0; i < test.size(); ++i) tok_test[i] = tok(tokq(test[i].q), [&] { return entity_of(test[i].q); });
-        for (std::size_t i = 0; i < sh1.size(); ++i) tok_sh1[i] = tok(oc ? "high" : tokq(sh1[i].q), [&] { return sh1[i].entity; });
-        for (std::size_t i = 0; i < sh2.size(); ++i) tok_sh2[i] = tok(oc ? "high" : tokq(sh2[i].q), [&] { return sh2[i].entity; });
+        for (std::size_t i = 0; i < test.size(); ++i) {
+            tok_test[i] = tok(tokq(test[i].q), [&] { return entity_of(test[i].q); }, true);
+            if (!fr_tok && !o.fam_ent.empty()) pre_test[i] = fam_frames(o.fam_ent, entity_of(test[i].q));  // DK2
+        }
+        for (std::size_t i = 0; i < sh1.size(); ++i)
+            tok_sh1[i] = tok(oc ? "high" : tokq(sh1[i].q), [&] { return sh1[i].entity; }, fr_train);
+        for (std::size_t i = 0; i < sh2.size(); ++i)
+            tok_sh2[i] = tok(oc ? "high" : tokq(sh2[i].q), [&] { return sh2[i].entity; }, fr_train);
         for (auto& [k, v] : cd) std::cout << "fam_dolly " << k << " " << v << "\n";
         for (auto& [k, v] : ck) std::cout << "fam_dk " << k << " " << v << "\n";
         for (auto& [k, v] : cv) std::cout << "fam_dev " << k << " in_slice " << v.first << " not_in_slice " << v.second << "\n";
+        if (o.dk_plain > 0 || o.fam_ent_at != "all") {  // DK2
+            std::size_t plain = 0, framed_train = 0, framed_ans = 0;
+            for (std::size_t i = 0; i < dk.size(); ++i) {
+                plain += i < n_dk && tok_dk[i].empty();
+                const bool fr = tok_dk[i].find("<|fam=") != 0 && !tok_dk[i].empty();
+                (i < n_dk ? framed_train : framed_ans) += fr || !pre_dk[i].empty();
+            }
+            std::cout << "dk2_text dk_plain " << o.dk_plain << " plain_turns " << plain << " of " << n_dk << " fam_ent_at "
+                      << o.fam_ent_at << " framed_training_turns " << framed_train << " framed_heldout_turns " << framed_ans
+                      << " copy_frame " << o.copy_frame << "\n";
+        }
     }
     // M14: with an entity statistic in the token, every dev and test entity was chosen above and is kept (`chosen`), and
     // nothing below reads the lowered index: free it (a store writes it later, so --save keeps it).
@@ -4119,7 +4196,7 @@ int cmd_qa(const Args& a, const QaOpts& o) {
         std::vector<int> bk;
         std::size_t used = 0;
         for (std::size_t j = n_dk; j < dk.size() && used < 1000; ++j, ++used) {
-            const std::string prompt = with_tok("User: " + dk[j].q + "\nAssistant: ", tok_dk[j]);
+            const std::string prompt = pre_dk[j] + with_tok("User: " + dk[j].q + "\nAssistant: ", tok_dk[j]);  // DK2: pre
             const std::string& resp = dk[j].response;
             for (int m = 0; m < 2; ++m) {
                 Lm lm = base[m];
@@ -4133,7 +4210,11 @@ int cmd_qa(const Args& a, const QaOpts& o) {
                     pb[m].push_back(P[y]);
                     if (m == 0) {
                         int n = 0;
-                        pe.push_back(copy_pred(seq.data(), seq.size(), n) == y ? 1.0 : 0.0);
+                        std::size_t cj = 0;
+                        int c = copy_pred(seq.data(), seq.size(), n, &cj);
+                        if (c >= 0 && o.copy_frame && copy_closes_unopened(seq.data(), seq.size(), cj, prompt.size()))
+                            c = -1, n = 0;  // DK2: as decode will see it
+                        pe.push_back(c == y ? 1.0 : 0.0);
                         bk.push_back(copy_bucket(n));
                     }
                     seq.push_back(y);
@@ -4173,7 +4254,7 @@ int cmd_qa(const Args& a, const QaOpts& o) {
     for (auto& l : lms) l.sim_gate = sc && parse_sim(o.sim).gate;  // A4: the expert off inside answers
     for (int l = 0; l < 4; ++l) lms[l].cls_gate = true, lms[l].lc_out = o.copy_out ? (l % 2 ? lc_i : lc_t) : nullptr;  // B4C
     if (o.copy_dk)
-        for (int l = 0; l < 4; ++l) lms[l].lc_dk = l % 2 ? ldk_i : ldk_t;  // ANS: copy inside don't-know answers
+        for (int l = 0; l < 4; ++l) lms[l].lc_dk = l % 2 ? ldk_i : ldk_t, lms[l].copy_frame = o.copy_frame;  // ANS; DK2
 
     // Grading only: is a gold answer in the source article's text (wiki train)? Splits A3's results.
     const std::string_view wiki(reinterpret_cast<const char*>(data.data()), cfg.train);
@@ -4200,7 +4281,8 @@ int cmd_qa(const Args& a, const QaOpts& o) {
         return cov_e.empty() || e.empty() ? -1 : cov_er.count(k + "|" + question_relation(r.q, e)) ? 2 : cov_e.count(k) ? 1 : 0;
     };
 
-    auto run_set = [&](const std::vector<QaRow>& rows, const std::vector<std::string>& toks) {
+    auto run_set = [&](const std::vector<QaRow>& rows, const std::vector<std::string>& toks,
+                       const std::vector<std::string>& pres) {  // DK2: pres, the start frames (empty unless start)
         std::vector<Graded> out;
         for (std::size_t r = 0; r < rows.size(); ++r)
             for (int form = 0; form < 2; ++form)
@@ -4213,7 +4295,7 @@ int cmd_qa(const Args& a, const QaOpts& o) {
                     g.lm = l;
                     g.fam_tok = fam_on ? toks[r] : "";
                     const std::string prompt =
-                        form == 0 ? with_tok("User: " + rows[r].q + "\nAssistant: ", g.fam_tok) : rows[r].q + " ";
+                        form == 0 ? pres[r] + with_tok("User: " + rows[r].q + "\nAssistant: ", g.fam_tok) : rows[r].q + " ";
                     const auto t0 = std::chrono::steady_clock::now();
                     g.ans = decode(lm, prompt);
                     g.ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
@@ -4316,7 +4398,7 @@ int cmd_qa(const Args& a, const QaOpts& o) {
         return out;
     };
 
-    const std::vector<Graded> gd = run_set(dev, tok_dev);
+    const std::vector<Graded> gd = run_set(dev, tok_dev, pre_dev);
     std::map<std::string, int> why_dev;
     const std::vector<Graded> gr3 = o.r3.empty() ? std::vector<Graded>{} : r3_set(dev, why_dev);
     const char* const form_name[2] = {"chat", "wiki"};
@@ -4545,7 +4627,7 @@ int cmd_qa(const Args& a, const QaOpts& o) {
     }
     // The frozen test, once: gates chosen on all of dev, applied unchanged.
     if (!test.empty()) {
-        const std::vector<Graded> gt = run_set(test, tok_test);
+        const std::vector<Graded> gt = run_set(test, tok_test, pre_test);
         std::map<std::string, int> why_test;
         const std::vector<Graded> gt3 = o.r3.empty() ? std::vector<Graded>{} : r3_set(test, why_test);
         write_rows("test", gt, true);
@@ -4853,6 +4935,34 @@ int cmd_selftest() {
                         !d.in_dont_know(b("I don't know. I"));
         if (!ok) {
             std::cerr << "selftest: ANS frame / don't-know context checks failed\n";
+            return 1;
+        }
+    }
+    {
+        // DK2: the frames alone; the plain-turn spread of --dk-plain; --copy-frame: a frame's end is not copied into the
+        // message (no "<|" open in the answer), but a tag the answer opened may be closed.
+        auto b = [](const std::string& x) { return std::vector<std::uint8_t>(x.begin(), x.end()); };
+        int p50 = 0, p75 = 0, p0 = 0;
+        for (std::size_t j = 0; j < 8; ++j) p50 += dk_plain_turn(j, 0.5), p75 += dk_plain_turn(j, 0.75), p0 += dk_plain_turn(j, 0);
+        const std::string pr = "<|about Zorbia|><|entity=\"Zorbia\"|>User: Who? x\nAssistant: ";
+        const auto m = b(pr + "I don't know. I have nothing about Zorbia");
+        const auto t = b(pr + "I don't know. I have nothing about Zorbia in it. <|unknown entity=\"Zorbia\"");
+        const auto u = b(pr + "I don't know. <|unknown|> about Zorbia");
+        int n1 = 0, n2 = 0, n3 = 0;
+        std::size_t j1 = 0, j2 = 0, j3 = 0;
+        const int c1 = copy_pred(m.data(), m.size(), n1, &j1), c2 = copy_pred(t.data(), t.size(), n2, &j2),
+                  c3 = copy_pred(u.data(), u.size(), n3, &j3);
+        const bool ok = fam_frames("about {E};entity=\"{E}\"", "the Zorbia") == "<|about Zorbia|><|entity=\"Zorbia\"|>" &&
+                        fam_frames("entity=\"{E}\"", "").empty() && p50 == 4 && p75 == 6 && p0 == 0 && !dk_plain_turn(0, 0.5) &&
+                        dk_plain_turn(1, 0.5) && c1 == '|' && n1 >= 12 && copy_closes_unopened(m.data(), m.size(), j1, pr.size()) &&
+                        c2 == '|' && !copy_closes_unopened(t.data(), t.size(), j2, pr.size()) && c3 == '|' &&
+                        copy_closes_unopened(u.data(), u.size(), j3, pr.size()) &&
+                        !copy_closes_unopened(m.data(), m.size(), 1, pr.size()) &&  // "<|" opens, it does not close
+                        open_token_at(m.data(), m.size(), pr.size()) == std::string::npos &&
+                        open_token_at(t.data(), t.size(), pr.size()) == t.size() - 25 &&  // at `<|unknown entity="Zorbia"`
+                        open_token_at(u.data(), u.size(), pr.size()) == std::string::npos;
+        if (!ok) {
+            std::cerr << "selftest: DK2 frames / plain turns / copy-frame checks failed\n";
             return 1;
         }
     }
@@ -5285,7 +5395,7 @@ void usage() {
                  "  qa [wiki] [dolly] --dev DEV.tsv [--test TEST.tsv] [--leak TEST.tsv] [--out ROWS.tsv] [--base A0_ROWS.tsv]\n"
                  "     [--dk DK.tsv --dk-ratio R] [--fam none|before|after] [--parse E1.tsv] [--fam-stat NAME]\n"
                  "     [--fam-train stat|outcome|low] [--fam-only] [--copy] [--copy-min N] [--r3 PATTERNS.tsv]\n"
-                 "     [--fam-ent FRAMES] [--copy-dk] [--fam-read]\n"
+                 "     [--fam-ent FRAMES] [--copy-dk] [--fam-read] [--dk-plain P] [--fam-ent-at all|answer|start] [--copy-frame]\n"
                  "     [--shard F.tsv] [--shard2 F.tsv] [--cls TABLE|shape[:tail[:orders[:flags]]]] [--sim SPEC] [--cards FILE]\n"
                  "     [--save DIR | --model DIR]\n"
                  "     (class, similar-context and copy experts are defaults, off inside answers: --no-cls --no-sim --no-copy)\n"
@@ -5356,10 +5466,17 @@ int main(int argc, char** argv) {
             usage();
             return 2;
         }
+        if (a.dk_plain < 0 || a.dk_plain >= 1 || (a.fam_ent_at != "all" && a.fam_ent_at != "answer" && a.fam_ent_at != "start") ||
+            (a.fam_ent_at != "all" && a.fam_ent.empty()) || (a.copy_frame && !a.copy_dk) || (a.dk_plain > 0 && a.fam == "none") ||
+            ((a.dk_plain > 0 || a.fam_ent_at != "all" || a.copy_frame) && (!a.model.empty() || !a.save.empty())) ||
+            (a.fam_ent_at == "start" && !a.cards.empty())) {  // DK2: training text, not stored; start frames not in cards
+            usage();
+            return 2;
+        }
         rc = cmd_qa(a, QaOpts{a.dev, a.test, a.out, a.base, a.dk, a.dk_ratio, a.fam, a.parse, a.fam_stat, a.fam_train,
                               a.r3, a.shard, a.shard2, a.leak, a.copy, a.fam_only, default_cls_spec(a), a.copy_min,
                               a.no_sim ? std::string() : a.sims.empty() ? std::string("default") : a.sims[0], !a.no_copy,
-                              a.fam_ent, a.copy_dk, a.fam_read});
+                              a.fam_ent, a.copy_dk, a.fam_read, a.dk_plain, a.fam_ent_at, a.copy_frame});
     } else if (cmd == "dktext") {
         if (a.dev.empty() || a.test.empty() || a.out.empty()) {
             usage();
