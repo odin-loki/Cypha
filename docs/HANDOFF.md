@@ -271,7 +271,7 @@ Run these on every change: `native_cyphalm_trie_selftest` (it also checks that K
    - **After Odin's calls** (§5.10, §5.24): FC4 (events on bytes) and FC3 (real extracts, fetched on Odin's PC).
    - **Agents:** FC-DATA, FC-SCORE, FC-SEQ, FC-EST and FC-SERVE, each with its own files (FORECAST_PLAN §8).
 4. **Similar-context expert:** A4f done (ledger 94): repeated online keys are merged by default (−62% memory at 16 MiB, fresh −0.0091 bits per byte). Online keys still grow about 2 MB per MiB read. No bound kept the gain (A4e): online keys grow about 550 MB per 100 MiB read; `qa` and `sample` read short streams. A long-stream reader can take a 2^19 window as a memory guard at about +0.003 BPC or more (Odin's call). **S4c:** no content signal sees Dolly, because most of it is in scope; a new planted pool needs Odin's call (§5.17). Source-trust shifts once source reliability is refit over time.
-5. **On Odin's PC:** the 8B QE0 gate and timing, QE2 probe vectors, QE3, QE4 `pairs`, teacher Q/A text (QWEN3_EMBEDDING_DISSECTION §9). **1 TB runs** ([runbook](TRAIN_1TB_RUNBOOK.md)): when the live run (model 1) is finished, stop it and run `bash scripts/train_model.sh`: it verifies model 1 (expect its 32-bit counts to have wrapped), trains model 2, verifies it and compares the two.
+5. **On Odin's PC:** the 8B QE0 gate and timing, QE2 probe vectors, QE3, QE4 `pairs`, teacher Q/A text (QWEN3_EMBEDDING_DISSECTION §9). **1 TB runs** ([runbook](TRAIN_1TB_RUNBOOK.md)): when the live run (model 1) is finished, stop it, then `bash scripts/verify_model.sh 1` (expect its 32-bit counts to have wrapped), `bash scripts/train_model.sh 2`, `bash scripts/verify_model.sh 2` and `bash scripts/compare_models.sh 1 2`.
 6. **Bill of work upkeep** with every commit.
 
 ---
