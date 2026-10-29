@@ -456,6 +456,15 @@ inline bool has_supporting_independent_evidence(const Hypothesis& h) {
   return false;
 }
 
+/// S7d: the sources of h's positive independent results, each once, in test order. A promotion whose list holds one
+/// source rests on one provider alone.
+inline std::vector<std::string> supporting_independent_sources(const Hypothesis& h) {
+  std::vector<std::string> out;
+  for (const HypTest& t : h.tests)
+    if (independent_evidence(h, t) && t.positive && std::find(out.begin(), out.end(), t.source) == out.end()) out.push_back(t.source);
+  return out;
+}
+
 // ---------------------------------------------------------------------------
 // 7.2 Updating and deciding
 // ---------------------------------------------------------------------------

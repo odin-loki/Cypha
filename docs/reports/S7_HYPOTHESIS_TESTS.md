@@ -578,3 +578,152 @@ cmake --build build --target epistemic_test && build/epistemic_test   # 811 chec
 ```
 
 The S7c lines start with `S7C`. `OUT.c2_items.tsv` lists C2's hypotheses with their results, prior, posterior, e-value, null p-value and tier. `OUT.c2.prereg.tsv` is C2's pre-registration log.
+
+## S7d: T2 in the loop, Wikidata as one source, K3 against K4, fusion's φ (2026-10-29)
+
+**Odin Loch** · 2026-10-29 · HANDOFF §5.12 and §5.14 settled by measurement (PLAN ledger 55), open to Odin's veto · S9's part is in [S9_WORLDS_AND_FRAGILITY.md](S9_WORLDS_AND_FRAGILITY.md), "S9b"
+
+(The reads, the rules and the predictions below were written and committed before any S7d run. Results are added under them.)
+
+**Rule 10.** Cypha's own hypothesis machinery. Nothing here answers a question.
+
+### The data (fixed now)
+
+- **S7's dev set** (2,950 hypotheses, both sets U and C), with S7b's loop: T1 under the store's φ, T6, T5, T4, three-way add-one likelihoods from dev, cheapest first, `decide` as on main (S8d: support needs a positive independent result), S7c's hybrid with K4 as the Known tier.
+- Its items come from two runs of main's tool: `--test-kinds … --s7c` (T6, T5, T4, P0) and `--worlds` (T1 under the store's φ, T2), joined on pair, label, subject, relation and object. A new mode, `pattern_learn --s7d`, reads them. It first reproduces S7c's dev lines from the joined items; nothing below is read until it does.
+- **S15's choose half** (reachable pairs), as S7b read it, with its loop (no T5). It is used only in check 5b below; no choice is made on it.
+- **Final reads.** If S8e's fresh set is ready during this work, items 1 and 5 are read once on its test part. If not, they rest on dev and the report says so.
+
+### 1. T2 in the loop
+
+- **The test.** S9's chosen T2 (worlds, depth 1, with the type check) as a test kind "T2 worlds": source `store`, not independent of the generator, cost 2. The plan becomes T1, T2, T6, T5, T4.
+- **Its likelihoods.** Three-way add-one from dev, with S6's labels. For the reads they are cross-fitted: each half of dev (bit 13 of FNV-1a(subject)) uses T2's likelihoods from the other half. The other tests keep S7b's.
+- **The reads.** Supported, refuted and decided; the Known tier (K4) with its precision and Known-decided share; K4's realised FDR in S7c's model simulation (mixed and planted nulls, 400 batches each) and in the dev resampling (400 splits). The plan without T2 is read beside it the same way.
+- **Rule: T2 enters the loop when all hold.**
+  - (a) The Known-decided share on dev rises by at least 0.5 points over the plan without T2.
+  - (b) The Known precision's Wilson lower bound is at least 0.90, and the precision is not more than 0.01 below the plan without T2.
+  - (c) K4's realised FDR is at most 0.10 + 2 SE in both simulations and in the resampling.
+  - (d) If S8e's fresh set is read: the Known precision's Wilson lower bound there is at least 0.90.
+
+### 2. Wikidata as one source or per claim (the loop's part)
+
+- **Per claim** (the loop as it is): T5 is independent of a store-based generator, because the claim that judges h is not one of the claims the generator read.
+- **One source:** Wikidata is one provider. When the generator's store holds a Wikidata claim about h's subject, T5 is not independent of the generator.
+- **The reads, both ways, on dev:** Known, precision and decided; and the Known promotions whose only independent positive result is T5 (T4 not positive), with their precision.
+- **Rule** (it protects against one provider carrying a promotion): **Wikidata counts as one source**, unless no Known promotion on dev rests on T5 alone when it is counted per claim. One source then applies to the loop, to fragility and to the blast radius (S9b).
+
+### 5. K3 against K4
+
+S7c found that K3 and K4 promoted the same sets on every read. The reads below look for where they differ.
+- **5a. Plausible nulls.** Batches drawn from dev's loop results, with every false member taken from the top prior quartile (where S7c found the false e-values inflated: mean 1.58) and true members drawn at random. False fractions 0.5 and 0.8, batch size 600. K3's calibration set is drawn the same way from the other bit-13 half, so it is exchangeable with the batch. 400 batches per fraction. Realised FDR with its SE for K3, K4 and S7b's step.
+- **5b. A calibration set from another distribution.** K3 calibrated on S7's dev, applied to S15's choose half (reachable). Its realised false share, with a bootstrap interval over subjects (2,000 resamples), beside K4's on the same batch. This is how K3 would run in practice: a labelled set made earlier, not drawn with the batch.
+- **Rule: switch the Known tier to K3 only when all hold.**
+  - (a) In 5a, K4's realised FDR exceeds 0.10 + 2 SE at some fraction while K3's stays at or under 0.10 + 2 SE at both.
+  - (b) In 5b, K3's realised false share is at most 0.10, with its interval's upper bound at most 0.15.
+  - (c) K3's Known-decided share on dev is within 1 point of K4's.
+  - Otherwise K4 stays.
+
+### 6. Fusion's φ
+
+- **The reads.** `pattern_learn`'s normal run (`--cv --wikidata`, S3's command) with fusion's φ as now (`kRel`'s hand-set table) and with the store's φ estimated on the v2 seed store (written by `--worlds --s9b` as `OUT.phi_store.tsv`, passed with the existing `--phi`). Compared: admitted facts, their agreement with Wikidata on held-out subjects, and S3's gap counts by kind.
+- **Rule.** The store's φ is the recommended setting for fusion when its agreement with Wikidata is not lower (point estimate) and the admitted facts fall by at most 2%. Either way the default in this change stays byte-identical, because S3's gap map is every change's parity reference. A recommendation to switch is recorded for Odin and the integrator.
+
+### Predictions (registered before the runs)
+
+| # | Prediction |
+|---|---|
+| D1 | `--s7d` reproduces S7c's dev lines (as changed by S8d: K4 572 at 0.976) from the joined items |
+| D2 | T2 moves the Known-decided share by less than 0.5 points: rule 1 fails and T2 stays out |
+| D3 | Per claim, more than 50 Known promotions on dev rest on T5 alone: rule 2 picks one source |
+| D4 | One source costs at least 20% of dev's Known promotions |
+| D5 | In 5a, K4's realised FDR stays at or under 0.10 + 2 SE at both fractions: K4 stays |
+| D6 | In 5b, K3's realised false share is under 0.10 |
+| D7 | Fusion with the store's φ changes admitted facts by less than 2% and agreement by less than 0.005 |
+
+### Results (run 2026-10-29)
+
+Tool: `pattern_learn --s7d` (commit e4afd6f), on items from main's tool (`--test-kinds … --s7c`, dev only) and from `--worlds --s9b`. A run takes 28 s at 45 MB. S8e's fresh set was not ready, so **every read here is on dev** (and S15's choose half for 5b); no final read was made.
+
+**The reproduction (D1: hit).** The joined items (2,958; none unmatched) give S7c's dev lines exactly, as S8d changed them: K4 promotes 572 at 0.976 [0.959, 0.985], Known-decided 0.232; K1 215, K2 37, K3 572, S7b's step 571.
+
+#### 1. T2 in the loop
+
+| | Known (K4) | Precision [Wilson 95%] | Refuted (precision) | Known-decided |
+|---|---|---|---|---|
+| Without T2 | 572 | 0.976 [0.959, 0.985] | 113 (0.965) | 0.2322 |
+| With T2 (cross-fitted) | 572 | 0.976 [0.959, 0.985] | 117 (0.957) | 0.2336 |
+
+- T2's likelihoods: all of dev BF(positive) 3.35, BF(inconclusive) 0.943, as S9 measured; cross-fitted 2.63 and 4.33 by half.
+- T2 changes no supported hypothesis. It refutes 4 more, one of them true.
+- K4's realised FDR with T2: 0.026 (mixed), 0.060 ± 0.012 (planted nulls), 0.025 (resampling). All under 0.10 + 2 SE.
+- **Rule: (a) fails** (+0.14 points against the 0.5 needed); (b) and (c) hold. **T2 stays out of the loop.** It fires on 5% of dev and is never negative, so it can only nudge posteriors that `decide` already settles.
+
+#### 2. Wikidata as one source or per claim (the loop)
+
+- 1,924 of 2,958 dev items have a subject with a Wikidata claim in the reduced store.
+- **Per claim** (the loop as it is): 54 of the 572 Known promotions rest on Wikidata alone. All 54 are true (1.000 [0.934, 1.000]).
+- **All 54 have subjects with no Wikidata claim in the store.** So Wikidata judged a subject the generator knew only from other sources. Had the loop gone on to T4, 47 of them would also have had a corpus yes.
+- **One source:** 572 Known at 0.976. No promotion differs.
+- **Rule: one source.** 54 promotions rest on Wikidata alone when it is counted per claim, so the protective count applies. On S7's dev it costs nothing.
+- **Where it bites.** Only where the generator's store holds a Wikidata claim about h's subject and Wikidata is h's only independent yes. The generators' own loops (S8a's and S8b's, and S8d's source stage) still count Wikidata per claim. Wiring the rule into them changes their outputs; it is left for after S8e merges, so S8e's reads are not moved.
+
+#### 5. K3 against K4
+
+**5a. Plausible nulls.** 1,479 true; 659 false with a prior in the top quartile (p0 ≥ 0.473), whose mean e-value is 1.09 and of which `decide` supports 10. 400 batches of 600 per false fraction:
+
+| False fraction | K3 FDR (SE) | K4 FDR (SE) | S7b's step FDR (SE) | Promoted per batch (K3 / K4 / S7b) |
+|---|---|---|---|---|
+| 0.5 | 0.039 (0.001) | 0.039 (0.001) | 0.039 (0.001) | 117.5 / 117.7 / 117.5 |
+| 0.8 | 0.063 (0.003) | 0.054 (0.004) | **0.140 (0.002)** | 35.9 / 25.1 / 52.6 |
+
+K4 stays under its bar even when most of the batch is plausible and false; S7b's selective step does not.
+
+**5b. A calibration set from another distribution.** K3 calibrated on S7's dev, applied to S15's choose half (reachable: 5,236 hypotheses, 833 subjects): 901 promoted, false share 0.051 [0.036, 0.067] (bootstrap over subjects). K4 promotes the same 901.
+
+**Rule: (a) fails** (K4 is never over its bar); (b) and (c) hold. **K4 stays.** The two rules promote the same sets on every real read. K4 needs no labelled set at run time.
+
+#### 6. Fusion's φ
+
+The store's φ on the v2 seed store differs from `kRel`'s hand-set table in most relations. Examples: language 0.59 against 0.20, occupation 0.26 against 0.10, birth_place 0.73, capital 0.88.
+
+| | Hand-set φ (as now) | Store's φ |
+|---|---|---|
+| Admitted facts (P ≥ 0.8) | 1,216 | 1,214 |
+| Candidates (0.5 ≤ P < 0.8) | 178 | 190 |
+| Agreement with Wikidata on held-out subjects | 173 / 182 [0.909, 0.974] | 173 / 182 [0.909, 0.974] |
+| S3's gaps: certainty / contradiction | 1,342 / 128 | 1,344 / 130 |
+
+- The two admitted facts lost are Chad's language, "arabic" and "Arabic": the store's φ makes language more functional, so French competes harder. Chad has both languages, so that loss is a small error the store's φ introduces.
+- **Rule: met** (agreement not lower; admitted −0.16%). **The store's φ is the recommended setting for fusion.** The default is unchanged in this change: S3's gap map is every change's parity reference. Switching it is a decision for Odin and the integrator; it changes the v2 store and S3's map.
+
+### Predictions scored (S7d)
+
+| # | Prediction | Result |
+|---|---|---|
+| D1 | `--s7d` reproduces S7c's dev lines | **Hit:** exactly |
+| D2 | T2 moves Known-decided by < 0.5 points; stays out | **Hit:** +0.14 |
+| D3 | > 50 Known promotions rest on T5 alone; one source | **Hit:** 54 |
+| D4 | One source costs ≥ 20% of Known | **Miss:** 0% (all 54 are about subjects with no Wikidata claim in the store) |
+| D5 | K4 stays under its bar in 5a: K4 stays | **Hit** |
+| D6 | K3 across distributions under 0.10 | **Hit:** 0.051 |
+| D7 | Fusion with the store's φ: admitted change < 2%, agreement change < 0.005 | **Hit:** −0.16%, 0 |
+
+6 hits, 1 miss.
+
+### Decisions (S7d), open to Odin's veto
+
+1. **T2 stays out of the loop** (rule 1).
+2. **Wikidata counts as one source** (rule 2): in fragility and the blast radius (as S9 ran) and in independence. On S7's dev it changes no promotion. Wiring it into the generators' loops is the follow-up.
+3. **K4 stays the Known tier** (rule 5). K3 is kept in the library.
+4. **The store's φ is the recommended setting for fusion** (rule 6), with the default unchanged until Odin and the integrator switch it.
+
+### How to reproduce (S7d)
+
+```bash
+g++ -O2 -std=c++20 -pthread -I native/include native/tools/pattern_learn.cpp -o pattern_learn
+./pattern_learn --test-kinds enwik8 seeds.tsv wd_values.tsv patterns.tsv s7 --phi-wd phi.tsv --s15 bench/eval/temporal_holdout_dev.tsv --s7c
+./pattern_learn --worlds enwik8 seeds.tsv wd_values.tsv facts_f2.tsv bench/eval/temporal_holdout_dev.tsv s9 --s9b
+./pattern_learn --s7d s7.items.tsv s9.dev_items.tsv s9.s9b_dev_items.tsv s7.s15_items.tsv s7d
+# fusion's phi: S3's normal command, then the same with --phi s9.phi_store.tsv
+```
+Runs are in `/root/work/s9b/runs/` (`s7d.out`, `g0`, `gphi`).

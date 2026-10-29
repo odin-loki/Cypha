@@ -133,10 +133,21 @@
 //   --f2b-wild 1|2 adds wildcard gaps (first token, <*>, last two | <*>, last two); --f2b-classes FILE adds word-class gaps;
 //   --f2b-gold-split scores D4's gold fifth by halves (dev; test only with --f2b-read-test). --f2b-selftest checks the keys.
 //
+// S9b and S7d (2026-10-29; the S9 report, "S9b", and the S7 report, "S7d"): --worlds … --s9b writes each dev item's
+//   Wikidata-subject flag, the store's phi table, Wikidata counted per claim and whether fragility points at errors;
+//   --gaps … --gaps-spof SPOF adds S9's single points of failure as fragile gaps; --s7d S7_ITEMS S9_ITEMS S9B_ITEMS S15_ITEMS
+//   OUT reads T2 in the loop, Wikidata as one source and K3 against K4. Cypha's own bookkeeping: it answers nothing.
+//
+// S12a (2026-10-29, docs/reports/S12A_DEDUCTION_LAWS_REFINEMENT.md; gen_laws.hpp, gen_deep.hpp):
+//   --gen-laws ENWIK8 SEEDS FACTS_F2 OUT [--read-test]: G15's planted-law gate and its real read (the 2006 country and
+//   place infoboxes; persons' years). --gen-deep ENWIK8 SEEDS FACTS_F2 WD_VALUES PATTERNS S15_DIR OUT [--read-test]
+//   [--fresh-dev | --fresh-test]: G1 by depth, G19's precision at equal N, and the pools of G1, G19 and G20 with the
+//   prospective log. Hypotheses and laws for Cypha's own store only: it answers nothing.
+//
 // Build: g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp -o pattern_learn
 // Usage: pattern_learn <enwik8> <outdir> [--cv] [--folds K] [--min-train N] [--base-rate A] [--sample N] [--seed S]
 //          [--wikidata FILE [--wikidata-gold-only]] [--phi FILE] [--shard FILE --dev DEV --test TEST [--slice-end B] [--holdout-from B]]
-//          [--raw] [--join FACTS] [--reach PARSE] [--gaps FILE [--demand ROWS,...] [--parse PARSE] [--gap-floor F] [--demand-weight W]]
+//          [--raw] [--join FACTS] [--reach PARSE] [--gaps FILE [--demand ROWS,...] [--parse PARSE] [--gap-floor F] [--demand-weight W] [--gaps-spof SPOF]]
 //          [--frontier FILE [--frontier-test] [--frontier-split B]]
 //        pattern_learn --wilson K N
 //   <outdir> gets facts_f2.tsv (subject, relation, object, P, grade, n_evidence, best_pattern, source_page, byte_offset;
@@ -152,8 +163,10 @@
 #include "cypha/eval/epistemic.hpp"
 #include "cypha/eval/gap_map.hpp"
 #include "cypha/eval/gen_concepts.hpp"
+#include "cypha/eval/gen_deep.hpp"
 #include "cypha/eval/gen_analogy.hpp"
 #include "cypha/eval/gen_links.hpp"
+#include "cypha/eval/gen_laws.hpp"
 #include "cypha/eval/gen_rules.hpp"
 #include "cypha/eval/sources.hpp"
 #include "cypha/eval/unknown_signals.hpp"
@@ -170,6 +183,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <ctime>
 #include <fstream>
 #include <functional>
 #include <iostream>
@@ -2586,7 +2600,7 @@ void reach_report(const vector<Pat>& pats, const string& data, std::size_t train
 //              w = --demand-weight (0: 0 of 750 dev tags name their question's slot; the demand column is kept).
 //   grading    with --dev (grading only, dev only): does a tag name its question's slot (subject: the in-slice title, else
 //              --parse's E1 entity; relation: q_rels), and is that slot a gap?
-struct GapOpt { string path, parse; vector<string> demand; double floor = 0.05, demand_weight = 0.0; };
+struct GapOpt { string path, parse, spof; vector<string> demand; double floor = 0.05, demand_weight = 0.0; };  // spof: S9b's --gaps-spof
 void write_gaps(const GapOpt& G, const string& dev, const vector<PageRef>& pages, const vector<Fused>& fused,
                 const std::function<void(const string&)>& say) {
     const char* kT[4] = {"country", "person", "place", "other"};
@@ -2785,6 +2799,23 @@ void write_gaps(const GapOpt& G, const string& dev, const vector<PageRef>& pages
     for (const ecs::Gap& g : gm.gaps())  // a demand gap no rung can fill (no kept pattern for its relation, or no page) is parked
         if (g.kind == ecs::GapKind::Demand && (rel_index(g.relation) < 0 || !(kept & bit(rel_index(g.relation))) || at(g.entity) < 0))
             gm.find(g.kind, g.entity, g.relation)->status = ecs::GapStatus::Parked;
+    if (!G.spof.empty()) {  // S9b: S9's single points of failure (--worlds OUT.spof.tsv) as fragile gaps
+        std::ifstream f(G.spof);
+        string l;
+        std::getline(f, l);
+        long rows = 0, added = 0, skipped = 0;
+        while (std::getline(f, l)) {
+            const vector<string> c = split(l, '\t');  // gap_id kind status entity relation object p top_source note
+            if (c.size() < 8) continue;
+            ++rows;
+            const int e = at(c[3]);
+            const std::size_t before = gm.size();
+            const ecs::Gap* g = gm.add_fragile(c[3], c[4], std::atof(c[6].c_str()), e < 0 ? "unknown" : kT[type[e]], c[5] + " single point of failure, top source " + c[7]);
+            if (!g) ++skipped;
+            else added += gm.size() > before;
+        }
+        say("  GAPSPOF " + G.spof + ": rows " + std::to_string(rows) + ", fragile gaps " + std::to_string(added) + ", slots already asked about " + std::to_string(skipped));
+    }
     ecs::VoiConfig vc;
     vc.demand_weight = G.demand_weight;
     gm.score(vc);
@@ -5047,7 +5078,9 @@ double pnull_of(PnullMemo& memo, const vector<ecs::HypTest>& plan, double p0, do
 
 // loop2's loop with three-way likelihoods and no batch step, keeping each hypothesis's posterior, e-value, decide's state
 // and the null-model p-value of its e-value. Folds: bit 13 of FNV-1a(subject).
-vector<LoopRes> loop_res(const vector<Item>& it, const vector<std::size_t>& idx, const vector<LoopKind>& kinds, const string& log_path = "") {
+// sup_src (S7d): when given, each hypothesis's supporting independent sources, in idx order.
+vector<LoopRes> loop_res(const vector<Item>& it, const vector<std::size_t>& idx, const vector<LoopKind>& kinds, const string& log_path = "",
+                         vector<vector<string>>* sup_src = nullptr) {
     ecs::HypothesisStore hs;
     ecs::PreregLog log;
     const vector<ecs::HypTest> plan = s7c_plan(kinds);
@@ -5078,6 +5111,7 @@ vector<LoopRes> loop_res(const vector<Item>& it, const vector<std::size_t>& idx,
         r.label = x.label, r.counted = !(x.label == 0 && x.wd_true), r.fold = static_cast<int>((fnv(x.s) >> 13) & 1), r.subj = x.s;
         r.pnull = pnull_of(memo, plan, x.p0, r.e);
         out.push_back(r);
+        if (sup_src) sup_src->push_back(ecs::supporting_independent_sources(*hh));
     }
     if (!log_path.empty()) {
         std::ofstream lf(log_path);
@@ -8331,14 +8365,15 @@ const char* oname(TestOutcome o) { return ecs::test_outcome_name(o); }
 
 int run(int argc, char** argv) {
     if (argc < 8) {
-        std::fprintf(stderr, "usage: pattern_learn --worlds ENWIK8 SEEDS.tsv WD_VALUES.tsv FACTS_F2.tsv S15_DEV.tsv OUT_PREFIX [--read-confirm]\n");
+        std::fprintf(stderr, "usage: pattern_learn --worlds ENWIK8 SEEDS.tsv WD_VALUES.tsv FACTS_F2.tsv S15_DEV.tsv OUT_PREFIX [--read-confirm] [--s9b]\n");
         return 2;
     }
     const double t0 = now_s();
     const string out = argv[7];
-    bool read_confirm = false;
+    bool read_confirm = false, s9b = false;  // s9b: S9b's reads (the S9 report, "S9b"); without it the output is S9's
     for (int i = 8; i < argc; ++i) {
         if (string(argv[i]) == "--read-confirm") read_confirm = true;
+        else if (string(argv[i]) == "--s9b") s9b = true;
         else { std::fprintf(stderr, "unknown option %s\n", argv[i]); return 2; }
     }
     char b[2048];
@@ -8512,6 +8547,30 @@ int run(int argc, char** argv) {
     }
     std::snprintf(b, sizeof b, "S9 DEV worlds %zu in %.1f s", i9.worlds, now_s() - t_dev);
     std::cout << b << "\n";
+    if (s9b) {  // S9b for S7d: does the reduced store hold a Wikidata claim about each dev item's subject?
+        std::set<string> wd_fact;
+        for (const Row& w : seed_rows)
+            if (w.source == "wikidata") wd_fact.insert(w.s + '\x1f' + w.r + '\x1f' + w.o);
+        std::ofstream f(out + ".s9b_dev_items.tsv");
+        f << "pair\tlabel\tsubject\trelation\tobject\twd_subject\n";
+        std::size_t nw = 0;
+        for (const Item& x : it) {
+            bool w = false;
+            const auto bs = by_subj.find(x.s);
+            if (bs != by_subj.end())
+                for (const auto& [r, o] : bs->second) {
+                    const string k = x.s + '\x1f' + r + '\x1f' + o;
+                    if (!held_keys.count(k) && wd_fact.count(k)) {
+                        w = true;
+                        break;
+                    }
+                }
+            nw += w;
+            f << x.pair << '\t' << x.label << '\t' << x.s << '\t' << x.r << '\t' << x.o << '\t' << w << '\n';
+        }
+        std::snprintf(b, sizeof b, "S9B DEV items whose subject has a Wikidata claim in the reduced store %zu of %zu", nw, it.size());
+        std::cout << b << "\n";
+    }
     vector<std::size_t> all_idx, u_idx, c_idx;
     for (std::size_t i = 0; i < it.size(); ++i) all_idx.push_back(i), (it[i].set == 'U' ? u_idx : c_idx).push_back(i);
     double mi[3][2];
@@ -8844,6 +8903,20 @@ int run(int argc, char** argv) {
             }
         }
     }
+    vector<ecs::FragFact> F_claim;  // S9b: the same model with Wikidata counted per claim
+    vector<string> claim_name;
+    if (s9b) {
+        F_claim = F, claim_name = src_name;
+        std::unordered_map<string, std::size_t> claim_id;
+        for (auto& x : F_claim)
+            for (auto& si : x.sources)
+                if (src_name[si.source] == "wikidata") {
+                    const string n = "wikidata|" + x.s + "|" + x.r + "|" + x.o;
+                    auto [p, ins] = claim_id.emplace(n, claim_name.size());
+                    if (ins) claim_name.push_back(n);
+                    si.source = p->second;
+                }
+    }
     const ecs::FragilityModel M(std::move(F));
     const ecs::Retraction none;
     std::map<string, std::size_t> by_state;
@@ -8961,6 +9034,110 @@ int run(int argc, char** argv) {
             cards << "# source instance retracted: " << src_name[s] << " (" << c.retracted.size() << " facts lose their only source)\n" << ecs::format_world_card(c) << "\n";
         }
     }
+    if (s9b) {  // ---- S9b: the store's phi for fusion (S7d item 6), Wikidata per claim, and whether fragility points at errors
+        {
+            std::ofstream fp(out + ".phi_store.tsv");
+            fp << "relation\tphi\n";
+            for (int r = 0; r < kNRel; ++r) fp << kRel[r].name << '\t' << phi2[static_cast<std::size_t>(r)] << '\n';
+        }
+        const ecs::FragilityModel Mc(std::move(F_claim));
+        std::size_t c_held = 0, c_spof = 0, c_top = 0, same_state = 0;
+        for (std::size_t i = 0; i < Mc.size(); ++i) {
+            const ecs::EpistemicState sc = Mc.state(i, none);
+            same_state += sc == s0[i];
+            if (!ecs::held_state(sc)) continue;
+            ++c_held;
+            const auto fr = Mc.fragility(i);
+            c_top += fr.top_dropped;
+            c_spof += fr.worlds > 0 && fr.drops == fr.worlds;
+        }
+        std::snprintf(b, sizeof b, "S9B CLAIM held %zu | single points of failure %zu (%.4f) | top-source worlds drop %zu | states equal to one-source %zu of %zu", c_held, c_spof,
+                      c_held ? static_cast<double>(c_spof) / c_held : 0.0, c_top, same_state, Mc.size());
+        std::cout << b << "\n";
+        vector<std::pair<std::size_t, std::size_t>> cb;
+        std::map<string, std::array<std::size_t, 3>> ck;
+        for (std::size_t s = 0; s < claim_name.size(); ++s) {
+            if (Mc.facts_of_source(s).empty()) continue;
+            ecs::Retraction R;
+            R.sources.insert(s);
+            const std::size_t n = Mc.dropped_by(R).size();
+            cb.push_back({n, s});
+            const string k = claim_name[s].substr(0, claim_name[s].find('|'));
+            auto& v = ck[k];
+            v[0]++, v[1] += n, v[2] = std::max(v[2], n);
+        }
+        std::sort(cb.begin(), cb.end(), [](const auto& a, const auto& c) { return a.first != c.first ? a.first > c.first : a.second < c.second; });
+        for (std::size_t i = 0; i < cb.size() && i < 5; ++i) {
+            std::snprintf(b, sizeof b, "S9B CLAIM BLAST %zu %-60s radius %zu (%.4f of held)", i + 1, claim_name[cb[i].second].c_str(), cb[i].first,
+                          c_held ? static_cast<double>(cb[i].first) / c_held : 0.0);
+            std::cout << b << "\n";
+        }
+        for (const auto& [k, v] : ck) {
+            std::snprintf(b, sizeof b, "S9B CLAIM BLAST kind %-9s instances %5zu mean radius %.2f max %zu", k.c_str(), v[0], v[0] ? static_cast<double>(v[1]) / v[0] : 0.0, v[2]);
+            std::cout << b << "\n";
+        }
+        // Held facts with no Wikidata source whose slot Wikidata covers: disagreement with Wikidata, single points of failure
+        // against facts with two or more sources (not single points of failure); bootstrap over subjects.
+        struct Acc {
+            double n[2] = {0, 0}, d[2] = {0, 0};
+        };
+        std::map<string, Acc> by_s;
+        std::size_t excl_wd = 0, uncovered = 0, other = 0;
+        for (std::size_t i = 0; i < M.size(); ++i) {
+            if (!ecs::held_state(s0[i])) continue;
+            const auto& x = M.facts()[i];
+            bool has_wd = false;
+            for (const auto& si : x.sources) has_wd = has_wd || src_name[si.source] == "wikidata";
+            if (has_wd) {
+                ++excl_wd;
+                continue;
+            }
+            const auto wit = wd.find(x.s + '\x1f' + x.r);
+            if (wit == wd.end()) {
+                ++uncovered;
+                continue;
+            }
+            const auto fr = M.fragility(i);
+            const bool spof = fr.worlds > 0 && fr.drops == fr.worlds;
+            const int g = spof ? 0 : x.sources.size() >= 2 ? 1 : -1;
+            if (g < 0) {
+                ++other;
+                continue;
+            }
+            Acc& a = by_s[x.s];
+            a.n[g] += 1, a.d[g] += !s7::wd_match(rel_index(x.r), x.o, wit->second);
+        }
+        double N[2] = {0, 0}, D[2] = {0, 0};
+        vector<const Acc*> subs;
+        for (const auto& [k, a] : by_s) {
+            subs.push_back(&a);
+            for (int g = 0; g < 2; ++g) N[g] += a.n[g], D[g] += a.d[g];
+        }
+        auto rate = [](double d, double n) { return n > 0 ? d / n : 0.0; };
+        const double diff = rate(D[0], N[0]) - rate(D[1], N[1]);
+        std::mt19937_64 rb(20261029);
+        vector<double> bd;
+        for (int rr = 0; rr < 2000 && !subs.empty(); ++rr) {
+            double n[2] = {0, 0}, d[2] = {0, 0};
+            for (std::size_t q = 0; q < subs.size(); ++q) {
+                const Acc* a = subs[rb() % subs.size()];
+                for (int g = 0; g < 2; ++g) n[g] += a->n[g], d[g] += a->d[g];
+            }
+            bd.push_back(rate(d[0], n[0]) - rate(d[1], n[1]));
+        }
+        std::sort(bd.begin(), bd.end());
+        const double lo = bd.empty() ? 0.0 : bd[static_cast<std::size_t>(0.025 * static_cast<double>(bd.size()))];
+        const double hi = bd.empty() ? 0.0 : bd[std::min(bd.size() - 1, static_cast<std::size_t>(0.975 * static_cast<double>(bd.size())))];
+        std::snprintf(b, sizeof b,
+                      "S9B GRADE held facts with no Wikidata source, slot covered by Wikidata: single points of failure %.0f disagree %.0f (%.4f [%.4f, %.4f]) | "
+                      "two or more sources %.0f disagree %.0f (%.4f [%.4f, %.4f]) | difference %+.4f [%+.4f, %+.4f] (bootstrap over %zu subjects) -> %s | "
+                      "left out: with a Wikidata source %zu, slot not covered %zu, one source not a single point of failure %zu",
+                      N[0], D[0], rate(D[0], N[0]), ecs::wilson_lower(D[0], N[0]), ecs::wilson_upper(D[0], N[0]), N[1], D[1], rate(D[1], N[1]),
+                      ecs::wilson_lower(D[1], N[1]), ecs::wilson_upper(D[1], N[1]), diff, lo, hi, subs.size(),
+                      lo > 0.0 ? "fragility points at errors: the fragile kind joins S3's documented command" : "not shown: the fragile kind stays a flag", excl_wd,
+                      uncovered, other);
+        std::cout << b << "\n";
+    }
     // ---- I9: every base store unchanged; a write-back attempt on purpose
     {
         ecs::World w(st);
@@ -8981,6 +9158,356 @@ int run(int argc, char** argv) {
 }
 
 }  // namespace s9
+
+// ============================================================ S7d: T2 in the loop, Wikidata as one source, K3 against K4
+// (docs/reports/S7_HYPOTHESIS_TESTS.md, "S7d"). pattern_learn --s7d S7_ITEMS S9_DEV_ITEMS S9B_DEV_ITEMS S15_ITEMS OUT
+//   S7_ITEMS: --test-kinds … --s7c's OUT.items.tsv (dev); S9_DEV_ITEMS: --worlds' OUT.dev_items.tsv; S9B_DEV_ITEMS: --worlds
+//   --s9b's OUT.s9b_dev_items.tsv; S15_ITEMS: --test-kinds' OUT.s15_items.tsv (S15's choose half). It first reproduces S7c's
+//   dev lines from the joined items. Cypha's own hypothesis machinery only: nothing here answers a question.
+namespace s7d {
+
+using s7::Item;
+using s7::LoopKind;
+using s7::LoopRes;
+using ecs::TestOutcome;
+constexpr TestOutcome kPos = TestOutcome::Positive, kNeg = TestOutcome::Negative, kInc = TestOutcome::Inconclusive;
+
+TestOutcome outcome_of(const string& n) { return n == "positive" ? kPos : n == "negative" ? kNeg : kInc; }
+
+struct Table {
+    vector<string> head;
+    vector<vector<string>> rows;
+    std::size_t col(const string& n) const {
+        const auto it = std::find(head.begin(), head.end(), n);
+        if (it == head.end()) throw std::runtime_error("no column " + n);
+        return static_cast<std::size_t>(it - head.begin());
+    }
+};
+bool read_table(const string& path, Table& t) {
+    std::ifstream f(path);
+    if (!f) return false;
+    string l;
+    if (!std::getline(f, l)) return false;
+    t.head = split(l, '\t');
+    while (std::getline(f, l))
+        if (!l.empty()) t.rows.push_back(split(l, '\t'));
+    return true;
+}
+
+// A loop kind with three-way add-one likelihoods (and S7's add-one s and c) tallied over the items `over`, with S6's labels
+// (false members Wikidata lists are left out) unless all_false: S7b's construction.
+LoopKind make_kind(const char* name, const char* src, bool disc, bool indep, bool all_false, std::function<TestOutcome(const Item&)> f,
+                   const vector<Item>& it, const vector<std::size_t>& over) {
+    ecs::TestTally t;
+    for (std::size_t i : over) {
+        const Item& x = it[i];
+        if (!x.label && x.wd_true && !all_false) continue;
+        t.add(x.label == 1, f(x));
+    }
+    return {name, src, disc, indep, f, (t.t_pos + 1) / (t.t_pos + t.t_neg + 2), (t.f_neg + 1) / (t.f_pos + t.f_neg + 2), ecs::likelihoods_from(t)};
+}
+
+// The loop over idx in parts: part[j] picks the kinds for item idx[j]; results in idx order.
+vector<LoopRes> loop_parts(const vector<Item>& it, const vector<std::size_t>& idx, const vector<int>& part, const vector<vector<LoopKind>>& kinds,
+                           vector<vector<string>>* sup = nullptr) {
+    vector<LoopRes> out(idx.size());
+    vector<vector<string>> ss(idx.size());
+    for (std::size_t k = 0; k < kinds.size(); ++k) {
+        vector<std::size_t> sub, pos;
+        for (std::size_t j = 0; j < idx.size(); ++j)
+            if (part[j] == static_cast<int>(k)) sub.push_back(idx[j]), pos.push_back(j);
+        vector<vector<string>> s2;
+        const vector<LoopRes> r = s7::loop_res(it, sub, kinds[k], "", &s2);
+        for (std::size_t q = 0; q < sub.size(); ++q) out[pos[q]] = r[q], ss[pos[q]] = s2[q];
+    }
+    if (sup) *sup = std::move(ss);
+    return out;
+}
+
+string kname(int k) { return s7::kKName[k]; }
+
+int run(int argc, char** argv) {
+    if (argc < 7) {
+        std::fprintf(stderr, "usage: pattern_learn --s7d S7_ITEMS.tsv S9_DEV_ITEMS.tsv S9B_DEV_ITEMS.tsv S15_ITEMS.tsv OUT_PREFIX\n");
+        return 2;
+    }
+    const double t0 = now_s();
+    char b[2048];
+    Table a, w, v, q;
+    if (!read_table(argv[2], a) || !read_table(argv[3], w) || !read_table(argv[4], v) || !read_table(argv[5], q)) {
+        std::fprintf(stderr, "cannot read an input\n");
+        return 1;
+    }
+    // ---- dev items: S7's run (T6, T5, T4, P0) joined with S9's (T1 under the store's phi, T2) and S9b's (Wikidata claims)
+    std::map<std::pair<int, int>, std::size_t> wrow, vrow;
+    for (std::size_t i = 0; i < w.rows.size(); ++i) wrow[{std::atoi(w.rows[i][w.col("pair")].c_str()), std::atoi(w.rows[i][w.col("label")].c_str())}] = i;
+    for (std::size_t i = 0; i < v.rows.size(); ++i) vrow[{std::atoi(v.rows[i][v.col("pair")].c_str()), std::atoi(v.rows[i][v.col("label")].c_str())}] = i;
+    vector<Item> it;
+    vector<TestOutcome> t2;
+    vector<bool> wds;
+    std::size_t mism = 0;
+    for (const auto& r : a.rows) {
+        if (r[a.col("split")] != "dev") continue;
+        Item x;
+        x.pair = std::atoi(r[a.col("pair")].c_str()), x.label = std::atoi(r[a.col("label")].c_str());
+        x.set = r[a.col("set")][0], x.dev = true, x.wd_true = r[a.col("wd_true")] == "1";
+        x.s = r[a.col("subject")], x.r = r[a.col("relation")], x.o = r[a.col("object")];
+        x.t6[0] = outcome_of(r[a.col("T6")]), x.t5 = outcome_of(r[a.col("T5")]), x.t4[0] = outcome_of(r[a.col("T4")]);
+        x.p0 = std::atof(r[a.col("P0")].c_str());
+        const auto wi = wrow.find({x.pair, x.label});
+        const auto vi = vrow.find({x.pair, x.label});
+        if (wi == wrow.end() || vi == vrow.end()) {
+            ++mism;
+            continue;
+        }
+        const auto& wr = w.rows[wi->second];
+        const auto& vr = v.rows[vi->second];
+        if (wr[w.col("subject")] != x.s || wr[w.col("relation")] != x.r || wr[w.col("object")] != x.o || vr[v.col("subject")] != x.s) {
+            ++mism;
+            continue;
+        }
+        x.t1 = outcome_of(wr[w.col("T1")]);
+        it.push_back(x), t2.push_back(outcome_of(wr[w.col("T2_d1_type")])), wds.push_back(vr[v.col("wd_subject")] == "1");
+    }
+    std::snprintf(b, sizeof b, "S7D DEV items joined %zu (S7 %zu, S9 %zu, S9b %zu) | not joined %zu", it.size(), a.rows.size(), w.rows.size(), v.rows.size(), mism);
+    std::cout << b << "\n";
+    if (mism) return 1;
+    vector<std::size_t> all(it.size());
+    std::iota(all.begin(), all.end(), 0);
+    vector<std::size_t> fold[2];
+    for (std::size_t i : all) fold[(fnv(it[i].s) >> 13) & 1].push_back(i);
+    const Item* base = it.data();
+    auto F1 = [](const Item& x) { return x.t1; };
+    auto F6 = [](const Item& x) { return x.t6[0]; };
+    auto F5 = [](const Item& x) { return x.t5; };
+    auto F4 = [](const Item& x) { return x.t4[0]; };
+    auto F2 = [base, &t2](const Item& x) { return t2[static_cast<std::size_t>(&x - base)]; };
+    const LoopKind K1k = make_kind("T1 consistency", "store", true, false, false, F1, it, all), K6k = make_kind("T6 compression", "store", false, false, false, F6, it, all),
+                   K5k = make_kind("T5 Wikidata", "wikidata", true, true, true, F5, it, all), K4k = make_kind("T4 corpus", "corpus", true, true, false, F4, it, all);
+    const vector<LoopKind> lk = {K1k, K6k, K5k, K4k};
+    // ---- the reproduction of S7c's dev lines (S8d's decide)
+    vector<vector<string>> src0;
+    const vector<LoopRes> rd = loop_parts(it, all, vector<int>(all.size(), 0), {lk}, &src0);
+    vector<std::size_t> S(rd.size());
+    std::iota(S.begin(), S.end(), 0);
+    s7::KStats d0[s7::N_K];
+    for (int k = 0; k < s7::N_K; ++k) {
+        d0[k] = s7::s7c_stats(rd, S, s7::s7c_run(k, rd, S));
+        std::cout << "S7D REPRODUCE " << s7::s7c_line("DEV", kname(k), d0[k]) << "\n";
+    }
+    // ---- item 1: T2 in the loop (cross-fitted by bit 13; the full-dev fit for the simulations)
+    {
+        const LoopKind K2full = make_kind("T2 worlds", "store", true, false, false, F2, it, all);
+        vector<vector<LoopKind>> kf(2);
+        for (int f = 0; f < 2; ++f) kf[static_cast<std::size_t>(f)] = {K1k, make_kind("T2 worlds", "store", true, false, false, F2, it, fold[1 - f]), K6k, K5k, K4k};
+        vector<int> part(all.size());
+        for (std::size_t j = 0; j < all.size(); ++j) part[j] = static_cast<int>((fnv(it[all[j]].s) >> 13) & 1);
+        const vector<LoopRes> r2 = loop_parts(it, all, part, kf);
+        for (int f = 0; f < 2; ++f) {
+            const auto& L = kf[static_cast<std::size_t>(f)][1].lik;
+            std::snprintf(b, sizeof b, "S7D T2 likelihoods for fold %d (fitted on fold %d): true pos %.4f neg %.4f inc %.4f | false pos %.4f neg %.4f inc %.4f | BF pos %.3f inc %.4f",
+                          f, 1 - f, L.t[0], L.t[1], L.t[2], L.f[0], L.f[1], L.f[2], L.t[0] / L.f[0], L.t[2] / L.f[2]);
+            std::cout << b << "\n";
+        }
+        {
+            const auto& L = K2full.lik;
+            std::snprintf(b, sizeof b, "S7D T2 likelihoods, all dev: true pos %.4f neg %.4f inc %.4f | false pos %.4f neg %.4f inc %.4f | BF pos %.3f inc %.4f", L.t[0], L.t[1],
+                          L.t[2], L.f[0], L.f[1], L.f[2], L.t[0] / L.f[0], L.t[2] / L.f[2]);
+            std::cout << b << "\n";
+        }
+        s7::KStats d2[s7::N_K];
+        for (int k = 0; k < s7::N_K; ++k) {
+            d2[k] = s7::s7c_stats(r2, S, s7::s7c_run(k, r2, S));
+            std::cout << "S7D T2 " << s7::s7c_line("DEV", kname(k), d2[k]) << "\n";
+        }
+        std::size_t moved_sup = 0, moved_ref = 0;
+        for (std::size_t j = 0; j < S.size(); ++j) moved_sup += rd[j].sup != r2[j].sup, moved_ref += rd[j].ref != r2[j].ref;
+        std::snprintf(b, sizeof b, "S7D T2 items whose decide state changed: supported %zu, refuted %zu", moved_sup, moved_ref);
+        std::cout << b << "\n";
+        vector<double> pool;
+        for (const LoopRes& r : rd) pool.push_back(r.p0);
+        const vector<LoopKind> lk2 = {K1k, K2full, K6k, K5k, K4k};
+        const s7::FdrAcc sm = s7::s7c_simulate(pool, lk2, rd.size(), 400, false, 20261104), sn = s7::s7c_simulate(pool, lk2, rd.size(), 400, true, 20261105),
+                         rs = s7::s7c_resample(r2, 400, 20261106);
+        std::cout << "S7D T2 " << s7::fdr_line("SIM mixed", sm) << "\nS7D T2 " << s7::fdr_line("SIM planted-nulls", sn) << "\nS7D T2 " << s7::fdr_line("DEV resampling", rs)
+                  << "\n";
+        const s7::KStats& k0 = d0[s7::K4];
+        const s7::KStats& k2 = d2[s7::K4];
+        auto ok = [](const s7::FdrAcc& x) { return x.fdr(s7::K4) <= 0.10 + 2 * x.se(s7::K4); };
+        const bool ra = k2.decided() - k0.decided() >= 0.005, rb = ecs::wilson_lower(k2.pt, k2.prom()) >= 0.90 && k2.prec() >= k0.prec() - 0.01,
+                   rc = ok(sm) && ok(sn) && ok(rs);
+        std::snprintf(b, sizeof b,
+                      "S7D T2 RULE (a) Known-decided %.4f -> %.4f (%+.4f; needs +0.0050) %s | (b) Known precision %.3f [%.3f] (without T2 %.3f) %s | (c) K4 FDR checks %s | "
+                      "(d) S8e's fresh set: not read here -> %s",
+                      k0.decided(), k2.decided(), k2.decided() - k0.decided(), ra ? "met" : "not met", k2.prec(), ecs::wilson_lower(k2.pt, k2.prom()), k0.prec(),
+                      rb ? "met" : "not met", rc ? "met" : "not met", ra && rb && rc ? "T2 enters the loop (on dev)" : "T2 stays out of the loop");
+        std::cout << b << "\n";
+    }
+    // ---- item 2: Wikidata as one source (T5 not independent where the reduced store holds a Wikidata claim about the subject)
+    {
+        std::size_t t5only = 0, t5only_t = 0, kn = 0;
+        const vector<bool> k4 = s7::s7c_run(s7::K4, rd, S);
+        for (std::size_t j = 0; j < S.size(); ++j) {
+            if (!k4[j] || !rd[j].counted) continue;
+            ++kn;
+            if (src0[j].size() == 1 && src0[j][0] == "wikidata") ++t5only, t5only_t += rd[j].label == 1;
+        }
+        LoopKind K5one = K5k;
+        K5one.independent = false;
+        vector<int> part(all.size());
+        std::size_t nwd = 0;
+        for (std::size_t j = 0; j < all.size(); ++j) part[j] = wds[all[j]] ? 1 : 0, nwd += wds[all[j]];
+        vector<vector<string>> src1;
+        const vector<LoopRes> r1 = loop_parts(it, all, part, {lk, {K1k, K6k, K5one, K4k}}, &src1);
+        s7::KStats d1[s7::N_K];
+        for (int k = 0; k < s7::N_K; ++k) {
+            d1[k] = s7::s7c_stats(r1, S, s7::s7c_run(k, r1, S));
+            std::cout << "S7D ONE-SOURCE " << s7::s7c_line("DEV", kname(k), d1[k]) << "\n";
+        }
+        const s7::KStats& p = d0[s7::K4];
+        const s7::KStats& o = d1[s7::K4];
+        std::snprintf(b, sizeof b,
+                      "S7D WIKIDATA items whose subject has a Wikidata claim in the store %zu of %zu | per claim: Known %.0f, resting on Wikidata alone %zu (true %zu, "
+                      "precision %.3f [%.3f, %.3f]) | one source: Known %.0f at %.3f [%.3f] (%+.0f, %.1f%% of per claim's), Known-decided %.4f -> %.4f",
+                      nwd, all.size(), p.prom(), t5only, t5only_t, t5only ? static_cast<double>(t5only_t) / static_cast<double>(t5only) : 0.0,
+                      ecs::wilson_lower(static_cast<double>(t5only_t), static_cast<double>(t5only)), ecs::wilson_upper(static_cast<double>(t5only_t), static_cast<double>(t5only)),
+                      o.prom(), o.prec(), ecs::wilson_lower(o.pt, o.prom()), o.prom() - p.prom(), p.prom() > 0 ? 100.0 * (o.prom() - p.prom()) / p.prom() : 0.0, p.decided(),
+                      o.decided());
+        std::cout << b << "\n";
+        {  // where the promotions that rest on Wikidata alone (per claim) go when Wikidata is one source
+            const vector<bool> k4o = s7::s7c_run(s7::K4, r1, S);
+            std::size_t in_wd = 0, t4pos = 0, still = 0, alone_one = 0, diff = 0;
+            for (std::size_t j = 0; j < S.size(); ++j) {
+                diff += k4[j] != k4o[j];
+                if (k4o[j] && r1[j].counted && src1[j].size() == 1 && src1[j][0] == "wikidata") ++alone_one;
+                if (!k4[j] || !rd[j].counted || !(src0[j].size() == 1 && src0[j][0] == "wikidata")) continue;
+                in_wd += wds[all[j]], t4pos += it[all[j]].t4[0] == kPos, still += k4o[j];
+            }
+            std::snprintf(b, sizeof b,
+                          "S7D WIKIDATA the %zu resting on Wikidata alone (per claim): subject with a Wikidata claim in the store %zu | T4 positive when run %zu | Known "
+                          "under one source %zu | Known promotions that differ between the two %zu | resting on Wikidata alone under one source %zu (subjects with no "
+                          "Wikidata claim in the store)",
+                          t5only, in_wd, t4pos, still, diff, alone_one);
+            std::cout << b << "\n";
+        }
+        std::cout << "S7D WIKIDATA RULE " << (t5only == 0 ? "no Known promotion rests on Wikidata alone: per claim" : "Known promotions rest on Wikidata alone: one source")
+                  << " (Known checked " << kn << ")\n";
+    }
+    // ---- item 5a: plausible nulls (false members from the top prior quartile), exchangeable calibration
+    {
+        vector<std::size_t> tr, fa;
+        vector<double> fp0;
+        for (std::size_t j = 0; j < rd.size(); ++j)
+            if (rd[j].counted && rd[j].label == 0) fp0.push_back(rd[j].p0);
+        std::sort(fp0.begin(), fp0.end());
+        const double q3 = fp0.empty() ? 1.0 : fp0[fp0.size() * 3 / 4];
+        for (std::size_t j = 0; j < rd.size(); ++j) {
+            if (!rd[j].counted) continue;
+            if (rd[j].label == 1) tr.push_back(j);
+            else if (rd[j].p0 >= q3) fa.push_back(j);
+        }
+        double fe = 0;
+        for (std::size_t j : fa) fe += rd[j].e;
+        std::snprintf(b, sizeof b, "S7D 5a pools: true %zu | false in the top prior quartile (p0 >= %.4f) %zu, mean e %.3f, supported by decide %zu", tr.size(), q3, fa.size(),
+                      fa.empty() ? 0.0 : fe / static_cast<double>(fa.size()), static_cast<std::size_t>(std::count_if(fa.begin(), fa.end(), [&](std::size_t j) { return rd[j].sup; })));
+        std::cout << b << "\n";
+        const int rules[3] = {s7::K3, s7::K4, s7::KREF};
+        bool k4_over = false, k3_ok = true;
+        for (const double pi : {0.5, 0.8}) {
+            std::mt19937_64 g(20261107 + static_cast<std::uint64_t>(pi * 10));
+            double sfd[3] = {}, s2[3] = {}, np[3] = {};
+            const int reps = 400;
+            const std::size_t m = 600, nf = static_cast<std::size_t>(pi * static_cast<double>(m));
+            for (int rep = 0; rep < reps; ++rep) {
+                vector<LoopRes> B, C;
+                auto draw = [&](vector<LoopRes>& out) {
+                    for (std::size_t i = 0; i < m; ++i) out.push_back(rd[i < nf ? fa[g() % fa.size()] : tr[g() % tr.size()]]);
+                };
+                draw(B), draw(C);
+                vector<std::size_t> ib(m), ic(m);
+                std::iota(ib.begin(), ib.end(), 0), std::iota(ic.begin(), ic.end(), 0);
+                for (int u = 0; u < 3; ++u) {
+                    const vector<bool> pr = s7::s7c_apply(rules[u], B, ib, C, ic);
+                    double n = 0, f = 0;
+                    for (std::size_t i = 0; i < m; ++i)
+                        if (pr[i]) n += 1, f += B[i].label == 0;
+                    const double fdp = n > 0 ? f / n : 0.0;
+                    sfd[u] += fdp, s2[u] += fdp * fdp, np[u] += n;
+                }
+            }
+            for (int u = 0; u < 3; ++u) {
+                const double mean = sfd[u] / reps, se = std::sqrt(std::max(0.0, (s2[u] / reps - mean * mean) / (reps - 1)));
+                const bool over = mean > 0.10 + 2 * se;
+                if (rules[u] == s7::K4 && over) k4_over = true;
+                if (rules[u] == s7::K3 && over) k3_ok = false;
+                std::snprintf(b, sizeof b, "S7D 5a false fraction %.1f %-26s realised FDR %.4f (SE %.4f) promoted per batch %.1f%s", pi, kname(rules[u]).c_str(), mean, se,
+                              np[u] / reps, over ? "  > 0.10 + 2 SE" : "");
+                std::cout << b << "\n";
+            }
+        }
+        // ---- item 5b: K3 calibrated on S7's dev, applied to S15's choose half (reachable)
+        vector<Item> it15;
+        for (const auto& r : q.rows) {
+            if (r[q.col("half")] != "choose" || r[q.col("reachable")] != "1") continue;
+            Item x;
+            x.pair = std::atoi(r[q.col("pair")].c_str()), x.label = std::atoi(r[q.col("label")].c_str());
+            x.s = r[q.col("subject")], x.r = r[q.col("relation")], x.o = r[q.col("object")];
+            x.t1 = outcome_of(r[q.col("T1")]), x.t6[0] = outcome_of(r[q.col("T6")]), x.t4[0] = outcome_of(r[q.col("T4")]);
+            x.p0 = std::atof(r[q.col("P0")].c_str());
+            it15.push_back(x);
+        }
+        vector<std::size_t> i15(it15.size());
+        std::iota(i15.begin(), i15.end(), 0);
+        const vector<LoopRes> r15 = s7::loop_res(it15, i15, {K1k, K6k, K4k});
+        vector<std::size_t> b15(r15.size());
+        std::iota(b15.begin(), b15.end(), 0);
+        auto fdp_of = [&](int rule, const vector<std::size_t>& bb, double* n_out) {
+            const vector<bool> pr = rule == s7::K3 ? s7::s7c_apply(rule, r15, bb, rd, S) : s7::s7c_apply(rule, r15, bb, r15, {});
+            double n = 0, f = 0;
+            for (std::size_t i = 0; i < bb.size(); ++i)
+                if (pr[i]) n += 1, f += r15[bb[i]].label == 0;
+            if (n_out) *n_out = n;
+            return n > 0 ? f / n : 0.0;
+        };
+        std::map<string, vector<std::size_t>> by_subj;
+        for (std::size_t i = 0; i < it15.size(); ++i) by_subj[it15[i].s].push_back(i);
+        vector<const vector<std::size_t>*> subs;
+        for (const auto& [k, vv] : by_subj) subs.push_back(&vv);
+        double pt[2], n0[2];
+        vector<double> bs[2];
+        const int r5b[2] = {s7::K3, s7::K4};
+        for (int u = 0; u < 2; ++u) pt[u] = fdp_of(r5b[u], b15, &n0[u]);
+        std::mt19937_64 gb(20261108);
+        for (int rep = 0; rep < 2000; ++rep) {
+            vector<std::size_t> bb;
+            for (std::size_t z = 0; z < subs.size(); ++z)
+                for (std::size_t i : *subs[gb() % subs.size()]) bb.push_back(i);
+            for (int u = 0; u < 2; ++u) bs[u].push_back(fdp_of(r5b[u], bb, nullptr));
+        }
+        double hi[2], lo[2];
+        for (int u = 0; u < 2; ++u) {
+            std::sort(bs[u].begin(), bs[u].end());
+            lo[u] = bs[u][static_cast<std::size_t>(0.025 * 2000)], hi[u] = bs[u][static_cast<std::size_t>(0.975 * 2000)];
+            std::snprintf(b, sizeof b, "S7D 5b S15 choose half (reachable, %zu hypotheses, %zu subjects) %-26s promoted %.0f false share %.4f [%.4f, %.4f]%s", it15.size(),
+                          subs.size(), kname(r5b[u]).c_str(), n0[u], pt[u], lo[u], hi[u], u == 0 ? " (calibrated on S7's dev)" : "");
+            std::cout << b << "\n";
+        }
+        const bool ra = k4_over && k3_ok, rb = pt[0] <= 0.10 && hi[0] <= 0.15,
+                   rc = std::fabs(d0[s7::K3].decided() - d0[s7::K4].decided()) <= 0.01;
+        std::snprintf(b, sizeof b, "S7D K3 RULE (a) K4 over and K3 within in 5a: %s | (b) K3 across distributions %.4f, upper %.4f: %s | (c) Known-decided K3 %.4f K4 %.4f: %s -> %s",
+                      ra ? "met" : "not met", pt[0], hi[0], rb ? "met" : "not met", d0[s7::K3].decided(), d0[s7::K4].decided(), rc ? "met" : "not met",
+                      ra && rb && rc ? "the Known tier switches to K3" : "K4 stays");
+        std::cout << b << "\n";
+    }
+    std::cout << "S7D FINAL S8e's fresh set: not read by this run (pass it once it is ready)\n";
+    struct rusage ru;
+    getrusage(RUSAGE_SELF, &ru);
+    std::snprintf(b, sizeof b, "S7D seconds %.1f max_rss_mb %.1f", now_s() - t0, static_cast<double>(ru.ru_maxrss) / 1024.0);
+    std::cout << b << "\n";
+    return 0;
+}
+
+}  // namespace s7d
 
 // ============================================================ S8c: other evidence sources and their reliability
 // pattern_learn --sources S15_DEV TABLES WD_VALUES SEEDS FACTS_F2 OUT_PREFIX S8A_R1 S8A_R2 S8B_PROMO
@@ -12201,6 +12728,784 @@ int run_grade(int argc, char** argv) {
 
 }  // namespace s11c
 
+// ============================================================ S12a: G1 deep deduction, G15 numeric laws, G19 refinement, G20 the wild tier
+// (docs/reports/S12A_DEDUCTION_LAWS_REFINEMENT.md; native/include/cypha/eval/gen_laws.hpp, gen_deep.hpp)
+// pattern_learn --gen-laws ENWIK8 SEEDS.tsv FACTS_F2.tsv OUT_PREFIX [--read-test]
+//   the planted-law gate (dev replicates; the test replicates once, with --read-test) and G15's real read (the country
+//   and place infoboxes of the 2006 text; persons' birth and death years in stores K and T).
+// pattern_learn --gen-deep ENWIK8 SEEDS.tsv FACTS_F2.tsv WD_VALUES.tsv PATTERNS.tsv S15_DIR OUT_PREFIX [--read-test]
+//                [--fresh-dev | --fresh-test]
+//   G1 by depth (S8a's R1 random hide of store K; store T on S15), G19's precision at equal N (R1), and the pools of G1,
+//   G19 and G20 with the prospective log. Hypotheses for Cypha's own store only: it answers nothing.
+namespace s12a {
+namespace lw = cypha::eval::laws;
+namespace dp = cypha::eval::deep;
+using Facts = s8a::Facts;
+using s11c::wilson;
+
+// ---- numbers in infobox values: "$21.5 billion", "$316.2&amp;nbsp;[[1 E9|billion]]", "647,500", "0.780"
+bool parse_number(string v, double& out) {
+    for (;;) {
+        const auto a = v.find("&lt;!--");
+        if (a == string::npos) break;
+        const auto b = v.find("--&gt;", a);
+        v.erase(a, b == string::npos ? string::npos : b + 6 - a);
+    }
+    for (const string& e : {string("&amp;nbsp;"), string("&nbsp;")})
+        for (std::size_t p; (p = v.find(e)) != string::npos;) v.replace(p, e.size(), " ");
+    string w;
+    for (std::size_t i = 0; i < v.size();) {
+        if (v.compare(i, 2, "[[") == 0) {
+            const auto e = v.find("]]", i);
+            if (e == string::npos) break;
+            const string in = v.substr(i + 2, e - i - 2);
+            const auto bar = in.rfind('|');
+            w += bar == string::npos ? in : in.substr(bar + 1);
+            i = e + 2;
+        } else {
+            w += v[i++];
+        }
+    }
+    std::size_t i = 0;
+    while (i < w.size() && !std::isdigit(static_cast<unsigned char>(w[i]))) ++i;
+    if (i == w.size()) return false;
+    const bool neg = i > 0 && w[i - 1] == '-';
+    string num;
+    bool dot = false;
+    std::size_t j = i;
+    for (; j < w.size(); ++j) {
+        const char c = w[j];
+        if (std::isdigit(static_cast<unsigned char>(c))) num += c;
+        else if (c == ',' && j + 1 < w.size() && std::isdigit(static_cast<unsigned char>(w[j + 1]))) continue;
+        else if (c == '.' && !dot && j + 1 < w.size() && std::isdigit(static_cast<unsigned char>(w[j + 1]))) dot = true, num += c;
+        else break;
+    }
+    double x = std::atof(num.c_str());
+    if (neg) x = -x;
+    const string rest = lower(w.substr(j, 24));
+    if (rest.find("trillion") != string::npos) x *= 1e12;
+    else if (rest.find("billion") != string::npos) x *= 1e9;
+    else if (rest.find("million") != string::npos) x *= 1e6;
+    out = x;
+    return true;
+}
+
+// ---- the template fields of a page: "| key = value" or "key = value |", the first occurrence of each key (lower case)
+std::map<string, string> page_fields(const string& data, const PageRef& pg) {
+    std::map<string, string> f;
+    std::size_t p = pg.tb;
+    while (p < pg.te) {
+        std::size_t e = data.find('\n', p);
+        if (e == string::npos || e > pg.te) e = pg.te;
+        const string l = data.substr(p, e - p);
+        p = e + 1;
+        std::size_t a = 0;
+        while (a < l.size() && (l[a] == ' ' || l[a] == '|')) ++a;
+        const std::size_t eq = l.find('=', a);
+        if (eq == string::npos) continue;
+        string k = trim(l.substr(a, eq - a));
+        if (k.empty() || k.size() > 40) continue;
+        bool ok = true;
+        for (unsigned char c : k) ok = ok && (std::isalnum(c) || c == '_' || c >= 0x80);
+        if (!ok) continue;
+        string val = l.substr(eq + 1);
+        while (!val.empty() && (val.back() == ' ' || val.back() == '|' || val.back() == '\r')) val.pop_back();
+        k = lower(k);
+        if (!f.count(k)) f[k] = trim(val);
+    }
+    return f;
+}
+
+// ---- G15's real tables
+struct Col {
+    const char* field;
+    const char* name;
+    lw::Scale scale;
+};
+lw::NumTable infobox_table(const s8b::Corpus& C, const string& type, const vector<Col>& cols, const std::function<bool(const std::map<string, string>&)>& member) {
+    lw::NumTable t;
+    t.type = type;
+    for (const Col& c : cols) t.add_attr(c.name, c.scale);
+    for (const PageRef& pg : C.pages) {
+        const auto f = page_fields(C.data, pg);
+        if (!member(f)) continue;
+        const std::size_t i = t.add_entity(pg.title);
+        for (std::size_t a = 0; a < cols.size(); ++a) {
+            const auto it = f.find(cols[a].field);
+            double x = 0;
+            if (it != f.end() && parse_number(it->second, x)) t.v[a][i] = x;
+        }
+    }
+    return t;
+}
+// birth and death years of a store's subjects (the first parsable birth_* and death_* fact in the subject's sorted facts)
+vector<lw::PersonYears> person_years(const Facts& by, int split) {  // split: -1 all, 0 dev (bit 11 = 0), 1 test
+    vector<lw::PersonYears> out;
+    for (const auto& [s, fs] : by) {
+        if (split >= 0 && s11c::dev_subject(s) != (split == 0)) continue;
+        bool hb = false, hd = false;
+        lw::PersonYears p;
+        p.name = s;
+        for (const auto& [r, o] : fs) {
+            int y = 0;
+            if (!hb && (r == "birth_year" || r == "birth_date") && s11c::year_of(o, y)) hb = true, p.birth = y;
+            if (!hd && (r == "death_year" || r == "death_date") && s11c::year_of(o, y)) hd = true, p.death = y;
+        }
+        if (hb && hd) out.push_back(p);
+    }
+    return out;
+}
+lw::NumTable person_table(const Facts& by, const string& type) {
+    lw::NumTable t;
+    t.type = type;
+    const std::size_t b = t.add_attr("birth", lw::Scale::Interval), d = t.add_attr("death", lw::Scale::Interval);
+    for (const auto& [s, fs] : by) {
+        bool hb = false, hd = false;
+        double yb = 0, yd = 0;
+        for (const auto& [r, o] : fs) {
+            int y = 0;
+            if (!hb && (r == "birth_year" || r == "birth_date") && s11c::year_of(o, y)) hb = true, yb = y;
+            if (!hd && (r == "death_year" || r == "death_date") && s11c::year_of(o, y)) hd = true, yd = y;
+        }
+        if (!hb && !hd) continue;
+        const std::size_t i = t.add_entity(s);
+        if (hb) t.v[b][i] = yb;
+        if (hd) t.v[d][i] = yd;
+    }
+    return t;
+}
+
+void print_laws(const lw::NumTable& t, const vector<lw::Law>& laws, const std::function<string(const lw::Law&)>& tag) {
+    char b[640];
+    std::size_t searched = laws.size(), screened = 0, kept = 0;
+    std::map<std::size_t, std::size_t> with;
+    for (std::size_t a = 0; a < t.attrs.size(); ++a)
+        for (std::size_t i = 0; i < t.entities.size(); ++i) with[a] += t.has(a, i);
+    string attrs;
+    for (std::size_t a = 0; a < t.attrs.size(); ++a) attrs += " " + t.attrs[a] + "(" + std::to_string(with[a]) + ")";
+    for (const auto& L : laws) screened += L.screen, kept += L.kept;
+    std::snprintf(b, sizeof b, "S12A LAWS %s | entities %zu | attributes:%s | formulas searched %zu, nearly constant %zu, kept %zu", t.type.c_str(),
+                  t.entities.size(), attrs.c_str(), searched, screened, kept);
+    std::cout << b << "\n";
+    for (const auto& L : laws) {
+        if (!L.kept && !(L.screen && L.kind != lw::LawKind::Order)) continue;
+        std::snprintf(b, sizeof b, "  %s %-11s %-60s n %4zu | constant %.6g | %s %.4f (classic CV %.3f) inliers %.3f | p %.2e BH %d | held out %zu within %.3f | %s%s",
+                      L.kept ? "KEPT" : "    ", lw::law_kind_name(L.kind), L.text(t).c_str(), L.n, L.constant,
+                      L.kind == lw::LawKind::Power ? "robust CV" : L.kind == lw::LawKind::Diff ? "rel spread" : "share", L.spread, L.classic_cv, L.inlier,
+                      L.p_value, L.bh ? 1 : 0, L.heldout_n, L.heldout_share, L.redundant ? "redundant " : "", tag(L).c_str());
+        std::cout << b << "\n";
+    }
+}
+
+// The expected laws (registered): attribute set -> exponent vector, up to sign.
+struct Expected {
+    lw::LawKind kind;
+    vector<std::pair<string, int>> terms;  // Power: name -> exponent; Diff/Order: {X, -1}, {Y, +1} meaning Y - X or X <= Y
+    string what;
+};
+bool matches(const lw::NumTable& t, const lw::Law& L, const Expected& e) {
+    if (L.kind != e.kind || L.attr.size() != e.terms.size()) return false;
+    if (L.kind != lw::LawKind::Power) return t.attrs[L.attr[0]] == e.terms[0].first && t.attrs[L.attr[1]] == e.terms[1].first;
+    std::map<string, int> got;
+    for (std::size_t k = 0; k < L.attr.size(); ++k) got[t.attrs[L.attr[k]]] = L.exp[k];
+    bool same = true, neg = true;
+    for (const auto& [n, x] : e.terms) {
+        const auto it = got.find(n);
+        if (it == got.end()) return false;
+        same = same && it->second == x, neg = neg && it->second == -x;
+    }
+    return same || neg;
+}
+
+int run_laws(int argc, char** argv) {
+    if (argc < 6) {
+        std::fprintf(stderr, "usage: pattern_learn --gen-laws ENWIK8 SEEDS.tsv FACTS_F2.tsv OUT_PREFIX [--read-test]\n");
+        return 2;
+    }
+    const double t0 = now_s();
+    const string out = argv[5];
+    bool read_test = false;
+    for (int i = 6; i < argc; ++i) {
+        if (string(argv[i]) == "--read-test") read_test = true;
+        else {
+            std::fprintf(stderr, "unknown option %s\n", argv[i]);
+            return 2;
+        }
+    }
+    s11c::Stores S;
+    if (!s11c::load_stores(argv[3], argv[4], S)) return 1;
+    char b[768];
+    // ============================================================ the planted-law gate
+    const lw::PlantKind kinds[] = {lw::PlantKind::Ratio, lw::PlantKind::Product, lw::PlantKind::Power, lw::PlantKind::Scale, lw::PlantKind::Offset, lw::PlantKind::Order};
+    const double levels[] = {0.0, 0.02, 0.05, 0.10, 0.20};
+    const int reps = 20;
+    std::ofstream tsv(out + ".planted.tsv");
+    tsv << "split\tkind\tsigma\trep\tseed\tc\tentities\tfound\tfalse_laws\tnull_false_laws\tkept\tnull_kept\n";
+    for (int split = 0; split < (read_test ? 2 : 1); ++split) {
+        const string sp = split == 0 ? "dev" : "test";
+        const auto persons = person_years(S.kby, split);
+        std::snprintf(b, sizeof b, "S12A PLANTED %s: persons with birth and death years (store K, %s subjects) %zu", sp.c_str(), sp.c_str(), persons.size());
+        std::cout << b << "\n";
+        double gf = 0, gn = 0, nf = 0, nn = 0, inf_ = 0, inn = 0;  // gate: found / tables; null tables with a false law / null tables; independent false
+        for (const auto kind : kinds)
+            for (const double sig : levels) {
+                double f = 0, fl = 0, nfl = 0;
+                for (int rep = 0; rep < reps; ++rep) {
+                    const std::uint64_t seed = fnv("S12A|" + sp + "|" + lw::plant_kind_name(kind) + "|" + std::to_string(sig) + "|" + std::to_string(rep));
+                    const lw::Planted P = lw::plant(kind, sig, seed, persons);
+                    const auto L = lw::search_laws(P.table), Ln = lw::search_laws(P.null_table);
+                    const bool found = lw::planted_found(P, L);
+                    const std::size_t fls = lw::false_laws(P, L, false), nfls = lw::false_laws(P, Ln, true);
+                    std::size_t k1 = 0, k2 = 0;
+                    for (const auto& x : L) k1 += x.kept;
+                    for (const auto& x : Ln) k2 += x.kept;
+                    f += found, fl += fls > 0, nfl += nfls > 0;
+                    tsv << sp << '\t' << lw::plant_kind_name(kind) << '\t' << sig << '\t' << rep << '\t' << seed << '\t' << P.c << '\t' << P.table.entities.size() << '\t'
+                        << found << '\t' << fls << '\t' << nfls << '\t' << k1 << '\t' << k2 << '\n';
+                    if (sig <= 0.05 + 1e-12) gf += found, gn += 1, nf += nfls > 0, nn += 1, inf_ += fls > 0, inn += 1;
+                }
+                std::snprintf(b, sizeof b, "S12A PLANTED %s %-7s sigma %.2f: found %s | tables with a false law %s | null tables with a false law %s", sp.c_str(),
+                              lw::plant_kind_name(kind), sig, wilson(f, reps).c_str(), wilson(fl, reps).c_str(), wilson(nfl, reps).c_str());
+                std::cout << b << "\n";
+            }
+        std::snprintf(b, sizeof b, "S12A PLANTED %s pooled (sigma <= 0.05): recall %s | null tables with a false law %s | planted tables with a false law %s", sp.c_str(),
+                      wilson(gf, gn).c_str(), wilson(nf, nn).c_str(), wilson(inf_, inn).c_str());
+        std::cout << b << "\n";
+        if (split == 1) {
+            const bool pass = gn > 0 && gf / gn >= 0.90 && nn > 0 && nf / nn <= 0.05;
+            std::snprintf(b, sizeof b, "S12A GATE (test replicates, read once: recall >= 0.90 and false-law rate <= 0.05, point estimates): recall %.3f, false-law rate %.3f -> %s",
+                          gf / gn, nf / nn, pass ? "MET" : "NOT MET");
+            std::cout << b << "\n";
+        }
+    }
+    // ============================================================ G15's real read (one run, nothing chosen)
+    s8b::Corpus C;
+    if (!read_file(argv[2], C.data)) { std::fprintf(stderr, "cannot read %s\n", argv[2]); return 1; }
+    {
+        long tot = 0, red = 0;
+        C.pages = list_pages(C.data, tot, red);
+    }
+    const string a2 = "areami\xc2\xb2", d2 = "population_densitymi\xc2\xb2";
+    const vector<Col> country_cols = {{"area", "area_km2", lw::Scale::Ratio},
+                                      {a2.c_str(), "area_mi2", lw::Scale::Ratio},
+                                      {"population_estimate", "population", lw::Scale::Ratio},
+                                      {"population_density", "density_km2", lw::Scale::Ratio},
+                                      {d2.c_str(), "density_mi2", lw::Scale::Ratio},
+                                      {"gdp_ppp", "gdp_ppp", lw::Scale::Ratio},
+                                      {"gdp_ppp_per_capita", "gdp_ppp_per_capita", lw::Scale::Ratio},
+                                      {"hdi", "hdi", lw::Scale::Ratio}};
+    const vector<Col> place_cols = {{"population_total", "population", lw::Scale::Ratio},
+                                    {"area_total", "area_total", lw::Scale::Ratio},
+                                    {"area_land", "area_land", lw::Scale::Ratio},
+                                    {"area_water", "area_water", lw::Scale::Ratio},
+                                    {"population_density", "density", lw::Scale::Ratio},
+                                    {"elevation", "elevation", lw::Scale::Interval}};
+    const auto country = infobox_table(C, "countries (2006 infoboxes)", country_cols,
+                                       [](const std::map<string, string>& f) { return f.count("population_estimate") || f.count("gdp_ppp"); });
+    const auto place = infobox_table(C, "places (2006 infoboxes with population_total)", place_cols, [](const std::map<string, string>& f) {
+        return f.count("population_total") && !f.count("population_estimate") && !f.count("gdp_ppp");
+    });
+    const vector<Expected> exp_country = {
+        {lw::LawKind::Power, {{"density_km2", 1}, {"area_km2", 1}, {"population", -1}}, "density = population / area"},
+        {lw::LawKind::Power, {{"area_km2", 1}, {"area_mi2", -1}}, "area in km2 = 2.59 x area in mi2"},
+        {lw::LawKind::Power, {{"density_km2", 1}, {"density_mi2", -1}}, "density per mi2 = 2.59 x density per km2"},
+        {lw::LawKind::Power, {{"gdp_ppp", 1}, {"gdp_ppp_per_capita", -1}, {"population", -1}}, "GDP per capita = GDP / population"},
+        // the same laws through the other unit (implied by the first three; kept only if the span allows)
+        {lw::LawKind::Power, {{"density_mi2", 1}, {"area_mi2", 1}, {"population", -1}}, "density per mi2 = population / area in mi2"},
+    };
+    const vector<Expected> exp_person = {{lw::LawKind::Order, {{"birth", -1}, {"death", 1}}, "birth <= death"},
+                                         {lw::LawKind::Diff, {{"birth", -1}, {"death", 1}}, "death - birth bounded (lifespan)"}};
+    auto read_table = [&](const lw::NumTable& t, const vector<Expected>& ex) {
+        const auto laws = lw::search_laws(t);
+        std::size_t outside = 0, kept = 0;
+        vector<bool> got(ex.size(), false);
+        auto tag = [&](const lw::Law& L) {
+            for (std::size_t i = 0; i < ex.size(); ++i)
+                if (matches(t, L, ex[i])) {
+                    if (L.kept) got[i] = true;
+                    return "EXPECTED: " + ex[i].what;
+                }
+            return string(L.kept ? "outside the expected list" : "");
+        };
+        for (const auto& L : laws)
+            if (L.kept) {
+                ++kept;
+                bool e = false;
+                for (const auto& x : ex) e = e || matches(t, L, x);
+                outside += !e;
+            }
+        print_laws(t, laws, tag);
+        string g;
+        for (std::size_t i = 0; i < ex.size(); ++i) g += string(" | ") + (got[i] ? "kept: " : "not kept: ") + ex[i].what;
+        std::snprintf(b, sizeof b, "S12A REAL %s: kept %zu, outside the expected list %zu%s", t.type.c_str(), kept, outside, g.c_str());
+        std::cout << b << "\n";
+    };
+    read_table(country, exp_country);
+    read_table(place, {});
+    read_table(person_table(S.kby, "persons (store K)"), exp_person);
+    read_table(person_table(S.tby, "persons (store T)"), exp_person);
+    std::snprintf(b, sizeof b, "S12A --gen-laws done in %.1f s", now_s() - t0);
+    std::cout << b << "\n";
+    return 0;
+}
+
+// ============================================================ G1, G19, G20
+// Every kept rule deriving each value of (s, r) (indices into rules), as RuleSet::candidates finds them.
+struct RuleIdx {
+    std::unordered_map<string, vector<std::size_t>> by_body, by_head;
+    explicit RuleIdx(const vector<ecs::Rule>& rules) {
+        for (std::size_t i = 0; i < rules.size(); ++i) {
+            if (!rules[i].kept) continue;
+            if (rules[i].kind == ecs::RuleKind::Const) by_body[rules[i].r1 + '\x1f' + rules[i].c1].push_back(i);
+            else by_head[rules[i].head].push_back(i);
+        }
+    }
+};
+std::map<string, vector<std::size_t>> derive_slot(const ecs::RuleIndex& ix, const vector<ecs::Rule>& rules, const RuleIdx& I, const string& s, const string& r) {
+    std::map<string, vector<std::size_t>> got;
+    const ecs::TripleStore& st = ix.store();
+    for (const auto& f : st.facts_of(s)) {
+        const auto it = I.by_body.find(f.r + '\x1f' + f.o);
+        if (it == I.by_body.end()) continue;
+        for (std::size_t i : it->second)
+            if (rules[i].head == r) got[rules[i].head_o].push_back(i);
+    }
+    const auto hit = I.by_head.find(r);
+    if (hit != I.by_head.end())
+        for (std::size_t i : hit->second) {
+            const ecs::Rule& R = rules[i];
+            if (R.kind == ecs::RuleKind::Same) {
+                for (const auto& y : ix.values(s, R.r1)) got[y].push_back(i);
+            } else if (R.kind == ecs::RuleKind::Inverse) {
+                for (const auto& [y, ry] : ix.incoming(s))
+                    if (ry == R.r1) got[y].push_back(i);
+            } else {
+                vector<string> zs;
+                if (!R.inv1) zs = ix.values(s, R.r1);
+                else
+                    for (const auto& [z, rz] : ix.incoming(s))
+                        if (rz == R.r1) zs.push_back(z);
+                for (const auto& z : zs) {
+                    vector<string> ys;
+                    if (!R.inv2) ys = ix.values(z, R.r2);
+                    else
+                        for (const auto& [y, ry] : ix.incoming(z))
+                            if (ry == R.r2) ys.push_back(y);
+                    for (const auto& y : ys)
+                        if (y != s && y != z) got[y].push_back(i);
+                }
+            }
+        }
+    for (auto& [o, v] : got) {
+        std::sort(v.begin(), v.end());
+        v.erase(std::unique(v.begin(), v.end()), v.end());
+    }
+    return got;
+}
+// Whether a const, same or inverse rule's body derives (s, head, o) in the store.
+bool body_derives(const ecs::TripleStore& st, const ecs::Rule& R, const string& s, const string& o) {
+    if (R.kind == ecs::RuleKind::Const) return o == R.head_o && st.has(s, R.r1, R.c1);
+    if (R.kind == ecs::RuleKind::Same) return st.has(s, R.r1, o);
+    if (R.kind == ecs::RuleKind::Inverse) return st.has(o, R.r1, s);
+    return false;
+}
+
+struct Pred {
+    string s, r, o;
+    double g2 = 0, g19 = 0;  // scores: G2 alone; G2 with G19's kept refinements
+    int grade = -1;
+};
+
+int run_deep(int argc, char** argv) {
+    if (argc < 9) {
+        std::fprintf(stderr, "usage: pattern_learn --gen-deep ENWIK8 SEEDS.tsv FACTS_F2.tsv WD_VALUES.tsv PATTERNS.tsv S15_DIR OUT_PREFIX [--read-test] [--fresh-dev | --fresh-test]\n");
+        return 2;
+    }
+    const double t0 = now_s();
+    const string s15dir = argv[7], out = argv[8];
+    bool read_test = false, fresh_dev = false, fresh_test = false;
+    for (int i = 9; i < argc; ++i) {
+        const string a = argv[i];
+        if (a == "--read-test") read_test = true;
+        else if (a == "--fresh-dev") fresh_dev = true;
+        else if (a == "--fresh-test") fresh_test = true;
+        else {
+            std::fprintf(stderr, "unknown option %s\n", argv[i]);
+            return 2;
+        }
+    }
+    s11c::Stores S;
+    if (!s11c::load_stores(argv[3], argv[4], S)) return 1;
+    char b[768];
+    const ecs::TripleStore K = s8a::make_store(S.kby);
+    // S15 rows by slot: dev always; test with --read-test (S8a's amendment 1 grader)
+    std::map<string, vector<std::pair<string, int>>> s15_slot[2];
+    std::map<string, string> s15_cat[2];  // s r value(norm) -> category of the true row
+    for (int sp = 0; sp < (read_test ? 2 : 1); ++sp)
+        for (const auto& R : s8a::load_s15(s15dir + (sp == 0 ? "/temporal_holdout_dev.tsv" : "/temporal_holdout_test.tsv"))) {
+            s15_slot[sp][R.s + '\x1f' + R.r].push_back({R.v, R.label});
+            if (R.label == 1) s15_cat[sp][R.s + '\x1f' + R.r + '\x1f' + R.v] = R.cat;
+        }
+    auto k_holds = [&](const string& s, const string& r, const string& o) {
+        const int ri = rel_index(r);
+        for (const auto& f : K.facts_of(s))
+            if (f.r == r && s8a::same_value(ri, f.o, o)) return true;
+        return false;
+    };
+    // the amended grader for R1: K (the full store) or S15 lists it -> 1; S15 says otherwise -> 0; else -1
+    auto grade_r1 = [&](const string& s, const string& r, const string& o, bool dev) {
+        if (k_holds(s, r, o)) return 1;
+        const int ri = rel_index(r);
+        int g = s8a::s15_grade(s15_slot[0], ri, s, r, o);
+        if (g < 0 && !dev) g = s8a::s15_grade(s15_slot[1], ri, s, r, o);
+        return g;
+    };
+    // ============================================================ read 1: S8a's R1 random hide of store K
+    vector<std::array<string, 3>> trip;
+    for (const auto& [s, fs] : S.kby)
+        for (const auto& [r, o] : fs) trip.push_back({s, r, o});
+    vector<std::size_t> h(trip.size());
+    for (std::size_t i = 0; i < h.size(); ++i) h[i] = i;
+    {
+        std::mt19937_64 rng(20261029);
+        for (std::size_t i = h.size(); i > 1; --i) std::swap(h[i - 1], h[rng() % i]);
+    }
+    const std::set<std::size_t> hidden(h.begin(), h.begin() + static_cast<std::ptrdiff_t>(trip.size() / 10));
+    Facts red;
+    for (std::size_t i = 0; i < trip.size(); ++i)
+        if (!hidden.count(i)) red[trip[i][0]].push_back({trip[i][1], trip[i][2]});
+    const ecs::TripleStore st = s8a::make_store(red);
+    const ecs::RuleIndex ix(st);
+    const vector<ecs::Rule> rules = ecs::mine_rules(ix);
+    const ecs::RuleBook book(rules);
+    std::size_t nkept = 0;
+    for (const auto& R : rules) nkept += R.kept;
+    std::snprintf(b, sizeof b, "S12A R1 random hide: hidden %zu, reduced store %zu, candidate rules %zu, kept %zu", hidden.size(), st.size(), rules.size(), nkept);
+    std::cout << b << "\n";
+    // ---- G1 by depth
+    {
+        const double tc = now_s();
+        const auto derived = dp::deep_chain(st, book, 6);
+        struct Acc {
+            double n = 0, g = 0, t = 0, nl_g = 0, nl_t = 0, conf = 0;
+        };
+        std::map<int, Acc> by[2];
+        std::ofstream df(out + ".g1_r1.tsv");
+        df << "split\tdepth\tsubject\trelation\tobject\tconf\tgrade\tgroup\tpremises\n";
+        for (const auto& d : derived) {
+            const bool dev = s11c::dev_subject(d.t.s);
+            if (!dev && !read_test) continue;
+            const int g = grade_r1(d.t.s, d.t.r, d.t.o, dev);
+            Acc& a = by[dev ? 0 : 1][d.depth];
+            a.n += 1, a.conf += d.conf;
+            if (g >= 0) {
+                a.g += 1, a.t += g == 1;
+                if (s8c::group_of(d.t.r) != "lexical") a.nl_g += 1, a.nl_t += g == 1;
+            }
+            string prem;
+            for (const auto& p : d.premises) prem += (prem.empty() ? "" : " ; ") + p.text();
+            df << (dev ? "dev" : "test") << '\t' << d.depth << '\t' << d.t.s << '\t' << d.t.r << '\t' << d.t.o << '\t' << d.conf << '\t' << g << '\t'
+               << s8c::group_of(d.t.r) << '\t' << prem << '\n';
+        }
+        for (int sp = 0; sp < (read_test ? 2 : 1); ++sp) {
+            for (const auto& [dep, a] : by[sp]) {
+                std::snprintf(b, sizeof b, "S12A G1 R1 %s depth %d: derived %5.0f (mean chain confidence %.3f) | graded %4.0f precision %s | non-lexical %s",
+                              sp == 0 ? "dev" : "TEST", dep, a.n, a.n > 0 ? a.conf / a.n : 0.0, a.g, wilson(a.t, a.g).c_str(), wilson(a.nl_t, a.nl_g).c_str());
+                std::cout << b << "\n";
+            }
+            Acc deep;
+            for (const auto& [dep, a] : by[sp])
+                if (dep >= 2) deep.n += a.n, deep.g += a.g, deep.t += a.t;
+            std::snprintf(b, sizeof b, "S12A G1 R1 %s depth >= 2 (G1's hypotheses): derived %.0f, graded %.0f, precision %s", sp == 0 ? "dev" : "TEST", deep.n, deep.g,
+                          wilson(deep.t, deep.g).c_str());
+            std::cout << b << "\n";
+        }
+        std::snprintf(b, sizeof b, "S12A G1 R1 chained in %.1f s", now_s() - tc);
+        std::cout << b << "\n";
+    }
+    // ---- G19: refinements and the precision at equal N
+    {
+        const auto refs = dp::refine_rules(st, rules);
+        std::size_t kept = 0, rescued = 0;
+        std::map<std::size_t, vector<std::size_t>> by_parent;  // kept refinements by parent
+        for (std::size_t i = 0; i < refs.size(); ++i)
+            if (refs[i].kept) {
+                ++kept;
+                rescued += !rules[refs[i].parent].kept;
+                by_parent[refs[i].parent].push_back(i);
+            }
+        std::snprintf(b, sizeof b, "S12A G19 refinements: candidates %zu, kept %zu (of a rejected parent %zu, of a kept parent %zu)", refs.size(), kept, rescued, kept - rescued);
+        std::cout << b << "\n";
+        {
+            std::ofstream rf(out + ".g19_refinements.tsv");
+            rf << "kept\tparent_kept\tparent\tcondition\tsupport\tpca_body\tpca_conf\tparent_pca\tp_value\thidden_support\thidden_pca\n";
+            for (const auto& F : refs) {
+                const auto& R = rules[F.parent];
+                rf << F.kept << '\t' << R.kept << '\t' << R.text() << '\t' << F.cr << "(X, " << F.cc << ")\t" << F.support << '\t' << F.pca_body << '\t' << F.pca_conf() << '\t'
+                   << R.pca_conf() << '\t' << F.p_value << '\t' << F.hid_support << '\t' << F.hid_pca << '\n';
+            }
+            int shown = 0;
+            for (const auto& F : refs) {
+                if (!F.kept || shown >= 12) continue;
+                ++shown;
+                const auto& R = rules[F.parent];
+                std::snprintf(b, sizeof b, "  G19 kept: %s  &  %s(X, %s)  | support %.0f PCA %.3f (parent %.3f, %s)", R.text().c_str(), F.cr.c_str(), F.cc.c_str(),
+                              F.support, F.pca_conf(), R.pca_conf(), R.kept ? "kept" : "rejected");
+                std::cout << b << "\n";
+            }
+        }
+        // predictions: every slot (s, r) a kept rule or a kept refinement derives, for the split's subjects
+        const RuleIdx I(rules);
+        const auto by_rel = dp::facts_by_relation(st);
+        std::set<std::pair<string, string>> slots;
+        for (const auto& d : dp::deep_chain(st, book, 1)) slots.insert({d.t.s, d.t.r});
+        for (const auto& [pi, ris] : by_parent) {
+            if (rules[pi].kept) continue;
+            for (std::size_t ri : ris)
+                for (const auto& t : dp::refinement_predictions(st, rules[pi], refs[ri], by_rel)) slots.insert({t.s, t.r});
+        }
+        vector<Pred> P[2];
+        for (const auto& [s, r] : slots) {
+            const bool dev = s11c::dev_subject(s);
+            if (!dev && !read_test) continue;
+            auto got = derive_slot(ix, rules, I, s, r);
+            // rescued refinements' values for this slot
+            std::map<string, vector<std::size_t>> fam;  // value -> parents (kept or rescued) deriving it
+            for (const auto& [o, v] : got) fam[o] = v;
+            for (const auto& [pi, ris] : by_parent) {
+                if (rules[pi].kept || rules[pi].head != r) continue;
+                for (std::size_t ri : ris)
+                    if (st.has(s, refs[ri].cr, refs[ri].cc)) {
+                        // the parent's body values for s
+                        vector<string> ys;
+                        const auto& R = rules[pi];
+                        if (R.kind == ecs::RuleKind::Const) ys = {R.head_o};
+                        else if (R.kind == ecs::RuleKind::Same) ys = ix.values(s, R.r1);
+                        else
+                            for (const auto& [y, ry] : ix.incoming(s))
+                                if (ry == R.r1) ys.push_back(y);
+                        for (const auto& y : ys)
+                            if (y != s && body_derives(st, R, s, y)) fam[y].push_back(pi);
+                        break;
+                    }
+            }
+            for (auto& [o, v] : fam) {
+                if (st.has(s, r, o)) continue;
+                std::sort(v.begin(), v.end());
+                v.erase(std::unique(v.begin(), v.end()), v.end());
+                Pred x;
+                x.s = s, x.r = r, x.o = o;
+                double k2 = 1.0, k19 = 1.0;
+                bool any_g2 = false;
+                for (std::size_t pi : v) {
+                    double c = rules[pi].kept ? rules[pi].pca_conf() : 0.0;
+                    if (rules[pi].kept) k2 *= 1.0 - c, any_g2 = true;
+                    const auto it = by_parent.find(pi);
+                    if (it != by_parent.end())
+                        for (std::size_t ri : it->second)
+                            if (st.has(s, refs[ri].cr, refs[ri].cc)) c = std::max(c, refs[ri].pca_conf());
+                    if (c > 0) k19 *= 1.0 - c;
+                }
+                x.g2 = any_g2 ? 1.0 - k2 : 0.0;
+                x.g19 = 1.0 - k19;
+                if (x.g19 <= 0) continue;
+                x.grade = grade_r1(s, r, o, dev);
+                P[dev ? 0 : 1].push_back(x);
+            }
+        }
+        for (int sp = 0; sp < (read_test ? 2 : 1); ++sp) {
+            vector<const Pred*> g2, all;
+            for (const auto& x : P[sp]) {
+                if (x.grade < 0) continue;
+                all.push_back(&x);
+                if (x.g2 > 0) g2.push_back(&x);
+            }
+            const std::size_t N = g2.size();
+            auto prec_at = [&](vector<const Pred*> v, bool use19, std::size_t n) {
+                std::stable_sort(v.begin(), v.end(), [&](const Pred* a, const Pred* c) {
+                    const double sa = use19 ? a->g19 : a->g2, sc = use19 ? c->g19 : c->g2;
+                    if (sa != sc) return sa > sc;
+                    return std::tie(a->s, a->r, a->o) < std::tie(c->s, c->r, c->o);
+                });
+                double t = 0;
+                const std::size_t m = std::min(n, v.size());
+                for (std::size_t i = 0; i < m; ++i) t += v[i]->grade == 1;
+                return m ? t / static_cast<double>(m) : 0.0;
+            };
+            const double p2 = prec_at(g2, false, N), p19 = prec_at(all, true, N);
+            // bootstrap over the graded predictions
+            vector<double> diffs;
+            std::mt19937_64 rng(20261029);
+            for (int it = 0; it < 2000 && !all.empty(); ++it) {
+                vector<const Pred*> rs, r2;
+                for (std::size_t i = 0; i < all.size(); ++i) {
+                    const Pred* x = all[rng() % all.size()];
+                    rs.push_back(x);
+                    if (x->g2 > 0) r2.push_back(x);
+                }
+                diffs.push_back(prec_at(rs, true, r2.size()) - prec_at(r2, false, r2.size()));
+            }
+            std::sort(diffs.begin(), diffs.end());
+            const double lo = diffs.empty() ? 0 : diffs[49], hi = diffs.empty() ? 0 : diffs[1949];
+            std::size_t new19 = 0;
+            for (const auto* x : all) new19 += x->g2 <= 0;
+            std::snprintf(b, sizeof b, "S12A G19 R1 %s: graded predictions G2 %zu, with G19 %zu (new %zu) | precision@N (N = %zu): G2 %.4f, G2+G19 %.4f, gain %+.4f [%+.4f, %+.4f]%s",
+                          sp == 0 ? "dev" : "TEST", N, all.size(), new19, N, p2, p19, p19 - p2, lo, hi,
+                          sp == 1 ? (lo > 0 ? " -> G19 EARNS ITS PLACE" : " -> G19 does not earn its place") : "");
+            std::cout << b << "\n";
+        }
+    }
+    // ============================================================ read 2: store T on S15 (G1 by depth)
+    {
+        const ecs::TripleStore T = s8a::make_store(S.tby);
+        const ecs::RuleIndex tix(T);
+        const vector<ecs::Rule> trules = ecs::mine_rules(tix);
+        const ecs::RuleBook tbook(trules);
+        std::size_t tk = 0;
+        for (const auto& R : trules) tk += R.kept;
+        const auto derived = dp::deep_chain(T, tbook, 6);
+        std::map<int, std::array<double, 4>> by[2];  // depth -> derived on S15 subjects, graded, true, strict (b or c)
+        std::set<string> s15_subj[2];
+        for (int sp = 0; sp < (read_test ? 2 : 1); ++sp)
+            for (const auto& [k, v] : s15_slot[sp]) s15_subj[sp].insert(k.substr(0, k.find('\x1f')));
+        for (const auto& d : derived)
+            for (int sp = 0; sp < (read_test ? 2 : 1); ++sp) {
+                if (!s15_subj[sp].count(d.t.s)) continue;
+                auto& a = by[sp][d.depth];
+                a[0] += 1;
+                const int g = s8a::s15_grade(s15_slot[sp], rel_index(d.t.r), d.t.s, d.t.r, d.t.o);
+                if (g >= 0) {
+                    a[1] += 1, a[2] += g == 1;
+                    if (g == 1) {
+                        const auto it = s15_slot[sp].find(d.t.s + '\x1f' + d.t.r);
+                        for (const auto& [v, lab] : it->second) {
+                            const auto ci = s15_cat[sp].find(d.t.s + '\x1f' + d.t.r + '\x1f' + v);
+                            if (lab == 1 && s8a::same_value(rel_index(d.t.r), v, d.t.o) && ci != s15_cat[sp].end() && (ci->second == "b" || ci->second == "c")) {
+                                a[3] += 1;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        std::snprintf(b, sizeof b, "S12A G1 R2 store T: candidate rules %zu, kept %zu, derived facts %zu", trules.size(), tk, derived.size());
+        std::cout << b << "\n";
+        for (int sp = 0; sp < (read_test ? 2 : 1); ++sp)
+            for (const auto& [dep, a] : by[sp]) {
+                std::snprintf(b, sizeof b, "S12A G1 R2 %s depth %d: derived for S15 subjects %.0f | graded %.0f precision %s | true and unstated or later (b, c) %.0f",
+                              sp == 0 ? "dev" : "TEST", dep, a[0], a[1], wilson(a[2], a[1]).c_str(), a[3]);
+                std::cout << b << "\n";
+            }
+    }
+    // ============================================================ the pools (S11c's construction) and the prospective log
+    if (fresh_dev || fresh_test) {
+        s8b::Corpus C;
+        if (!s8b::load_corpus(argv[2], argv[5], argv[6], C)) return 1;
+        const auto slots = s11c::pool_slots(s15dir, fresh_test);
+        Facts fred;
+        std::size_t held = 0;
+        for (const auto& [s, fs] : S.kby)
+            for (const auto& [r, o] : fs) {
+                if (slots.count({s, r})) ++held;
+                else fred[s].push_back({r, o});
+            }
+        const ecs::TripleStore fst = s8a::make_store(fred);
+        const ecs::RuleIndex fix(fst);
+        const vector<ecs::Rule> frules = ecs::mine_rules(fix);
+        const ecs::RuleBook fbook(frules);
+        const string ptag = fresh_test ? "S12A POOL test (S15 test, bit 17 = 0)" : "S12A POOL dev (S15 dev, bit 17 = 1)";
+        vector<s11c::PoolItem> pool[3];  // G1, G19, G20
+        // G1: facts first derived at depth >= 2 in a pool slot; the best chain per slot
+        {
+            std::map<std::pair<string, string>, const cypha::eval::Derived*> best;
+            const auto derived = dp::deep_chain(fst, fbook, 6);
+            for (const auto& d : derived) {
+                if (d.depth < 2 || !slots.count({d.t.s, d.t.r})) continue;
+                auto& bp = best[{d.t.s, d.t.r}];
+                if (!bp || d.conf > bp->conf || (d.conf == bp->conf && d.t.o < bp->t.o)) bp = &d;
+            }
+            for (const auto& [k, d] : best) {
+                s11c::PoolItem x;
+                x.s = d->t.s, x.r = d->t.r, x.o = d->t.o, x.gen = "G1", x.score = d->conf;
+                x.prior = std::min(0.98, std::max(0.02, d->conf));
+                string prem;
+                for (const auto& p : d->premises) prem += (prem.empty() ? "" : " ; ") + p.text();
+                x.explain = "depth " + std::to_string(d->depth) + ": " + prem;
+                pool[0].push_back(x);
+            }
+        }
+        // G19: new facts from kept refinements (rejected parents), not derived by the kept rules; the best per slot
+        {
+            const auto refs = dp::refine_rules(fst, frules);
+            const auto by_rel = dp::facts_by_relation(fst);
+            std::set<string> g2facts;
+            for (const auto& d : dp::deep_chain(fst, fbook, 1)) g2facts.insert(d.t.key());
+            std::map<std::pair<string, string>, std::pair<double, s11c::PoolItem>> best;
+            for (const auto& F : refs) {
+                if (!F.kept || frules[F.parent].kept) continue;
+                for (const auto& t : dp::refinement_predictions(fst, frules[F.parent], F, by_rel)) {
+                    if (!slots.count({t.s, t.r}) || g2facts.count(t.key())) continue;
+                    auto& bp = best[{t.s, t.r}];
+                    if (bp.second.s.empty() || F.pca_conf() > bp.first || (F.pca_conf() == bp.first && t.o < bp.second.o)) {
+                        s11c::PoolItem x;
+                        x.s = t.s, x.r = t.r, x.o = t.o, x.gen = "G19", x.score = F.pca_conf();
+                        x.prior = std::min(0.98, std::max(0.02, F.pca_conf()));
+                        x.explain = frules[F.parent].text() + " & " + F.cr + "(X, " + F.cc + ")";
+                        bp = {F.pca_conf(), x};
+                    }
+                }
+            }
+            for (auto& [k, v] : best) pool[1].push_back(v.second);
+        }
+        // G20: the wild tier, 5% of the main pool, at least 20
+        {
+            const ecs::LinkPredictor lp(fst, ecs::LinkPredictor::Config{});
+            vector<std::pair<string, string>> sv(slots.begin(), slots.end());
+            const std::size_t budget = std::max<std::size_t>(20, (pool[0].size() + pool[1].size()) / 20);
+            for (const auto& w : dp::wild_tier(fst, lp, sv, budget, 20261029)) {
+                s11c::PoolItem x;
+                x.s = w.t.s, x.r = w.t.r, x.o = w.t.o, x.gen = "G20", x.score = w.lp;
+                x.prior = std::min(0.98, std::max(0.02, w.lp));
+                char e[96];
+                std::snprintf(e, sizeof e, "wild: P %.4f, base rate %.4f", w.lp, w.base);
+                x.explain = e;
+                pool[2].push_back(x);
+            }
+        }
+        std::snprintf(b, sizeof b, "%s slots %zu | store facts hidden %zu | kept rules %zu | G1 %zu, G19 %zu, G20 %zu hypotheses", ptag.c_str(), slots.size(), held,
+                      static_cast<std::size_t>(std::count_if(frules.begin(), frules.end(), [](const ecs::Rule& R) { return R.kept; })), pool[0].size(),
+                      pool[1].size(), pool[2].size());
+        std::cout << b << "\n";
+        const char* gn[3] = {"g1", "g19", "g20"};
+        for (int g = 0; g < 3; ++g) {
+            s11c::pool_loop(pool[g], fst, C, out + ".fresh_" + gn[g] + ".prereg.tsv");
+            s11c::pool_states(ptag + " " + gn[g], pool[g]);
+            s11c::write_pool(out + ".fresh_" + gn[g] + ".hyps.tsv", pool[g]);
+        }
+        // the prospective log: every pool hypothesis, timestamped, with the check registered for it
+        {
+            const std::time_t now = std::time(nullptr);
+            char ts[32];
+            std::strftime(ts, sizeof ts, "%Y-%m-%dT%H:%M:%SZ", std::gmtime(&now));
+            std::ofstream pf(out + ".prospective.tsv");
+            pf << "logged_utc\tid\tgenerator\ttier\tsubject\trelation\tobject\tprior\tstate_after_loop\tcheck\n";
+            std::size_t id = 0;
+            for (int g = 0; g < 3; ++g)
+                for (const auto& x : pool[g])
+                    pf << ts << '\t' << "S12A-" << (fresh_test ? "T" : "D") << '-' << id++ << '\t' << x.gen << '\t' << (g == 2 ? "wild" : "main") << '\t' << x.s << '\t' << x.r
+                       << '\t' << x.o << '\t' << x.prior << '\t' << x.state << '\t'
+                       << "graded when a later source (a later Wikidata, S8e's slots or Odin) lists the slot; not before" << '\n';
+            std::snprintf(b, sizeof b, "S12A PROSPECTIVE log %s: %zu hypotheses logged at %s", (out + ".prospective.tsv").c_str(), id, ts);
+            std::cout << b << "\n";
+        }
+    }
+    std::snprintf(b, sizeof b, "S12A --gen-deep done in %.1f s", now_s() - t0);
+    std::cout << b << "\n";
+    return 0;
+}
+
+}  // namespace s12a
+
 int main(int argc, char** argv) {
     if (argc >= 2 && string(argv[1]) == "--score-planted") return s6::run(argc, argv);  // S6 (hypothesis scoring)
     if (argc >= 2 && string(argv[1]) == "--test-kinds") return s7::run(argc, argv);  // S7 (testing hypotheses)
@@ -12209,11 +13514,14 @@ int main(int argc, char** argv) {
     if (argc >= 2 && string(argv[1]) == "--sources") return s8c::run(argc, argv);  // S8c (evidence sources and their reliability)
     if (argc >= 2 && string(argv[1]) == "--worlds") return s9::run(argc, argv);  // S9 (possible worlds, T2, fragility)
     if (argc >= 2 && string(argv[1]) == "--schedule") return s10::run(argc, argv);  // S10 (the curiosity scheduler)
+    if (argc >= 2 && string(argv[1]) == "--s7d") return s7d::run(argc, argv);  // S7d (T2 in the loop, Wikidata as one source, K3 against K4)
     if (argc >= 2 && string(argv[1]) == "--gen-concepts") return s11a::run(argc, argv);  // S11a (G9 concepts, G11 open relations)
     if (argc >= 2 && string(argv[1]) == "--gen-anomaly") return s11c::run_anomaly(argc, argv);  // S11c (G13 anomalies, G3 abduction)
     if (argc >= 2 && string(argv[1]) == "--gen-analogy") return s11c::run_analogy(argc, argv);  // S11c (G4 and G5 analogy)
     if (argc >= 2 && string(argv[1]) == "--pool-grade") return s11c::run_grade(argc, argv);  // S11c (a pool after the source stage)
     if (argc >= 2 && string(argv[1]) == "--f2b-selftest") return f2b::selftest();  // F2b (key rules)
+    if (argc >= 2 && string(argv[1]) == "--gen-laws") return s12a::run_laws(argc, argv);  // S12a (G15 numeric laws, the planted-law gate)
+    if (argc >= 2 && string(argv[1]) == "--gen-deep") return s12a::run_deep(argc, argv);  // S12a (G1 deep deduction, G19 refinement, G20 wild tier)
     if (argc >= 4 && string(argv[1]) == "--wilson") {
         double k = std::atof(argv[2]), n = std::atof(argv[3]);
         std::printf("%.0f/%.0f = %.3f  Wilson95 [%.3f, %.3f]\n", k, n, n > 0 ? k / n : 0.0, ecs::wilson_lower(k, n), ecs::wilson_upper(k, n));
@@ -12223,7 +13531,7 @@ int main(int argc, char** argv) {
     if (argc < 3) {
         std::fprintf(stderr, "usage: pattern_learn <enwik8> <outdir> [--folds K] [--cv] [--min-train N] [--sample N] [--seed S] [--base-rate A]\n"
                              "         [--wikidata FILE [--wikidata-gold-only]] [--phi FILE] [--shard FILE --dev DEV --test TEST [--slice-end B] [--holdout-from B]]\n"
-                             "         [--raw] [--join FACTS] [--reach PARSE] [--gaps FILE [--demand ROWS,...] [--parse PARSE] [--gap-floor F] [--demand-weight W]]\n"
+                             "         [--raw] [--join FACTS] [--reach PARSE] [--gaps FILE [--demand ROWS,...] [--parse PARSE] [--gap-floor F] [--demand-weight W] [--gaps-spof SPOF]]\n"
                              "         [--frontier FILE [--frontier-test] [--frontier-split B]]\n"
                              "         [--signals DIR [--signals-dolly PAGES.xml] [--surprise SCORES.tsv,...] [--signals-gaps FILE]\n"
                              "          [--signals-scope dev|test|u-dev [--signals-plain PAGES.xml] [--signals-vec FILE]]]\n"
@@ -12261,6 +13569,7 @@ int main(int argc, char** argv) {
         else if (a == "--parse" && i + 1 < argc) A.gaps.parse = argv[++i];
         else if (a == "--gap-floor" && i + 1 < argc) A.gaps.floor = std::atof(argv[++i]);
         else if (a == "--demand-weight" && i + 1 < argc) A.gaps.demand_weight = std::atof(argv[++i]);
+        else if (a == "--gaps-spof" && i + 1 < argc) A.gaps.spof = argv[++i];  // S9b: fragile gaps from --worlds OUT.spof.tsv
         else if (a == "--frontier" && i + 1 < argc) A.frontier.path = argv[++i];
         else if (a == "--frontier-test") A.frontier.test = true;
         else if (a == "--frontier-split" && i + 1 < argc) A.frontier.split = static_cast<std::size_t>(std::atoll(argv[++i]));

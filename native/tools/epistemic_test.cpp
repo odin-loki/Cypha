@@ -7,6 +7,8 @@
 #include "cypha/eval/epistemic.hpp"
 #include "cypha/eval/gap_map.hpp"
 #include "cypha/eval/gen_concepts.hpp"
+#include "cypha/eval/gen_deep.hpp"
+#include "cypha/eval/gen_laws.hpp"
 #include "cypha/eval/gen_analogy.hpp"
 #include "cypha/eval/gen_links.hpp"
 #include "cypha/eval/gen_rules.hpp"
@@ -16,6 +18,8 @@
 #include "cypha/eval/worlds.hpp"
 
 #include <cmath>
+#include <map>
+#include <numeric>
 #include <cstdio>
 #include <random>
 #include <string>
@@ -2944,6 +2948,308 @@ static void test_analogy_S11c() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// S9b and S7d: fragile gaps, a promotion's supporting sources, and where K4's guarantee and K3's part
+// ---------------------------------------------------------------------------
+
+static void test_fragile_S9b() {
+  // Fragile gaps (S9b): one per slot, none where a contradiction or certainty gap already asks about the slot.
+  GapMap m;
+  m.open(GapKind::Certainty, "Auguste Rodin", "death_date", "person").p = 0.97;
+  m.open(GapKind::Contradiction, "Bob Dylan", "birth_place", "person").p = 0.6;
+  Gap* f = m.add_fragile("Agamemnon", "birth_place", 0.66, "person", "Mycenae");
+  CHECK(f != nullptr && f->kind == GapKind::Fragile && f->p == 0.66 && f->p_exists == 1.0 && f->demand == 0 && f->status == GapStatus::Open);
+  CHECK_STR(gap_kind_name(GapKind::Fragile), "fragile");
+  CHECK(m.add_fragile("Auguste Rodin", "death_date", 0.66) == nullptr);  // the certainty gap asks already
+  CHECK(m.add_fragile("Bob Dylan", "birth_place", 0.66) == nullptr);     // the contradiction gap asks already
+  CHECK(m.add_fragile("AGAMEMNON", "birth_place", 0.9) == f && f->p == 0.66 && m.size() == 3);  // one per slot, the first kept
+  CHECK(m.add_fragile("", "birth_place", 0.5) == nullptr && m.add_fragile("Troy", "", 0.5) == nullptr);
+  CHECK(m.find(GapKind::Schema, "Agamemnon", "birth_place") == nullptr);  // its own kind: no other kind's key
+  // A demand tag never lands on a fragile gap (S3's order: schema, contradiction, certainty, demand).
+  const Gap* d = m.add_demand(parse_unknown_tag("<|unknown reason=NO_FACT entity=\"Agamemnon\" relation=birth_place gap=G-0000|>"));
+  CHECK(d != nullptr && d->kind == GapKind::Demand && f->demand == 0);
+  m.score();
+  CHECK_NEAR(f->eig, expected_information_gain(0.66, 0.9, 0.9).eig, 1e-12);
+  // Ties in VOI keep the older kinds first: the fragile kind is last.
+  GapMap t;
+  t.open(GapKind::Certainty, "B", "capital").p = 0.66;
+  t.add_fragile("A", "capital", 0.66);
+  t.score();
+  CHECK(t.ranked()[0]->kind == GapKind::Certainty && t.ranked()[1]->kind == GapKind::Fragile);
+
+  // A promotion's supporting sources (S7d): positive, independent, not the generator's own; each once, in test order.
+  Hypothesis h;
+  h.generator = "G2";
+  auto test = [](const char* src, bool indep, bool pos, bool inc) {
+    HypTest x;
+    x.source = src, x.independent = indep, x.done = true, x.positive = pos, x.inconclusive = inc;
+    return x;
+  };
+  h.tests = {test("store", false, true, false), test("wikidata", true, true, false), test("corpus", true, false, true)};
+  CHECK(supporting_independent_sources(h) == std::vector<std::string>{"wikidata"});  // rests on Wikidata alone
+  h.tests[2] = test("corpus", true, true, false);
+  CHECK((supporting_independent_sources(h) == std::vector<std::string>{"wikidata", "corpus"}));
+  h.tests.push_back(test("wikidata", true, true, false));
+  CHECK(supporting_independent_sources(h).size() == 2);  // a source counts once
+  h.tests = {test("G2", true, true, false), test("corpus", true, false, false)};
+  CHECK(supporting_independent_sources(h).empty());  // the generator's own result, and a negative one, carry nothing
+  h.tests[1].done = false, h.tests[1].positive = true;
+  CHECK(supporting_independent_sources(h).empty());  // a test not run carries nothing
+
+  // Where K4 and K3 part (S7d 5a): one independent test whose stated null likelihoods understate how often false
+  // hypotheses pass it. K4's p-values rest on the stated model, so its false share goes over q; conformal selection
+  // calibrated on draws from the real distribution stays under it.
+  {
+    HypTest k;
+    k.kind = "T", k.source = "corpus", k.independent = true;
+    k.likelihoods.t[0] = 0.8, k.likelihoods.t[1] = 0.05, k.likelihoods.t[2] = 0.15;
+    k.likelihoods.f[0] = 0.02, k.likelihoods.f[1] = 0.5, k.likelihoods.f[2] = 0.48;  // stated: false passes 2% of the time
+    const double real_false_pos = 0.25;                                               // real: 25%
+    const std::vector<HypTest> plan = {k};
+    std::mt19937_64 g(20261029);
+    std::uniform_real_distribution<double> U(0.0, 1.0);
+    auto draw = [&](bool truth, double& post, double& e, bool& sup) {
+      const double u = U(g);
+      const int o = truth ? (u < 0.8 ? 0 : u < 0.85 ? 1 : 2) : (u < real_false_pos ? 0 : u < 0.6 ? 1 : 2);
+      const TestOutcome out = o == 0 ? TestOutcome::Positive : o == 1 ? TestOutcome::Negative : TestOutcome::Inconclusive;
+      e = bayes_factor(out, k);
+      post = update_posterior(0.5, e);
+      sup = post > 0.9 && out == TestOutcome::Positive;
+    };
+    double fdp4 = 0, fdp3 = 0;
+    const int reps = 200, m = 200;
+    for (int r = 0; r < reps; ++r) {
+      std::vector<std::vector<HypTest>> plans(m, plan);
+      std::vector<double> pri(m, 0.5), e(m), post(m), cs, bs;
+      std::vector<bool> sup(m), truth(m), ct;
+      for (int i = 0; i < m; ++i) {
+        truth[i] = i < m / 4;  // a batch where most are false
+        bool s2 = false;
+        double p2 = 0, e2 = 1;
+        draw(truth[i], post[i], e[i], s2);
+        sup[i] = s2;
+        bs.push_back(s2 ? post[i] : -1.0);
+        const bool tc = U(g) < 0.25;  // the calibration set: drawn the same way
+        draw(tc, p2, e2, s2);
+        cs.push_back(s2 ? p2 : -1.0), ct.push_back(tc);
+      }
+      const std::vector<int> tiers = hybrid_null_model_tiers(plans, pri, e, sup, 0.1);
+      const std::vector<bool> k3 = conformal_select(cs, ct, bs, 0.1);
+      double n4 = 0, f4 = 0, n3 = 0, f3 = 0;
+      for (int i = 0; i < m; ++i) {
+        if (tiers[i] == 2) n4 += 1, f4 += !truth[i];
+        if (k3[i] && sup[i]) n3 += 1, f3 += !truth[i];
+      }
+      fdp4 += n4 > 0 ? f4 / n4 : 0.0, fdp3 += n3 > 0 ? f3 / n3 : 0.0;
+    }
+    CHECK(fdp4 / reps > 0.2);   // K4 trusts the stated model and over-promotes
+    CHECK(fdp3 / reps <= 0.12); // K3 keeps its guarantee (q 0.1, Monte Carlo slack)
+  }
+}
+
+// ---------------------------------------------------------------------------
+// S12a: G15 numeric laws (gen_laws.hpp); G1 deep deduction, G19 refinement, G20 the wild tier (gen_deep.hpp)
+// ---------------------------------------------------------------------------
+
+static void test_laws_deep_S12a() {
+  namespace lw = cypha::eval::laws;
+  namespace dp = cypha::eval::deep;
+  // ---- robust statistics and the chi-square tail
+  CHECK_NEAR(lw::median_of({4, 1, 3, 2}), 2.5, 1e-12);
+  CHECK_NEAR(lw::robust_sd({1, 2, 3, 4, 100}), 1.4826, 1e-9);  // one outlier does not move it
+  CHECK_NEAR(lw::chi2_lower(2.0, 2.0), 1.0 - std::exp(-1.0), 1e-10);
+  CHECK_NEAR(lw::chi2_lower(3.841458820694124, 1.0), 0.95, 1e-6);
+  CHECK_NEAR(lw::chi2_lower(30.0, 30.0) + (1.0 - lw::chi2_lower(30.0, 30.0)), 1.0, 1e-12);
+  CHECK(lw::chi2_lower(1e-3, 39.0) < 1e-40);
+  // ---- the exponent vectors BACON's walk reaches (first positive, gcd 1)
+  const auto e2 = lw::detail::exponent_vectors(2, 3), e3 = lw::detail::exponent_vectors(3, 2);
+  CHECK(e2.size() == 14 && e3.size() == 28);
+  bool canon = true;
+  for (const auto& e : e2) canon = canon && e[0] > 0 && std::gcd(e[0], e[1]) == 1;
+  CHECK(canon);
+  CHECK(lw::detail::in_span({{1, -1, 0}}, {2, -2, 0}) && !lw::detail::in_span({{1, -1, 0}}, {1, 0, -1}));
+  CHECK(lw::detail::in_span({{1, -1, 0}, {0, 1, -1}}, {1, 0, -1}));  // the third is implied by the first two
+  // ---- a table: density = population / area (5% noise-free), and a second unit of area
+  {
+    lw::NumTable t;
+    t.type = "toy countries";
+    const std::size_t A = t.add_attr("area", lw::Scale::Ratio), M = t.add_attr("area_mi2", lw::Scale::Ratio), P = t.add_attr("population", lw::Scale::Ratio),
+                      D = t.add_attr("density", lw::Scale::Ratio), H = t.add_attr("hdi", lw::Scale::Ratio);
+    std::mt19937_64 rng(7);
+    for (int i = 0; i < 60; ++i) {
+      const std::size_t e = t.add_entity("country" + std::to_string(i));
+      const double area = std::exp(std::normal_distribution<double>(11, 2)(rng)), pop = std::exp(std::normal_distribution<double>(15, 2)(rng));
+      t.v[A][e] = area, t.v[M][e] = area / 2.58999, t.v[P][e] = pop, t.v[D][e] = pop / area * std::exp(std::normal_distribution<double>(0, 0.01)(rng));
+      t.v[H][e] = std::uniform_real_distribution<double>(0.3, 0.95)(rng);
+    }
+    t.v[D][3] = 1e9;  // a typing error: robust statistics keep the law
+    const auto laws = lw::search_laws(t);
+    int kept = 0, dens = 0, conv = 0, hdi = 0, redundant = 0;
+    for (const auto& L : laws) {
+      redundant += L.redundant;
+      if (!L.kept) continue;
+      ++kept;
+      if (L.attr == std::vector<std::size_t>{A, M} && L.exp == std::vector<int>{1, -1}) {
+        ++conv;
+        CHECK_NEAR(L.constant, 2.58999, 1e-6);
+      }
+      if (L.attr == std::vector<std::size_t>{A, P, D} && L.exp == std::vector<int>{1, -1, 1}) {
+        ++dens;
+        CHECK_NEAR(L.constant, 1.0, 0.01);
+      }
+      for (std::size_t a : L.attr) hdi += a == H;
+    }
+    CHECK(conv == 1 && dens == 1 && hdi == 0);
+    CHECK(kept == 2 && redundant >= 1);  // density through area_mi2 is implied by the two, so it is redundant
+  }
+  // ---- interval attributes: differences and orders, never ratios; the order null is independence (amendment 1)
+  {
+    lw::NumTable t;
+    t.type = "toy persons";
+    const std::size_t B = t.add_attr("birth", lw::Scale::Interval), Z = t.add_attr("z", lw::Scale::Interval), S = t.add_attr("shifted", lw::Scale::Interval);
+    std::mt19937_64 rng(11);
+    for (int i = 0; i < 80; ++i) {
+      const std::size_t e = t.add_entity("p" + std::to_string(i));
+      const double b = std::floor(std::uniform_real_distribution<double>(-500, 1950)(rng));
+      t.v[B][e] = b, t.v[Z][e] = b + 30;                                       // Z = birth + 30
+      t.v[S][e] = std::floor(std::uniform_real_distribution<double>(1800, 2600)(rng));  // later than almost every birth, no link
+    }
+    const auto laws = lw::search_laws(t);
+    bool diff = false, order_bz = false, order_bs = false, power = false;
+    for (const auto& L : laws) {
+      power = power || L.kind == lw::LawKind::Power;
+      if (!L.kept) continue;
+      if (L.kind == lw::LawKind::Diff && L.attr == std::vector<std::size_t>{B, Z}) {
+        diff = true;
+        CHECK_NEAR(L.constant, 30.0, 1e-9);
+      }
+      if (L.kind == lw::LawKind::Order && L.attr == std::vector<std::size_t>{B, Z}) order_bz = true;
+      if (L.kind == lw::LawKind::Order && L.attr == std::vector<std::size_t>{B, S}) order_bs = true;
+    }
+    CHECK(diff && order_bz && !power);
+    CHECK(!order_bs);  // birth <= shifted holds for almost every entity, but no more than for unrelated pairs (a coin null keeps it)
+  }
+  // ---- the held-out third: a law that fails on held-out entities is not kept
+  {
+    lw::NumTable t;
+    const std::size_t X = t.add_attr("x", lw::Scale::Ratio), Y = t.add_attr("y", lw::Scale::Ratio);
+    std::mt19937_64 rng(13);
+    std::size_t held = 0;
+    for (int i = 0; i < 120; ++i) {
+      const std::string name = "h" + std::to_string(i);
+      const std::size_t e = t.add_entity(name);
+      const double x = std::exp(std::normal_distribution<double>(3, 1)(rng));
+      t.v[X][e] = x;
+      t.v[Y][e] = lw::heldout_entity(name) ? x * std::exp(std::normal_distribution<double>(0, 1)(rng)) : 2 * x;
+      held += lw::heldout_entity(name);
+    }
+    CHECK(held > 20 && held < 70);
+    bool kept = false, screened = false;
+    for (const auto& L : lw::search_laws(t))
+      if (L.attr == std::vector<std::size_t>{X, Y} && L.exp == std::vector<int>{1, -1}) kept = L.kept, screened = L.heldout_ok;
+    CHECK(!kept && !screened);
+  }
+  // ---- the planted gate's pieces: a planted law is found, its null finds nothing
+  {
+    std::vector<lw::PersonYears> persons;
+    for (int i = 0; i < 100; ++i) persons.push_back({"person" + std::to_string(i), 1500.0 + 4 * i, 1560.0 + 4 * i + (i % 7)});
+    int found = 0, nulls = 0;
+    for (auto kind : {lw::PlantKind::Ratio, lw::PlantKind::Product, lw::PlantKind::Power, lw::PlantKind::Scale, lw::PlantKind::Offset})
+      for (std::uint64_t seed = 1; seed <= 3; ++seed) {
+        const lw::Planted P = lw::plant(kind, 0.0, seed * 977, persons, 40, 0.0);
+        found += lw::planted_found(P, lw::search_laws(P.table));
+        nulls += lw::false_laws(P, lw::search_laws(P.null_table), true) > 0;
+      }
+    CHECK(found == 15 && nulls == 0);
+    const lw::Planted Q = lw::plant(lw::PlantKind::Ratio, 0.0, 5, persons, 40, 0.0);
+    CHECK(Q.table.entities.size() == 40 && Q.table.attrs.size() == 5 && Q.null_table.v[Q.z] != Q.table.v[Q.z]);
+    CHECK_NEAR(lw::implied_c(lw::PlantKind::Power, 1.0 / (3.0 * 3.0)), 3.0, 1e-12);
+  }
+  // ---- G1: chaining two rules through a derived premise
+  {
+    TripleStore st;
+    st.add("x1", "occupation", "poet");
+    st.add("x2", "occupation", "writer");
+    std::vector<Rule> rules(2);
+    rules[0].kind = RuleKind::Const, rules[0].r1 = "occupation", rules[0].c1 = "poet", rules[0].head = "occupation", rules[0].head_o = "writer";
+    rules[0].support = 8, rules[0].pca_body = 10, rules[0].kept = true;
+    rules[1].kind = RuleKind::Const, rules[1].r1 = "occupation", rules[1].c1 = "writer", rules[1].head = "occupation", rules[1].head_o = "author";
+    rules[1].support = 5, rules[1].pca_body = 10, rules[1].kept = true;
+    const RuleBook book(rules);
+    const auto d = dp::deep_chain(st, book, 6);
+    std::map<std::string, std::pair<int, double>> got;
+    for (const auto& x : d) got[x.t.s + "|" + x.t.o] = {x.depth, x.conf};
+    CHECK(got.size() == 3);
+    CHECK(got["x1|writer"].first == 1 && got["x1|author"].first == 2 && got["x2|author"].first == 1);
+    CHECK_NEAR(got["x1|author"].second, 0.8 * 0.5, 1e-12);  // the product of the rules' PCA confidences
+    CHECK(dp::deep_chain(st, book, 1).size() == 2);         // depth 1 is G2's own prediction
+  }
+  // ---- G19: a rejected rule rescued by a condition on its subject
+  {
+    TripleStore st;
+    for (int i = 0; i < 30; ++i) {
+      const std::string x = "painter" + std::to_string(i);
+      st.add(x, "occupation", "Painter");
+      const bool paris = i < 12;
+      st.add(x, "birth_place", paris ? "Paris" : "Rome");
+      st.add(x, "nationality", paris ? "French" : "Italian");
+    }
+    st.add("newcomer", "occupation", "Painter");
+    st.add("newcomer", "birth_place", "Paris");
+    st.add("roman", "occupation", "Painter");
+    st.add("roman", "birth_place", "Rome");
+    Rule R;
+    R.kind = RuleKind::Const, R.r1 = "occupation", R.c1 = "Painter", R.head = "nationality", R.head_o = "French";
+    R.support = 12, R.pca_body = 30, R.p0 = 0.4, R.kept = false;
+    const auto refs = dp::refine_rules(st, {R});
+    const dp::Refinement* best = nullptr;
+    for (const auto& F : refs)
+      if (F.kept && F.cr == "birth_place" && F.cc == "Paris") best = &F;
+    CHECK(best != nullptr);
+    if (best) {
+      CHECK_NEAR(best->pca_conf(), 1.0, 1e-12);
+      CHECK(best->support == 12);
+      const auto by_rel = dp::facts_by_relation(st);
+      const auto pred = dp::refinement_predictions(st, R, *best, by_rel);
+      CHECK(pred.size() == 1 && pred[0].s == "newcomer" && pred[0].o == "French");
+    }
+    for (const auto& F : refs) CHECK(!(F.kept && F.cr == "birth_place" && F.cc == "Rome"));  // never better than its parent
+    for (const auto& F : refs) CHECK(F.cr != "nationality");                                  // never the head's own relation
+  }
+  // ---- G20: the wild tier's clusters, budget and support rule
+  {
+    TripleStore st;
+    st.add("Alice", "birth_year", "1900");
+    st.add("Alice", "nationality", "France");
+    st.add("Lyon", "located_in", "France");
+    CHECK_STR(dp::cluster_of(st, "Alice"), "person|France");
+    CHECK_STR(dp::cluster_of(st, "Lyon"), "place|none");
+    CHECK_STR(dp::cluster_of(st, "Nowhere"), "value|none");
+    TripleStore g;
+    std::mt19937_64 rng(3);
+    std::vector<std::pair<std::string, std::string>> slots;
+    for (int i = 0; i < 40; ++i) {
+      const std::string p = "p" + std::to_string(i);
+      g.add(p, "birth_year", std::to_string(1800 + i));
+      g.add(p, "nationality", i % 2 ? "France" : "Italy");
+      g.add(p, "occupation", i % 3 ? "Painter" : "Poet");
+      if (i < 30) g.add(p, "birth_place", i % 2 ? "Paris" : "Rome");
+      else slots.push_back({p, "birth_place"});
+    }
+    g.add("Paris", "country", "France");
+    g.add("Rome", "country", "Italy");
+    const LinkPredictor lp(g, LinkPredictor::Config{});
+    const auto w1 = dp::wild_tier(g, lp, slots, 5, 99), w2 = dp::wild_tier(g, lp, slots, 5, 99);
+    CHECK(w1.size() <= 5 && w1.size() == w2.size());
+    bool same = true, rule_ok = true;
+    for (std::size_t i = 0; i < w1.size(); ++i) {
+      same = same && w1[i].t == w2[i].t;
+      rule_ok = rule_ok && w1[i].lp >= 2.0 * w1[i].base && dp::cluster_of(g, w1[i].t.o) != dp::cluster_of(g, w1[i].t.s) && !g.has(w1[i].t.s, w1[i].t.r, w1[i].t.o);
+    }
+    CHECK(same && rule_ok);
+  }
+}
+
 static void test_gap_map() {
   // The gap id CyphaLM writes (cyphalm_trie dktext rows and its dev tags).
   CHECK_STR(gap_id("Honduras", "capital"), "G-AEC1");
@@ -3187,6 +3493,8 @@ int main() {
   test_concepts_S11a();
   test_date_links_S4bb();
   test_analogy_S11c();
+  test_fragile_S9b();
+  test_laws_deep_S12a();
   std::printf("epistemic_test: %d checks, %d failed\n", g_checks, g_failed);
   return g_failed == 0 ? 0 : 1;
 }

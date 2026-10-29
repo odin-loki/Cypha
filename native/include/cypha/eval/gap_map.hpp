@@ -98,9 +98,10 @@ inline UnknownTag parse_unknown_tag(const std::string& text) {
 // 3.2 The gap map
 // ---------------------------------------------------------------------------
 
-/// The four kinds the current stores can show. Lexical, structural, coverage and prediction gaps need stores that do not
-/// exist yet.
-enum class GapKind { Schema, Demand, Contradiction, Certainty };
+/// The kinds the current stores can show. Lexical, structural, coverage and prediction gaps need stores that do not
+/// exist yet. Fragile (S9b): a held fact that rests on one source (S9's single point of failure); last, so the others'
+/// keys and order are unchanged.
+enum class GapKind { Schema, Demand, Contradiction, Certainty, Fragile };
 /// Open: a rung of the asking ladder (P1) can run. Queued: open and asked about (a tag queued it, 3.5). Parked: no
 /// automatic rung can fill it now. Closed: filled through ECS.
 enum class GapStatus { Open, Queued, Parked, Closed };
@@ -111,6 +112,7 @@ inline const char* gap_kind_name(GapKind k) {
     case GapKind::Demand: return "demand";
     case GapKind::Contradiction: return "contradiction";
     case GapKind::Certainty: return "certainty";
+    case GapKind::Fragile: return "fragile";
   }
   return "?";
 }
@@ -198,6 +200,21 @@ class GapMap {
     ++g->demand;
     if (g->status == GapStatus::Open) g->status = GapStatus::Queued;
     return g;
+  }
+
+  /// S9b: a held fact that a single source holds up (S9's single point of failure) as a fragile gap. A slot that already
+  /// has a contradiction or certainty gap gets none (those already ask about it); a slot keeps its first fragile gap.
+  /// p is the fact's P, p_exists 1, demand 0. Returns the gap, or nullptr when the slot is skipped.
+  Gap* add_fragile(const std::string& entity, const std::string& relation, double p, const std::string& type = "",
+                   const std::string& note = "") {
+    if (entity.empty() || relation.empty()) return nullptr;
+    if (find(GapKind::Contradiction, entity, relation) || find(GapKind::Certainty, entity, relation)) return nullptr;
+    if (Gap* g = find(GapKind::Fragile, entity, relation)) return g;
+    Gap& g = open(GapKind::Fragile, entity, relation, type);
+    g.p = p;
+    g.p_exists = 1.0;
+    g.note = note;
+    return &g;
   }
 
   /// 6.3 for every gap: EIG of the placeholder test on the gap's p, Impact = weight x demand, I+ = 0, priority = VOI.
