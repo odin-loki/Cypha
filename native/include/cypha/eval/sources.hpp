@@ -230,6 +230,25 @@ struct LeadText {
 inline int outcome_index(TestOutcome o) { return o == TestOutcome::Positive ? 0 : o == TestOutcome::Negative ? 1 : 2; }
 
 // ---------------------------------------------------------------------------
+// S8d: calibration on the generators' own graded hypotheses (docs/reports/S8D_PROMOTION.md)
+// ---------------------------------------------------------------------------
+
+/// P(positive | true) / P(positive | false); 0 without likelihoods.
+inline double positive_lr(const OutcomeLikelihoods& L) { return L.set() && L.f[0] > 0.0 ? L.t[0] / L.f[0] : 0.0; }
+
+/// A (source, group) cell's likelihoods (add-one): its own tally when it holds at least `min_n` graded true and `min_n`
+/// graded false items, else the source's tally pooled over its groups. `own` says which was used.
+inline OutcomeLikelihoods calibrated_likelihoods(const TestTally& cell, const TestTally& pooled, double min_n = 10.0, bool* own = nullptr) {
+  const bool use = cell.t_pos + cell.t_neg + cell.t_inc >= min_n && cell.f_pos + cell.f_neg + cell.f_inc >= min_n;
+  if (own) *own = use;
+  return likelihoods_from(use ? cell : pooled);
+}
+
+/// A source may carry a promotion (give the positive result `decide` needs) only where its positive likelihood ratio on
+/// the generators' graded hypotheses is at least `min_lr` (S8c's bar, measured on the errors that matter).
+inline bool may_carry_promotion(const OutcomeLikelihoods& L, double min_lr = 10.0) { return positive_lr(L) >= min_lr; }
+
+// ---------------------------------------------------------------------------
 // Reliability without a reference: Dawid-Skene
 // ---------------------------------------------------------------------------
 

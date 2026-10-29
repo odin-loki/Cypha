@@ -96,6 +96,12 @@
 //   reliability on S15's choose half and by Dawid-Skene, and S8's dev promotions with the accepted ones, graded on S15's
 //   confirm half. Cypha's own evidence only.
 //
+// S8d (2026-10-29, docs/reports/S8D_PROMOTION.md): `decide` needs a positive independent result (hypothesis.hpp).
+//   --sources ... [--calibrate | --fresh FRESH_G2 FRESH_LINKS]: each source re-measured on the generators' choose-half dev
+//   hypotheses (a source carries a promotion only if LR+ >= 10 there), and the fresh confirm-half set read once.
+//   --gen-rules ... --fresh-confirm and --gen-links ... --fresh-confirm write that set: G2 and G6/G7 on S15 dev's
+//   confirm-half slots with their facts hidden. No S15 label is read to make it.
+//
 // S9 (2026-10-29, docs/reports/S9_WORLDS_AND_FRAGILITY.md):
 //   --worlds ENWIK8 SEEDS WD_VALUES FACTS_F2 S15_DEV OUT [--read-confirm]: possible worlds (worlds.hpp). T2 through worlds
 //   on S7's dev set and, once, on S15 dev's choose half; fragility of the v2 store (single points of failure, blast radius
@@ -4168,7 +4174,7 @@ LoopRes s7c_sim_one(std::mt19937_64& g, double p0, bool truth, const vector<ecs:
         const int o = u < pr[0] ? 0 : u < pr[0] + pr[1] ? 1 : 2;
         const ecs::TestOutcome out = o == 0 ? kPos : o == 1 ? kNeg : kInc;
         const double bf = ecs::bayes_factor(out, t);
-        post = ecs::update_posterior(post, bf), e *= bf, indep = indep || (t.independent && o != 2), ++done;
+        post = ecs::update_posterior(post, bf), e *= bf, indep = indep || (t.independent && o == 0), ++done;  // a positive one (S8d)
         moved += std::fabs(post - last), last = post;
         if (post > cfg.supported_p && indep) { r.sup = true; break; }
         if (post < cfg.refuted_p) { r.ref = true; break; }
@@ -5534,14 +5540,15 @@ vector<S15Row> load_s15(const string& path) {
 
 int run(int argc, char** argv) {
     if (argc < 9) {
-        std::fprintf(stderr, "usage: pattern_learn --gen-links ENWIK8 SEEDS.tsv FACTS_F2.tsv WD_VALUES.tsv PATTERNS.tsv S15_DIR OUT_PREFIX [--read-test]\n");
+        std::fprintf(stderr, "usage: pattern_learn --gen-links ENWIK8 SEEDS.tsv FACTS_F2.tsv WD_VALUES.tsv PATTERNS.tsv S15_DIR OUT_PREFIX [--read-test] [--fresh-confirm]\n");
         return 2;
     }
     const double t0 = now_s();
     const string out = argv[8];
-    bool read_test = false;
+    bool read_test = false, fresh_confirm = false;  // --fresh-confirm: S8d's fresh G6/G7 set (docs/reports/S8D_PROMOTION.md)
     for (int i = 9; i < argc; ++i) {
         if (string(argv[i]) == "--read-test") read_test = true;
+        else if (string(argv[i]) == "--fresh-confirm") fresh_confirm = true;
         else { std::fprintf(stderr, "unknown option %s\n", argv[i]); return 2; }
     }
     char b[1024];
@@ -5805,6 +5812,60 @@ int run(int argc, char** argv) {
             f << (h.dev ? "dev" : "test") << '\t' << h.s << '\t' << h.r << '\t' << h.o << '\t' << h.score << '\t' << h.prior << '\t' << ecs::test_outcome_name(h.out[0])
               << '\t' << ecs::test_outcome_name(h.out[1]) << '\t' << ecs::test_outcome_name(h.out[2]) << '\t' << h.post << '\t' << h.state << '\t' << h.promoted << '\t'
               << h.truth << '\t' << h.explain << "\n";
+        }
+        // ---- S8d: the chosen generator on S15 dev's confirm-half slots with their facts hidden (docs/reports/S8D_PROMOTION.md).
+        // S15's labels are not read. Priors by PROMO's isotonic map (fitted on its dev items only); tests T1, T6, T4.
+        if (fresh_confirm) {
+            std::set<std::pair<string, string>> cslots;
+            for (const S15Row& x : load_s15(string(argv[7]) + "/temporal_holdout_dev.tsv"))
+                if (((fnv(x.s) >> 17) & 1) == 1 && rel_index(x.r) >= 0) cslots.insert({x.s, x.r});
+            ecs::TripleStore fst;
+            std::size_t held = 0;
+            for (const auto& t : triples) {
+                if (cslots.count({t[0], t[1]})) ++held;
+                else fst.add(t[0], t[1], t[2]);
+            }
+            const auto fobjs = objects_by_rel(fst);
+            const ecs::RelGraph fg(fst);
+            ecs::PathRanker fpr(fst, fg, ecs::PathRanker::Config{});
+            const ecs::LinkScorer fls(fst, {});
+            const ecs::LinkPredictor flp(fst, ecs::LinkPredictor::Config{});
+            vector<LoopItem> fit = items;  // set_priors fits on the dev items with a truth, so on PROMO's alone
+            const std::size_t n0 = fit.size();
+            std::size_t in_store = 0;
+            for (const auto& [s, r] : cslots) {
+                if (fst.facts_of(s).empty()) continue;
+                ++in_store;
+                Query q;
+                q.s = s, q.r = r, q.dev = false;
+                q.cands = candidates(fst, fobjs, s, r);
+                if (q.cands.empty()) continue;
+                q.truth.assign(q.cands.size(), 0);
+                score_query(q, fst, fls, fpr);
+                const auto p = primary(q, chosen, &combo);
+                const int top = top_of(q, p);
+                if (top < 0) continue;
+                LoopItem h;
+                h.s = s, h.r = r, h.o = q.cands[static_cast<std::size_t>(top)], h.dev = false, h.score = p[static_cast<std::size_t>(top)];
+                h.explain = explain(q, top, fpr);
+                fit.push_back(h);
+            }
+            set_priors(fit);
+            vector<LoopItem> fh(fit.begin() + static_cast<std::ptrdiff_t>(n0), fit.end());
+            for (LoopItem& h : fh) run_tests(h, fst, flp, C);
+            vector<LoopItem*> batch;
+            for (LoopItem& h : fh) batch.push_back(&h);
+            const LoopRead R = run_loop(batch, out + ".fresh_links.prereg.tsv");
+            std::snprintf(b, sizeof b, "S8D FRESH G6/G7 (generator %s) confirm-half slots %zu | store facts hidden %zu, reduced store %zu | slots whose subject is in "
+                          "the store %zu | hypotheses %zu | supported %.0f, promoted after BH %.0f, refuted %.0f (no grade read) | log %zu entries verify %s",
+                          kGenName[chosen], cslots.size(), held, fst.size(), in_store, fh.size(), R.sup, R.pro, R.ref, R.log_entries, R.log_ok ? "ok" : "BROKEN");
+            std::cout << b << "\n";
+            std::ofstream ff(out + ".fresh_links.hyps.tsv");
+            ff << "split\tsubject\trelation\tobject\tscore\tprior\tT1\tT6\tT4\tposterior\tstate\tpromoted\tpath\n";
+            for (const LoopItem& h : fh)
+                ff << "fresh\t" << h.s << '\t' << h.r << '\t' << h.o << '\t' << h.score << '\t' << h.prior << '\t' << ecs::test_outcome_name(h.out[0]) << '\t'
+                   << ecs::test_outcome_name(h.out[1]) << '\t' << ecs::test_outcome_name(h.out[2]) << '\t' << h.post << '\t' << h.state << '\t' << h.promoted << '\t'
+                   << h.explain << "\n";
         }
     }
 
@@ -6509,15 +6570,16 @@ long days_of(const Date& D) {  // days from civil (proleptic Gregorian), for the
 
 int run(int argc, char** argv) {
     if (argc < 9) {
-        std::fprintf(stderr, "usage: pattern_learn --gen-rules ENWIK8 SEEDS.tsv FACTS_F2.tsv WD_VALUES.tsv PATTERNS.tsv S15_DIR OUT_PREFIX [--read-test]\n");
+        std::fprintf(stderr, "usage: pattern_learn --gen-rules ENWIK8 SEEDS.tsv FACTS_F2.tsv WD_VALUES.tsv PATTERNS.tsv S15_DIR OUT_PREFIX [--read-test] [--fresh-confirm]\n");
         return 2;
     }
     const double t0 = now_s();
     const string out = argv[8], s15dir = argv[7];
-    bool read_test = false;
+    bool read_test = false, fresh_confirm = false;  // --fresh-confirm: S8d's fresh G2 set (docs/reports/S8D_PROMOTION.md)
     int t4_variant = 1;
     for (int i = 9; i < argc; ++i) {
         if (string(argv[i]) == "--read-test") read_test = true;
+        else if (string(argv[i]) == "--fresh-confirm") fresh_confirm = true;
         else if (string(argv[i]) == "--t4-pattern") t4_variant = 0;
         else {
             std::fprintf(stderr, "unknown option %s\n", argv[i]);
@@ -6770,6 +6832,61 @@ int run(int argc, char** argv) {
             f << "subject\trelation\tobject\tlabel\tlabel_s15\tP0\tposterior\tstate\tpromoted\tT1\tT2\tT3\tT6\tT5\tT4\n";
             for (const Item& x : hyps)
                 f << x.s << '\t' << x.r << '\t' << x.o << '\t' << x.label << '\t' << x.label2 << '\t' << x.p0 << '\t' << x.post << '\t' << x.state << '\t' << x.promoted73 << '\t'
+                  << ecs::test_outcome_name(x.T.t[0]) << '\t' << ecs::test_outcome_name(x.T.t[1]) << '\t' << ecs::test_outcome_name(x.T.t[2]) << '\t'
+                  << ecs::test_outcome_name(x.T.t[3]) << '\t' << ecs::test_outcome_name(x.T.t[4]) << '\t' << ecs::test_outcome_name(x.T.t[5]) << '\n';
+        }
+        // ---- S8d: G2 on S15 dev's confirm-half slots with their facts hidden (docs/reports/S8D_PROMOTION.md). S15's labels
+        // are not read; R1's plan and combination rule; T5 left out (Wikidata is what S15 grades against).
+        if (fresh_confirm) {
+            std::set<std::pair<string, string>> cslots;
+            for (const auto& R : load_s15(s15dir + "/temporal_holdout_dev.tsv"))
+                if (((fnv(R.s) >> 17) & 1) == 1 && rel_index(R.r) >= 0) cslots.insert({R.s, R.r});
+            Facts fred;
+            std::size_t held = 0;
+            for (const auto& [s, fs] : kby)
+                for (const auto& [r, o] : fs) {
+                    if (cslots.count({s, r})) ++held;
+                    else fred[s].push_back({r, o});
+                }
+            const ecs::TripleStore fst = make_store(fred);
+            const ecs::RuleIndex fix(fst);
+            const vector<ecs::Rule> frules = ecs::mine_rules(fix);
+            const ecs::RuleSet frs(fix, frules, noisy_or);
+            const ecs::LinkPredictor flp(fst, {});
+            Ctx fcx;
+            fcx.data = &data, fcx.pages = &pages, fcx.page_of = &page_of, fcx.wd = &wd, fcx.t4_variant = t4_variant;
+            vector<Item> fh;
+            std::size_t in_store = 0, with_cand = 0;
+            for (const auto& [s, r] : cslots) {
+                if (fst.facts_of(s).empty()) continue;
+                ++in_store;
+                const auto rc = frs.candidates(s, r);
+                if (rc.empty()) continue;
+                ++with_cand;
+                const int ri = rel_index(r);
+                for (const auto& c : rc) {
+                    if (holds_value(fix, s, r, c.o)) continue;
+                    Item x;
+                    x.s = s, x.r = r, x.o = c.o;
+                    x.T = run_tests(fcx, fst, fix, frs, flp, rc, s, r, c.o, false);
+                    x.p0 = std::min(0.98, std::max(0.02, c.score * s6::hard_constraint(fst, s, ri, c.o)));
+                    fh.push_back(std::move(x));
+                }
+            }
+            std::snprintf(b, sizeof b, "S8D FRESH G2 confirm-half slots %zu | store facts hidden %zu, reduced store %zu | slots whose subject is in the store %zu, "
+                          "with a rule candidate %zu | hypotheses %zu", cslots.size(), held, fst.size(), in_store, with_cand, fh.size());
+            std::cout << b << "\n";
+            run_loop(fh, PL, "S8D FRESH G2", out + ".fresh_g2.prereg.tsv");
+            std::map<string, std::size_t> states;
+            std::size_t promoted = 0;
+            for (const Item& x : fh) ++states[x.state], promoted += x.promoted73;
+            string line = "S8D FRESH G2 states (no grade read):";
+            for (const auto& [s, n] : states) line += " " + s + " " + std::to_string(n);
+            std::cout << line << " | promoted (BH among supported) " << promoted << "\n";
+            std::ofstream f(out + ".fresh_g2.hyps.tsv");
+            f << "split\tsubject\trelation\tobject\tP0\tposterior\tstate\tpromoted\tT1\tT2\tT3\tT6\tT5\tT4\n";
+            for (const Item& x : fh)
+                f << "fresh\t" << x.s << '\t' << x.r << '\t' << x.o << '\t' << x.p0 << '\t' << x.post << '\t' << x.state << '\t' << x.promoted73 << '\t'
                   << ecs::test_outcome_name(x.T.t[0]) << '\t' << ecs::test_outcome_name(x.T.t[1]) << '\t' << ecs::test_outcome_name(x.T.t[2]) << '\t'
                   << ecs::test_outcome_name(x.T.t[3]) << '\t' << ecs::test_outcome_name(x.T.t[4]) << '\t' << ecs::test_outcome_name(x.T.t[5]) << '\n';
         }
@@ -7915,7 +8032,7 @@ struct Hyp {
     bool promoted = false;
 };
 
-vector<Hyp> load_hyps(const string& path, const string& gen) {
+vector<Hyp> load_hyps(const string& path, const string& gen, const string& want_split = "dev") {
     vector<Hyp> out;
     std::ifstream f(path);
     string l;
@@ -7929,7 +8046,7 @@ vector<Hyp> load_hyps(const string& path, const string& gen) {
     while (std::getline(f, l)) {
         const auto c = split(l, '\t');
         if (c.size() < h.size()) continue;
-        if (csp < h.size() && c[csp] != "dev") continue;
+        if (csp < h.size() && c[csp] != want_split) continue;
         Hyp x;
         x.gen = gen, x.s = c[cs], x.r = c[cr], x.o = c[co];
         x.p0 = std::atof(c[cp0].c_str()), x.post = std::atof(c[cpr].c_str());
@@ -7965,13 +8082,246 @@ double odds(double p) {
     return p / (1.0 - p);
 }
 
+// ============================================================ S8d (docs/reports/S8D_PROMOTION.md)
+// Calibration: each accepted (source, group) re-measured on the generators' own dev hypotheses graded by S15's choose half
+// (each distinct one once); a source carries a promotion only where its calibrated LR+ >= 10. The source stage: a
+// hypothesis starts from its generator's posterior, the accepted sources follow as tests (DB-IB, WP-LEAD, GN) with the
+// calibrated likelihoods, and HypothesisStore's decide (a positive independent result, S8d) stops it; Known = row 70's K4
+// on the source tests. Read on S8c's dev set (the confirm half, already read) and, with --fresh, once on the fresh set.
+using Accepted = std::map<std::pair<int, string>, ecs::OutcomeLikelihoods>;
+
+string item_key(const Hyp& h) { return src::norm_subject(h.s) + '\x1f' + h.r + '\x1f' + src::norm_name(h.o); }
+
+struct Stage {
+    double p0 = 0, post = 0, e = 1;
+    bool sup = false, ref = false;
+    int known = 0, graded = -1;
+    string by;
+    TestOutcome o[kNSrc] = {TestOutcome::Inconclusive, TestOutcome::Inconclusive, TestOutcome::Inconclusive, TestOutcome::Inconclusive,
+                            TestOutcome::Inconclusive};
+    vector<ecs::HypTest> plan;
+};
+
+vector<Stage> source_stage(const Sources& S, const vector<Hyp>& H, const Accepted& cal, const std::map<std::pair<int, string>, bool>& carry,
+                           const Grader& G) {
+    vector<Stage> st(H.size());
+    for (std::size_t i = 0; i < H.size(); ++i) {
+        const Hyp& h = H[i];
+        Stage& z = st[i];
+        const string grp = group_of(h.r);
+        const src::Value v = src::make_value(h.o);
+        for (int k = 0; k < kNSrc; ++k) z.o[k] = S.answer(k, h.s, h.r, v);
+        ecs::Hypothesis x;
+        x.id = "S8d-" + std::to_string(i);
+        x.key = h.r + '|' + h.s + '|' + h.o;
+        x.statement = h.s + " " + h.r + " " + h.o;
+        x.generator = h.gen;
+        vector<TestOutcome> outs;
+        for (int k = 1; k < kNSrc; ++k) {
+            const auto it = cal.find({k, grp});
+            if (it == cal.end()) continue;
+            ecs::HypTest t;
+            t.kind = string("S8d ") + kSrcName[k], t.source = kSrcName[k], t.predicted = "positive", t.refuted_if = "negative";
+            t.disconfirmation = true;
+            t.independent = carry.at({k, grp});  // a source under the bar never carries a promotion
+            t.likelihoods = it->second;
+            x.tests.push_back(t), outs.push_back(z.o[k]);
+        }
+        z.plan = x.tests;
+        z.p0 = std::min(1.0 - 1e-6, std::max(1e-6, h.post));
+        ecs::HypothesisStore hs;
+        hs.propose(x);
+        hs.score(x.id, z.p0);
+        hs.transition(x.id, ecs::HypState::Queued, "scored");
+        for (std::size_t k = 0; k < outs.size(); ++k) {
+            if (hs.find(x.id)->state != ecs::HypState::Queued) break;
+            hs.transition(x.id, ecs::HypState::UnderTest, "next source");
+            hs.record_outcome(x.id, k, outs[k]);
+        }
+        const ecs::Hypothesis* hh = hs.find(x.id);
+        z.post = hh->posterior, z.e = ecs::e_value(*hh);
+        z.sup = hh->state == ecs::HypState::Supported, z.ref = hh->state == ecs::HypState::Refuted;
+        for (const ecs::HypTest& t : hh->tests)
+            if (ecs::independent_evidence(*hh, t) && t.positive) z.by += string(z.by.empty() ? "" : "+") + t.source;
+        z.graded = G.grade(h.s, h.r, v);
+    }
+    vector<vector<ecs::HypTest>> plans;
+    vector<double> pri, ev;
+    vector<bool> sp;
+    for (const Stage& z : st) plans.push_back(z.plan), pri.push_back(z.p0), ev.push_back(z.e), sp.push_back(z.sup);
+    const vector<int> tiers = ecs::hybrid_null_model_tiers(plans, pri, ev, sp, 0.1);
+    for (std::size_t i = 0; i < st.size(); ++i) st[i].known = tiers[i];
+    return st;
+}
+
+// Precision lines of one read: per generator (rows), then each distinct hypothesis once (supported or Known when any copy
+// is), by the source that gave the positive, by relation group and by relation. Returns {graded, true} of the supported.
+std::pair<double, double> stage_report(const string& tag, const vector<Hyp>& H, const vector<Stage>& st, const string& tsv) {
+    char b[1024];
+    struct Acc {
+        double n = 0, g = 0, sup = 0, sg = 0, stt = 0, kn = 0, kg = 0, kt = 0, ref = 0, rg = 0, rf = 0;
+    };
+    auto line = [&](const string& what, const Acc& a) {
+        std::snprintf(b, sizeof b,
+                      "S8D %s %-26s hyps %5.0f graded %5.0f | supported %4.0f, graded %4.0f, true %4.0f, precision %.3f [%.3f, %.3f] | Known %4.0f, "
+                      "graded %4.0f, precision %.3f [%.3f, %.3f] | refuted %4.0f, graded %4.0f, false %.3f",
+                      tag.c_str(), what.c_str(), a.n, a.g, a.sup, a.sg, a.stt, a.sg ? a.stt / a.sg : 0.0, ecs::wilson_lower(a.stt, a.sg),
+                      ecs::wilson_upper(a.stt, a.sg), a.kn, a.kg, a.kg ? a.kt / a.kg : 0.0, ecs::wilson_lower(a.kt, a.kg), ecs::wilson_upper(a.kt, a.kg),
+                      a.ref, a.rg, a.rg ? a.rf / a.rg : 0.0);
+        std::cout << b << "\n";
+    };
+    auto add = [](Acc& a, int g, bool sup, bool known, bool ref) {
+        a.n += 1;
+        if (g >= 0) a.g += 1;
+        if (sup) a.sup += 1, a.sg += g >= 0, a.stt += g == 1;
+        if (known) a.kn += 1, a.kg += g >= 0, a.kt += g == 1;
+        if (ref) a.ref += 1, a.rg += g >= 0, a.rf += g == 0;
+    };
+    std::map<string, Acc> gen;
+    for (std::size_t i = 0; i < H.size(); ++i) add(gen[H[i].gen], st[i].graded, st[i].sup, st[i].known == 2, st[i].ref);
+    for (const auto& [g, a] : gen) line("generator " + g, a);
+    // each distinct hypothesis once
+    struct D {
+        std::size_t first = 0;
+        int graded = -1;
+        bool sup = false, known = false, ref = false;
+        string by;
+    };
+    std::map<string, D> dist;
+    vector<string> order;
+    for (std::size_t i = 0; i < H.size(); ++i) {
+        const string k = item_key(H[i]);
+        auto it = dist.find(k);
+        if (it == dist.end()) {
+            D d;
+            d.first = i, d.graded = st[i].graded;
+            it = dist.emplace(k, d).first, order.push_back(k);
+        }
+        D& d = it->second;
+        if (st[i].sup && !d.sup) d.by = st[i].by;
+        d.sup = d.sup || st[i].sup, d.known = d.known || st[i].known == 2, d.ref = d.ref || st[i].ref;
+    }
+    Acc all;
+    std::map<string, Acc> by_src, by_grp, by_rel;
+    for (const string& k : order) {
+        const D& d = dist[k];
+        const bool ref = d.ref && !d.sup;
+        const Hyp& h = H[d.first];
+        add(all, d.graded, d.sup, d.known, ref);
+        add(by_grp[group_of(h.r)], d.graded, d.sup, d.known, ref);
+        add(by_rel[h.r], d.graded, d.sup, d.known, ref);
+        if (d.sup) add(by_src[d.by], d.graded, true, d.known, false);
+    }
+    line("all (each distinct once)", all);
+    for (const auto& [s, a] : by_src) line("positive from " + s, a);
+    for (const auto& [g, a] : by_grp) line("group " + g, a);
+    for (const auto& [r, a] : by_rel)
+        if (a.sup > 0) line("relation " + r, a);
+    std::ofstream f(tsv);
+    f << "generator\tsubject\trelation\tobject\tposterior_gen\tDB-IB\tWP-LEAD\tGN\tposterior_src\te_src\tsupported\tknown\trefuted\tby\tgraded\n";
+    for (std::size_t i = 0; i < H.size(); ++i) {
+        const Stage& z = st[i];
+        std::snprintf(b, sizeof b, "%s\t%s\t%s\t%s\t%.6f\t%s\t%s\t%s\t%.6f\t%.6g\t%d\t%d\t%d\t%s\t%d\n", H[i].gen.c_str(), H[i].s.c_str(), H[i].r.c_str(),
+                      H[i].o.c_str(), z.p0, ecs::test_outcome_name(z.o[1]), ecs::test_outcome_name(z.o[2]), ecs::test_outcome_name(z.o[3]), z.post, z.e,
+                      z.sup ? 1 : 0, z.known == 2 ? 1 : 0, z.ref ? 1 : 0, z.by.c_str(), z.graded);
+        f << b;
+    }
+    return {all.sg, all.stt};
+}
+
+void s8d(const Sources& S, const vector<Hyp>& hyps, const Accepted& accepted, const Grader& conf, const Grader& choose, const string& fresh_g2,
+         const string& fresh_links, const string& out) {
+    char b[1024];
+    // ---- calibration: the generators' dev hypotheses on S15's choose half, each distinct one once
+    std::map<std::pair<int, string>, ecs::TestTally> cell;
+    std::map<int, ecs::TestTally> pooled;
+    {
+        std::set<string> seen;
+        double n = 0, nt = 0;
+        for (const Hyp& h : hyps) {
+            if (!choose_half(h.s) || !seen.insert(item_key(h)).second) continue;
+            const src::Value v = src::make_value(h.o);
+            const int g = choose.grade(h.s, h.r, v);
+            if (g < 0) continue;
+            n += 1, nt += g;
+            for (const auto& [kg, L] : accepted) {
+                if (kg.second != group_of(h.r)) continue;
+                const TestOutcome o = S.answer(kg.first, h.s, h.r, v);
+                cell[kg].add(g == 1, o), pooled[kg.first].add(g == 1, o);
+            }
+        }
+        std::snprintf(b, sizeof b, "S8D CALIBRATION set: %.0f distinct dev hypotheses of S8a-R1, S8a-R2 and S8b graded on S15's choose half, %.0f true (%.3f)",
+                      n, nt, n > 0 ? nt / n : 0.0);
+        std::cout << b << "\n";
+    }
+    Accepted cal;
+    std::map<std::pair<int, string>, bool> carry;
+    std::cout << "S8D CALIBRATION (add-one; a cell with < 10 graded true or false uses the source's pooled cell; carries a promotion only if LR+ >= 10):\n";
+    auto tl = [&](const ecs::TestTally& t) {
+        std::snprintf(b, sizeof b, "true %3.0f (pos %3.0f neg %3.0f inc %3.0f) false %3.0f (pos %3.0f neg %3.0f inc %3.0f) | pos then true %3.0f/%-3.0f",
+                      t.t_pos + t.t_neg + t.t_inc, t.t_pos, t.t_neg, t.t_inc, t.f_pos + t.f_neg + t.f_inc, t.f_pos, t.f_neg, t.f_inc, t.t_pos,
+                      t.t_pos + t.f_pos);
+        return string(b);
+    };
+    for (const auto& [k, t] : pooled) {
+        const ecs::OutcomeLikelihoods L = ecs::likelihoods_from(t);
+        std::snprintf(b, sizeof b, "  %-7s pooled   %s | LR+ %7.2f", kSrcName[k], tl(t).c_str(), src::positive_lr(L));
+        std::cout << b << "\n";
+    }
+    for (const auto& [kg, L1] : accepted) {
+        bool own = false;
+        const ecs::OutcomeLikelihoods L = src::calibrated_likelihoods(cell[kg], pooled[kg.first], 10.0, &own);
+        cal[kg] = L, carry[kg] = src::may_carry_promotion(L);
+        std::snprintf(b, sizeof b, "  %-7s %-8s %s | uses %-6s LR+ %7.2f BF(neg) %.3f BF(inc) %.3f | read 1 LR+ %7.2f -> %s", kSrcName[kg.first],
+                      kg.second.c_str(), tl(cell[kg]).c_str(), own ? "own" : "pooled", src::positive_lr(L), L.t[1] / L.f[1], L.t[2] / L.f[2],
+                      src::positive_lr(L1), carry[kg] ? "MAY CARRY" : "may not carry");
+        std::cout << b << "\n";
+    }
+    // ---- S8c's dev set again, with the fix and the calibrated sources (the confirm half was read before; nothing is chosen here)
+    {
+        const vector<Stage> st = source_stage(S, hyps, cal, carry, conf);
+        stage_report("DEV-CONFIRM(already read)", hyps, st, out + ".s8d_dev_confirm.tsv");
+        const vector<Stage> sc = source_stage(S, hyps, cal, carry, choose);
+        stage_report("DEV-CHOOSE(calibration set, in-sample)", hyps, sc, out + ".s8d_dev_choose.tsv");
+    }
+    if (fresh_g2.empty()) return;
+    // ---- the fresh set: read once
+    vector<Hyp> fresh;
+    for (const auto& [path, gen] : {std::pair<string, string>{fresh_g2, "G2-fresh"}, {fresh_links, "G6G7-fresh"}}) {
+        auto v = load_hyps(path, gen, "fresh");
+        fresh.insert(fresh.end(), v.begin(), v.end());
+    }
+    std::size_t off_half = 0;
+    for (const Hyp& h : fresh) off_half += choose_half(h.s);
+    std::snprintf(b, sizeof b, "S8D FRESH set: %zu hypotheses (%s, %s), subjects outside the confirm half %zu", fresh.size(), fresh_g2.c_str(),
+                  fresh_links.c_str(), off_half);
+    std::cout << b << "\n";
+    const vector<Stage> st = source_stage(S, fresh, cal, carry, conf);
+    const auto [g, t] = stage_report("FRESH", fresh, st, out + ".s8d_fresh.tsv");
+    std::snprintf(b, sizeof b, "S8D GATE (fresh, supported, each distinct once): graded %.0f, precision %.3f [%.3f, %.3f] -> %s", g, g > 0 ? t / g : 0.0,
+                  ecs::wilson_lower(t, g), ecs::wilson_upper(t, g), g >= 20 && t / g >= 0.9 ? "MET" : "NOT MET");
+    std::cout << b << "\n";
+}
+
 int run(int argc, char** argv) {
     if (argc < 11) {
-        std::fprintf(stderr, "usage: pattern_learn --sources S15_DEV TABLES WD_VALUES SEEDS FACTS_F2 OUT_PREFIX S8A_R1 S8A_R2 S8B_PROMO\n");
+        std::fprintf(stderr, "usage: pattern_learn --sources S15_DEV TABLES WD_VALUES SEEDS FACTS_F2 OUT_PREFIX S8A_R1 S8A_R2 S8B_PROMO "
+                             "[--calibrate | --fresh FRESH_G2 FRESH_LINKS]\n");
         return 2;
     }
     const double t0 = now_s();
     const string s15p = argv[2], tables = argv[3], out = argv[7];
+    bool calibrate = false;  // S8d: calibration on the generators' choose-half hypotheses, and S8c's dev set again
+    string fresh_g2, fresh_links;  // S8d: the fresh confirm-half set, read once
+    for (int i = 11; i < argc; ++i) {
+        const string a = argv[i];
+        if (a == "--calibrate") calibrate = true;
+        else if (a == "--fresh" && i + 2 < argc) fresh_g2 = argv[i + 1], fresh_links = argv[i + 2], i += 2, calibrate = true;
+        else {
+            std::fprintf(stderr, "unknown option %s\n", argv[i]);
+            return 2;
+        }
+    }
     char b[1024];
     // ---- the sources
     Sources S;
@@ -8203,7 +8553,7 @@ int run(int argc, char** argv) {
             const int oi = src::outcome_index(R.o[k]);
             const double bf = std::max(1e-6, it->second.t[oi]) / std::max(1e-6, it->second.f[oi]);
             o *= bf, R.e *= bf;
-            if (R.o[k] != TestOutcome::Inconclusive) R.indep = true, R.by += string(R.by.empty() ? "" : "+") + kSrcName[k];
+            if (R.o[k] == TestOutcome::Positive) R.indep = true, R.by += string(R.by.empty() ? "" : "+") + kSrcName[k];  // S8d: a positive one
         }
         R.post2 = o / (1.0 + o);
         R.supported = R.post2 > 0.9 && R.indep;
@@ -8258,6 +8608,7 @@ int run(int argc, char** argv) {
         for (int k = 0; k < kNSrc; ++k) std::cout << " " << kSrcName[k] << " " << ecs::test_outcome_name(S.answer(k, "India", "capital", v));
         std::cout << "\n";
     }
+    if (calibrate) s8d(S, hyps, accepted, conf, choose, fresh_g2, fresh_links, out);  // S8d (docs/reports/S8D_PROMOTION.md)
     std::snprintf(b, sizeof b, "S8C seconds %.1f", now_s() - t0);
     std::cout << b << "\n";
     return 0;

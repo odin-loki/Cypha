@@ -2030,6 +2030,106 @@ static void test_worlds_S9() {
 }
 
 // ---------------------------------------------------------------------------
+// S8d: support needs a positive independent result; sources calibrated on generator errors (docs/reports/S8D_PROMOTION.md)
+// ---------------------------------------------------------------------------
+
+static void test_decide_S8d() {
+  namespace src = cypha::eval::sources;
+  // Two source tests with three-way likelihoods: positive BF 30, negative BF 0.2, inconclusive BF 0.65 / 0.74.
+  auto hyp = [](const std::string& id) {
+    Hypothesis h;
+    h.id = id, h.key = "capital|" + id + "|X", h.statement = id + " capital X", h.generator = "G2";
+    for (const char* k : {"DB-IB", "GN"}) {
+      HypTest t;
+      t.kind = std::string("S8d ") + k, t.source = k, t.independent = true, t.disconfirmation = true;
+      t.likelihoods.t[0] = 0.30, t.likelihoods.t[1] = 0.05, t.likelihoods.t[2] = 0.65;
+      t.likelihoods.f[0] = 0.01, t.likelihoods.f[1] = 0.25, t.likelihoods.f[2] = 0.74;
+      h.tests.push_back(t);
+    }
+    return h;
+  };
+  HypothesisStore hs;
+  auto start = [&](const Hypothesis& h, double p0) {
+    CHECK(hs.propose(h));
+    CHECK(hs.score(h.id, p0));
+    CHECK(hs.transition(h.id, HypState::Queued, "scored"));
+    CHECK(hs.transition(h.id, HypState::UnderTest, "test"));
+  };
+  // 1. Negative independent results only: never supported, even with the posterior above 0.9 (S8c's India capital Mumbai).
+  start(hyp("h-neg"), 0.999);
+  auto r = hs.record_outcome("h-neg", 0, TestOutcome::Negative);
+  CHECK(r.has_value() && *r == HypState::Queued);
+  const Hypothesis* hn = hs.find("h-neg");
+  CHECK_NEAR(hn->posterior, 199.8 / 200.8, 1e-12);  // odds 999 x 0.2
+  CHECK(has_independent_evidence(*hn));               // the negative is independent evidence ...
+  CHECK(!has_supporting_independent_evidence(*hn));   // ... but not evidence for h
+  CHECK(decide(*hn) == HypState::Queued);
+  CHECK(hs.transition("h-neg", HypState::UnderTest, "test"));
+  r = hs.record_outcome("h-neg", 1, TestOutcome::Negative);
+  CHECK(r.has_value() && *r == HypState::Queued);
+  CHECK_NEAR(hs.find("h-neg")->posterior, 39.96 / 40.96, 1e-12);
+  // 2. A positive independent result supports.
+  start(hyp("h-pos"), 0.5);
+  r = hs.record_outcome("h-pos", 0, TestOutcome::Positive);
+  CHECK(r.has_value() && *r == HypState::Supported);
+  CHECK(has_supporting_independent_evidence(*hs.find("h-pos")));
+  // 3. Negative, then positive: supported once the positive comes and the posterior is above 0.9 (odds 9 x 0.2 x 30 = 54).
+  start(hyp("h-np"), 0.9);
+  r = hs.record_outcome("h-np", 0, TestOutcome::Negative);
+  CHECK(r.has_value() && *r == HypState::Queued);
+  CHECK(hs.transition("h-np", HypState::UnderTest, "test"));
+  r = hs.record_outcome("h-np", 1, TestOutcome::Positive);
+  CHECK(r.has_value() && *r == HypState::Supported);
+  CHECK_NEAR(hs.find("h-np")->posterior, 54.0 / 55.0, 1e-12);
+  const Hypothesis* hnp = hs.find("h-np");
+  CHECK(independent_evidence(*hnp, hnp->tests[0]) && !hnp->tests[0].positive);  // the negative still counts for ECS (Oppose)
+  // 4. A positive from the generator's own source is not independent (I4).
+  Hypothesis g = hyp("h-gen");
+  g.generator = "DB-IB";
+  start(g, 0.5);
+  r = hs.record_outcome("h-gen", 0, TestOutcome::Positive);
+  CHECK(r.has_value() && *r == HypState::Queued && hs.find("h-gen")->posterior > 0.9);
+  // 5. A positive from a test not marked independent (a source under S8d's calibration bar) never supports.
+  Hypothesis w = hyp("h-weak");
+  w.tests[0].independent = false;
+  start(w, 0.5);
+  r = hs.record_outcome("h-weak", 0, TestOutcome::Positive);
+  CHECK(r.has_value() && *r == HypState::Queued && hs.find("h-weak")->posterior > 0.9);
+  CHECK(hs.transition("h-weak", HypState::UnderTest, "test"));
+  r = hs.record_outcome("h-weak", 1, TestOutcome::Positive);  // then an independent one
+  CHECK(r.has_value() && *r == HypState::Supported);
+  // 6. An inconclusive result never supports.
+  start(hyp("h-inc"), 0.95);
+  r = hs.record_outcome("h-inc", 0, TestOutcome::Inconclusive);
+  CHECK(r.has_value() && *r == HypState::Queued && hs.find("h-inc")->posterior > 0.9);
+  CHECK(!has_supporting_independent_evidence(*hs.find("h-inc")));
+  // 7. The null model's walk stops as decide does: after a negative it goes on. From 0.999 with e_obs = 6 (negative then
+  // positive), P(e >= 6 | false) = P(pos) + P(neg) P(pos) + P(inc) P(pos) = 0.01 + 0.0025 + 0.0074. Before S8d the walk
+  // stopped at the negative (posterior 0.995 with "independent evidence"), and the middle path was missing (0.0174).
+  const Hypothesis plan_h = hyp("h-plan");
+  CHECK_NEAR(null_model_pvalue(plan_h.tests, 0.999, 6.0), 0.0199, 1e-12);
+  CHECK_NEAR(null_model_pvalue(plan_h.tests, 0.999, 30.0), 0.01, 1e-12);  // only the first positive reaches 30
+  // 8. Calibration helpers (sources.hpp): a cell under 10 graded true or false uses the pooled tally.
+  TestTally small, big, pooled;
+  small.t_pos = 5, small.t_inc = 4, small.f_neg = 20, small.f_inc = 30;  // 9 true
+  big.t_pos = 30, big.t_inc = 106, big.f_pos = 1, big.f_neg = 100, big.f_inc = 164;  // DB-IB-like: 30 of 31 positives true
+  pooled = big;
+  bool own = true;
+  const OutcomeLikelihoods Ls = src::calibrated_likelihoods(small, pooled, 10.0, &own);
+  CHECK(!own && Ls.t[0] == likelihoods_from(pooled).t[0] && Ls.f[0] == likelihoods_from(pooled).f[0]);
+  const OutcomeLikelihoods Lb = src::calibrated_likelihoods(big, small, 10.0, &own);
+  CHECK(own);
+  CHECK_NEAR(src::positive_lr(Lb), (31.0 / 139.0) / (2.0 / 268.0), 1e-12);
+  CHECK(src::may_carry_promotion(Lb));
+  TestTally lead;  // WP-LEAD-like: positive on 25 of 136 true and 18 of 265 false, never negative
+  lead.t_pos = 25, lead.t_inc = 111, lead.f_pos = 18, lead.f_inc = 247;
+  const OutcomeLikelihoods Ll = likelihoods_from(lead);
+  CHECK_NEAR(src::positive_lr(Ll), (26.0 / 139.0) / (19.0 / 268.0), 1e-12);  // 2.64
+  CHECK(!src::may_carry_promotion(Ll));
+  CHECK(src::positive_lr(OutcomeLikelihoods{}) == 0.0 && !src::may_carry_promotion(OutcomeLikelihoods{}));
+}
+
+// ---------------------------------------------------------------------------
 // S8c: evidence sources and their reliability (sources.hpp)
 // ---------------------------------------------------------------------------
 
@@ -2215,6 +2315,7 @@ int main() {
   test_gen_rules_S8a();
   test_s7c();
   test_worlds_S9();
+  test_decide_S8d();
   test_sources_S8c();
   test_gap_map();
   std::printf("epistemic_test: %d checks, %d failed\n", g_checks, g_failed);
