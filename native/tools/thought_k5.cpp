@@ -966,6 +966,10 @@ static AppStats run_stream(const std::shared_ptr<const Library>& lib, const std:
   if (kind == "dif") {
     dif = std::make_shared<bd::DifApplicability>(8, 20);
     it.set_applicability(dif);
+  } else if (kind == "dif_iso" || kind == "dif_platt") {  // K6: DIF through a calibration map (HANDOFF 5.23)
+    dif = std::make_shared<bd::DifApplicability>(8, 20);
+    it.set_applicability(std::make_shared<bd::CalibratedApplicability>(
+        dif, kind == "dif_iso" ? bd::CalibratedApplicability::Map::Isotonic : bd::CalibratedApplicability::Map::Platt));
   } else {
     it.set_applicability(std::make_shared<bd::BetaApplicability>(kind == "beta_class"));
   }
@@ -1094,9 +1098,111 @@ static int cmd_applicability(const std::string& lib_path) {
   return 0;
 }
 
+/// One row of the calibration tables.
+static void calib_row(const std::string& kind, std::uint64_t seed, const AppStats& st) {
+  const auto ci = boot_ci(st.regret);
+  double s1 = 0, n1 = 0, s0 = 0, n0 = 0;
+  for (std::size_t i = 0; i < st.p_all.size(); ++i) (st.y_all[i] ? (s1 += st.p_all[i], n1 += 1) : (s0 += st.p_all[i], n0 += 1));
+  std::printf("| %s | %llu | %.4f (%zu) | %.4f | %.4f | %.3f | %.4f | [%.4f, %.4f] | %.4f | %.3f / %.3f | %.3f / %.3f |\n",
+              kind.c_str(), static_cast<unsigned long long>(seed), ev::expected_calibration_error(st.p_chosen, st.y_chosen),
+              st.p_chosen.size(), ev::expected_calibration_error(st.p_all, st.y_all), ev::brier_score(st.p_all, st.y_all),
+              st.impasse / static_cast<double>(st.tasks), mean(st.regret), ci.first, ci.second, auroc(st.p_all, st.y_all),
+              n1 ? s1 / n1 : 0.0, n0 ? s0 / n0 : 0.0, mean(st.ood_flag_new), mean(st.ood_flag_known));
+  std::fflush(stdout);
+}
+
+static const char* kCalibHeader =
+    "| model | stream | ECE, chosen (n) | ECE, all pairs | Brier, all | IMPASSE share | mean regret | 95% CI | AUROC | mean P "
+    "applies / not | OOD flagged: new / known |\n|---|---:|---:|---:|---:|---:|---:|---|---:|---|---|\n";
+
+/// K6 (HANDOFF 5.23; docs/reports/K6_K7_CHUNKING_AND_MINING.md section 3): a calibration map of the DIF classifier's
+/// P. Dev seeds 1-3 choose isotonic or Platt; with --read-test MAP, fresh held-out seeds 2001-2003, read once.
+static int cmd_calibration(const std::string& lib_path, bool read_test, const std::string& map) {
+  auto lib = load_library(lib_path);
+  if (!read_test) {
+    std::printf("## K6: calibration map, dev streams (seeds 1-3; training 1,500, held-out 1,000, then 200 new)\n\n%s", kCalibHeader);
+    std::map<std::string, std::vector<double>> regret, ece;
+    for (const std::string kind : {"dif", "dif_iso", "dif_platt"})
+      for (std::uint64_t seed : {1ULL, 2ULL, 3ULL}) {
+        const AppStats st = run_stream(lib, kind, seed, g_train, g_heldout, g_ood);
+        calib_row(kind, seed, st);
+        regret[kind].insert(regret[kind].end(), st.regret.begin(), st.regret.end());
+        ece[kind].push_back(ev::expected_calibration_error(st.p_all, st.y_all));
+      }
+    const double ri = mean(regret["dif_iso"]), rp = mean(regret["dif_platt"]);
+    const double ei = mean(ece["dif_iso"]), ep = mean(ece["dif_platt"]);
+    const std::string pick = std::abs(ri - rp) <= 0.005 ? (ei <= ep ? "iso" : "platt") : (ri < rp ? "iso" : "platt");
+    std::printf("\nDev pooled mean regret: raw %.4f, isotonic %.4f, Platt %.4f; mean all-pairs ECE: raw %.4f, isotonic %.4f, "
+                "Platt %.4f\nDEV CHOICE (lower regret; within 0.005 the lower ECE): %s\n",
+                mean(regret["dif"]), ri, rp, mean(ece["dif"]), ei, ep, pick.c_str());
+    return 0;
+  }
+  const std::string cal = map == "iso" ? "dif_iso" : "dif_platt";
+  std::printf("## K6: calibration map, held-out streams (seeds 2001-2003, read once; map %s)\n\n%s", map.c_str(), kCalibHeader);
+  std::map<std::string, std::vector<AppStats>> all;
+  for (const std::string& kind : {std::string("beta_class"), std::string("beta_pooled"), std::string("dif"), cal})
+    for (std::uint64_t seed : {2001ULL, 2002ULL, 2003ULL}) {
+      AppStats st = run_stream(lib, kind, seed, g_train, g_heldout, g_ood);
+      calib_row(kind, seed, st);
+      all[kind].push_back(std::move(st));
+    }
+  // C1: the calibrated DIF against raw DIF, paired by task (positive = calibrated better)
+  std::printf("\nC1, calibrated against raw DIF (regret saved per task, paired):\n");
+  bool c1 = true;
+  std::vector<double> pa_raw, pa_cal;
+  std::vector<int> ya_raw, ya_cal;
+  for (std::size_t k = 0; k < 3; ++k) {
+    const AppStats& r = all["dif"][k];
+    const AppStats& c = all[cal][k];
+    std::vector<double> d;
+    for (std::size_t i = 0; i < std::min(r.regret.size(), c.regret.size()); ++i) d.push_back(r.regret[i] - c.regret[i]);
+    const auto ci = boot_ci(d);
+    std::printf("  seed %zu: %+.4f [%+.4f, %+.4f]\n", 2001 + k, mean(d), ci.first, ci.second);
+    if (k == 0) c1 = c1 && ci.first > 0.0;
+    else c1 = c1 && mean(d) > 0.0;
+    pa_raw.insert(pa_raw.end(), r.p_all.begin(), r.p_all.end());
+    ya_raw.insert(ya_raw.end(), r.y_all.begin(), r.y_all.end());
+    pa_cal.insert(pa_cal.end(), c.p_all.begin(), c.p_all.end());
+    ya_cal.insert(ya_cal.end(), c.y_all.begin(), c.y_all.end());
+  }
+  const double ece_raw = ev::expected_calibration_error(pa_raw, ya_raw), ece_cal = ev::expected_calibration_error(pa_cal, ya_cal);
+  c1 = c1 && ece_cal <= ece_raw + 0.01;
+  std::printf("  all-pairs ECE pooled: raw %.4f, calibrated %.4f\nC1 (replace raw DIF): %s\n", ece_raw, ece_cal, c1 ? "HOLDS" : "FAILS");
+  // C2: K5's rule 3 unchanged, for the calibrated DIF
+  std::vector<double> rc, rb, ec;
+  for (std::size_t k = 0; k < 3; ++k) {
+    rc.insert(rc.end(), all[cal][k].regret.begin(), all[cal][k].regret.end());
+    rb.insert(rb.end(), all["beta_class"][k].regret.begin(), all["beta_class"][k].regret.end());
+    ec.push_back(ev::expected_calibration_error(all[cal][k].p_chosen, all[cal][k].y_chosen));
+  }
+  const AppStats dev_p = run_stream(lib, "beta_pooled", 1, g_train, g_heldout, 0);
+  const AppStats dev_c = run_stream(lib, cal, 1, g_train, g_heldout, 0);
+  ev::LciInputs in;
+  const AppStats& tp = all["beta_pooled"][0];
+  const AppStats& tc = all[cal][0];
+  for (std::size_t i = 0; i < std::min(tp.regret.size(), tc.regret.size()); ++i) in.test_diffs.push_back(tp.regret[i] - tc.regret[i]);
+  in.eps = 0.0;
+  in.gain_dev = mean(dev_p.regret) - mean(dev_c.regret);
+  in.gain_ext = mean(tp.regret) - mean(tc.regret);
+  for (int k = 0; k < 3; ++k) in.seed_gains.push_back(mean(all["beta_pooled"][static_cast<std::size_t>(k)].regret) - mean(all[cal][static_cast<std::size_t>(k)].regret));
+  in.ece_before = ev::expected_calibration_error(tp.p_all, tp.y_all);
+  in.ece_after = ev::expected_calibration_error(tc.p_all, tc.y_all);
+  in.brier_before = ev::brier_score(tp.p_all, tp.y_all);
+  in.brier_after = ev::brier_score(tc.p_all, tc.y_all);
+  const ev::LciDecision d = ev::compute_lci(in);
+  const double ratio = mean(rb) > 0 ? mean(rc) / mean(rb) : 0.0;
+  const bool c2 = mean(ec) <= 0.10 && ratio <= 1.1 && d.lci >= 0.95;
+  std::printf("\nC2 (K5 rule 3): ECE chosen mean %.4f (<= 0.10), regret %.4f vs Beta-class %.4f, ratio %.2f (<= 1.1), LCI vs "
+              "Beta-pooled: ", mean(ec), mean(rc), mean(rb), ratio);
+  for (const auto& [k, v] : d.components()) std::printf("%s %.4f  ", k.c_str(), v);
+  std::printf("\nC2 (applicability default): %s\n", c2 ? "HOLDS" : "FAILS");
+  return 0;
+}
+
 int main(int argc, char** argv) {
   if (argc < 3) {
-    std::fprintf(stderr, "usage: thought_k5 qa|chains|hyps|monitor|applicability PROCESSES_JSON [ROWS] [--read-test]\n");
+    std::fprintf(stderr, "usage: thought_k5 qa|chains|hyps|monitor|applicability|calibration PROCESSES_JSON [ROWS] "
+                         "[--read-test [iso|platt]]\n");
     return 2;
   }
   const std::string cmd = argv[1], lib = argv[2];
@@ -1111,6 +1217,10 @@ int main(int argc, char** argv) {
       g_ood = std::atoi(argv[5]);
     }
     return cmd_applicability(lib);
+  }
+  if (cmd == "calibration") {  // K6: thought_k5 calibration PROCESSES_JSON [--read-test iso|platt]
+    const bool rt = argc >= 5 && std::string(argv[3]) == "--read-test";
+    return cmd_calibration(lib, rt, rt ? argv[4] : "");
   }
   std::fprintf(stderr, "unknown command\n");
   return 2;

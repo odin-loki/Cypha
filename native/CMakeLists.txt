@@ -2472,6 +2472,24 @@ target_include_directories(thought_k5 PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
 target_link_libraries(thought_k5 PRIVATE cypha_core)
 cypha_mingw_apply_exe_link_options(thought_k5)
+# K6/K7: chunking, process mining with MDL edits, and the DIF calibration map (docs/reports/K6_K7_CHUNKING_AND_MINING.md).
+# Header-only (include/cypha/thought/chunking.hpp, mining.hpp); the test also checks CalibratedApplicability
+# (bindings_cypha.hpp, links cypha_core). thought_k6 runs the benchmarks by hand; see the report for the commands.
+add_executable(thought_k6 tools/thought_k6.cpp)
+target_include_directories(thought_k6 PRIVATE
+  "${CMAKE_CURRENT_SOURCE_DIR}/include"
+  "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
+target_link_libraries(thought_k6 PRIVATE cypha_core)
+cypha_mingw_apply_exe_link_options(thought_k6)
+add_executable(thought_k6_test tools/thought_k6_test.cpp)
+target_include_directories(thought_k6_test PRIVATE
+  "${CMAKE_CURRENT_SOURCE_DIR}/include"
+  "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
+target_link_libraries(thought_k6_test PRIVATE cypha_core)
+cypha_mingw_apply_exe_link_options(thought_k6_test)
+add_test(NAME native_thought_k6_test
+  COMMAND "$<TARGET_FILE:thought_k6_test>" "${CMAKE_CURRENT_SOURCE_DIR}/../docs/thought/processes.json")
+set_tests_properties(native_thought_k6_test PROPERTIES TIMEOUT 300)
 # --- end K4 block -------------------------------------------------------------------------------------
 
 # --- QE geometry: Cypha-side embedding geometry library (docs/EMBEDDING_GEOMETRY.md sections 4.2, 4.5, 5.1, 7.1, 9.3) ----
