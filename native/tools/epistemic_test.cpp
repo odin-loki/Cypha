@@ -7,6 +7,7 @@
 #include "cypha/eval/epistemic.hpp"
 #include "cypha/eval/gap_map.hpp"
 #include "cypha/eval/gen_concepts.hpp"
+#include "cypha/eval/gen_analogy.hpp"
 #include "cypha/eval/gen_links.hpp"
 #include "cypha/eval/gen_rules.hpp"
 #include "cypha/eval/hypothesis.hpp"
@@ -2693,6 +2694,205 @@ static void test_date_links_S4bb() {
   CHECK(!span_within(7, 8, SP{{0, 2}, {4, 7}}));    // just after a date
 }
 
+// ---------------------------------------------------------------------------
+// S11c: G13 anomalies, G3 abduction, G4 and G5 analogy (gen_analogy.hpp)
+// ---------------------------------------------------------------------------
+
+static void test_analogy_S11c() {
+  namespace an = cypha::eval::analogy;
+  // the empirical tail, add-one
+  {
+    an::EmpiricalTail t;
+    for (int v = 1; v <= 99; ++v) t.add(v);
+    CHECK_NEAR(t.upper_p(99), 2.0 / 100.0, 1e-12);
+    CHECK_NEAR(t.upper_p(100), 1.0 / 100.0, 1e-12);
+    CHECK_NEAR(t.upper_p(0), 1.0, 1e-12);
+  }
+  const an::YearOf year_of = [](const std::string& v, int& y) {
+    if (v.empty()) return false;
+    const bool bc = v.size() > 3 && v.compare(v.size() - 3, 3, " BC") == 0;
+    const std::string d = v.substr(0, bc ? v.size() - 3 : std::min<std::size_t>(4, v.size()));
+    for (char c : d)
+      if (c < '0' || c > '9') return false;
+    y = std::stoi(d) * (bc ? -1 : 1);
+    return y != 0;
+  };
+  // ---- G13: one store with each kind
+  TripleStore st;
+  st.add("A", "birth_year", "1900"), st.add("A", "death_year", "1880");                // A1
+  st.add("B", "birth_date", "1850-01-01"), st.add("B", "birth_year", "1851");          // A3
+  st.add("Aristotle", "birth_year", "384"), st.add("Aristotle", "death_year", "322 BC");  // A1, a lost BC sign
+  st.add("Texas", "capital", "Austin"), st.add("Austin", "country", "United States"), st.add("Texas", "located_in", "United States");  // A4, a state
+  st.add("Narnia", "capital", "Paris"), st.add("Paris", "country", "France");          // A4
+  st.add("Org", "founder", "P"), st.add("Org", "founded", "1900"), st.add("P", "birth_year", "1950");  // A5
+  for (int i = 0; i < 40; ++i) {
+    const std::string s = "L" + std::to_string(i);
+    st.add(s, "birth_year", "1800"), st.add(s, "death_year", std::to_string(1860 + i % 20));
+  }
+  st.add("Old", "birth_year", "1700"), st.add("Old", "death_year", "1850");            // A2: 150 years
+  st.add("Mid", "birth_year", "1800"), st.add("Mid", "death_year", "1880");            // 80 years: not in the tail
+  for (int i = 0; i < 40; ++i) {
+    const std::string a = "Sa" + std::to_string(i), b = "Sb" + std::to_string(i);
+    st.add(a, "birth_year", "1900"), st.add(b, "birth_year", std::to_string(1900 + i)), st.add(a, "spouse", b);
+  }
+  st.add("Sx", "birth_year", "1900"), st.add("Sy", "birth_year", "1970"), st.add("Sx", "spouse", "Sy");  // a 70-year gap
+  const auto A = an::find_anomalies(st, year_of);
+  std::map<std::string, int> kinds;
+  for (const auto& a : A) ++kinds[an::anomaly_kind_name(a.kind)];
+  CHECK(kinds["A1_death_before_birth"] == 2 && kinds["A3_year_mismatch"] == 1 && kinds["A4_capital_elsewhere"] == 2 &&
+        kinds["A5_founder_timing"] == 1 && kinds["A2_lifespan_tail"] == 1);
+  CHECK(kinds["A6_spouse_gap"] == 0);  // 41 gaps: add-one p cannot reach 0.005
+  {
+    an::AnomalyConfig cfg;
+    cfg.tail_p = 0.05;
+    int n6 = 0;
+    for (const auto& a : an::find_anomalies(st, year_of, cfg)) {
+      if (a.kind != an::AnomalyKind::SpouseGap) continue;
+      ++n6;
+      CHECK(a.facts[0].o == "Sy" && a.value == 70 && a.link == 0);
+    }
+    CHECK(n6 == 1);
+  }
+  auto find = [&](an::AnomalyKind k, const std::string& s) {
+    for (const auto& a : A)
+      if (a.kind == k && a.facts[0].s == s) return a;
+    return an::Anomaly{};
+  };
+  const an::Anomaly a1 = find(an::AnomalyKind::DeathBeforeBirth, "A");
+  CHECK(a1.facts.size() == 2 && a1.facts[0].r == "birth_year" && a1.facts[1].r == "death_year");
+  if (a1.facts.size() == 2) {
+    an::AnomalyEvidence ev;
+    ev.year_of = year_of;
+    auto x = an::explain_anomaly(a1, ev);  // no sources, no page: the registered order names the death
+    CHECK(x.verdict == an::Verdict::Error && x.wrong == 1 && x.why == "registered order");
+    CHECK_NEAR(x.bits, 4.0, 1e-12);
+    CHECK(std::isinf(x.bits_unusual));
+    ev.sources = [](const an::FactRef& f) { return f.r == "birth_year" ? 1.0 : 2.0; };  // the birth has fewer sources
+    x = an::explain_anomaly(a1, ev);
+    CHECK(x.wrong == 0 && x.why == "fewer sources");
+    ev.sources = [](const an::FactRef&) { return 1.0; };
+    ev.page = [](const an::FactRef& f) { return f.r == "death_year" ? 1 : 0; };  // the page states the death
+    x = an::explain_anomaly(a1, ev);
+    CHECK(x.wrong == 0 && x.why == "page states the others");
+  }
+  if (find(an::AnomalyKind::DeathBeforeBirth, "Aristotle").facts.size() == 2 && find(an::AnomalyKind::YearMismatch, "B").facts.size() == 2) {
+    an::AnomalyEvidence ev;
+    ev.year_of = year_of;
+    const auto x = an::explain_anomaly(find(an::AnomalyKind::DeathBeforeBirth, "Aristotle"), ev);
+    CHECK(x.verdict == an::Verdict::Qualifier && x.wrong == 0 && x.why == "lost BC sign");
+    CHECK_NEAR(x.bits, 1.0, 1e-12);
+    const auto y = an::explain_anomaly(find(an::AnomalyKind::YearMismatch, "B"), ev);
+    CHECK(y.verdict == an::Verdict::Error && y.wrong == 0);  // the year relation, by the registered order
+  }
+  {
+    an::AnomalyEvidence ev;
+    ev.year_of = year_of;
+    ev.contains = [&](const std::string& o, const std::string& i) { return st.has(i, "located_in", o); };
+    ev.ambiguous = [](const std::string& n) { return n == "Paris"; };
+    const auto tx = an::explain_anomaly(find(an::AnomalyKind::CapitalElsewhere, "Texas"), ev);
+    CHECK(tx.verdict == an::Verdict::Qualifier && tx.wrong == -1);
+    const auto nr = an::explain_anomaly(find(an::AnomalyKind::CapitalElsewhere, "Narnia"), ev);
+    CHECK(nr.verdict == an::Verdict::DifferentEntity && nr.wrong == 0);
+    CHECK_NEAR(nr.bits, 2.0, 1e-12);
+    ev.ambiguous = nullptr;
+    const auto ne = an::explain_anomaly(find(an::AnomalyKind::CapitalElsewhere, "Narnia"), ev);
+    CHECK(ne.verdict == an::Verdict::Error && ne.wrong == 0);
+    const an::Anomaly a2 = find(an::AnomalyKind::LifespanTail, "Old");
+    CHECK(a2.value == 150);
+    const auto t2 = an::explain_anomaly(a2, ev);
+    CHECK(t2.verdict == an::Verdict::Error && t2.bits_unusual > t2.bits_error);  // the tail costs more than an error
+    const an::Anomaly a5 = find(an::AnomalyKind::FounderTiming, "Org");
+    CHECK(a5.facts.size() == 3 && a5.linked == "P" && a5.value == 50);
+  }
+  // ---- G3: abduction through a const rule and a path rule
+  {
+    TripleStore g;
+    for (int i = 0; i < 30; ++i) {
+      const std::string p = "poet" + std::to_string(i);
+      g.add(p, "occupation", "Poet"), g.add(p, "occupation", "Writer");
+    }
+    for (int i = 0; i < 60; ++i) g.add("painter" + std::to_string(i), "occupation", "Painter");
+    for (int i = 0; i < 20; ++i) {
+      const std::string x = "x" + std::to_string(i), c = "c" + std::to_string(i), k = i % 2 ? "K1" : "K0";
+      g.add(x, "birth_place", c), g.add(c, "country", k), g.add(x, "nationality", k);
+    }
+    g.add("X", "occupation", "Writer");
+    g.add("Y", "nationality", "K0"), g.add("Y", "occupation", "Painter");
+    const RuleIndex ix(g);
+    const RuleSet rs(ix, mine_rules(ix), true);
+    CHECK(!an::derivable(rs, "X", "occupation", "Writer"));
+    const auto ex = an::abduce(ix, rs, "X", "occupation", "Writer", [](const an::FactRef&) { return 3.0; });
+    const auto rf = an::ranked_facts(ex);
+    CHECK(!rf.empty() && rf.front().first == (an::FactRef{"X", "occupation", "Poet"}));
+    CHECK(!ex.empty() && ex.front().bits >= 3.0 && ex.front().bits < 3.5);
+    CHECK(an::derivable(rs, "poet0", "occupation", "Writer"));
+    // the path rule birth_place(X, Z) & country(Z, Y) => nationality(X, Y): the missing birth place, c0 cheapest
+    auto bits = [](const an::FactRef& f) { return f.o == "c0" ? 1.0 : 5.0; };
+    const auto rp = an::ranked_facts(an::abduce(ix, rs, "Y", "nationality", "K0", bits));
+    CHECK(!rp.empty() && rp.front().first == (an::FactRef{"Y", "birth_place", "c0"}));
+    bool odd = false;
+    for (const auto& [f, b] : rp) odd = odd || f.o == "c1";  // c1 is in K1: never proposed for K0
+    CHECK(!odd);
+    TripleStore g2 = g;
+    g2.add("X", "occupation", "Poet");
+    const RuleIndex ix2(g2);
+    const RuleSet rs2(ix2, mine_rules(ix2), true);
+    CHECK(an::derivable(rs2, "X", "occupation", "Writer"));
+    CHECK(an::abduce(ix2, rs2, "X", "occupation", "Writer", [](const an::FactRef&) { return 3.0; }).empty() ||
+          an::ranked_facts(an::abduce(ix2, rs2, "X", "occupation", "Writer", [](const an::FactRef&) { return 3.0; })).front().first.o != "Poet");
+  }
+  // ---- G4: equality and path roles, the guards
+  {
+    TripleStore g;
+    g.add("S1", "capital", "a1"), g.add("S1", "largest_city", "a1"), g.add("S1", "currency", "Euro"), g.add("S1", "language", "French"),
+        g.add("S1", "located_in", "Europe");
+    g.add("T", "capital", "t1"), g.add("T", "currency", "Euro"), g.add("T", "language", "French"), g.add("T", "located_in", "Europe");
+    g.add("S2", "largest_city", "s2c"), g.add("S2", "currency", "Euro"), g.add("S2", "language", "French");  // two aligned: no analog
+    const auto an1 = an::find_analogs(g, "T", "largest_city");
+    CHECK(an1.size() == 1 && an1.front().s == "S1" && an1.front().aligned == 4 && an1.front().identical == 3);
+    const auto tr0 = an::transfer(g, an1, "T", "largest_city", 0.0);
+    CHECK(tr0.size() == 1 && tr0.front().first == "t1");
+    CHECK_NEAR(tr0.empty() ? 0.0 : tr0.front().second, 4.0, 1e-12);
+    const auto tr1 = an::transfer(g, an1, "T", "largest_city", 1.0);
+    bool has_a1 = false, has_t1 = false;
+    for (const auto& [o, s] : tr1) has_a1 = has_a1 || o == "a1", has_t1 = has_t1 || o == "t1";
+    CHECK(has_a1 && has_t1 && tr1.size() == 2);
+    an::AnalogConfig strict;
+    strict.min_identical = 4;
+    CHECK(an::find_analogs(g, "T", "largest_city", strict).empty());
+    TripleStore h;
+    h.add("Sp", "birth_place", "Lyon"), h.add("Lyon", "country", "France"), h.add("Sp", "nationality", "France");
+    h.add("Sp", "occupation", "Writer"), h.add("Sp", "genre", "Novel"), h.add("Sp", "language", "French");
+    h.add("Tp", "birth_place", "Munich"), h.add("Munich", "country", "Germany");
+    h.add("Tp", "occupation", "Writer"), h.add("Tp", "genre", "Novel"), h.add("Tp", "language", "French");
+    const auto an2 = an::find_analogs(h, "Tp", "nationality");
+    CHECK(an2.size() == 1 && an2.front().higher == 1 && an2.front().sys == 5);
+    const auto tr2 = an::transfer(h, an2, "Tp", "nationality", 0.0);
+    CHECK(!tr2.empty() && tr2.front().first == "Germany");
+  }
+  // ---- G5: words, entity vectors and the relation offset
+  {
+    CHECK(an::WordVectors::words_of("New York City") == (std::vector<std::string>{"new", "york", "city"}));
+    CHECK(an::WordVectors::words_of("C\xc3\xb4te d'Ivoire") == (std::vector<std::string>{"c\xc3\xb4te", "d", "ivoire"}));
+    CHECK(an::WordVectors::words_of("\xc3\x89ire") == (std::vector<std::string>{"\xc3\xa9ire"}));
+    an::WordVectors wv;
+    wv.add("france", {1, 0, 0, 0}), wv.add("germany", {0, 1, 0, 0}), wv.add("italy", {0, 0, 1, 0});
+    wv.add("paris", {1, 0, 0, 1}), wv.add("berlin", {0, 1, 0, 1}), wv.add("rome", {0, 0, 1, 1}), wv.add("venice", {0, 0, 1, -1});
+    CHECK(wv.size() == 7 && wv.dim() == 4 && wv.entity("Atlantis").empty());
+    CHECK_NEAR(an::cosine(wv.entity("Paris"), {1, 0, 0, 1}), 1.0, 1e-6);
+    TripleStore g;
+    g.add("France", "capital", "Paris"), g.add("Germany", "capital", "Berlin"), g.add("Italy", "language", "Italian");
+    const an::VectorAnalogy va(g, wv);
+    CHECK(va.has("capital") && va.facts_used("capital") == 2.0 && !va.has("language"));
+    const auto q = va.query("Italy", "capital");
+    double r = 0, p = 0, bn = 0, vn = 0;
+    CHECK(va.score(q, "Rome", r) && va.score(q, "Paris", p) && va.score(q, "Berlin", bn) && va.score(q, "Venice", vn));
+    CHECK(r > p + 0.1 && r > bn + 0.1 && r > vn + 0.1);  // the offset, not Italy's own vector, separates Rome from Venice
+    double z = 0;
+    CHECK(!va.score(q, "Atlantis", z) && va.query("Atlantis", "capital").empty());
+  }
+}
+
 static void test_gap_map() {
   // The gap id CyphaLM writes (cyphalm_trie dktext rows and its dev tags).
   CHECK_STR(gap_id("Honduras", "capital"), "G-AEC1");
@@ -2935,6 +3135,7 @@ int main() {
   test_curiosity_S10();
   test_concepts_S11a();
   test_date_links_S4bb();
+  test_analogy_S11c();
   std::printf("epistemic_test: %d checks, %d failed\n", g_checks, g_failed);
   return g_failed == 0 ? 0 : 1;
 }
