@@ -220,6 +220,7 @@
 //   ./cyphalm_trie selftest
 
 #include "cypha/cyphalm/class_context.hpp"
+#include "cypha/cyphalm/doc_cache.hpp"
 #include "cypha/cyphalm/evidence.hpp"
 #include "cypha/cyphalm/fm_infinigram.hpp"
 #include "cypha/cyphalm/packed_trie.hpp"
@@ -246,6 +247,7 @@
 
 using namespace cypha::cyphalm::trie;
 using cypha::cyphalm::ClassContext;
+using cypha::cyphalm::DocTopic;
 using cypha::cyphalm::FmInfiniGram;
 using cypha::cyphalm::SimilarContext;
 namespace evidence = cypha::cyphalm::evidence;
@@ -284,6 +286,7 @@ struct Args {
     std::string plant, part;                      // S4b surprise: the planted pages (D), --part K/N
     std::string fam_ent;                          // ANS: the entity's frames before the token (--fam-ent)
     bool copy_dk = false, fam_read = false;       // ANS: copy inside don't-know answers; FAMREAD / FAMDOLLY
+    std::string doc;                              // GEN-C: document experts in sample (--doc SPEC; off by default)
 };
 
 std::string env_or(const char* name, const char* fallback) {
@@ -342,6 +345,7 @@ Args parse(int argc, char** argv, int from) {
         else if (s == "--fam-ent") a.fam_ent = next();
         else if (s == "--copy-dk") a.copy_dk = true;
         else if (s == "--fam-read") a.fam_read = true;
+        else if (s == "--doc") a.doc = next();
         else if (s.rfind("--", 0) == 0) {
             std::cerr << "unknown option " << s << "\n";
             a.ok = false;
@@ -668,9 +672,15 @@ constexpr int kBuckets = 28;
 void fit_lambdas(const std::vector<double>& pe, const std::vector<double>& pb, const std::vector<int>& bk,
                  std::size_t upto, int nb, double* lam);
 std::unique_ptr<SimilarContext> default_sim(const Args& a, const std::uint8_t* text, std::size_t n, int& rc);
+// GEN-C (PLAN B5), defined below with the similar-context expert: the document experts of --doc SPEC, and their
+// lambdas fit on the first half of the holdout over cur (cur is then mixed with them; its second half is the read).
+std::unique_ptr<DocTopic> make_doc(const Args& a, const std::uint8_t* text, std::size_t n, int& rc);
+std::vector<std::vector<double>> fit_doc(const DocTopic& dt, const std::uint8_t* data, std::size_t train, std::size_t half,
+                                         std::vector<double>& cur);
 std::string sample_with_class(const PackedModel& model, const double w[6], std::size_t limit, const ClassContext* cc,
                               const double* lam, const std::string& prompt, int n, std::uint32_t seed,
-                              const SimilarContext* sc, const double* lsm, double temperature, const double* lcp);
+                              const SimilarContext* sc, const double* lsm, double temperature, const double* lcp,
+                              const DocTopic* dt = nullptr, const std::vector<std::vector<double>>* ldoc = nullptr);
 // B4C, defined below with the copy and class experts: the class and copy experts where they are defaults.
 std::string default_cls_spec(const Args& a);
 std::unique_ptr<ClassContext> default_cls(const Args& a, const std::uint8_t* text, std::size_t n, int& rc);
@@ -1004,12 +1014,16 @@ int cmd_sample(const Args& a) {
     if (rc) return rc;
     const auto sc = default_sim(a, data.data(), cfg.train, rc);
     if (rc) return rc;
+    const auto dt = make_doc(a, data.data(), cfg.train, rc);  // GEN-C: nullptr without --doc
+    if (rc) return rc;
     double lsm[SimilarContext::kBuckets] = {0};
     std::vector<double> lcl, lcp;
-    if (cc || sc || !a.no_copy) {
+    std::vector<std::vector<double>> ldoc;
+    if (cc || sc || !a.no_copy || dt) {
         const std::size_t half = (cfg.sample - cfg.train) / 2;
-        std::vector<double> pt(half);
-        for (std::size_t k = 0; k < half; ++k) {
+        const std::size_t span = dt ? cfg.sample - cfg.train : half;  // GEN-C: the second half is --doc's read
+        std::vector<double> pt(span);
+        for (std::size_t k = 0; k < span; ++k) {
             const std::size_t i = cfg.train + k;
             double e[5][256], M[256];
             bool em = false;
@@ -1020,23 +1034,25 @@ int cmd_sample(const Args& a) {
         }
         if (cc) lcl = mix_cls_into(*cc, data.data(), cfg.train, half, pt);
         if (sc) {
-            std::vector<double> ps(half);
-            std::vector<int> sb(half);
-            for (std::size_t k = 0; k < half; ++k) {
+            std::vector<double> ps(span);
+            std::vector<int> sb(span);
+            for (std::size_t k = 0; k < span; ++k) {
                 double P[256];
                 sb[k] = SimilarContext::bucket(sc->predict(data.data(), cfg.train + k, P));
                 ps[k] = P[data[cfg.train + k]];
             }
             fit_lambdas(ps, pt, sb, half, SimilarContext::kBuckets, lsm);
-            for (std::size_t k = 0; k < half; ++k) pt[k] = lsm[sb[k]] * ps[k] + (1 - lsm[sb[k]]) * pt[k];
+            for (std::size_t k = 0; k < span; ++k) pt[k] = lsm[sb[k]] * ps[k] + (1 - lsm[sb[k]]) * pt[k];
         }
         if (!a.no_copy) lcp = mix_copy_into(data.data(), cfg.train, half, a.copy_min, pt);
+        if (dt) ldoc = fit_doc(*dt, data.data(), cfg.train, half, pt);
     }
-    const bool experts = cc || sc || !lcp.empty();
+    const bool experts = cc || sc || !lcp.empty() || dt;
     std::string model_line = std::string("MODEL\ttrie") + (cc ? "+cls" : "") + (sc ? "+sim" : "") + (lcp.empty() ? "" : "+copy") +
                              "\t" + (sc ? (a.sims.empty() ? std::string("default") : a.sims[0]) : std::string("-"));
     if (cc) model_line += "\tcls=" + default_cls_spec(a);
     if (!lcp.empty()) model_line += "\tcopy_min=" + std::to_string(a.copy_min);
+    if (dt) model_line += "\tdoc=" + a.doc;
     const double temps[3] = {0.6, 0.8, 1.0};
     for (std::size_t f = 0; f < nfiles; ++f) {
         std::ofstream out(a.outs[f]);
@@ -1057,7 +1073,8 @@ int cmd_sample(const Args& a) {
                 const auto seed32 = static_cast<std::uint32_t>(seed ^ (seed >> 32));
                 const std::string text =
                     experts ? sample_with_class(pm, w, cfg.train, cc.get(), lcl.empty() ? nullptr : lcl.data(), p, a.bytes,
-                                                seed32, sc.get(), lsm, temps[ti], lcp.empty() ? nullptr : lcp.data())
+                                                seed32, sc.get(), lsm, temps[ti], lcp.empty() ? nullptr : lcp.data(),
+                                                dt.get(), dt ? &ldoc : nullptr)
                             : sample_continuation(pm, w, p, cfg.train, a.bytes, seed32, opt);
                 char kind[32];
                 std::snprintf(kind, sizeof kind, "trie_T%.1f", temps[ti]);
@@ -1495,6 +1512,150 @@ std::unique_ptr<SimilarContext> default_sim(const Args& a, const std::uint8_t* t
     return sc;
 }
 
+// GEN-C (PLAN B5): --doc SPEC, the document experts in sample. SPEC is "default" (trig,cache: the setting chosen on
+// dev, docs/reports/GEN_TRACK.md "GEN-C") or a comma list of parts (trig, cache, topic), frozen (in sample the document
+// state is the prompt's alone; the holdout fit is unchanged) and settings: cand=N (candidate
+// words a part), per=N (triggers a word), stop=N (stop list size), mindf=N, minco=N, words=N (content words a training
+// document gives to pairs), topk=N, topict=X (topic temperature), every=N (topic refresh). The parts are built over
+// the train bytes; the topic part reads the similar-context expert's projected vectors (sim_vectors_path()).
+std::unique_ptr<DocTopic> make_doc(const Args& a, const std::uint8_t* text, std::size_t n, int& rc) {
+    rc = 0;
+    if (a.doc.empty()) return nullptr;
+    DocTopic::Params p;
+    p.trig = p.cache = p.topic = false;
+    const std::string spec = a.doc == "default" ? std::string("trig,cache") : a.doc;
+    for (const auto& f : split(spec, ',')) {
+        const std::size_t eq = f.find('=');
+        const std::string k = f.substr(0, eq), v = eq == std::string::npos ? "" : f.substr(eq + 1);
+        if (k == "trig") p.trig = true;
+        else if (k == "cache") p.cache = true;
+        else if (k == "topic") p.topic = true;
+        else if (k == "frozen") p.frozen = true;
+        else if (k == "cand") p.cand = std::atoi(v.c_str());
+        else if (k == "per") p.per_source = std::atoi(v.c_str());
+        else if (k == "stop") p.stop_top = std::atoi(v.c_str());
+        else if (k == "mindf") p.min_df = std::atoi(v.c_str());
+        else if (k == "minco") p.min_co = std::atoi(v.c_str());
+        else if (k == "words") p.max_doc_words = std::atoi(v.c_str());
+        else if (k == "topk") p.topic_k = std::atoi(v.c_str());
+        else if (k == "topict") p.topic_temp = std::atof(v.c_str());
+        else if (k == "every") p.topic_every = std::atoi(v.c_str());
+        else {
+            std::cerr << "--doc: unknown field '" << f << "'\n";
+            rc = 2;
+            return nullptr;
+        }
+    }
+    if (!(p.trig || p.cache || p.topic) || p.cand < 1 || p.per_source < 1 || p.topic_k < 1 || !(p.topic_temp > 0) ||
+        p.topic_every < 1) {
+        std::cerr << "--doc " << a.doc << ": no part, or a bad setting\n";
+        rc = 2;
+        return nullptr;
+    }
+    auto dt = std::make_unique<DocTopic>(p);
+    if (p.topic) {
+        std::string err;
+        const SimilarContext::Vectors V = SimilarContext::load_projected(sim_vectors_path(), err);
+        if (!err.empty() || !V.projected()) {
+            std::cerr << "--doc topic: " << (err.empty() ? std::string("no projected vectors") : err) << "\n";
+            rc = 1;
+            return nullptr;
+        }
+        std::unordered_map<std::string, std::vector<float>> rows;
+        for (const auto& [word, r] : V.id) {
+            std::vector<float> x(static_cast<std::size_t>(V.d));
+            for (int d = 0; d < V.d; ++d)
+                x[static_cast<std::size_t>(d)] = V.scale[static_cast<std::size_t>(r)] * V.q[static_cast<std::size_t>(r) * V.d + d];
+            rows.emplace(DocTopic::lower(word), std::move(x));
+        }
+        dt->set_vectors(V.d, std::move(rows));
+    }
+    const auto t0 = std::chrono::steady_clock::now();
+    dt->build(text, n);
+    std::cerr << "doc " << spec << " docs " << dt->docs() << " vocab " << dt->vocab() << " trigger_pairs "
+              << dt->trigger_pairs() << " topic_words " << dt->topic_words() << " build_s "
+              << std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count() << "\n";
+    return dt;
+}
+
+// GEN-C: each part's next-byte distribution over the holdout (one stream from the train end, reset at "<page>"),
+// its lambdas fit on k < half over cur, cur mixed with it, in DocTopic's part order. The read: bits a byte on
+// [half, cur.size()) before and after, with a bootstrap over 16 KiB blocks, and split by the byte's offset in its
+// document (under and over 4 KiB). Printed to stderr with a DOC prefix.
+std::vector<std::vector<double>> fit_doc(const DocTopic& dt, const std::uint8_t* data, std::size_t train, std::size_t half,
+                                         std::vector<double>& cur) {
+    const std::size_t span = cur.size();
+    const auto& p = dt.params();
+    const bool on[DocTopic::kParts] = {p.trig, p.cache, p.topic};
+    std::vector<double> pe[DocTopic::kParts];
+    std::vector<int> bk[DocTopic::kParts];
+    for (int q = 0; q < DocTopic::kParts; ++q)
+        if (on[q]) pe[q].resize(span), bk[q].resize(span);
+    std::vector<std::uint32_t> off(span);
+    DocTopic::Stream st(dt);
+    std::size_t page = 0;
+    const auto t0 = std::chrono::steady_clock::now();
+    for (std::size_t k = 0; k < span; ++k) {
+        const std::size_t i = train + k;
+        for (int q = 0; q < DocTopic::kParts; ++q)
+            if (on[q]) {
+                double P[256];
+                bk[q][k] = st.predict(q, P);
+                pe[q][k] = P[data[i]];
+            }
+        if (k >= 6 && std::memcmp(data + i - 6, "<page>", 6) == 0) page = k - 6;
+        off[k] = static_cast<std::uint32_t>(std::min<std::size_t>(k - page, 0xffffffffu));
+        st.feed(data[i]);
+    }
+    const std::vector<double> before = cur;
+    std::vector<std::vector<double>> lam(DocTopic::kParts);
+    for (int q = 0; q < DocTopic::kParts; ++q)
+        if (on[q]) lam[static_cast<std::size_t>(q)] = mix_into(pe[q], bk[q], half, DocTopic::kBuckets, cur);
+    static const char* const name[DocTopic::kParts] = {"trig", "cache", "topic"};
+    for (int q = 0; q < DocTopic::kParts; ++q) {
+        if (!on[q]) continue;
+        std::cerr << "DOC lambdas " << name[q];
+        for (double l : lam[static_cast<std::size_t>(q)]) std::cerr << " " << l;
+        std::cerr << "\n";
+    }
+    if (span > half) {
+        const std::size_t B = 16384;
+        std::vector<double> diff;  // mean bits a byte, after minus before, a block
+        double sb = 0, sa = 0, lb[2] = {0, 0}, la[2] = {0, 0}, ln[2] = {0, 0};
+        for (std::size_t s0 = half; s0 < span; s0 += B) {
+            const std::size_t s1 = std::min(span, s0 + B);
+            double d = 0;
+            for (std::size_t k = s0; k < s1; ++k) {
+                const double b0 = -std::log2(before[k]), b1 = -std::log2(cur[k]);
+                sb += b0, sa += b1, d += b1 - b0;
+                const int g = off[k] >= 4096;
+                lb[g] += b0, la[g] += b1, ln[g] += 1;
+            }
+            diff.push_back(d / static_cast<double>(s1 - s0));
+        }
+        const double n = static_cast<double>(span - half);
+        std::mt19937_64 rng(20261029);
+        std::vector<double> bs(2000);
+        for (double& x : bs) {
+            double m = 0;
+            for (std::size_t j = 0; j < diff.size(); ++j) m += diff[rng() % diff.size()];
+            x = m / static_cast<double>(diff.size());
+        }
+        std::sort(bs.begin(), bs.end());
+        double mean = 0;
+        for (double d : diff) mean += d;
+        mean /= static_cast<double>(diff.size());
+        std::fprintf(stderr, "DOC read [half, end) bytes %.0f bpc before %.6f after %.6f diff %.6f ci95 %.6f %.6f blocks %zu\n",
+                     n, sb / n, sa / n, mean, bs[50], bs[1949], diff.size());
+        for (int g = 0; g < 2; ++g)
+            if (ln[g] > 0)
+                std::fprintf(stderr, "DOC read offset %s 4KiB bytes %.0f bpc before %.6f after %.6f diff %.6f\n",
+                             g ? ">=" : "<", ln[g], lb[g] / ln[g], la[g] / ln[g], (la[g] - lb[g]) / ln[g]);
+    }
+    std::cerr << "DOC fit_s " << std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count() << "\n";
+    return lam;
+}
+
 // simvec [wiki] --sim SPEC --out FILE (A4): the expert of SPEC built over the train bytes; its projected word rows
 // written as the file the default reads.
 int cmd_simvec(const Args& a) {
@@ -1650,10 +1811,17 @@ void print_boot(const std::string& name, const Boot& b) {
 std::string sample_with_class(const PackedModel& model, const double w[6], std::size_t limit, const ClassContext* cc,
                               const double* lam, const std::string& prompt, int n, std::uint32_t seed,
                               const SimilarContext* sc = nullptr, const double* lsm = nullptr, double temperature = 0.8,
-                              const double* lcp = nullptr) {
+                              const double* lcp = nullptr, const DocTopic* dt,
+                              const std::vector<std::vector<double>>* ldoc) {
     std::vector<std::uint8_t> seq(prompt.begin(), prompt.end());
     std::mt19937 rng(seed);
     std::uniform_real_distribution<double> U(0.0, 1.0);
+    std::unique_ptr<DocTopic::Stream> ds;  // GEN-C: the document experts read the prompt and what is written
+    if (dt && ldoc) {
+        ds = std::make_unique<DocTopic::Stream>(*dt);
+        ds->feed(seq.data(), seq.size());
+        if (dt->params().frozen) ds->freeze();  // GEN-C amendment: the prompt alone is the document state
+    }
     for (int t = 0; t < n; ++t) {
         double e[5][256], M[256];
         bool matched = false;
@@ -1677,6 +1845,14 @@ std::string sample_with_class(const PackedModel& model, const double w[6], std::
             for (int s = 0; s < 256; ++s) M[s] *= 1 - l;
             M[c] += l;
         }
+        if (ds)  // GEN-C: the document experts, mixed after the copy expert, in DocTopic's part order
+            for (int part = 0; part < DocTopic::kParts; ++part) {
+                const auto& lp = (*ldoc)[static_cast<std::size_t>(part)];
+                if (lp.empty()) continue;
+                double P[256];
+                const double l = lp[static_cast<std::size_t>(ds->predict(part, P))];
+                for (int s = 0; s < 256; ++s) M[s] = l * P[s] + (1 - l) * M[s];
+            }
         bool banned[256];
         mark_banned(seq, banned);
         double p[256], mass = 0;
@@ -1703,6 +1879,7 @@ std::string sample_with_class(const PackedModel& model, const double w[6], std::
                 break;
             }
         seq.push_back(static_cast<std::uint8_t>(pick));
+        if (ds) ds->feed(static_cast<std::uint8_t>(pick));
     }
     return std::string(seq.begin() + static_cast<std::ptrdiff_t>(prompt.size()), seq.end());
 }
@@ -4655,6 +4832,48 @@ int cmd_selftest() {
         }
         if (!causal || differs < 10) {
             std::cerr << "selftest: similar-context online keys (A4d) read a byte not yet scored, or are never used\n";
+            return 1;
+        }
+    }
+    {  // GEN-C: the document experts on a toy corpus (they print nothing unless they fail)
+        std::string corpus;
+        for (int d = 0; d < 40; ++d) {
+            corpus += "<page> ";
+            corpus += d % 2 == 0 ? "Agamemnon sailed to Troy with Achilles and the Greek army. Troy fell. "
+                                 : "The pianist played Chopin and Liszt in Vienna. Vienna loved Chopin. ";
+            corpus += "the of and a to in is ";
+        }
+        DocTopic::Params dp;
+        dp.stop_top = 8, dp.min_df = 2, dp.min_co = 2;
+        DocTopic toy(dp);
+        toy.build(reinterpret_cast<const std::uint8_t*>(corpus.data()), corpus.size());
+        bool ach = false, cho = false;
+        for (const auto& [wd, x] : toy.triggers("troy")) ach |= wd == "achilles", cho |= wd == "chopin";
+        bool back = false;  // a trigger pair works both ways
+        for (const auto& [wd, x] : toy.triggers("achilles")) back |= wd == "troy";
+        ach = ach && back;
+        DocTopic::Stream st(toy);
+        double P[256];
+        bool okd = toy.docs() == 40 && ach && !cho && st.predict(DocTopic::kTrig, P) == 0;
+        const std::string pr = "<page> Agamemnon ";
+        st.feed(reinterpret_cast<const std::uint8_t*>(pr.data()), pr.size());
+        const int b = st.predict(DocTopic::kTrig, P);
+        double sum = 0;
+        for (double x : P) sum += x;
+        okd = okd && b > 0 && std::fabs(sum - 1) < 1e-9 && P['T'] > 0 && P['C'] == 0;  // Troy, never Chopin
+        st.feed(reinterpret_cast<const std::uint8_t*>("Tr"), 2);
+        okd = okd && st.predict(DocTopic::kTrig, P) > 0 && P['o'] > 0.99;  // "Tr" goes on as "Troy"
+        st.feed(reinterpret_cast<const std::uint8_t*>(" <page> "), 8);
+        okd = okd && st.predict(DocTopic::kTrig, P) == 0 && st.predict(DocTopic::kCache, P) == 0;  // a new page forgets
+        DocTopic::Stream fz(toy);  // frozen: words after freeze() change nothing
+        const std::string p2 = "<page> Agamemnon ", p3 = "Chopin Liszt Vienna ";
+        fz.feed(reinterpret_cast<const std::uint8_t*>(p2.data()), p2.size());
+        fz.freeze();
+        fz.feed(reinterpret_cast<const std::uint8_t*>(p3.data()), p3.size());
+        okd = okd && fz.predict(DocTopic::kTrig, P) > 0 && P['L'] == 0 && P['T'] > 0 &&
+              fz.predict(DocTopic::kCache, P) > 0 && P['C'] == 0 && P['A'] > 0.99;
+        if (!okd) {
+            std::cerr << "selftest: document experts (GEN-C) wrong on the toy corpus\n";
             return 1;
         }
     }
