@@ -528,4 +528,18 @@ inline bool span_within(int b, int e, const std::vector<std::pair<int, int>>& sp
   return false;
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
+// S4d (docs/reports/S4_UNSEEN_AND_FRONTIER.md, "S4d"): fresh pools and streams, and a second alarm threshold.
+
+/// The article pages from kSignalPlainFrom (not lists, disambiguation pages, namespaces or redirects), by their
+/// qualifying index q in dump order: S4c's control P took q % 4 = 0, S4d's control P2 takes q % 4 = 2, and S4d's
+/// fresh unshifted stream F reads q % 4 in {1, 3}.
+enum class SignalFreshPart { P, F, P2 };
+inline SignalFreshPart signal_fresh_part(std::size_t q) {
+  return q % 4 == 0 ? SignalFreshPart::P : q % 4 == 2 ? SignalFreshPart::P2 : SignalFreshPart::F;
+}
+
+/// S4d's second alarm threshold, read beside SignalRule's A = 20,000 on the same replicates.
+inline constexpr double kSignalAHigh = 100000.0;
+
 }  // namespace cypha::eval

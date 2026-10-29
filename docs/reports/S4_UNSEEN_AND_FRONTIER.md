@@ -898,3 +898,296 @@ D=$A/d_rows.tsv,$A/d2_rows.tsv,$Q/E1a.rows.tsv,$Q/E1b.rows.tsv,$Q/E1c.rows.tsv,$
 ./pattern_learn $E OUT --cv --wikidata $W --dev $DEV --gaps OUT/gap_map.tsv --demand $D --parse $A/parse_dev.tsv \
   --signals OUT --signals-dolly /root/work/s4b/runs/dolly_pages.xml --signals-gaps OUT/signal_gaps.tsv --signals-scope u-dev
 ```
+
+## S4d: a fresh own-voice pool, TF-IDF novelty for new page types, and the alarm threshold (registered 2026-10-29, before any run)
+
+**Odin Loch** · 2026-10-29 · follows S4c's "For Odin" and HANDOFF §5.16 and §5.17 · Odin, 2026-10-29: "Continue. Do all."
+
+(The pools, the reads, the rules and the predictions below were written and committed before any S4d score was computed. Results and decisions are added under them.)
+
+**Task.** Odin's "do all" turns three open questions into registered reads:
+1. **(a) The out-of-scope gate on an own-voice pool.** S4c's Dolly pages were mostly encyclopedic prose, in scope by content. Read the gate on a fresh pool written in an assistant's own voice.
+2. **(b) TF-IDF novelty (O5) beside the vocabulary signal (V) for new page types.** S4c saw O5 detect list and disambiguation pages faster than V, but that was not its gate. Register it and read it once on a fresh pool.
+3. **(c) The alarm threshold.** Runs of pages on one topic raised S4b's false alarms (taxonomy pages for V, American football pages for Σ). Is A = 100,000 better than S4b's A = 20,000? Decide by measurement on fresh streams.
+4. **(d) A `scope` gap kind** for DISCOVERY §3.2, as proposed text (below, after the results).
+
+**Rule 10.** These are Cypha's self-assessment signals. They watch what Cypha reads. They never answer a question, never feed a gate or a tag, and never change a fact.
+
+### What was looked at before this was written
+
+- Counts only, with no score of any kind: oasst1 has 88,838 "ready" messages, of which 24,258 are English assistant replies that passed review. The pool rule below keeps one reply for 3,344 of its conversation trees.
+- Three rendered OASST replies were read by eye to check the Markdown rendering (an answer about Socrates, one about a child's fall, one about Aristotle's physics), and one more (a TensorFlow answer).
+- enwik8 holds 93 namespace pages, all in the Wikipedia namespace, all after byte 7,340,032. No other page type is unread by every S4 reader: every list and disambiguation page after byte 9,437,184 is in S4b's L, and every other article type was read in C or S.
+
+### Data (provenance)
+
+- **OpenAssistant oasst1**, Hugging Face `OpenAssistant/oasst1` at revision `fdf72ae0827c1cda404aff25b6603abec9e3399b` (2023-05-02), file `2023-04-12_oasst_ready.messages.jsonl.gz` (sha256 `286a6e9a5a413b3272ae9c0b5a20d327983dea1c24342ae28cb244a6da65185c`). Licence: Apache-2.0 (the dataset's LICENSE file). Kept outside the repository, in `/root/work/s4d/data/oasst1`. It was written in 2023, by volunteers writing as an assistant.
+- **Dolly**, `/root/cdata/dolly.jsonl` (the GitHub copy, as S4b).
+- **enwik8**, as everywhere in S4.
+
+### The pools and streams (fixed now; `scripts/s4d_pools.py`)
+
+| Name | What | Dev | Test |
+|---|---|---|---|
+| **O** (own voice, the gate's pool) | oasst1: one English assistant reply per conversation tree. Among the replies to the tree's root prompt that are not deleted, passed review, are not synthetic and keep at least 256 bytes after rendering: the lowest rank (no rank last), then the earliest, then the smallest message id. Markdown is rendered to plain lines: fenced code removed; headings, tables and images dropped; links become their words; URLs, inline-code ticks, emphasis markers and HTML tags removed; `*` and `+` list items written as `- item` | trees whose SHA-256 of the tree id starts with an even byte (1,651 pages) | odd (1,693 pages) |
+| **Y** (Dolly's own voice, reported) | Dolly brainstorming and creative-writing responses of at least 256 bytes that S4b's D did not take (D took every 10th qualifying response) | even line numbers (613) | odd (617) |
+| **L2** (a new page type, the gate's pool for O5) | enwik8's Wikipedia-namespace pages after byte 9,437,184, not redirects, body unchanged (a space is added after the title's colon so the page list keeps them) | even index (47) | odd index (46) |
+| **P** / **P2** (the markup control) | wiki pages with their markup removed by S4c's renderer | S4c's P-dev (P's even pages) | **P2**, new: article pages from byte 50,000,000 with qualifying index q % 4 = 2 (1,022 pages; P took q % 4 = 0) |
+| **Stream** (unshifted) | article pages, not lists or disambiguation pages | S4c's dev split: C's pages from byte 19,718,592 | **F**, new: article pages from byte 50,000,000 with q % 4 in {1, 3} (about 2,044 pages) |
+| **Calibration** (the running reference's warm-up; the fixed reference) | | C's pages before byte 19,718,592 | C then S (S4b's streams, read as one sequence) |
+
+- F, P2, O, Y and L2 have never been scored by any S4 signal. q counts the qualifying pages from byte 50,000,000 in dump order (not redirects, namespaces, lists or disambiguation pages), as S4c's script does.
+- Pool file hashes (sha256 prefix): `oasst_dev.xml` bce96490ea7afbca, `oasst_test.xml` f200daf5ca3b25f4, `own_dev.xml` 3711526fa82d58e1, `own_test.xml` 648149d89a68f64b, `ns_dev.xml` 5871dd82b84b22aa, `ns_test.xml` e5ecc5be5a17690e, `plain2.xml` 8ddbc9f32240e398.
+
+### The signals (unchanged)
+
+- **O1–O5**, S4c's five out-of-scope candidates on a page's first 50 prose words (S4c's reader, list rule, reference, vectors and strata).
+- **V**, S4b's vocabulary signal. Its reader reads the calibration pages, then the stream, adding each page's words. The pools are scored against the vocabulary at the start of the stream.
+- **U**, S4b's unparsed signal with S4b-b's reader. q_τ comes from the calibration pages.
+- **Σ is not read.** No surprise scores exist for F or the new pools. Making them would take `cyphalm_trie surprise` about 23 minutes per 2,000 pages, on a model whose similar-context default changed after S4b (A4d), so its scores would not be comparable with S4b's references.
+
+### The alarm rule, at two thresholds
+
+S4b's rule, unchanged (events at p < 0.05, Shiryaev–Roberts with p1 = 0.25, running windows of 500 scored after 100, the fixed reference for comparison), run twice: **A = 20,000** (S4b's) and **A = 100,000**. Both thresholds read the same replicates: the same planted points, mixtures and plant orders.
+
+Planted shifts as S4b: 200 replicates per (pool, π ∈ {1, 0.5, 0.2}, reference), t0 uniform over the stream's units [100, |stream| − 200], a detection is the first alarm within 200 units of t0. Shares get Wilson 95% intervals.
+
+### (a) The out-of-scope gate on O
+
+- **The choice on dev** (S4c's rule, with O for D): a candidate is eligible when the dev stream (running reference, A = 20,000) has at most one alarm, and P-dev at π = 1 is detected within 50 units in at most 10% of the replicates. The chosen one is the eligible candidate with the most O-dev detections within 50 at π = 1 (running reference, A = 20,000); ties go to the lower median delay, then to O1, O2, O3, O4, O5 in that order. If none is eligible, the one with the most O-dev detections is read on test and reported as failed on dev.
+- **The gate (test, read once, A = 20,000):**
+  1. F in dump order (running reference): at most one alarm.
+  2. O-test at π = 1: at least 90% of 200 replicates detected within 50 units.
+  3. P2 at π = 1: detected within 50 units in at most 10% of the replicates.
+- **Decision.** If all three hold, the chosen candidate is Cypha's out-of-scope signal: it is watched, and each alarm opens a gap of kind `scope` (proposed for DISCOVERY §3.2, for Odin). Otherwise it stays built and reported. Y, the other candidates, π = 0.5 and 0.2 and the fixed reference are reported, not gated.
+
+### (b) O5 beside V for new page types
+
+- **The gate (test, read once, A = 20,000):**
+  1. F in dump order (running reference): O5 has at most one alarm.
+  2. L2-test at π = 1: at least 90% of 200 replicates detected within 50 units.
+  3. P2 at π = 1: O5 detects within 50 units in at most 10% of the replicates.
+  4. L2-test has at least 20 O5 units. Below that the gate is not read.
+- **Decision.** If all hold, O5 is watched beside V for new page types, and each alarm opens a `scope` gap. V's result on L2 is reported beside it. Nothing is chosen on dev; the dev read of L2 is reported only.
+
+### (c) The threshold
+
+- **FA(A):** the alarms on F in dump order (running reference) at threshold A, summed over U, V and O1–O5.
+- **PASS(A):** the pairs that pass at threshold A, among (the chosen candidate, O-test) by gate (a), (O5, L2-test) by gate (b), and (V, L2-test) by gate (b)'s conditions 1, 2 and 4 with V in O5's place.
+- **Rule.** A = 100,000 replaces A = 20,000 for every S4 signal when FA(100,000) < FA(20,000) and PASS(100,000) includes PASS(20,000). Otherwise A stays at 20,000. Equal false alarms (0 against 0 included) keep 20,000: a lower threshold detects sooner.
+- Reported beside it, not in the rule: S4b's and S4c's alarms on C and S at A = 100,000 (`--signals-A 100000`, a re-read of their streams for the motivating cases), the random-order alarm rates, and the delays at both thresholds.
+
+### Predictions (registered before any run)
+
+| # | Prediction |
+|---|---|
+| H1 | O1 (register) is chosen on dev: an assistant's replies use "you", "can" and "it's", where wiki prose uses "the", "of" and "was" |
+| H2 | The chosen candidate passes gate (a), with O-test's Wilson lower bound at least 0.85 |
+| H3 | On Y-test at π = 1 (running), the chosen candidate detects 40–90% within 50 units |
+| H4 | O5 passes gate (b) on L2-test |
+| H5 | V detects L2-test within 50 units in fewer than 90% of replicates: project pages are not dense in new names |
+| H6 | P2 at π = 1: every candidate detects within 50 in at most 5% of replicates. On F (A = 20,000, running) every signal's event rate is in [0.03, 0.08] |
+| H7 | FA(20,000) is 1–3 and FA(100,000) is lower, with PASS kept: A = 100,000 is adopted |
+| H8 | For each pair that passes at both thresholds, the median delay at A = 100,000 is 1–8 units longer |
+| H9 | At least 75% of O's pages are O units (50 prose words or more); L2-test has at least 25 O units |
+
+### The dev read (run 2026-10-29, before any test read)
+
+The dev split: the stream Sdev is C's 830 pages from byte 19,718,592; Cdev (C's 1,015 earlier pages) calibrates. Pools O-dev (1,651 pages), Y-dev (613), L2-dev (47) and P-dev (511). F, P2 and the test pools were not scored.
+
+Units (50 prose words or more for O1–O5; 50 tokens or more for V):
+
+| Set | Pages | O1–O5 units | V units |
+|---|---|---|---|
+| Cdev | 1,015 | 926 | 1,001 |
+| Sdev | 830 | 752 | 819 |
+| O-dev | 1,651 | 1,397 (84.6%) | 1,605 |
+| Y-dev | 613 | 428 | 564 |
+| L2-dev | 47 | 37 | 45 |
+| P-dev | 511 | 469 | – |
+
+U has no units on O or L2. Its pages are those with linked sentences, and rendered replies have no links.
+
+**The choice (S4c's rule with O for D; A = 20,000, running reference, π = 1):**
+
+| Candidate | Sdev alarms | P-dev within 50 | O-dev within 50 | O-dev median delay | Eligible |
+|---|---|---|---|---|---|
+| O1-register | 0 | 0/200 (0.0%, 95% 0.000–0.019) | 17/200 (8.5%, 95% 0.054–0.132) | >200 | yes |
+| O2-rare | 0 | 0/200 | 1/200 (0.5%) | >200 | yes |
+| O3-topic | 0 | 0/200 | 0/200 (0.0%) | >200 | yes |
+| O4-delta | 0 | 0/200 | 0/200 (0.0%) | >200 | yes |
+| O5-novelty | 1 | 0/200 | 6/200 (3.0%) | >200 | yes |
+
+**Chosen: O1-register** (all five are eligible; O1 has the most O-dev detections). It is far from gate (a)'s 90% on dev: 8.5% within 50 with the running reference. Against the fixed reference it detects 93/200 within 50 (median delay 54). O-dev's event rate under O1 is 0.176 against the fixed reference, where Y-dev's is 0.318.
+
+Reported only (dev, running reference, π = 1):
+
+| Signal | O-dev within 50 | Y-dev within 50 | L2-dev within 50 | L2-dev events (fixed reference) |
+|---|---|---|---|---|
+| O1-register | 17/200 | 183/200 (91.5%) | 0/200 | 4 of 37 |
+| O3-topic | 0/200 | 158/200 (79.0%) | 44/200 (22.0%) | 20 of 37 |
+| O5-novelty | 6/200 | 8/200 | 0/200 | 0 of 37 |
+| V | 0/200 | 0/200 | 1/200 | 3 of 45 |
+
+At A = 100,000 on the same replicates: O1 detects Y-dev 155/200 within 50; O5's one Sdev alarm (A = 20,000, "Bayonne", unit 581) is gone; O3 detects L2-dev 43/200.
+
+The test read below is the single read of F, O-test, Y-test, L2-test and P2. It uses this choice and the rules registered above, unchanged.
+
+### Results (the test read, run 2026-10-29, once)
+
+**The fresh stream F.** From byte 50,000,000 there are 4,088 qualifying pages. F holds the 2,044 with q % 4 in {1, 3}. The 1,022 pages with q % 4 = 0 are exactly P's titles, and the 1,022 with q % 4 = 2 are exactly P2's: the split matches the scripts.
+
+Units on test:
+
+| Set | Pages | O1–O5 units | V units | U units |
+|---|---|---|---|---|
+| Calibration (C then S) | 3,485 | 3,152 | 3,426 | 2,875 |
+| F | 2,044 | 1,844 | 1,998 | 1,721 |
+| O-test | 1,693 | 1,414 (83.5%) | 1,632 | 0 |
+| Y-test | 617 | 441 | 576 | – |
+| L2-test | 46 | 35 | 43 | 4 |
+| P2 | 1,022 | 915 | – | – |
+
+**Gate (a), O1-register on O-test: fails.**
+
+| Condition | A = 20,000 | A = 100,000 |
+|---|---|---|
+| 1. F alarms (running) ≤ 1 | 0, holds | 0, holds |
+| 2. O-test within 50 ≥ 90% | 52/200 = 26.0% (95% 0.204–0.325), fails | 18/200 = 9.0% (0.058–0.138), fails |
+| 3. P2 within 50 ≤ 10% | 0/200 (0.000–0.019), holds | 0/200, holds |
+
+O1's median delay on O-test is 114 units (A = 20,000). Against the fixed reference it detects 34/200 within 50 (median 105).
+
+**Gate (b), O5 on L2-test: fails.** L2-test has 35 O5 units, so the gate is read. F has no O5 alarm and P2 is 0/200. But O5 detects L2-test in 0/200 within 50 (95% 0.000–0.019), at both thresholds. None of L2-test's 35 units is an O5 event against the fixed reference. V detects L2-test in 2/200 (1.0%, 0.003–0.036) at A = 20,000 and 1/200 at A = 100,000. It fails too.
+
+**(c) The threshold: A stays 20,000.**
+
+| Signal | F units scored | F events | F event rate | F alarms, A = 20,000 | F alarms, A = 100,000 |
+|---|---|---|---|---|---|
+| U | 1,711 | 79 | 0.0462 | 0 | 0 |
+| V | 1,998 | 101 | 0.0506 | 0 | 0 |
+| O1-register | 1,834 | 102 | 0.0556 | 0 | 0 |
+| O2-rare | 1,834 | 83 | 0.0453 | 0 | 0 |
+| O3-topic | 1,834 | 104 | 0.0567 | 0 | 0 |
+| O4-delta | 1,834 | 90 | 0.0491 | 1 | 1 |
+| O5-novelty | 1,834 | 94 | 0.0513 | 0 | 0 |
+
+- FA(20,000) = 1 and FA(100,000) = 1. The one alarm is O4-delta's on a run of French pages: F unit 659 ("Politics of French Guiana") at A = 20,000 and unit 675 ("Francophone") at A = 100,000.
+- PASS(20,000) and PASS(100,000) are both empty.
+- Equal false alarms keep 20,000 (the registered rule).
+
+Event rates of the pools against the fixed reference (C then S), on test:
+
+| Signal | O-test | Y-test | L2-test | P2 |
+|---|---|---|---|---|
+| O1-register | 0.138 | 0.247 | 4 of 35 | 0.051 |
+| O2-rare | 0.038 | 0.023 | 0 of 35 | 0.043 |
+| O3-topic | 0.100 | 0.272 | 20 of 35 | 0.042 |
+| O4-delta | 0.046 | 0.064 | 2 of 35 | 0.034 |
+| O5-novelty | 0.066 | 0.070 | 0 of 35 | 0.043 |
+| V | 0.012 | 0.014 | 5 of 43 | – |
+
+**Why O is not seen.** The alarm rule weighs an event by ln(p1/p0) = ln 5 and a non-event by ln(0.75/0.95). Its log R grows only when the event rate is above 0.128. O-test's best rate is O1's 0.138, so R barely grows: about 0.018 per unit, where reaching A = 20,000 needs about 9.9. Y-test's 0.247 grows about 0.22 per unit and is detected (O1: 168/200 within 50). The running reference also takes in the plants as they come, which lowers the rate further. So within 50 units no candidate can see oasst1 replies. Read by these five scores, a volunteer assistant's first 50 prose words are close to Wikipedia prose.
+
+**Reported, not gated (π = 1, running reference):**
+
+| Signal | Pool | Within 50, A = 20,000 | Median | Within 50, A = 100,000 | Median |
+|---|---|---|---|---|---|
+| O1-register | Y-test | 168/200 (84.0%, 0.783–0.884) | 29 | 149/200 (74.5%) | 35 |
+| O3-topic | Y-test | 176/200 (88.0%, 0.828–0.918) | 23 | 156/200 (78.0%) | 32 |
+| O3-topic | L2-test | 182/200 (91.0%, 0.862–0.942) | 9 | 157/200 (78.5%) | 12 |
+| O3-topic | O-test | 22/200 (11.0%) | >200 | 12/200 (6.0%) | >200 |
+| O3-topic | P2 | 2/200 (1.0%) | >200 | 0/200 | >200 |
+
+- **O3-topic on L2-test** is the one high number. It was not registered for L2, and on dev it detected L2-dev in only 44/200 (22.0%, 0.168–0.282), so it is not a result.
+- L2 is also thin and repetitive. Of L2-test's 46 pages, 18 open with the same notice ("This (now-obsolete) page contains (in its history) important documentation…") and 5 with another. On test, 18 of the 35 O3 units have one identical score (0.2612); on dev, 20 of 37. A planted run of L2 cycles about 15 distinct openings, and the running reference soon holds copies of them. This was not checked when the pool was registered.
+- **Σ was not read** (registered).
+
+**S4b's and S4c's streams at A = 100,000** (`--signals-A 100000`, reported only):
+
+| Signal | S alarms (running), A = 20,000 | A = 100,000 |
+|---|---|---|
+| V | 1 ("Carolus Linnaeus", S unit 37) | 0 |
+| Σ | 1 ("Chrono Trigger", S unit 793) | 1 ("Candide", S unit 802) |
+| U | 0 | 0 |
+| O1–O5 | 0 | 0 |
+
+- C alarms: O5's two (Athlon, Bayonne) go at A = 100,000; O4-delta's one stays (Military of Brazil, one unit later).
+- The cost: V on S4b's L (π = 1, running) drops from 191/200 (95.5%) within 50, median 24, to 175/200 (87.5%), median 30. That is below S4b's own 90% gate. S4b expected about 5 more pages of delay; the median moved 6, but 16 more replicates fell past 50 pages. Σ on L drops from 112/200 to 85/200.
+- So A = 100,000 removes the taxonomy alarm, keeps the surprise alarm, and costs V its pass on new page types.
+- "S4b for Odin" and HANDOFF §5.16 expected 100,000 to silence both alarms, because their R was below 100,000 when they fired. That holds for V. Σ's R, measured, keeps rising after the run of American football pages and crosses 100,000 nine pages later, at *Candide* (R 292,174).
+
+### Predictions, scored
+
+| # | Prediction | Result |
+|---|---|---|
+| H1 | O1 chosen on dev | **Yes** |
+| H2 | The chosen candidate passes gate (a), lower bound ≥ 0.85 | **No**: 26.0% (0.204–0.325) |
+| H3 | Y-test within 50 in 40–90% | **Yes**: 84.0% |
+| H4 | O5 passes gate (b) | **No**: 0/200 on L2-test |
+| H5 | V on L2-test below 90% | **Yes**: 1.0% |
+| H6 | P2 ≤ 5% for every candidate; F event rates in [0.03, 0.08] | **Yes**: P2 at most 2/200 (O3); F rates 0.045–0.057 |
+| H7 | FA(20,000) 1–3, FA(100,000) lower with PASS kept; A = 100,000 adopted | **No**: 1 and 1; A stays 20,000 |
+| H8 | Delays 1–8 units longer at A = 100,000 for pairs passing at both | **Not read**: no pair passes. On the reported pairs above the medians are 3–9 units longer |
+| H9 | ≥ 75% of O pages are O units; L2-test ≥ 25 units | **Yes**: 83.5%; 35 |
+
+Five of the eight read predictions held. The three misses (H2, H4, H7) are the three gates.
+
+### Checks
+
+- `epistemic_test`: 1,306 checks, 0 failed (S4d adds the fresh split and the threshold). Four planted bugs each fail it: P2's residue moved (2 checks fail), the high threshold changed to 50,000 (3), the detector ignoring its rule's A (4), and P's residue removed (3).
+- Byte-identical without the new flags, base 4331619 against S4d's binary, same command lines (every output file, and stdout with timings and paths removed; `stats.txt` differs only in timings): S3 (`--gaps`; gap map `a77678d8ef7dfdef`, also equal to S4's test run with its side files), S4b (`--signals`), S4b-b (`--signals-scope u-dev`), S4c dev and S4c test.
+- The S4d runs' own gap maps are `a77678d8ef7dfdef` too (S3's passes come first).
+- The nine CTests of HANDOFF §4.4 pass on this branch (CMake Release build, 9 of 9).
+
+### S4d decisions
+
+1. **(a)** No out-of-scope candidate is watched. O1-register stays built and reported. No alarm opens a `scope` gap in Cypha's gap map.
+2. **(b)** O5 is not watched for new page types. V stays the only signal for them (S4b).
+3. **(c)** A stays 20,000 for every S4 signal (equal false alarms on F; no pass at either threshold). Decided by measurement.
+4. **(d)** The `scope` gap kind is proposed below for Odin. It has no producer while no out-of-scope signal is watched.
+
+### (d) Proposed: a `scope` gap kind for DISCOVERY §3.2 (text for Odin)
+
+Proposed row for §3.2's table:
+
+| Kind | How it is found |
+|---|---|
+| **Scope gap** | A run of pages whose content is unlike what Cypha has read. A watched out-of-scope signal (§3.4) raises an alarm on the page stream; the gap's region is the pages since the detector's last restart, named by the page where it alarmed. It has no P(exists) and no relation: it says "this region is unexplained", not "this value is missing". It closes when the region's pages have been read into the store (their signal scores fall back), or when Odin marks the region out of scope for good |
+
+Notes for the proposal:
+- Today no out-of-scope signal passes its gate (S4c, S4d), so nothing opens a `scope` gap in the gap map. The S4c and S4d report files already write alarm rows with kind `scope`; they are records, not gaps.
+- Rule 10: a `scope` gap never answers a question and never changes a fact. It points reading at a region.
+
+### S4d for Odin
+
+- Read by the five candidate scores, an assistant's own voice (oasst1) is close to Wikipedia prose in its first 50 words. Its event rate under the best score is 0.138, just above the 0.128 at which the alarm rule starts to gain. So no candidate can see it within 50 pages, and none is adopted. Dolly's brainstorming and creative answers (Y) are seen (84% within 50 for O1), but they were reported, not gated.
+- TF-IDF novelty (O5) does not see Wikipedia's own project pages at all (0 of 35 units are events). Topic distance (O3) does (182/200 within 50), but only on test, not on dev (44/200), and the pool is small and repetitive.
+- The threshold stays at 20,000. At 100,000 the fresh stream has the same one false alarm, and S4b's vocabulary signal would fall below its 90% gate on new page types.
+- Two options, not taken: (1) a registered read of O3 for new page types on a larger, de-duplicated pool; (2) a smaller registered alternative (p1 = 0.15 instead of 0.25) so the rule can see shifts with event rates of 0.1–0.15. The second changes S4b's rule for every signal and needs its own false-alarm read.
+
+### S4d reproduce
+
+```bash
+g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp -o pattern_learn
+g++ -O2 -std=c++20 -I native/include native/tools/epistemic_test.cpp -o epistemic_test && ./epistemic_test   # 1,306 checks
+# oasst1 (Hugging Face OpenAssistant/oasst1 at fdf72ae0827c1cda404aff25b6603abec9e3399b), file 2023-04-12_oasst_ready.messages.jsonl.gz
+P=POOLS; mkdir -p $P
+python3 -I scripts/s4d_pools.py oasst 2023-04-12_oasst_ready.messages.jsonl.gz $P/oasst_dev.xml $P/oasst_test.xml
+python3 -I scripts/s4d_pools.py dolly /root/cdata/dolly.jsonl $P/own_dev.xml $P/own_test.xml
+python3 -I scripts/s4d_pools.py ns /root/cdata/enwik8 $P/ns_dev.xml $P/ns_test.xml
+python3 -I scripts/s4d_pools.py plain2 /root/cdata/enwik8 $P/plain2.xml
+E=/root/cdata/enwik8; W=/root/work/f2/wikidata/wd_values.tsv; DEV=bench/eval/t_qa_wiki_dev.tsv; A=/root/work/answer; Q=/root/work/qa2/runs
+D=$A/d_rows.tsv,$A/d2_rows.tsv,$Q/E1a.rows.tsv,$Q/E1b.rows.tsv,$Q/E1c.rows.tsv,$Q/E1d.rows.tsv
+for read in dev test; do   # from the repository root (the vectors)
+  O=OUT/$read; mkdir -p $O
+  ./pattern_learn $E $O --cv --wikidata $W --dev $DEV --gaps $O/gap_map.tsv --demand $D --parse $A/parse_dev.tsv \
+    --signals $O --signals-gaps $O/signal_gaps.tsv --signals-scope s4d-$read --signals-plain /root/work/s4c/runs/plain_pages.xml \
+    --signals-pools $P > OUT/$read.out
+done
+python3 -I scripts/s4d_read.py dev OUT/dev.out                                  # the dev choice
+python3 -I scripts/s4d_read.py test OUT/test.out O1-register OUT/dev.out        # gates, threshold, predictions
+# S4b's and S4c's streams at A = 100,000: S4b's and S4c's command lines plus --signals-A 100000
+```
+
+- Test outputs (sha256 prefix): `units.tsv` e771c04cf5e1f967 (102,560 rows), `signal_gaps.tsv` 2adcd8c397872039 (7 rows), `.planted.tsv` 66b3849273112bd0. Dev `units.tsv` cbe67df49dfb2df1.
