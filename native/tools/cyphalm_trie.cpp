@@ -67,6 +67,11 @@
 //        the training bytes, raw or cleaned (the same reference with --clean). scripts/gen_eval.sh runs it with SCRIBE v2 (docs/reports/GEN_TRACK.md). --clean trains
 //        on SCRIBE's cleaned prose of [0, train) (clean_wiki_documents, a page per line) and fits the lambdas and draws
 //        holdout prompts on the cleaned [train, sample).
+//        GEN-E: --plan STOREDIR[,RAWFRAMES] adds the content-plan expert (content_plan.hpp,
+//        docs/reports/GEN_E_CONTENT_PLAN.md), mixed last: the store (pattern_learn's v2 files) plans the facts of the
+//        prompt's entity, and the expert follows their realisations (F2's frames, filled). Facts read from the holdout
+//        are dropped, and from --plan-drop LO:HI (raw bytes; the benchmark's source range for --prompts-file). The
+//        files gain PLAN lines (the plan of each prompt; SCRIBE reads GEN lines only). Off by default.
 //        chat and sample: --save FILE stores the trained packed trie with its weights and split (RAM_PROFILE M7);
 //        --model FILE serves that file without training (chat then prints no mix_stored: it measures the training form).
 //   cls <wiki> <TABLE|shape>[:tail[:orders[:flags]]] [more specs] [--sim SPEC ...] [--sim-fresh] [--sim-surface]
@@ -241,6 +246,7 @@
 //   ./cyphalm_trie selftest
 
 #include "cypha/cyphalm/class_context.hpp"
+#include "cypha/cyphalm/content_plan.hpp"
 #include "cypha/cyphalm/doc_cache.hpp"
 #include "cypha/cyphalm/evidence.hpp"
 #include "cypha/cyphalm/fm_infinigram.hpp"
@@ -268,6 +274,7 @@
 
 using namespace cypha::cyphalm::trie;
 using cypha::cyphalm::ClassContext;
+using cypha::cyphalm::ContentPlanStore;
 using cypha::cyphalm::DocTopic;
 using cypha::cyphalm::FmInfiniGram;
 using cypha::cyphalm::SimilarContext;
@@ -306,6 +313,8 @@ struct Args {
     std::string cards;                            // S1: qa's evidence cards and reason codes (--cards FILE)
     bool no_cls = false, no_copy = false;         // B4C: the class and copy experts off where they are defaults
     std::string plant, part;                      // S4b surprise: the planted pages (D), --part K/N
+    std::string plan;                             // GEN-E: sample's content-plan expert, --plan STOREDIR[,RAWFRAMES]
+    std::string plan_drop;                        // GEN-E: --plan-drop LO:HI, the prompts' source bytes (facts there dropped)
     std::string prompts_file;                     // GEN-A: sample's prompts and human continuations
     bool clean = false;                           // GEN-A: sample trains on SCRIBE's cleaned prose of its bytes
     std::string fam_ent;                          // ANS: the entity's frames before the token (--fam-ent)
@@ -367,6 +376,8 @@ Args parse(int argc, char** argv, int from) {
         else if (s == "--no-copy") a.no_copy = true;
         else if (s == "--fam-only") a.fam_only = true;
         else if (s == "--model") a.model = next();
+        else if (s == "--plan") a.plan = next();
+        else if (s == "--plan-drop") a.plan_drop = next();
         else if (s == "--save") a.save = next();
         else if (s == "--mention") a.mention = true;
         else if (s == "--cards") a.cards = next();
@@ -715,7 +726,8 @@ std::vector<std::vector<double>> fit_doc(const DocTopic& dt, const std::uint8_t*
 std::string sample_with_class(const PackedModel& model, const double w[6], std::size_t limit, const ClassContext* cc,
                               const double* lam, const std::string& prompt, int n, std::uint32_t seed,
                               const SimilarContext* sc, const double* lsm, double temperature, const double* lcp,
-                              const DocTopic* dt = nullptr, const std::vector<std::vector<double>>* ldoc = nullptr);
+                              const DocTopic* dt = nullptr, const std::vector<std::vector<double>>* ldoc = nullptr,
+                              const ContentPlanStore::Plan* pl = nullptr, const double* lpl = nullptr);
 void sample_mix(const PackedModel& model, const double w[6], std::size_t limit, const ClassContext* cc, const double* lam,
                 const std::vector<std::uint8_t>& seq, const SimilarContext* sc, const double* lsm, const double* lcp,
                 double M[256]);
@@ -726,6 +738,11 @@ std::vector<double> mix_cls_into(const ClassContext& cc, const std::uint8_t* dat
                                  std::vector<double>& cur);
 std::vector<double> mix_copy_into(const std::uint8_t* data, std::size_t train, std::size_t half, int m,
                                   std::vector<double>& cur);
+// GEN-E, defined below with the copy expert: A3's frames, and the content-plan expert mixed into cur.
+std::map<std::string, std::vector<std::string>> load_frames(const std::string& path);
+bool good_start(const std::string& l);
+std::vector<double> mix_plan_into(const ContentPlanStore& st, const std::map<std::string, std::vector<std::string>>& frames,
+                                  const std::uint8_t* data, std::size_t train, std::size_t half, std::vector<double>& cur);
 
 int cmd_context8k(const Args& a) {
     const Config& cfg = a.cfg;
@@ -1062,6 +1079,7 @@ int cmd_sample(const Args& a) {
     if (!a.model.empty() ? !load_model(a, pm, w, cfg, data) : !load_wiki(a, data)) return 1;
     std::vector<std::uint8_t> raw_train;  // GEN-A: the copy share's reference is the raw and the cleaned training bytes
     if (!a.prompts_file.empty()) raw_train.assign(data.begin(), data.begin() + static_cast<std::ptrdiff_t>(cfg.train));
+    const std::size_t plan_lo = cfg.train, plan_hi = cfg.sample;  // GEN-E: the holdout in raw bytes, before --clean
     if (a.clean) {  // GEN-A: [0, train) and [train, sample) each become SCRIBE's cleaned pages, one per line
         if (!a.model.empty()) {
             std::cerr << "--clean trains; a stored model (--model) keeps the text it was trained on\n";
@@ -1145,14 +1163,54 @@ int cmd_sample(const Args& a) {
     if (rc) return rc;
     const auto sc = default_sim(a, data.data(), cfg.train, rc);
     if (rc) return rc;
+    // GEN-E: --plan STOREDIR[,RAWFRAMES], the content-plan expert (docs/reports/GEN_E_CONTENT_PLAN.md). The store drops
+    // facts read from the holdout (raw bytes, so also under --clean) and from --plan-drop's range; its frames are A3's,
+    // from STOREDIR/patterns.tsv and F2R's raw frames.
+    std::unique_ptr<ContentPlanStore> cps;
+    std::map<std::string, std::vector<std::string>> frames;
+    if (!a.plan.empty()) {
+        const std::size_t comma = a.plan.find(',');
+        const std::vector<std::string> parts =
+            comma == std::string::npos ? std::vector<std::string>{a.plan}
+                                       : std::vector<std::string>{a.plan.substr(0, comma), a.plan.substr(comma + 1)};
+        cps = std::make_unique<ContentPlanStore>();
+        std::string err;
+        std::size_t lo2 = 0, hi2 = 0;  // GEN-E: --plan-drop LO:HI (raw bytes), e.g. the benchmark's source range
+        if (!a.plan_drop.empty()) {
+            const std::size_t c = a.plan_drop.find(':');
+            if (c == std::string::npos) {
+                std::cerr << "--plan-drop wants LO:HI\n";
+                return 2;
+            }
+            lo2 = std::strtoull(a.plan_drop.substr(0, c).c_str(), nullptr, 10);
+            hi2 = std::strtoull(a.plan_drop.substr(c + 1).c_str(), nullptr, 10);
+        }
+        if (!cps->load(parts[0], plan_lo, plan_hi, err, lo2, hi2)) {
+            std::cerr << err << "\n";
+            return 1;
+        }
+        frames = load_frames(parts[0] + "/patterns.tsv");
+        if (parts.size() > 1)
+            for (auto& [r, v] : load_frames(parts[1])) {
+                auto& o = frames[r];
+                for (auto& f : v)
+                    if (std::find(o.begin(), o.end(), f) == o.end()) o.insert(o.begin(), f);  // raw frames first
+            }
+        std::size_t nf = 0;
+        for (const auto& [r, v] : frames) nf += v.size();
+        std::cerr << "plan store subjects " << cps->subjects() << " relations with frames " << frames.size() << " frames " << nf
+                  << "\n";
+    }
     const auto dt = make_doc(a, data.data(), cfg.train, rc);  // GEN-C: nullptr without --doc
     if (rc) return rc;
     double lsm[SimilarContext::kBuckets] = {0};
-    std::vector<double> lcl, lcp;
+    std::vector<double> lcl, lcp, lpl;
     std::vector<std::vector<double>> ldoc;
-    if (cc || sc || !a.no_copy || dt) {
+    if (cc || sc || !a.no_copy || dt || cps) {
         const std::size_t half = (cfg.sample - cfg.train) / 2;
-        const std::size_t span = dt ? cfg.sample - cfg.train : half;  // GEN-C: the second half is --doc's read
+        // GEN-C, GEN-E: with --doc or --plan every expert is read over the whole holdout (fit on the first half, as
+        // without them), so their BPC can be read on the second half.
+        const std::size_t span = dt || cps ? cfg.sample - cfg.train : half;
         std::vector<double> pt(span);
         for (std::size_t k = 0; k < span; ++k) {
             const std::size_t i = cfg.train + k;
@@ -1177,15 +1235,18 @@ int cmd_sample(const Args& a) {
         }
         if (!a.no_copy) lcp = mix_copy_into(data.data(), cfg.train, half, a.copy_min, pt);
         if (dt) ldoc = fit_doc(*dt, data.data(), cfg.train, half, pt);
+        if (cps) lpl = mix_plan_into(*cps, frames, data.data(), cfg.train, half, pt);  // GEN-E: mixed last
     }
-    const bool experts = cc || sc || !lcp.empty() || dt;
+    const bool experts = cc || sc || !lcp.empty() || dt || cps;
     std::string model_line = std::string("MODEL\ttrie") + (cc ? "+cls" : "") + (sc ? "+sim" : "") + (lcp.empty() ? "" : "+copy") +
                              "\t" + (sc ? (a.sims.empty() ? std::string("default") : a.sims[0]) : std::string("-"));
     if (cc) model_line += "\tcls=" + default_cls_spec(a);
     if (!lcp.empty()) model_line += "\tcopy_min=" + std::to_string(a.copy_min);
     if (dt) model_line += "\tdoc=" + a.doc;
+    if (cps) model_line += "\tplan=" + a.plan;
     const double temps[3] = {0.6, 0.8, 1.0};
     std::vector<std::string> gens[3];  // GEN-A: the generated texts by temperature (--prompts-file)
+    std::vector<int> planned(nfiles, 0);
     for (std::size_t f = 0; f < nfiles; ++f) {
         std::ofstream out(a.outs[f]);
         if (!out) {
@@ -1197,6 +1258,15 @@ int cmd_sample(const Args& a) {
             const std::size_t id = f * static_cast<std::size_t>(a.prompts) + static_cast<std::size_t>(k);
             const std::string& p = prompts[id];
             out << "PROMPT\t" << id << "\t" << printable(p) << "\n";
+            ContentPlanStore::Plan plan;
+            if (cps) {  // GEN-E: the prompt's plan, for the factual read (SCRIBE reads GEN lines only)
+                plan = cps->plan(p, frames);
+                out << "PLAN\t" << id << "\t" << printable(plan.entity) << "\t";
+                for (std::size_t q = 0; q < plan.facts.size(); ++q)
+                    out << (q ? "|" : "") << plan.facts[q].rel << "=" << printable(plan.facts[q].value);
+                out << "\n";
+                planned[f] += !plan.facts.empty();
+            }
             for (int ti = 0; ti < 3; ++ti) {
                 const std::uint64_t seed = 1000003ull * (id + 1) + static_cast<std::uint64_t>(ti) * 7919ull;
                 SampleOptions opt;
@@ -1206,7 +1276,8 @@ int cmd_sample(const Args& a) {
                 const std::string text =
                     experts ? sample_with_class(pm, w, cfg.train, cc.get(), lcl.empty() ? nullptr : lcl.data(), p, a.bytes,
                                                 seed32, sc.get(), lsm, temps[ti], lcp.empty() ? nullptr : lcp.data(),
-                                                dt.get(), dt ? &ldoc : nullptr)
+                                                dt.get(), dt ? &ldoc : nullptr, plan.facts.empty() ? nullptr : &plan,
+                                                lpl.empty() ? nullptr : lpl.data())
                             : sample_continuation(pm, w, p, cfg.train, a.bytes, seed32, opt);
                 char kind[32];
                 std::snprintf(kind, sizeof kind, "trie_T%.1f", temps[ti]);
@@ -1215,6 +1286,7 @@ int cmd_sample(const Args& a) {
             }
             if ((k + 1) % 50 == 0) std::cerr << "file " << f << " prompt " << (k + 1) << "/" << a.prompts << "\n";
         }
+        if (cps) std::cerr << "plan coverage file " << f << ": " << planned[f] << " of " << a.prompts << " prompts\n";
     }
     if (a.prompts_file.empty()) return 0;
 
@@ -1231,6 +1303,10 @@ int cmd_sample(const Args& a) {
             ds->feed(seq.data(), seq.size());
             if (dt->params().frozen) ds->freeze();
         }
+        ContentPlanStore::Plan plan;  // GEN-E: the content-plan expert, as in sample_with_class
+        if (cps && !lpl.empty()) plan = cps->plan(prompts[k], frames);
+        std::string folded;
+        std::vector<int> active;
         double b = 0;
         for (const char ch : conts[k]) {
             double M[256];
@@ -1244,10 +1320,22 @@ int cmd_sample(const Args& a) {
                     const double l = lp[static_cast<std::size_t>(ds->predict(part, P))];
                     for (int s = 0; s < 256; ++s) M[s] = l * P[s] + (1 - l) * M[s];
                 }
+            if (!plan.facts.empty()) {
+                active.clear();
+                for (std::size_t q = 0; q < plan.facts.size(); ++q)
+                    if (!ContentPlanStore::expressed(plan, q, folded)) active.push_back(static_cast<int>(q));
+                double P[256];
+                const int L = ContentPlanStore::predict(plan, active, seq.data(), seq.size(), P);
+                if (L > 0) {
+                    const double l = lpl[static_cast<std::size_t>(ContentPlanStore::bucket(L))];
+                    for (int s = 0; s < 256; ++s) M[s] = l * P[s] + (1 - l) * M[s];
+                }
+            }
             const auto u = static_cast<std::uint8_t>(ch);
             b -= std::log2(std::max(M[u], 1e-300));
             seq.push_back(u);
             if (ds) ds->feed(u);
+            ContentPlanStore::fold_into(folded, u);
         }
         bits[k] = b;
         nb[k] = static_cast<double>(conts[k].size());
@@ -1572,6 +1660,59 @@ std::vector<double> mix_copy_into(const std::uint8_t* data, std::size_t train, s
         bk[k] = copy_bucket(n);
     }
     return mix_into(pe, bk, half, kCopyBuckets, cur, m);
+}
+// GEN-E: the content-plan expert's predictions over the holdout text[train, train + cur.size()): every paragraph line
+// that could be a prompt (good_start) is planned from its first 64 bytes, as cmd_sample plans a prompt, and the expert
+// reads the rest of the line; elsewhere it predicts nothing (bucket 0). Lambdas fit on k < half; cur becomes the mix.
+// Prints the plan's coverage of those lines, the lambdas, and the bits per byte on k >= half before and after.
+std::vector<double> mix_plan_into(const ContentPlanStore& st, const std::map<std::string, std::vector<std::string>>& frames,
+                                  const std::uint8_t* data, std::size_t train, std::size_t half, std::vector<double>& cur) {
+    std::vector<double> pe(cur.size(), 0.0);
+    std::vector<int> bk(cur.size(), 0);
+    const std::string hold(reinterpret_cast<const char*>(data) + train, cur.size());
+    std::size_t lines = 0, planned_lines = 0, aligned = 0, right = 0;
+    std::size_t pos = hold.find('\n');
+    pos = pos == std::string::npos ? hold.size() : pos + 1;
+    while (pos < hold.size()) {
+        const std::size_t e = hold.find('\n', pos);
+        if (e == std::string::npos) break;
+        const std::string line = hold.substr(pos, e - pos);
+        const std::size_t ls = pos;
+        pos = e + 1;
+        if (!good_start(line)) continue;
+        ++lines;
+        std::size_t cut = 64;
+        while (cut > 0 && (static_cast<unsigned char>(line[cut]) & 0xC0) == 0x80) --cut;
+        const auto pl = st.plan(line.substr(0, cut), frames);
+        if (pl.facts.empty()) continue;
+        ++planned_lines;
+        std::string folded;
+        std::vector<int> active;
+        for (std::size_t q = ls + cut; q < e; ++q) {
+            active.clear();
+            for (std::size_t f = 0; f < pl.facts.size(); ++f)
+                if (!ContentPlanStore::expressed(pl, f, folded)) active.push_back(static_cast<int>(f));
+            double P[256];
+            const int L = ContentPlanStore::predict(pl, active, data, train + q, P);
+            bk[q] = ContentPlanStore::bucket(L);
+            pe[q] = P[data[train + q]];
+            aligned += L > 0;
+            right += L > 0 && P[data[train + q]] > 0.5;
+            ContentPlanStore::fold_into(folded, data[train + q]);
+        }
+    }
+    auto bpc = [&](std::size_t from) {
+        double s = 0;
+        for (std::size_t k = from; k < cur.size(); ++k) s -= std::log2(cur[k]);
+        return cur.size() > from ? s / static_cast<double>(cur.size() - from) : 0.0;
+    };
+    const double before = bpc(half);
+    const auto lam = mix_into(pe, bk, half, ContentPlanStore::kBuckets, cur);
+    std::cerr << "plan holdout paragraph lines " << lines << " planned " << planned_lines << " aligned bytes " << aligned
+              << " right " << right << "\nplan lambdas";
+    for (double l : lam) std::cerr << " " << l;
+    std::cerr << "\nplan holdout second-half bpc without " << before << " with " << bpc(half) << "\n";
+    return lam;
 }
 
 // B4: the class-context expert from "TABLE[:tail[:orders[:flags]]]": TABLE a word<TAB>class file, or "shape" (shape
@@ -2066,8 +2207,11 @@ std::string sample_with_class(const PackedModel& model, const double w[6], std::
                               const double* lam, const std::string& prompt, int n, std::uint32_t seed,
                               const SimilarContext* sc = nullptr, const double* lsm = nullptr, double temperature = 0.8,
                               const double* lcp = nullptr, const DocTopic* dt,
-                              const std::vector<std::vector<double>>* ldoc) {
+                              const std::vector<std::vector<double>>* ldoc, const ContentPlanStore::Plan* pl,
+                              const double* lpl) {
     std::vector<std::uint8_t> seq(prompt.begin(), prompt.end());
+    std::string gen_folded;  // GEN-E: the generated text, folded, for the plan's "expressed" test
+    std::vector<int> active;
     std::mt19937 rng(seed);
     std::uniform_real_distribution<double> U(0.0, 1.0);
     std::unique_ptr<DocTopic::Stream> ds;  // GEN-C: the document experts read the prompt and what is written
@@ -2087,6 +2231,17 @@ std::string sample_with_class(const PackedModel& model, const double w[6], std::
                 const double l = lp[static_cast<std::size_t>(ds->predict(part, P))];
                 for (int s = 0; s < 256; ++s) M[s] = l * P[s] + (1 - l) * M[s];
             }
+        if (pl && lpl) {  // GEN-E: the content-plan expert, mixed last (after the document experts)
+            active.clear();
+            for (std::size_t q = 0; q < pl->facts.size(); ++q)
+                if (!ContentPlanStore::expressed(*pl, q, gen_folded)) active.push_back(static_cast<int>(q));
+            double P[256];
+            const int L = ContentPlanStore::predict(*pl, active, seq.data(), seq.size(), P);
+            if (L > 0) {
+                const double l = lpl[ContentPlanStore::bucket(L)];
+                for (int s = 0; s < 256; ++s) M[s] = l * P[s] + (1 - l) * M[s];
+            }
+        }
         bool banned[256];
         mark_banned(seq, banned);
         double p[256], mass = 0;
@@ -2113,6 +2268,7 @@ std::string sample_with_class(const PackedModel& model, const double w[6], std::
                 break;
             }
         seq.push_back(static_cast<std::uint8_t>(pick));
+        ContentPlanStore::fold_into(gen_folded, static_cast<unsigned char>(pick));
         if (ds) ds->feed(static_cast<std::uint8_t>(pick));
     }
     return std::string(seq.begin() + static_cast<std::ptrdiff_t>(prompt.size()), seq.end());
@@ -5316,6 +5472,67 @@ int cmd_selftest() {
         }
         if (!causal || differs < 10) {
             std::cerr << "selftest: similar-context online keys (A4d) read a byte not yet scored, or are never used\n";
+            return 1;
+        }
+    }
+    // GEN-E: the content-plan expert (content_plan.hpp). The entity rule's order, dates to years, the holdout and
+    // list exclusions, the relation order, alignment and its tie rule, and the "expressed" test.
+    {
+        namespace fs = std::filesystem;
+        const fs::path dir = fs::temp_directory_path() / ("cyphalm_plan_selftest_" + std::to_string(std::random_device{}()));
+        fs::create_directories(dir);
+        {
+            std::ofstream(dir / "pages.tsv") << "Agamemnon\t1000\nMycenae\t5000\n";
+            std::ofstream(dir / "facts_f2.tsv")
+                << "subject\trelation\tobject\tP\tgrade\tn_evidence\tbest_pattern\tsource_page\tbyte_offset\n"
+                << "Agamemnon\tbirth_place\tMycenae\t0.9\tLow\t1\tp\tAgamemnon\t1010\n"
+                << "Agamemnon\tdeath_date\t1150-03-02\t0.9\tLow\t1\tp\tAgamemnon\t1005\n";
+            std::ofstream(dir / "seeds.tsv") << "subject\trelation\tobject\tsource\ttemplate\tbyte_offset\n"
+                                             << "Agamemnon\tspouse\tClytemnestra\twikidata\twikidata\t0\n"
+                                             << "Agamemnon\tspouse\tOther\twikidata\twikidata\t0\n"
+                                             << "Agamemnon\tspouse\tThird\twikidata\twikidata\t0\n"
+                                             << "Agamemnon\tcountry\tGreece\tinfobox\tx\t20500\n"
+                                             << "Agamemnon\tfounded\t0944\twikidata\twikidata\t0\n";
+        }
+        ContentPlanStore st;
+        std::string err;
+        bool ok = st.load(dir.string(), 20000, 30000, err) && err.empty();
+        fs::remove_all(dir);
+        const std::map<std::string, std::vector<std::string>> fr = {
+            {"birth_place", {"\x01 was born in [[\x02]],"}}, {"death_year", {"\x01 (died \x02)"}},
+            {"spouse", {"\x01 married \x02"}}, {"country", {"\x01 is in \x02"}}, {"founded", {"founded in \x02"}}};
+        const auto cand = ContentPlanStore::candidates("'''Ahmed III''' (in [[Arabic language|Arabic]]) ruled the Ottoman Empire.");
+        ok = ok && cand.size() >= 4 && cand[0] == "Ahmed III" && cand[1] == "Arabic language" &&
+             std::find(cand.begin(), cand.end(), "Ottoman Empire") != cand.end();
+        ok = ok && ContentPlanStore::canon("birth_date", "1673-12-30") == std::make_pair(std::string("birth_year"), std::string("1673")) &&
+             ContentPlanStore::canon("founded", "0944").second == "944";
+        const auto pl = st.plan("Agamemnon gathered together the Greek forces to sail for Troy.", fr);
+        // country (offset 20500) is in the holdout [20000, 30000); spouse has 3 values; birth_place and death_year come
+        // from the text (F2), by their position in the page: death_year (5 bytes in) before birth_place (10 bytes in)
+        ok = ok && pl.entity == "Agamemnon" && pl.facts.size() == 3 && pl.facts[0].rel == "death_year" &&
+             pl.facts[0].value == "1150" && pl.facts[1].rel == "birth_place" && pl.facts[2].rel == "founded" &&
+             pl.facts[2].value == "944" && pl.real[1].size() == 1 && pl.real[1][0] == "Agamemnon was born in [[Mycenae]],";
+        auto pred = [&](const std::string& text, const std::vector<int>& act, double* P) {
+            return ContentPlanStore::predict(pl, act, reinterpret_cast<const std::uint8_t*>(text.data()), text.size(), P);
+        };
+        double P[256];
+        const int L = pred("And then he was born in [[", {0, 1, 2}, P);
+        ok = ok && L == 15 && P['M'] == 1.0;
+        ok = ok && pred("nothing like it xyz", {0, 1, 2}, P) == 0 && *std::max_element(P, P + 256) == 0.0;
+        ok = ok && pred("he was born in [[", {0, 2}, P) == 0;  // birth_place expressed: not active
+        // tie: both facts align " in " (4 bytes); the earlier fact in the plan predicts
+        ContentPlanStore::Plan tp;
+        tp.facts = {{"a", "x", true}, {"b", "y", true}};
+        tp.real = {{"go in Q"}, {"be in R"}};
+        const std::string t = "xx in ";
+        ok = ok && ContentPlanStore::predict(tp, {0, 1}, reinterpret_cast<const std::uint8_t*>(t.data()), t.size(), P) == 4 &&
+             P['Q'] == 1.0 && P['R'] == 0.0;
+        ok = ok && ContentPlanStore::predict(tp, {1, 0}, reinterpret_cast<const std::uint8_t*>(t.data()), t.size(), P) == 4 &&
+             P['R'] == 1.0;
+        ok = ok && ContentPlanStore::expressed(pl, 1, ContentPlanStore::fold("he was born in [[Mycenae]] and")) &&
+             !ContentPlanStore::expressed(pl, 1, ContentPlanStore::fold("he was born in [[Myc"));
+        if (!ok) {
+            std::cerr << "selftest: content-plan expert (GEN-E) checks failed " << err << "\n";
             return 1;
         }
     }
