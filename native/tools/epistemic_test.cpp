@@ -1,5 +1,6 @@
 // Known-answer tests for cypha/eval/epistemic.hpp (docs/DISCOVERY.md sections 2.1-2.3, 3.1, 3.3, 10), hypothesis.hpp
-// (S5: 4, 6.3, 7.2-7.5; invariants I1, I4, I7, I8; S7: 7.1-7.3, I5, I6) and gap_map.hpp (S3: 3.2, 3.5).
+// (S5: 4, 6.3, 7.2-7.5; invariants I1, I4, I7, I8; S7: 7.1-7.3, I5, I6; S7b: three-way likelihoods, the batch step
+// among the supported) and gap_map.hpp (S3: 3.2, 3.5).
 // Returns nonzero if any check fails.
 #include "cypha/eval/epistemic.hpp"
 #include "cypha/eval/gap_map.hpp"
@@ -1159,6 +1160,107 @@ static void test_tests_S7() {
   CHECK(hl.verify());
 }
 
+// S7b (docs/reports/S7_HYPOTHESIS_TESTS.md, "S7b"): three-way likelihoods and the batch step among the supported.
+static void test_s7b() {
+  // likelihoods_from: the add-one mean of each row over (positive, negative, inconclusive).
+  TestTally tl;
+  for (int i = 0; i < 6; ++i) tl.add(true, TestOutcome::Positive);
+  tl.add(true, TestOutcome::Negative);
+  for (int i = 0; i < 3; ++i) tl.add(true, TestOutcome::Inconclusive);
+  tl.add(false, TestOutcome::Positive);
+  for (int i = 0; i < 4; ++i) tl.add(false, TestOutcome::Negative);
+  for (int i = 0; i < 5; ++i) tl.add(false, TestOutcome::Inconclusive);
+  const OutcomeLikelihoods L = likelihoods_from(tl);
+  CHECK(L.set() && !OutcomeLikelihoods{}.set());
+  CHECK_NEAR(L.t[0], 7.0 / 13, 1e-12);
+  CHECK_NEAR(L.t[1], 2.0 / 13, 1e-12);
+  CHECK_NEAR(L.t[2], 4.0 / 13, 1e-12);
+  CHECK_NEAR(L.f[0], 2.0 / 13, 1e-12);
+  CHECK_NEAR(L.f[1], 5.0 / 13, 1e-12);
+  CHECK_NEAR(L.f[2], 6.0 / 13, 1e-12);
+  // A test's BF: S7's two-way factor without likelihoods; the likelihood ratio with them, inconclusive included.
+  HypTest t;
+  t.sensitivity = 0.9, t.specificity = 0.8;
+  CHECK_NEAR(bayes_factor(TestOutcome::Positive, t), 4.5, 1e-12);
+  CHECK_NEAR(bayes_factor(TestOutcome::Inconclusive, t), 1.0, 1e-15);
+  t.likelihoods = L;
+  CHECK_NEAR(bayes_factor(TestOutcome::Positive, t), 3.5, 1e-12);
+  CHECK_NEAR(bayes_factor(TestOutcome::Negative, t), 0.4, 1e-12);
+  CHECK_NEAR(bayes_factor(TestOutcome::Inconclusive, t), 4.0 / 6, 1e-12);
+  {
+    HypTest tz = t;
+    tz.likelihoods.f[0] = 0.0;  // a zero likelihood is clamped: the factor is large, never infinite
+    CHECK_NEAR(bayes_factor(TestOutcome::Positive, tz), (7.0 / 13) / 1e-6, 1e-3);
+  }
+  // In the store: silence moves the posterior by its ratio, and is still no independent evidence (I4).
+  Hypothesis h = s7_hyp("h-3", true);
+  h.tests[0].likelihoods = L, h.tests[1].likelihoods = L;
+  HypothesisStore hs;
+  PreregLog log;
+  CHECK(hs.propose(h) && hs.score("h-3", 0.5) && hs.transition("h-3", HypState::Queued, "scored"));
+  CHECK(log.register_plan(*hs.find("h-3")));
+  CHECK(hs.transition("h-3", HypState::UnderTest, "test"));
+  auto r = hs.record_outcome("h-3", 0, TestOutcome::Inconclusive, &log);
+  CHECK(r.has_value() && *r == HypState::Queued);
+  CHECK_NEAR(hs.find("h-3")->posterior, (4.0 / 6) / (1 + 4.0 / 6), 1e-12);
+  CHECK(hs.find("h-3")->tests[0].inconclusive && !has_independent_evidence(*hs.find("h-3")));
+  CHECK(hs.transition("h-3", HypState::UnderTest, "test"));
+  r = hs.record_outcome("h-3", 1, TestOutcome::Positive, &log);  // odds 2/3 x 3.5 = 7/3: 0.7, queued
+  CHECK(r.has_value() && *r == HypState::Queued);
+  CHECK_NEAR(hs.find("h-3")->posterior, 0.7, 1e-12);
+  CHECK_NEAR(hs.find("h-3")->tests[1].bayes_factor, 3.5, 1e-12);  // record_result uses the three-way factor
+  CHECK_NEAR(e_value(*hs.find("h-3")), (4.0 / 6) * 3.5, 1e-12);
+  CHECK(log.verify());
+  {  // a posterior above 0.9 from silence alone is never supported
+    OutcomeLikelihoods sil;
+    sil.t[0] = 0.1, sil.t[1] = 0.1, sil.t[2] = 0.8, sil.f[0] = 0.1, sil.f[1] = 0.1, sil.f[2] = 0.08;  // silence: BF 10
+    Hypothesis g = s7_hyp("h-sil", true);
+    g.tests[0].likelihoods = sil, g.tests[1].likelihoods = sil;
+    HypothesisStore gs;
+    CHECK(gs.propose(g) && gs.score("h-sil", 0.5) && gs.transition("h-sil", HypState::Queued, "scored"));
+    CHECK(gs.transition("h-sil", HypState::UnderTest, "test"));
+    CHECK(gs.record_outcome("h-sil", 0, TestOutcome::Inconclusive) == HypState::Queued);
+    CHECK(gs.transition("h-sil", HypState::UnderTest, "test"));
+    const auto q = gs.record_outcome("h-sil", 1, TestOutcome::Inconclusive);
+    CHECK(q.has_value() && *q != HypState::Supported);
+    CHECK(gs.find("h-sil")->posterior > 0.9);
+  }
+  {  // without likelihoods an inconclusive result leaves the posterior exactly as it was (S7)
+    Hypothesis g = s7_hyp("h-2w", true);
+    HypothesisStore gs;
+    CHECK(gs.propose(g) && gs.score("h-2w", 0.37) && gs.transition("h-2w", HypState::Queued, "scored"));
+    CHECK(gs.transition("h-2w", HypState::UnderTest, "test"));
+    CHECK(gs.record_outcome("h-2w", 1, TestOutcome::Inconclusive) == HypState::Queued);
+    CHECK(gs.find("h-2w")->posterior == 0.37);
+  }
+  {  // the likelihoods are registered with the plan (I5): an edit of one breaks the chain
+    PreregLog a, b;
+    Hypothesis g1 = s7_hyp("p1", true), g2 = g1;
+    g2.tests[0].likelihoods = L;
+    CHECK(a.register_plan(g1) && b.register_plan(g2));
+    const std::string s1 = a.serialize(), s2 = b.serialize();
+    CHECK(s2.size() > s1.size());
+    const std::size_t at = s2.find("0.53846");
+    CHECK(at != std::string::npos);
+    std::string edited = s2;
+    if (at != std::string::npos) edited[at + 6] = edited[at + 6] == '9' ? '8' : '9';
+    CHECK(PreregLog::parse(s2).verify() && !PreregLog::parse(edited).verify());
+  }
+  // The batch step among the supported: BH at q 0.1 on p = 1/e over the selected only.
+  {
+    const std::vector<double> e = {1000, 1e9, 50, 2, 1.5, 400};
+    const std::vector<bool> sel = {true, false, true, true, true, true};
+    // Selected p: 0.001, 0.02, 0.5, 0.667, 0.0025; m 5, thresholds 0.02, 0.04, 0.06, 0.08, 0.1: the three smallest pass.
+    const auto rej = bh_reject_e_among(e, sel, 0.1);
+    CHECK(rej.size() == 6);
+    CHECK(rej[0] && !rej[1] && rej[2] && !rej[3] && !rej[4] && rej[5]);  // never the unselected one, however large its e
+    const auto all = bh_reject_e(e, 0.1);  // the whole batch (m 6) rejects the unselected one too
+    CHECK(all[0] && all[1] && all[2] && !all[3] && !all[4] && all[5]);
+    const auto none = bh_reject_e_among(e, std::vector<bool>(6, false), 0.1);
+    CHECK(none.size() == 6 && !none[0] && !none[1]);
+  }
+}
+
 static void test_gap_map() {
   // The gap id CyphaLM writes (cyphalm_trie dktext rows and its dev tags).
   CHECK_STR(gap_id("Honduras", "capital"), "G-AEC1");
@@ -1255,6 +1357,7 @@ int main() {
   test_labels_I8();
   test_scoring_S6();
   test_tests_S7();
+  test_s7b();
   test_gap_map();
   std::printf("epistemic_test: %d checks, %d failed\n", g_checks, g_failed);
   return g_failed == 0 ? 0 : 1;

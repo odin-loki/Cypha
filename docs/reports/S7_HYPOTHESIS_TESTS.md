@@ -218,3 +218,182 @@ cmake --build build --target epistemic_test && build/epistemic_test   # 654 chec
 - Writes `OUT.items.tsv` (each hypothesis's results; `state` is the last loop run: [point] on dev, [add1] on test) and the pre-registration logs `OUT.*.prereg.tsv`.
 - The seeds, patterns and Wikidata values are D4's run (`/root/work/f2/v2/aug`; the D4 report says how to rebuild them).
 - T2's code was removed before the first code commit (ffa6156), so no commit holds it. Its dev numbers above are from the first dev run.
+
+---
+
+## S7b: three-way likelihoods, batch control and φ (2026-10-29)
+
+**Odin Loch** · 2026-10-29 · S7's three questions for Odin, settled by measurement under PLAN ledger 55
+
+(The sets, the variants, the decision rule and the predictions below were written before any S7b run. Results and decisions are added under them.)
+
+**Question.** S7's loop decided little: 6% of test. Three things held it back.
+1. Silence was thrown away: an inconclusive result had BF 1, though T4 finding nothing measured BF 0.65.
+2. Batch control as specified (BH over the whole batch on p = 1/e) supports nothing once s and c are smoothed.
+3. T1 treats slots as functional by a hand-set φ, but the store holds several values in some of them (founding years; coarse and fine birthplaces). That costs T1 sensitivity.
+
+**Rule 10.** As in S7: this is Cypha's own hypothesis machinery. It never produces an answer for CyphaLM, and nothing here reaches `qa` or `chat`.
+
+### The sets (fixed before any run)
+
+- **Choices: S7's dev set** (sets U and C, S6's labels), as S7 read it. S7's test set is spent and is not read again.
+- **The confirm set: S15's dev half** (`bench/eval/temporal_holdout_dev.tsv`, true and false pairs with labels). S15's test half is not read; it is kept for the generators' final reads.
+  - Only pairs whose relation is one of `pattern_learn`'s relations (`kRel`) and whose subject has an enwik8 page.
+  - **Split by subject, fixed now:** the choose half when bit 17 of FNV-1a(subject) is 0, else the confirm half. The choose half is read freely, only to check that the adapter works; no choice is made on it. The confirm half is read once, with `--read-confirm`.
+  - **The S15-reduced store:** the full store (S7's seeds) without every true fact of S15's dev half that it holds (matched by normalised key, or by year for year relations and by a compatible date for date relations). Both halves' facts are removed, so no test reads the fact it judges.
+  - **The object's form:** an S15 value is replaced by the store's most frequent surface with the same key for that relation, when there is one, so the store's statistics see it.
+  - **The primary confirm set:** pairs where both members' objects occur as objects of the relation in the S15-reduced store (what a store-based generator could propose). All pairs are read beside it as a secondary set.
+  - **T5 is left out on S15.** S15's labels are current Wikidata, and T5 is current Wikidata (D4's values), so T5 would read the label. The loop on S15 runs T1, T6 and T4; only T4 is independent evidence there.
+  - The prior is S7's (the isotonic fit and z pools from S7's dev), applied to features computed on the S15-reduced store.
+
+### The variants (registered alternatives)
+
+**φ for T1.** A relation is functional when φ ≥ 0.9.
+- **φ_hand:** `kRel`'s hand-set values (S7 as run).
+- **φ_wd:** D4's Wikidata estimate (`/root/work/f2/wikidata/phi.tsv`: the share of subjects with exactly one value); `kRel`'s value where D4 has none.
+- **φ_store:** estimated from the store the tests read. Among subjects with at least one value of the relation, the share with exactly one distinct value (distinct years for date relations, distinct normalised keys otherwise).
+
+φ gates two of T1's negatives: the functional conflict (non-date relations, as in S7) and S6's same-kind date conflict (a date slot of s already holding another year: birth, death, founded). The lifespan checks (death before birth, a life over 125 years) and the type checks stay unconditional. With φ_hand, T1 is exactly S7's T1 (every date relation has φ_hand ≥ 0.9).
+
+**Likelihoods.**
+- **Two-way (S7):** add-one s and c; positive BF s / (1 − c), negative (1 − s) / c, inconclusive 1.
+- **Three-way:** P(outcome | true) and P(outcome | false) for the three outcomes, add-one per row (a Dirichlet(1, 1, 1) mean). BF = P(outcome | true) / P(outcome | false) for every outcome, inconclusive included.
+- In both, an inconclusive result is never independent evidence (I4 unchanged): silence can lower or raise a posterior, but it can never be the independent evidence `decide` needs for "supported".
+
+**Batch control.**
+- **B0:** BH at q 0.1 over the whole batch on p = min(1, 1/e) (S7). This is exactly e-BH (Wang and Ramdas 2022: reject the k largest e-values where e₍ₖ₎ ≥ m / (q k)), so e-BH is not a separate candidate.
+- **B1:** BH at q 0.1 only among the hypotheses `decide` supports. Selective; no FDR guarantee in general.
+- **B2:** BH at q 0.1 within each relation's batch (smaller batches).
+- **Reference only, not a candidate:** no batch step (`decide` alone).
+
+### Decision rule (fixed before the runs)
+
+1. **φ:** the variant with the highest mutual information between T1's three-way result and the label on S7's dev (S7's choice statistic). Ties go to φ_hand.
+2. **Likelihoods × batch control** (2 × 3), on S7's dev with the chosen T1: a configuration qualifies when its supported precision is ≥ 0.90 on at least 10 supported, and its refuted precision is ≥ 0.80. The qualifying configuration that decides the largest share (supported + refuted) wins. Ties (within 0.001) go to two-way before three-way, then B0, B2, B1. If none qualifies, S7's configuration stays.
+3. **Confirm:** S15's confirm half, read once, with the chosen configuration and S7's (two-way, B0) beside it. The choice is confirmed when its supported precision on the primary set is ≥ 0.90; its Wilson 95% lower bound is reported with it.
+
+### Predictions (registered before the runs)
+
+| # | Prediction |
+|---|---|
+| Q1 | φ_store is below 0.9 for birth_place, death_place and founded, and at or above 0.9 for capital, birth_year and death_year |
+| Q2 | φ_store is chosen. T1's s on dev rises from 0.755 to ≥ 0.85 and its c falls by at most 0.05. φ_wd moves T1's c more than its s (it makes country and author functional) |
+| Q3 | Three-way inconclusive BFs on dev: T4 in [0.55, 0.75], T5 in [0.9, 1.1], T1 in [0.95, 1.3] |
+| Q4 | Three-way decides a larger share of dev than two-way under every batch control, by at least 1 point |
+| Q5 | Supported counts on dev: B1 ≥ B2 ≥ B0; two-way B0 supports nothing (as in S7) |
+| Q6 | The chosen configuration is three-way with B2 or B1, with dev supported precision ≥ 0.95 |
+| Q7 | On S15's confirm half (primary set): supported precision ≥ 0.90; under 20% decided; T4 applicable to a smaller share than on S7's dev (S15's b and c facts are not in the 2006 text) |
+| Q8 | At least 80% of the confirm half's supported hypotheses are category a (stated in the 2006 text) |
+
+**Amendment (2026-10-29, after the choose-half read, before the confirm read).** The registration re-estimates φ_store on the store the tests read. On S15 that is the S15-reduced store, which has lost 9,393 of the store's 22,783 facts to the hold-out. Multi-valued slots then look functional: country's φ goes from 0.861 to 0.915, capital's from 0.881 to 0.908, director's from 0.877 to 0.909. On the choose half this alone made T1 negative on 46 true and 46 false `country` hypotheses, which carries no information. The hold-out was meant to keep each judged fact away from its tests, not to change the store's structure. So on S15 the loop uses **the φ table chosen on dev, as is**. The registered re-estimate is printed beside it on the confirm read, and the confirmation is judged on the amended form.
+
+### Results (run 2026-10-29)
+
+Tool: `pattern_learn --test-kinds … --phi-wd phi.tsv --s15 temporal_holdout_dev.tsv` (commit ca1ed8b, committed before the confirm read). A run takes 39–58 s at a 266–272 MB peak. S7's own lines and dev items are unchanged byte for byte, and with φ_hand T1 equals S7's T1 on all 5,746 hypotheses. The confirm half was read once (`--read-confirm`).
+
+#### φ for T1 (dev, both sets)
+
+| φ | Applicable | s | c | J | MI, bits |
+|---|---:|---|---|---|---:|
+| hand (S7) | 0.100 | 0.755 [0.680, 0.818] | 0.918 [0.863, 0.953] | +0.673 | 0.0374 |
+| Wikidata (D4) | 0.131 | 0.575 [0.505, 0.643] | 0.938 [0.894, 0.964] | +0.513 | 0.0318 |
+| **store** | 0.092 | **0.822 [0.749, 0.878]** | 0.911 [0.851, 0.948] | **+0.733** | **0.0403** |
+
+- **φ_store is chosen.** It is functional (≥ 0.9) where the store really holds one value.
+  - Unlike the hand-set table, it makes these not functional: birth_place (0.769: a coarse and a fine place), capital (0.881) and currency (0.808).
+  - It makes these functional: author (0.939), location (1.000) and owner (1.000).
+  - Date slots stay functional: birth_year 0.919, death_year 0.950, founded 0.938, birth_date 0.974, death_date 0.997.
+- **Wikidata's φ is worse than the hand-set one.** Wikidata counts one value per subject for country (0.920), author, director and composer, but the store holds several for them, so T1 starts negating true facts (s 0.755 → 0.575).
+- **Only T1 uses this φ.** Fusion's hand-set φ (`kRel`, which builds the store) is unchanged; replacing it changes the store and needs its own read.
+
+#### Three-way likelihoods (dev, with the chosen T1)
+
+| Test | P(+ / − / ? \| true) | P(+ / − / ? \| false) | BF + | BF − | BF ? |
+|---|---|---|---:|---:|---:|
+| T1 consistency | 0.076 / 0.017 / 0.908 | 0.009 / 0.084 / 0.907 | 8.57 | 0.200 | 1.001 |
+| T6 compression | 0.180 / 0.524 / 0.296 | 0.035 / 0.636 / 0.329 | 5.21 | 0.824 | 0.898 |
+| T5 Wikidata | 0.037 / 0.020 / 0.943 | 0.001 / 0.056 / 0.943 | 55.0 | 0.349 | 1.000 |
+| T4 corpus | 0.400 / 0.003 / 0.597 | 0.014 / 0.057 / 0.929 | 29.4 | 0.059 | **0.643** |
+
+- Silence is evidence for T4: "nothing found" has BF 0.64, as S7 measured.
+- The larger gain is elsewhere. S7's two-way factors condition on the test applying, so T4's positive factor was s / (1 − c) = 5.2. But false hypotheses rarely draw any T4 result at all: P(positive | false) is 0.014 over all hypotheses. The three-way positive factor is 29.4.
+
+#### The loop on dev (2,950 hypotheses, one batch)
+
+| Likelihoods | Batch step | Supported (precision, Wilson 95%) | Refuted (precision) | Decided | Qualifies |
+|---|---|---|---|---:|---|
+| two-way | B0 whole batch | 0 | 103 (0.961) | 0.035 | no |
+| two-way | B2 per relation | 111 (0.991 [0.951, 0.998]) | 103 (0.961) | 0.073 | yes |
+| two-way | B1 among supported | 237 (0.992 [0.970, 0.998]) | 103 (0.961) | 0.115 | yes |
+| three-way | B0 whole batch | 215 (0.995 [0.974, 0.999]) | 113 (0.965) | 0.111 | yes |
+| three-way | B2 per relation | 160 (0.988 [0.956, 0.997]) | 113 (0.965) | 0.093 | yes |
+| **three-way** | **B1 among supported** | **572 (0.974 [0.957, 0.984])** | **113 (0.965 [0.913, 0.986])** | **0.232** | **yes: chosen** |
+| two-way | none (reference) | 342 (0.991) | 103 | 0.151 | — |
+| three-way | none (reference) | 573 (0.974) | 113 | 0.233 | — |
+
+- **Chosen by the rule: three-way likelihoods with BH among the supported.** It decides 23.2% of dev, against S7's 3.5% with nothing supported.
+- **The batch step does almost nothing here.** Among the hypotheses `decide` supports it keeps 575 of 576. The precision comes from `decide` itself: a posterior above 0.9 from calibrated likelihoods, plus independent evidence. The whole-batch e-BH (three-way B0) is the valid FDR procedure, and supports 215 at 0.995.
+
+#### The confirm read: S15's confirm half, read once
+
+11,590 S15 dev pairs qualify (pattern_learn's relations, enwik8 subjects): 5,754 in the choose half and 5,836 in the confirm half, of which 2,680 are store-reachable. The S15-reduced store holds 13,390 of the store's 22,783 facts (9,393 held out). T5 is left out.
+
+| Set | Configuration | Supported (precision, Wilson 95%) | Refuted (precision) | Decided |
+|---|---|---|---|---:|
+| **Reachable (primary)** | **three-way, among supported, amended φ** | **977 (0.956 [0.941, 0.967])** | **138 (0.964 [0.918, 0.984])** | **0.208** |
+| Reachable | the same, registered φ | 975 (0.956 [0.941, 0.967]) | 138 (0.964) | 0.208 |
+| Reachable | S7's (two-way, whole batch) | 0 | 141 (0.957) | 0.026 |
+| All pairs | three-way, among supported, amended φ | 2,280 (0.969 [0.961, 0.976]) | 649 (0.928 [0.905, 0.945]) | 0.251 |
+| All pairs | S7's (two-way, whole batch) | 0 | 648 (0.929) | 0.056 |
+
+- **The choice is confirmed:** supported precision 0.956, Wilson lower bound 0.941, on a fresh labelled set.
+- The posterior's Brier score falls from the prior's 0.238 to 0.198 (primary set).
+- The φ amendment changes little in the loop: 977 against 975 supported.
+- On S15 the tests behave as on S7's dev, where they apply:
+  - T4: s 0.994, c 0.760, applicable 0.209;
+  - T6: J +0.16;
+  - T1 applies to under 1% of S15's hypotheses (few S15 subjects hold a conflicting value), J +0.29 [−0.36, +0.72].
+- **What is supported, by S15 category (primary):** a 432 (stated in the 2006 text), u 538 (no date), b 5, c 2. The loop finds what the 2006 text says. It supports almost nothing true only after 2006, as it should: no test here reads later evidence (T9 is the generators' final read).
+
+#### Predictions, scored
+
+| # | Prediction | Result | |
+|---|---|---|---|
+| Q1 | φ_store < 0.9 for birth_place, death_place, founded; ≥ 0.9 for capital, birth_year, death_year | birth_place 0.769, death_place 0.951, founded 0.938; capital 0.881, birth_year 0.919, death_year 0.950 | miss (3 of 6) |
+| Q2 | φ_store chosen; T1 s 0.755 → ≥ 0.85, c falls ≤ 0.05; φ_wd moves c more than s | chosen; s 0.822; c −0.007; φ_wd moves s (−0.180) more than c (+0.020) | partial |
+| Q3 | Inconclusive BFs: T4 0.55–0.75, T5 0.9–1.1, T1 0.95–1.3 | 0.643, 1.000, 1.001 | hit |
+| Q4 | Three-way decides ≥ 1 point more under every batch step | +7.6, +2.0, +11.7 points | hit |
+| Q5 | Supported B1 ≥ B2 ≥ B0; two-way B0 none | two-way 237 ≥ 111 ≥ 0; three-way B2 160 < B0 215 | partial |
+| Q6 | Three-way with B2 or B1, dev precision ≥ 0.95 | three-way B1, 0.974 | hit |
+| Q7 | Confirm: precision ≥ 0.90; under 20% decided; T4 applicable less than on dev | 0.956; 20.8%; 0.209 < 0.236 | partial (decided 0.8 points over) |
+| Q8 | ≥ 80% of the confirm's supported are category a | 44% (u 55%) | miss |
+
+3 hits, 3 partial, 2 misses. Q8 misread S15's categories: "u" means undated and changeable (occupation, genre, country), not "unstated", and the 2006 text states many of them.
+
+### Decisions (S7b)
+
+1. **T1 uses the store's own φ** (φ_store, the table estimated on the store; on S15 the dev table as is). Fusion's φ in `kRel` is unchanged.
+2. **The loop uses three-way likelihoods** (`HypTest::likelihoods`, `likelihoods_from`). An inconclusive result moves the posterior by its measured ratio and is still never independent evidence (I4).
+3. **The batch step is BH among the supported** (`bh_reject_e_among`), as the rule chose. It is selective, with no FDR guarantee over the batch. In practice the precision comes from `decide`'s 0.9 threshold on calibrated posteriors, and it held on fresh data (0.956).
+4. **Confirmed on S15's confirm half.** The loop decides about 21–25% of fresh hypotheses where S7's decided 3–6% and supported none.
+5. **I5 holds:** the plan registers each test's likelihoods; an edit of one breaks the log's chain.
+6. 43 new checks in `native_epistemic_test` (697 in all). Four planted bugs are caught (5, 3, 2 and 3 failing checks): silence counted as BF 1, likelihoods left out of the plan, the batch step ignoring the selection, and silence counted as independent evidence.
+
+### For Odin (S7b)
+
+- **Batch control.** The chosen step (BH among the supported) has no FDR guarantee and here changes almost nothing. The valid whole-batch e-BH with three-way likelihoods supports 215 of dev at 0.995 (11% decided against 23%). If a guarantee matters more than reach, switch to it; the code has both.
+- **Fusion's φ.** The store's φ differs from the hand-set table in six relations (birth_place, capital, currency, author, location, owner). Using it in fusion (`--phi FILE` exists) would change the store, and needs its own read.
+
+### How to reproduce (S7b)
+
+```bash
+g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp -o pattern_learn
+# dev choices and S15's choose half
+./pattern_learn --test-kinds enwik8 /root/work/f2/v2/aug/seeds.tsv /root/work/f2/wikidata/wd_values.tsv /root/work/f2/v2/aug/patterns.tsv out \
+  --phi-wd /root/work/f2/wikidata/phi.tsv --s15 bench/eval/temporal_holdout_dev.tsv
+# the single confirm read
+./pattern_learn … final --phi-wd /root/work/f2/wikidata/phi.tsv --s15 bench/eval/temporal_holdout_dev.tsv --read-confirm
+cmake --build build --target epistemic_test && build/epistemic_test   # 697 checks
+```
+
+The S7b lines start with `S7B`. `OUT.s15_items.tsv` lists the S15 hypotheses of the halves read with their T1, T6 and T4 results and prior. `OUT.s7b_dev.prereg.tsv` and `OUT.s15_confirm.prereg.tsv` are the chosen configuration's pre-registration logs.
