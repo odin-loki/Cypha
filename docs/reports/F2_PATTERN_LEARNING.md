@@ -367,3 +367,149 @@ E=/root/cdata/enwik8; W=/root/work/f2/wikidata/wd_values.tsv; C=/root/work/sem/c
 ./pattern_learn $E T0 --cv --wikidata $W --f2b-read-test                       # the test read, once (A0 and A1)
 ./pattern_learn $E T1 --cv --wikidata $W --f2b-read-test --f2b-xa
 ```
+
+## F2c: the lexicon leak (registered 2026-10-29, before any run)
+
+**Odin Loch** · 2026-10-29 · follows F2b's supplementary check · decided by measurement (PLAN ledger 55), open to Odin's veto
+
+(The definitions, the reads, the rule and the predictions below were written and committed before any fetch of types and before any run of the changed code. Results are added under them.)
+
+**Question.** F2b found that D4's Wikidata seeds widen the type lexicons with values of the wrong type. The "founder" values of the European Space Agency, the ECSC and Benelux include Belgium, France and Italy. Founder is a person relation, so `pass 1` adds those country names to the person lexicon. A1's cross-article reading then took a country's period as a death date ("Belgium (1940 - 1945)"): 8 of A1's 27 new facts. Wikidata's gold check misses them, because a country has no death date. Should a Wikidata seed value widen a type lexicon only when Wikidata's own type for it agrees?
+
+**Rule 10.** The lexicons read text into facts for Cypha's own store. Nothing here answers a question.
+
+### The fix (behind a flag)
+
+- **`--lexicon-type-check FILE`.** `FILE` is a table of Wikidata types for the seed values: item, its instance-of classes (P31), and whether it has a coordinate location (P625). It is fetched once from Wikidata's SPARQL endpoint for the person-relation and place-relation values in `wd_values.tsv`, and cached.
+- **What it changes.** Only how Wikidata seeds (source 3) widen the lexicons in pass 1. Text seeds widen them as before. The seeds stay seeds: they still choose and check patterns.
+  - **Arm P:** a Wikidata value of a person relation (author, director, composer, founder, creator, spouse, predecessor, successor, inventor) enters the person lexicon only if Wikidata says it is an instance of human (Q5).
+  - **Arm PL:** arm P, and a Wikidata value of a place relation (capital, largest_city, country, location, located_in, birth_place, death_place) enters the place lexicon only if it has a coordinate location (P625).
+  - A value with no row in the table counts as disagreeing (it does not widen).
+- **Every copy of pass 1** (the main run and the modes that rebuild its lexicons: S7, S8a and the others) uses the same test, so the store stays one store.
+- **Without the flag** every output is byte-identical to now.
+
+### The reads
+
+- **Dev** (choices): F2b's gold-dev half (`--f2b-gold-split`), with A0 (D4's run) and A1 (F2b's cross-article arm), each without the flag and with arms P and PL. Read: the lexicon entries each arm removes, by lexicon; admitted facts (P ≥ 0.8); the store's Wikidata agreement on gold-dev, right / checked with Wilson 95%; gold-dev facts Wikidata confirms ("right") that are lost; for A1, whether the 8 wrong country-period facts are gone and the 19 right ones kept.
+- **S3's gap map** with the chosen arm: which gap kinds and entities move.
+- **Gold-test** (the decision, read once): the chosen arm against no flag, with A0's settings, on F2b's gold-test half (`--f2b-read-test`).
+
+### Decision rule (fixed before any run)
+
+1. **Arm choice on dev.** PL replaces P only if it passes the rule below on dev and removes more misfiled place entries without losing any gold-dev "right" fact that P keeps. Otherwise P.
+2. **Adopt as the default** if, with A0's settings: the leaked entries are removed (no Wikidata person-relation value that Wikidata types as a country enters the person lexicon); the store's Wikidata agreement does not fall (gold point estimate not lower than without the flag); and admitted facts that Wikidata confirms fall by at most 1%. Dev chooses; gold-test decides, read once.
+3. If adopted, S3's reference outputs change. The report gives the new gap-map hash and lists every reference that must be regenerated. Other agents' references are not regenerated here.
+4. Otherwise the flag stays and the default is unchanged.
+
+### Predictions (registered before any run)
+
+| # | Prediction |
+|---|---|
+| L1 | 10–35% of the person-relation Wikidata values are not humans (organisations, countries, bands, fictional characters) |
+| L2 | Arm P removes 150–700 strings from the person lexicon that no page flag puts there |
+| L3 | With A0's settings, admitted facts change by under 1% and gold-dev agreement moves by under 0.01 |
+| L4 | With A1's settings, all 8 country-period facts are gone and at least 17 of the 19 right facts stay |
+| L5 | S3's gap map changes (its hash differs), mostly in person-entity schema gaps |
+| L6 | Arm PL removes 2–15% of the place-relation values from the place lexicon, and changes admitted facts by under 1% |
+| L7 | The rule adopts arm P |
+
+### F2c results on dev (2026-10-29)
+
+**The types.** `seed_value_types.tsv`: P31 classes and P625 for the 4,592 values of person and place relations in `wd_values.tsv` (2,278 person-relation values, 2,328 place-relation values, 14 in both). Fetched once from `https://query.wikidata.org/sparql` on 2026-10-29, in ten batches of 500 at one a minute (the endpoint was limiting to one request a minute during an outage). Every item has a row.
+
+- **Person-relation values that are not human:** 186 of 2,278 (0.082). By class (approximate): 87 mythological, biblical or fictional characters (the Japanese imperial consorts of legend, Zeus, Hephaestus, Fergus McDuck), 23 organisations (Sony, Philips, Cisco, Microsoft), 14 countries or states (Belgium, France, Italy, Spain, Sweden, the United Kingdom, West Germany), 62 other (bands, laboratories, legislatures, "group of authors").
+- **Place-relation values without a coordinate location:** 76 of 2,328 (0.033), mostly historical states and palaces.
+
+**The lexicons (pass 1, A0's settings).**
+
+| Arm | Person lexicon | Place lexicon | Values kept out |
+|---|---:|---:|---|
+| Off | 3,429 | 4,137 | — |
+| P | 3,283 | 4,137 | 147 person values; 146 of them no other source puts in the person lexicon ("david" stays, from a page) |
+| PL | 3,283 | 4,046 | as P, and 60 place values (56 not in the place lexicon from another source) |
+
+- **The leaked countries are out:** Belgium, France, Italy, Denmark, Spain, Sweden, Switzerland, Luxembourg, the Netherlands, the United Kingdom, the Republic of Ireland and West Germany no longer enter the person lexicon. No Wikidata person-relation value that Wikidata types as a country does.
+- **PL's 56 place removals:** about 7 are not places (a journal, a city council, a government, "internationality", Esperantujo, the Yishuv, a dynasty). About 49 are places Wikidata gives no coordinates: historical states (the Mughal Empire, the Delhi Sultanate, the Kingdom of Poland, the Ptolemaic Kingdom), Japanese palaces of legend, fictional places (Arrakis, Skaro), Christiania (Oslo's old name).
+
+**The store (gold-dev half, `--f2b-gold-split`).**
+
+| Run | Admitted | Lost against off | Gold-dev Wikidata agreement | Admitted facts any Wikidata value confirms |
+|---|---:|---|---|---:|
+| A0 off | 1,216 | — | 77/81 = 0.951 [0.880, 0.981] | 1,005 |
+| A0 P | 1,210 | 6, none checkable (Fergus McDuck ×5, Downy O'Drake ×1) | 77/81 = 0.951 [0.880, 0.981] | 1,005 (±0.00%) |
+| A0 PL | 1,209 | the 6, and Ivar Aasen died in Christiania (confirmed) | 77/81 = 0.951 [0.880, 0.981] | 1,004 (−0.10%) |
+| A1 off | 1,243 | — | 77/81 = 0.951 [0.880, 0.981] | 1,022 |
+| A1 P | 1,229 | 14 (below) | 77/81 = 0.951 [0.880, 0.981] | 1,022 (±0.00%) |
+| A1 PL | 1,228 | the 14 and Ivar Aasen's | 77/81 = 0.951 [0.880, 0.981] | 1,021 (−0.10%) |
+
+("Any Wikidata value confirms" uses every row of `wd_values.tsv`, seeds included, matched on a surface form; reported, not the registered gold measure.) No arm adds a fact.
+
+**A1's 27 cross-article facts (F2b's supplementary check).**
+- **Gone with arm P (8):** Belgium 1945, France 1944, Italy 1943 (each as death date and death year): 6 of F2b's 8 wrong facts. And Downy O'Drake's death in 1897 (date and year): 2 of F2b's 19 right ones. Downy O'Drake is a fictional duck; Wikidata types her as a fictional character, and her 1897 death is the comics' own.
+- **Kept (19):** 17 of the 19 right facts, and the Commonwealth of England's 1653 (date and year), 2 of the 8 wrong ones. The Commonwealth enters the person lexicon from a **text** seed, not Wikidata: Charles I of England's succession box names it as his successor. This fix leaves text seeds as they are (registered design), so that part of the leak stays.
+- Fergus McDuck's five facts (born 1835 in Glasgow, died 1902) go for the same reason as Downy O'Drake's: fictional characters are not human in Wikidata.
+
+**S3's gap map (the full run, `--gaps`).**
+
+| Arm | Gaps | Entities by type | Gap map hash |
+|---|---:|---|---|
+| Off | 27,842 | person 1,329, place 568, other 6,359 | `a77678d8ef7dfdef` |
+| P | 27,760 | person 1,320, place 570, other 6,366 | `7e71b1eae898ffb9` |
+| PL | 27,752 | person 1,320, place 568, other 6,368 | `ba221cb2c79cc1ee` |
+
+- With PL, 73 gap rows go (69 schema, 4 certainty; on 68 person entities and 5 place entities: France, Italy, Ezekiel, God, Hephaestus, the Free Software Foundation, the Futurians, Fergus McDuck, Christiania, Esperantujo) and 21 come (schema gaps of the same entities, now typed other or place). The demand file is unchanged. `facts_f2.tsv`, `patterns.tsv` and the cells file change with the store; `seeds.tsv` does not.
+
+**Rule 1 (the arm).** PL removes more misfiled place entries than P (about 7 against none) and loses no gold-dev fact that P keeps, so by the rule as registered **PL is chosen**. It also keeps about 49 real places without coordinates out of the place lexicon and loses one confirmed fact outside gold-dev (Ivar Aasen in Christiania). The rule did not weigh that; it is noted for Odin, and arm P stays available behind the same flag.
+
+**Rule 2 on dev (A0's settings, PL).** The leaked entries are removed; gold-dev agreement is unchanged (0.951); admitted facts any Wikidata value confirms fall by 0.10% (≤ 1%). Dev passes. The gold-test read decides.
+
+**Planted bugs** (`--f2b-selftest`, now 25 checks, 9 of them F2c's): text seeds gated too (1 check fails), any class counted as human (2 fail), arm P gating places (1 fails). Each fails it.
+
+### F2c test read and decision (2026-10-29)
+
+**Gold-test, read once** (`--f2b-read-test`, A0's settings, arm PL; the flag-off side is F2b's own read of the same half, reproduced byte for byte by the flag-off binary):
+
+| Run | Admitted | Gold-test Wikidata agreement | Admitted facts any Wikidata value confirms |
+|---|---:|---|---:|
+| Off (F2b's T0) | 1,216 | 96/101 = 0.950 [0.889, 0.979] | 1,005 |
+| PL | 1,209 | 96/101 = 0.950 [0.889, 0.979] | 1,004 (−0.10%) |
+
+The store with PL is the same on both halves' runs (the split only changes which subjects are scored). Peak 122 MB, 78 s.
+
+**Rule 2 holds.** The leaked entries are gone (no Wikidata person-relation value typed as a country enters the person lexicon); gold-test agreement is unchanged; confirmed facts fall by 0.10% (≤ 1%). **Arm PL is adopted as the default** (decided by measurement under PLAN ledger 55, open to Odin's veto).
+
+- **How it is the default:** the table is committed (`data/f2c/wd_seed_types.tsv`, 98 KB, with its README and `scripts/f2c_fetch_seed_types.py`). `pattern_learn` loads it from the working directory (the repository root, as every run here does) unless `--no-lexicon-type-check` is given. `--lexicon-type-check FILE` names another table; `--lexicon-type-arm P` keeps places as they were.
+- **What changes by default:** S3's gap map becomes `ba221cb2c79cc1ee` (27,752 gaps; was `a77678d8ef7dfdef`, 27,842). With `--no-lexicon-type-check` every output is byte-identical to before.
+- **References to regenerate** (by whoever owns them; not done here). Every mode that rebuilds the type lexicons from Wikidata seeds runs pass 1 through the new check:
+  - the main run: S3's `--gaps` reference (`/root/work/s4/runs/test/`: `gap_map.tsv`, its cells file, `facts_f2.tsv`, `facts_f2.evidence.tsv`, `facts_wd_check.tsv`, `patterns.tsv`, `sample_admitted.tsv`; `seeds.tsv`, `pages.tsv` and the demand file do not change), the v2 store if it is rebuilt, F2/F2b/D4's reads, S4's frontier and S4b/S4c's `--signals` runs (U reads the store's patterns);
+  - `--test-kinds` (S7, S7b, S7c), `--gen-links` (S8b; S8d's `--fresh-confirm` and S10's `--fresh-test-half` pools), `--gen-rules` (S8a, the same pools), `--worlds` (S9), `--gen-concepts` (S11a), `--gen-anomaly` and `--gen-analogy` (S11c);
+  - modes that only read those outputs (`--sources`, `--schedule`, `--score-planted`) change only through their inputs.
+  - Any pass-1 copy added by a branch merged later must call `lexfix::widen_ok` too.
+- **Not fixed here:** the Commonwealth of England's 1653 "death" stays. It enters the person lexicon from a text seed (Charles I's succession box), not Wikidata.
+
+#### Predictions, scored
+
+| # | Prediction | Result |
+|---|---|---|
+| L1 | 10–35% of person-relation values not human | **Miss:** 8.2% (186 of 2,278) |
+| L2 | Arm P removes 150–700 person strings | **Miss:** 146 |
+| L3 | A0: admitted −1% or less, gold agreement within 0.01 | **Hit:** −0.49% (P), −0.58% (PL); agreement unchanged |
+| L4 | A1: all 8 country-period facts gone, ≥ 17 of 19 right kept | **Partial:** 6 of 8 gone (the Commonwealth's 2 come from a text seed); 17 of 19 kept |
+| L5 | S3's gap map changes, mostly person schema gaps | **Hit:** 69 of 73 removed rows are schema gaps, 68 on person entities |
+| L6 | PL removes 2–15% of place values, admitted −1% or less | **Hit:** 60 of 2,328 values (2.6%) kept out; admitted −0.58% |
+| L7 | The rule adopts arm P | **Miss:** it adopts PL (rule 1, as registered) |
+
+3 hits, 1 partial, 3 misses.
+
+#### Reproduce
+
+```bash
+g++ -O2 -std=c++20 -I native/include -pthread native/tools/pattern_learn.cpp -o pattern_learn
+E=/root/cdata/enwik8; W=/root/work/f2/wikidata/wd_values.tsv; T=data/f2c/wd_seed_types.tsv
+./pattern_learn --f2b-selftest                                                                   # 25 checks
+./pattern_learn $E A0off --cv --wikidata $W --f2b-gold-split --no-lexicon-type-check              # dev, off
+./pattern_learn $E A0P --cv --wikidata $W --f2b-gold-split --lexicon-type-check $T --lexicon-type-arm P
+./pattern_learn $E A0PL --cv --wikidata $W --f2b-gold-split                                       # dev, PL (the default)
+./pattern_learn $E A1PL --cv --wikidata $W --f2b-gold-split --f2b-xa                              # A1 with PL
+./pattern_learn $E T0PL --cv --wikidata $W --f2b-read-test                                        # the test read (once)
+```

@@ -871,6 +871,44 @@ std::unordered_set<string> g_person;                 // person-like pages
 std::unordered_set<string> g_country;                // country / state / province pages
 std::unordered_map<string, std::uint64_t> g_lex;     // norm string -> mask of LEX relations that take it as an object
 
+// F2c (docs/reports/F2_PATTERN_LEARNING.md, "F2c"): --lexicon-type-check FILE [--lexicon-type-arm P|PL] (PL by default; the table is
+// data/f2c/wd_seed_types.tsv). A Wikidata seed value widens
+// the person lexicon only if Wikidata types it as human (P31 Q5); with arm PL it widens the place lexicon only if it has a coordinate
+// location (P625). Text seeds widen as before. Off: every output unchanged.
+namespace lexfix {
+int g_arm = 0;                                                              // 0 off, 1 P, 2 PL
+std::unordered_map<string, std::pair<std::vector<string>, bool>> g_types;  // item -> P31 classes, has P625
+std::set<string> g_blocked_person, g_blocked_place;                         // values kept out (pass 1)
+bool load(const string& path) {
+    std::ifstream f(path);
+    if (!f) return false;
+    string line;
+    while (std::getline(f, line)) {
+        if (line.empty() || line[0] == '#') continue;
+        std::size_t a = line.find('\t'), b = a == string::npos ? a : line.find('\t', a + 1);
+        if (b == string::npos) continue;
+        auto& t = g_types[line.substr(0, a)];
+        std::size_t p = a + 1;
+        while (p < b) {
+            std::size_t q = line.find(',', p);
+            if (q == string::npos || q > b) q = b;
+            if (q > p) t.first.push_back(line.substr(p, q - p));
+            p = q + 1;
+        }
+        t.second = line.compare(b + 1, 1, "1") == 0;
+    }
+    return true;
+}
+bool is_human(const string& q) {
+    auto it = g_types.find(q);
+    return it != g_types.end() && std::find(it->second.first.begin(), it->second.first.end(), "Q5") != it->second.first.end();
+}
+bool has_geo(const string& q) {
+    auto it = g_types.find(q);
+    return it != g_types.end() && it->second.second;
+}
+}  // namespace lexfix
+
 const std::unordered_set<string>& stop_words() {
     static const std::unordered_set<string> S = {
         "the", "a", "an", "in", "on", "at", "he", "she", "it", "his", "her", "its", "they", "their", "this", "that", "these", "those", "however",
@@ -1330,6 +1368,7 @@ struct Seed {
     int src = 0;  // 0 infobox/template, 1 wiki table, 2 category, 3 Wikidata (distant supervision only: never a fact)
     string tpl;
     std::uint64_t off = 0;
+    string vqid;  // F2c: the Wikidata value item (source 3 only)
 };
 const char* const kSrcName[4] = {"infobox", "table", "category", "wikidata"};
 
@@ -1477,6 +1516,23 @@ void add_seed(const string& subj, int r, const Obj& o, int src, const string& tp
     g_by_subj[subj].push_back(static_cast<int>(g_seeds.size()));
     g_seeds.push_back(std::move(s));
 }
+namespace lexfix {
+// F2c: may this seed's value widen the lexicon of type ty? Off, or a text seed: yes, as before.
+bool widen_ok(const Seed& sd, RT ty) {
+    if (g_arm == 0 || sd.src != 3) return true;
+    if (ty == T_PERSON) {
+        if (is_human(sd.vqid)) return true;
+        g_blocked_person.insert(sd.o.k1);
+        return false;
+    }
+    if ((ty == T_PLACE || ty == T_PLACE_LINK) && g_arm == 2) {
+        if (has_geo(sd.vqid)) return true;
+        g_blocked_place.insert(sd.o.k1);
+        return false;
+    }
+    return true;
+}
+}  // namespace lexfix
 
 bool starts_any(const string& c, std::initializer_list<const char*> pre, string& rest) {
     for (const char* p : pre) {
@@ -2128,7 +2184,12 @@ bool load_wikidata(const string& path, bool gold_only, const std::unordered_map<
             if (keys.size() > 3) o.alt.assign(keys.begin() + 3, keys.end());
         }
         if (gold_only || wd_gold_subject(c[0])) { g_gold[c[0] + "\x1f" + c[1]].push_back(o); ++n_gold; }
-        else { add_seed(c[0], r, o, 3, "wikidata", 0); ++n_seed; }
+        else {
+            const std::size_t before = g_seeds.size();
+            add_seed(c[0], r, o, 3, "wikidata", 0);
+            if (g_seeds.size() > before && c.size() > 4) g_seeds.back().vqid = c[4];  // F2c
+            ++n_seed;
+        }
     }
     return true;
 }
@@ -4281,6 +4342,33 @@ int selftest() {
         check(f2b::resolve("Loop", po) == -1 && f2b::resolve("Nowhere", po) == -1, "unresolved targets");
         f2b::g_redir.clear();
     }
+    {  // F2c: the lexicon type check (a Wikidata value widens a lexicon only when Wikidata's type agrees)
+        const string fn = "/tmp/pl_f2c_selftest_types.tsv";
+        { std::ofstream f(fn); f << "# test\nQ31\tQ3624078,Q6256\t1\nQ90\tQ515\t1\nQ1001\tQ5\t0\nQ2\t\t0\n"; }
+        lexfix::g_types.clear();
+        check(lexfix::load(fn) && lexfix::g_types.size() == 4, "F2c load");
+        check(lexfix::is_human("Q1001") && !lexfix::is_human("Q31") && !lexfix::is_human("Q2") && !lexfix::is_human("Q777"), "F2c human");
+        check(lexfix::has_geo("Q90") && lexfix::has_geo("Q31") && !lexfix::has_geo("Q1001") && !lexfix::has_geo("Q777"), "F2c coordinates");
+        Seed wd, tx;
+        wd.src = 3; wd.o.k1 = "belgium"; wd.vqid = "Q31";
+        tx.src = 0; tx.o.k1 = "belgium"; tx.vqid = "Q31";
+        lexfix::g_arm = 0;
+        check(lexfix::widen_ok(wd, T_PERSON) && lexfix::widen_ok(wd, T_PLACE), "F2c off: everything widens");
+        lexfix::g_arm = 1;
+        check(!lexfix::widen_ok(wd, T_PERSON) && lexfix::widen_ok(tx, T_PERSON), "F2c P: a country stays out of the person lexicon; text seeds widen");
+        wd.vqid = "Q1001";
+        check(lexfix::widen_ok(wd, T_PERSON), "F2c P: a human widens");
+        wd.vqid = "Q2";
+        check(lexfix::widen_ok(wd, T_PLACE) && !lexfix::widen_ok(wd, T_PERSON), "F2c P: places unchanged; an untyped value stays out of persons");
+        lexfix::g_arm = 2;
+        check(!lexfix::widen_ok(wd, T_PLACE_LINK) && (wd.vqid = "Q90", lexfix::widen_ok(wd, T_PLACE)), "F2c PL: places need coordinates");
+        check(lexfix::g_blocked_person.count("belgium") == 1, "F2c blocked values recorded");
+        lexfix::g_arm = 0;
+        lexfix::g_types.clear();
+        lexfix::g_blocked_person.clear();
+        lexfix::g_blocked_place.clear();
+        std::remove(fn.c_str());
+    }
     std::printf("f2b selftest: %d checks, %d failed\n", checks, fails);
     return fails ? 1 : 0;
 }
@@ -5386,8 +5474,8 @@ int run(int argc, char** argv) {
     }
     for (const Seed& sd : g_seeds) {
         const RT ty = kRel[sd.rel].type;
-        if (ty == T_PLACE || ty == T_PLACE_LINK) { g_place.insert(sd.o.k1); if (!sd.o.k2.empty()) g_place.insert(sd.o.k2); }
-        if (ty == T_PERSON) g_person.insert(sd.o.k1);
+        if ((ty == T_PLACE || ty == T_PLACE_LINK) && lexfix::widen_ok(sd, ty)) { g_place.insert(sd.o.k1); if (!sd.o.k2.empty()) g_place.insert(sd.o.k2); }
+        if (ty == T_PERSON && lexfix::widen_ok(sd, ty)) g_person.insert(sd.o.k1);
         if (ty == T_LEX && sd.o.k1.size() >= 3) g_lex[sd.o.k1] |= 1ULL << sd.rel;
         if (string(kRel[sd.rel].name) == "located_in") g_loc[norm_ent(sd.subj)].insert(sd.o.k1);
     }
@@ -6196,8 +6284,8 @@ bool load_corpus(const char* enwik8, const char* wd_path, const char* patterns_p
     if (!load_wikidata(wd_path, false, C.page_of, ns, ng)) { std::fprintf(stderr, "cannot read %s\n", wd_path); return false; }
     for (const Seed& sd : g_seeds) {
         const RT ty = kRel[sd.rel].type;
-        if (ty == T_PLACE || ty == T_PLACE_LINK) { g_place.insert(sd.o.k1); if (!sd.o.k2.empty()) g_place.insert(sd.o.k2); }
-        if (ty == T_PERSON) g_person.insert(sd.o.k1);
+        if ((ty == T_PLACE || ty == T_PLACE_LINK) && lexfix::widen_ok(sd, ty)) { g_place.insert(sd.o.k1); if (!sd.o.k2.empty()) g_place.insert(sd.o.k2); }
+        if (ty == T_PERSON && lexfix::widen_ok(sd, ty)) g_person.insert(sd.o.k1);
         if (ty == T_LEX && sd.o.k1.size() >= 3) g_lex[sd.o.k1] |= 1ULL << sd.rel;
         if (string(kRel[sd.rel].name) == "located_in") g_loc[norm_ent(sd.subj)].insert(sd.o.k1);
     }
@@ -7671,8 +7759,8 @@ int run(int argc, char** argv) {
     }
     for (const Seed& sd : g_seeds) {
         const RT ty = kRel[sd.rel].type;
-        if (ty == T_PLACE || ty == T_PLACE_LINK) { g_place.insert(sd.o.k1); if (!sd.o.k2.empty()) g_place.insert(sd.o.k2); }
-        if (ty == T_PERSON) g_person.insert(sd.o.k1);
+        if ((ty == T_PLACE || ty == T_PLACE_LINK) && lexfix::widen_ok(sd, ty)) { g_place.insert(sd.o.k1); if (!sd.o.k2.empty()) g_place.insert(sd.o.k2); }
+        if (ty == T_PERSON && lexfix::widen_ok(sd, ty)) g_person.insert(sd.o.k1);
         if (ty == T_LEX && sd.o.k1.size() >= 3) g_lex[sd.o.k1] |= 1ULL << sd.rel;
         if (string(kRel[sd.rel].name) == "located_in") g_loc[norm_ent(sd.subj)].insert(sd.o.k1);
     }
@@ -8400,8 +8488,8 @@ int run(int argc, char** argv) {
     }
     for (const Seed& sd : g_seeds) {
         const RT ty = kRel[sd.rel].type;
-        if (ty == T_PLACE || ty == T_PLACE_LINK) { g_place.insert(sd.o.k1); if (!sd.o.k2.empty()) g_place.insert(sd.o.k2); }
-        if (ty == T_PERSON) g_person.insert(sd.o.k1);
+        if ((ty == T_PLACE || ty == T_PLACE_LINK) && lexfix::widen_ok(sd, ty)) { g_place.insert(sd.o.k1); if (!sd.o.k2.empty()) g_place.insert(sd.o.k2); }
+        if (ty == T_PERSON && lexfix::widen_ok(sd, ty)) g_person.insert(sd.o.k1);
         if (ty == T_LEX && sd.o.k1.size() >= 3) g_lex[sd.o.k1] |= 1ULL << sd.rel;
         if (string(kRel[sd.rel].name) == "located_in") g_loc[norm_ent(sd.subj)].insert(sd.o.k1);
     }
@@ -10785,8 +10873,8 @@ bool load_env(Env& E, const string& enwik8, const string& seeds, const string& w
     }
     for (const Seed& sd : g_seeds) {
         const RT ty = kRel[sd.rel].type;
-        if (ty == T_PLACE || ty == T_PLACE_LINK) { g_place.insert(sd.o.k1); if (!sd.o.k2.empty()) g_place.insert(sd.o.k2); }
-        if (ty == T_PERSON) g_person.insert(sd.o.k1);
+        if ((ty == T_PLACE || ty == T_PLACE_LINK) && lexfix::widen_ok(sd, ty)) { g_place.insert(sd.o.k1); if (!sd.o.k2.empty()) g_place.insert(sd.o.k2); }
+        if (ty == T_PERSON && lexfix::widen_ok(sd, ty)) g_person.insert(sd.o.k1);
         if (ty == T_LEX && sd.o.k1.size() >= 3) g_lex[sd.o.k1] |= 1ULL << sd.rel;
         if (string(kRel[sd.rel].name) == "located_in") g_loc[norm_ent(sd.subj)].insert(sd.o.k1);
     }
@@ -13507,6 +13595,23 @@ int run_deep(int argc, char** argv) {
 }  // namespace s12a
 
 int main(int argc, char** argv) {
+    {  // F2c: --lexicon-type-check FILE [--lexicon-type-arm P|PL] apply to every mode's pass 1; they are taken out of argv here
+        int w = 1, arm = 2;  // PL, the arm F2c's rule chose
+        bool on = false;
+        for (int i = 1; i < argc; ++i) {
+            const string a = argv[i];
+            if (a == "--lexicon-type-check" && i + 1 < argc) {
+                if (!lexfix::load(argv[++i])) { std::fprintf(stderr, "cannot read %s\n", argv[i]); return 1; }
+                on = true;
+                continue;
+            }
+            if (a == "--lexicon-type-arm" && i + 1 < argc) { arm = string(argv[++i]) == "P" ? 1 : 2; continue; }
+            argv[w++] = argv[i];
+        }
+        argc = w;
+        argv[argc] = nullptr;
+        lexfix::g_arm = on && !lexfix::g_types.empty() ? arm : 0;
+    }
     if (argc >= 2 && string(argv[1]) == "--score-planted") return s6::run(argc, argv);  // S6 (hypothesis scoring)
     if (argc >= 2 && string(argv[1]) == "--test-kinds") return s7::run(argc, argv);  // S7 (testing hypotheses)
     if (argc >= 2 && string(argv[1]) == "--gen-links") return s8b::run(argc, argv);  // S8b (link prediction, G6 and G7)
@@ -13631,13 +13736,24 @@ int main(int argc, char** argv) {
     }
     for (const Seed& sd : g_seeds) {
         RT ty = kRel[sd.rel].type;
-        if (ty == T_PLACE || ty == T_PLACE_LINK) { g_place.insert(sd.o.k1); if (!sd.o.k2.empty()) g_place.insert(sd.o.k2); }
-        if (ty == T_PERSON) g_person.insert(sd.o.k1);
+        if ((ty == T_PLACE || ty == T_PLACE_LINK) && lexfix::widen_ok(sd, ty)) { g_place.insert(sd.o.k1); if (!sd.o.k2.empty()) g_place.insert(sd.o.k2); }
+        if (ty == T_PERSON && lexfix::widen_ok(sd, ty)) g_person.insert(sd.o.k1);
         if (ty == T_LEX && sd.o.k1.size() >= 3) g_lex[sd.o.k1] |= 1ULL << sd.rel;
         if (string(kRel[sd.rel].name) == "located_in") g_loc[norm_ent(sd.subj)].insert(sd.o.k1);
     }
     say("pass 1 (seeds, types): " + std::to_string(now_s() - t1) + " s; place pages " + std::to_string(g_place.size()) + ", person pages " + std::to_string(g_person.size()) +
         ", lexicon strings " + std::to_string(g_lex.size()));
+    if (lexfix::g_arm) {  // F2c
+        long np = 0, nl = 0;
+        std::ofstream bf(A.outdir + "/lexfix_blocked.tsv");
+        bf << "lexicon\tvalue\tstill_in_lexicon\n";
+        for (const string& v : lexfix::g_blocked_person) { bool in = g_person.count(v) > 0; np += !in; bf << "person\t" << v << '\t' << in << '\n'; }
+        for (const string& v : lexfix::g_blocked_place) { bool in = g_place.count(v) > 0; nl += !in; bf << "place\t" << v << '\t' << in << '\n'; }
+        say("F2C lexicon type check (arm " + string(lexfix::g_arm == 2 ? "PL" : "P") + ", " + std::to_string(lexfix::g_types.size()) +
+            " typed items): person values kept out " + std::to_string(lexfix::g_blocked_person.size()) + " (" + std::to_string(np) +
+            " not in the person lexicon from another source), place values kept out " + std::to_string(lexfix::g_blocked_place.size()) + " (" +
+            std::to_string(nl) + " not in the place lexicon)");
+    }
     if (f2b::g_xa) {  // F2b
         f2b::load_redirects(data);
         say("F2B cross-article reading: redirects " + std::to_string(f2b::g_redir.size()));
