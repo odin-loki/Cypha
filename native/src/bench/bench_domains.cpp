@@ -1781,7 +1781,7 @@ Json run_d10_ssm_diagnose() {
     cypha::bench::TimeSeriesEncoder enc(32, 16);
     const auto ecg = cypha::bench::load_ecg5000(kBenchSeed);
     cypha::cyphalm::CyphaLMConfig cfg;
-    cfg.vocab_size = 64;
+    cfg.vocab_size = 256;  // hp reads bytes; the recipe set 256 over the 64 asked for here (same model, same output)
     cfg.field_dim = enc.feature_dim();
     cfg.hp_table_bits = 16;
     cypha::cyphalm::apply_hp_production_recipe(cfg);

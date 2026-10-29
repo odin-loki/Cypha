@@ -81,10 +81,11 @@ void train_patterned(cypha::Cypha& model, const std::vector<std::uint32_t>& toke
 
 int test_hybrid_default_and_codec() {
     cypha::Cypha model;
-    if (!model.init_default_sequence(64, 32)) return fail("init_default_sequence");
+    if (!model.init_default_sequence(256, 32)) return fail("init_default_sequence");
     auto* lm = model.sequence();
     if (!lm) return fail("sequence null");
     const auto& cfg = lm->config();
+    const auto vocab = static_cast<std::uint32_t>(cfg.vocab_size);  // cfg dangles once load_sequence replaces lm
     if (cfg.context_mode != cypha::cyphalm::ContextMode::Hp) {
         return fail("expected hp context_mode, got " +
                     cypha::cyphalm::context_mode_name(cfg.context_mode));
@@ -132,21 +133,29 @@ int test_hybrid_default_and_codec() {
         return fail("mixer dilutes trained neural too much");
     }
 
-    // Cold (untrained) patterned stream: online n-gram experts should help.
+    // Cold (untrained) patterned stream. Until 2026-09-18 the neural model was an LSTM that did not learn while
+    // coding (online_adapt off), so this checked that the mixer's online n-gram experts beat it. hp is itself an
+    // online context mixer with n-gram and match models: it learns the stream as it codes it, and the mixer's
+    // experts add nothing (0.241 against 0.240 bits). So the check is now what that premise was for: the stream is
+    // learned online, beyond knowing its symbols (log2 5 = 2.32 bits a token without their order), and the mixer
+    // does not dilute it (the 0.15-bit margin of the trained check above). docs/reports/SLOW_TEST_TRIAGE.md, "Fix".
     {
         cypha::Cypha cold;
-        if (!cold.init_default_sequence(64, 32)) return fail("cold init");
+        if (!cold.init_default_sequence(256, 32)) return fail("cold init");
         const auto pat = make_pattern_tokens(200, 5);
         cypha::cyphalm::PredictiveCodecOptions cold_opt;
         cold_opt.online_adapt = false;
         auto cold_pack = cold.compress_tokens(pat, cold_opt);
         if (!cold_pack.detail.empty()) return fail("cold compress: " + cold_pack.detail);
-        if (!(cold_pack.model_bpc + 0.05 < cold_pack.neural_bpc)) {
-            return fail("mixer should beat cold neural on repetitive stream mix=" +
-                        std::to_string(cold_pack.model_bpc) +
+        if (!(cold_pack.neural_bpc < 1.0)) {
+            return fail("cold hp should learn a period-5 stream online neural=" +
+                        std::to_string(cold_pack.neural_bpc));
+        }
+        if (cold_pack.model_bpc > cold_pack.neural_bpc + 0.15) {
+            return fail("mixer dilutes cold online hp too much mix=" + std::to_string(cold_pack.model_bpc) +
                         " neural=" + std::to_string(cold_pack.neural_bpc));
         }
-        std::cout << "mixer_cold_gain OK mix=" << cold_pack.model_bpc
+        std::cout << "cold_online OK mix=" << cold_pack.model_bpc
                   << " neural=" << cold_pack.neural_bpc << "\n";
     }
     if (packed.coded_bpc > packed.model_bpc + 2.0) {
@@ -166,7 +175,7 @@ int test_hybrid_default_and_codec() {
     if (!detail.empty()) return fail("generate_via_bits: " + detail);
     if (gen.size() != 18) return fail("generate_via_bits length");
     for (auto t : gen) {
-        if (t >= 64) return fail("generated token out of vocab");
+        if (t >= vocab) return fail("generated token out of vocab");
     }
 
     std::cout << "predictive_codec OK mix_bpc=" << packed.model_bpc
@@ -179,7 +188,7 @@ int test_online_adapt_roundtrip() {
     const auto tokens = make_pattern_tokens(128, 7);
 
     cypha::Cypha trained;
-    if (!trained.init_default_sequence(64, 32)) return fail("online_adapt init");
+    if (!trained.init_default_sequence(256, 32)) return fail("online_adapt init");
     train_patterned(trained, tokens);
 
     const auto ckpt = std::filesystem::temp_directory_path() / "cypha_codec_online_adapt";

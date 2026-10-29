@@ -60,7 +60,9 @@ struct RankBits {
 /// Wavelet tree over a byte sequence, alphabetic and shaped by weight.
 class AlphaTree {
  public:
-    void build(std::vector<std::uint8_t> seq);
+    /// The tree of seq[0..n) with a 0 inserted at position zero_at (a BWT's $ row) when zero_at <= n. Builds in
+    /// place: nothing is allocated but the tree (M16).
+    void build(const std::uint8_t* seq, std::size_t n, std::size_t zero_at = SIZE_MAX);
     /// Ranks of c in [0, lo) and [0, hi), and the count of symbols below c in [lo, hi).
     void step(int c, std::size_t lo, std::size_t hi, std::size_t& rlo, std::size_t& rhi, std::size_t& less) const {
         less = 0;
@@ -105,7 +107,7 @@ class AlphaTree {
         int mid = 0;                // symbols <= mid go left
         int left = -1, right = -1;  // a node, or -(symbol + 1) for a leaf
     };
-    int make_(const std::vector<int>& syms, std::size_t a, std::size_t b, std::vector<std::uint8_t>& seq);
+    int shape_(const std::vector<int>& syms, std::size_t a, std::size_t b);
     void counts_(int v, std::size_t lo, std::size_t hi, std::uint32_t* out) const;
     std::vector<Node> nodes_;
     std::uint64_t freq_[256] = {};
@@ -116,11 +118,14 @@ class AlphaTree {
 
 class FmInfiniGram {
  public:
-    /// Index a copy of text[0..n) (at most 2^31 - 1 bytes). Peak while building:
-    /// about 7 bytes a text byte (6 when the text is moved in).
+    /// Index a copy of text[0..n) (at most 2^31 - 1 bytes). Peak while building (M16): 5 bytes a text byte
+    /// and one tree when the text is moved in (the BWT scratch is 4), one more byte a text byte when it is copied.
     FmInfiniGram(const std::uint8_t* text, std::size_t n);
-    /// Index ``text`` and consume it (it is reversed in place for the second BWT).
+    /// Index ``text`` and consume it: its buffer holds the forward BWT, then the reversed text and its BWT.
     explicit FmInfiniGram(std::vector<std::uint8_t>&& text);
+
+    /// The indexed text, rebuilt from the index (one LF walk, no stored copy; M16).
+    std::vector<std::uint8_t> text() const;
 
     /// InfiniGram::query, same arguments and same result.
     InfiniGram::Result query(const std::uint8_t* ctx, std::size_t len, int max_n, int hint = -1,
@@ -187,6 +192,7 @@ class FmInfiniGram {
     static std::size_t cap_(std::size_t len, int max_n, int hint);
     bool step_back_(int c, std::size_t& lo, std::size_t& hi) const;
     std::size_t lf_(std::size_t row) const;
+    void walk_(const fm_detail::AlphaTree& tree, std::size_t dollar, std::uint8_t* out) const;
 
     std::size_t n_ = 0;
     std::size_t C_[256] = {};          // first row of each byte (row 0 is the empty suffix)

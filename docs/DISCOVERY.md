@@ -372,7 +372,7 @@ Cheapest and most automatic come first. Each kind has measured sensitivity and s
 
 ### 7.3 Many hypotheses at once
 
-- **Batch control.** Each batch of decisions from one generator is controlled by Benjamini–Hochberg at q = 0.1, already in `lci.hpp`.
+- **Batch control.** Two tiers (S7c, 2026-10-29). Known: BH at q = 0.1 on null-model p-values (P(e ≥ e_obs | false), from enumerating the loop's outcome paths), limited to what `decide` supports; FDR ≤ 0.1 among the Known if the null likelihoods are right. Believed: the other supported hypotheses, never Known. Conformal selection (`conformal_select`) is the model-free alternative.
 - **Promotions** are controlled by the weekly α budget and e-values (PLAN §8.4).
 - **Watching for false discoveries.** The audit sample of promoted discoveries gives a running false-discovery rate. If its Wilson upper bound passes 0.15, promotion pauses.
 
@@ -691,7 +691,7 @@ These are written as CTests and checked on every build:
 | S6 | Scoring: plausibility, novelty, impact, compression gain, EIG and priority | Ranks known-true above known-false hypotheses (AUROC ≥ 0.75) on a planted set  **Run 2026-10-28:** P0 0.738 [0.717, 0.758] on a fresh planted set, gate missed; the terms are in `hypothesis.hpp` ([report](reports/S6_HYPOTHESIS_SCORING.md)) |
 | S7 | Tests T1–T6 with measured sensitivity and specificity, pre-registration in the experiment DB, Bayes-factor and e-value updating | I5, I6 CTests; s and c measured  **Run 2026-10-28:** I5 and I6 CTests pass; s and c measured on test for T1, T3, T4, T5 and T6; T2 cut (no consequence rule fired); the loop supports 56 of 56 correctly ([report](reports/S7_HYPOTHESIS_TESTS.md)) |
 | S8 | Generators batch 1: G2 rule induction, G6 and G7 link prediction, G14 contradiction resolution, G16 teacher | Rediscovery Hits@10 reported; promotion precision ≥ 0.9  **Runs 2026-10-29:** G2 and G14 ([S8a](reports/S8A_RULES_AND_CONTRADICTIONS.md)): Hits@10 0.230 test, promotions 0.818 on 11 graded, the gate cannot be read on the 2006-text store, G14 parked. G6 and G7 ([S8b](reports/S8B_LINK_PREDICTION.md)): Hits@10 0.334 test, no promotion under BH. G16 runs on Odin's PC |
-| S9 | Possible-worlds sandbox and the hypothetical card; fragility analysis | I9 CTest; consequence tests pass |
+| S9 | Possible-worlds sandbox and the hypothetical card; fragility analysis | I9 CTest; consequence tests pass  **Run 2026-10-29:** I9 met (43,409 worlds, no store changed); consequence tests: known-answer checks pass and the confirm direction holds, but T2 does not earn its place (never negative on this store); fragility: 76.9% single points of failure ([report](reports/S9_WORLDS_AND_FRAGILITY.md)) |
 | S10 | Curiosity scheduler (Thompson sampling, learning progress, floors, retirement) | Beats a uniform scheduler on confirmed value per cost, via LCI |
 | S11 | Generators batch 2: G9 concept formation, G11 open relations, G12 ABC, G13 anomalies, G3 abduction, G4 and G5 analogy | Rediscovery of a class; ABC precision@k |
 | S12 | Generators batch 3: G15 laws, G17 causal (labelled), G18 trends via the forecasting module, G19 refinement, G1 deep deduction, G20 wild tier | Planted-law rediscovery; prospective log |
@@ -706,6 +706,7 @@ These are written as CTests and checked on every build:
    - S4 done 2026-10-28 (gate met); S6 done 2026-10-28 (gate missed at 0.738; its next change needs S15 or another fresh source); S7 done 2026-10-28 (gates met); S15 built 2026-10-28, ahead of S8.
 3. S8 → S9 → S10. The first generators, worlds and the scheduler.
    - S8 run 2026-10-29 (G2, G6, G7, G14): rediscovery works; the promotion gate waits for a stronger independent test. S7b calibrated the loop the same day.
+   - S7c (2026-10-29) put a guarantee on the batch step (the two-tier hybrid, confirmed on a fresh set at 0.954); S8c measured sources other than Wikidata (DBpedia reliable; the gate still not passed); S9 built worlds and fragility (I9 met).
 4. S11 → S12 → S13 → S14, with S15 built alongside S8 so discovery has a fair test from the start.
 
 **Dependencies on other tracks**

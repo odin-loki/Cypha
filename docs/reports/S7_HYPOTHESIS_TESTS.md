@@ -397,3 +397,184 @@ cmake --build build --target epistemic_test && build/epistemic_test   # 697 chec
 ```
 
 The S7b lines start with `S7B`. `OUT.s15_items.tsv` lists the S15 hypotheses of the halves read with their T1, T6 and T4 results and prior. `OUT.s7b_dev.prereg.tsv` and `OUT.s15_confirm.prereg.tsv` are the chosen configuration's pre-registration logs.
+
+## S7c: a batch rule with a guarantee (2026-10-29)
+
+**Odin Loch** · 2026-10-29 · in answer to Odin's ruling on S7b's batch step: "Hybrid or something better. Keep working on it. Its not up to scratch yet."
+
+(The candidates, the sets, the decision rule and the predictions below were written before any S7c run. Results and decisions are added under them.)
+
+**Question.** S7b's batch step (BH among the supported) decides 23% of dev at precision 0.974 but guarantees nothing: it kept 575 of 576. The guaranteed whole-batch e-BH decides 11% at 0.995. Is there a rule with a stated false-discovery guarantee that decides more than 11%, at precision at least S7b's?
+
+**Rule 10.** As in S7 and S7b: Cypha's own hypothesis machinery. It never produces an answer for CyphaLM.
+
+### Common ground
+
+- The loop is S7b's, unchanged: three-way likelihoods from S7's dev, T1 under the store's φ, cheapest first (T1, T6, T5, T4; T5 left out on S15), `decide` (posterior > 0.9 with independent evidence; refuted below 0.05). The batch rule only decides which of `decide`'s supported hypotheses are promoted. Refutations are not batch-controlled (as in S7b).
+- q = 0.1 throughout. FDR is the expected share of false hypotheses among those promoted. Counts leave out false members that Wikidata lists (S6's labels), as before.
+- **Decided** = (promoted + refuted) / hypotheses, as S7b counted it.
+
+### The candidates (each states what it guarantees)
+
+| # | Rule | Promotes | Guarantee, and what it rests on |
+|---|---|---|---|
+| K1 | e-BH over the whole batch on the loop's e-values (S7b's B0, three-way) | `decide`'s supported whose null e-BH rejects | FDR ≤ q under any dependence between hypotheses, **if** each e-value is valid: the null likelihoods are right and the tests are independent given the truth |
+| K2 | Prior-weighted e-BH: weights w ∝ prior odds p0 / (1 − p0), scaled to mean 1 over the batch; reject the k largest w·e where w₍ₖ₎e₍ₖ₎ ≥ m / (q k) | as K1 | FDR ≤ q · (Σ null weights) / m ≤ q under any dependence, **if** the e-values are valid given the weights (the prior is fixed before any test runs) |
+| K3 | **Conformal selection** (Jin and Candès 2023): score = the loop's posterior when `decide` supports, else −1; conformal p = (1 + #{calibration hypotheses that are false and score ≥ s}) / (n + 1), n the whole calibration set; BH at q | the selected (all inside `decide`'s supported, by the score) | **Finite-sample FDR ≤ q when the calibration hypotheses and the batch are exchangeable** (drawn the same way, with labels for the calibration set). Needs no model: not the likelihoods, not calibration, not independence between tests |
+| K4 | BH on null-model p-values: p = P(e ≥ e_obs \| false) under the three-way null likelihoods, by enumerating the loop's outcome paths (its stopping rule included) | as K1 | FDR ≤ q **if** the null likelihoods are right and the p-values are PRDS (Benjamini–Yekutieli would cover any dependence) |
+| ref | S7b's B1, BH among the supported | | none (reference) |
+
+**The hybrid (Odin's word).** The default becomes two tiers: the winning rule's promotions are **Known** (with its guarantee); `decide`'s other supported hypotheses are **Believed** only, never Known (DISCOVERY §2.1's states). The Believed tier's precision is reported; its only claim is Bayesian (if the posteriors are calibrated, its expected false share is under 0.1, since each posterior is above 0.9).
+
+**Considered, not run:** online e-LOND / e-LORD (the loop decides in batches; a stream rule is weaker on a batch); per-relation batches with α spending (S7b's per-relation BH lost to the whole batch); e-closed testing (its gain over e-BH is small and its closure is costly); conditional-calibration boosting of e-BH (it needs each e-value's null distribution given a sufficient statistic, which this model does not give; K4's enumeration is the nearest form).
+
+### The sets (fixed before any run)
+
+- **S7's dev** (2,950 hypotheses), as S7b read it. K1, K2 and K4 run on the whole dev batch. K3 needs a calibration set: dev is split by bit 13 of FNV-1a(subject) into two folds; each fold is calibrated on the other, and the two selections are counted together. The score's likelihoods and prior were fitted on all of dev, so on dev K3's guarantee is not exact (said, not hidden).
+- **S7b's choose half of S15 dev** (read freely by S7b; no choice was made on it): reachable pairs primary, all pairs beside them, T5 left out, the amended φ. K3 folds by bit 13 inside the half; here the score was fitted on S7's dev, not on these hypotheses.
+- **The confirm set, C2, never read:** a third fact of S6's subjects. For each subject with an S6 hold-out, in S6's order, its facts are shuffled exactly as S7's set C was (`mt19937_64(20261029)`, the same calls), and the **second** fact that is neither S6's hold-out nor C's, and whose object occurs for another subject, is held out. Nobody has judged these facts: S6 and S7 left them in the store as true facts.
+  - The store the tests read is S7's reduced store without C2's facts too.
+  - False partners: S7's rule, drawn with `mt19937_64(20261101)`.
+  - The tests, the φ table, T6's ε, T4's variant, the prior's fit and the likelihoods are S7b's from dev, applied as is. T5 runs (C2's truth is the store, not Wikidata), with S7's eligibility rule.
+  - K3 calibrates C2's two bit-13 folds on each other (the score was fitted on S7's dev, so this is exact). K1, K2 and K4 run on C2 as one batch.
+  - C2 is read once, with `--read-c2`, after the choice.
+
+### Checking the guarantees (dev only)
+
+- **Model simulation** (400 batches): each hypothesis gets a prior drawn from dev's priors, a truth drawn with that probability, and outcomes drawn from the three-way likelihoods; the loop runs on it. Two scenarios: **mixed** (truths as drawn) and **planted nulls** (every hypothesis false). Batch and calibration sets each have dev's size and are drawn the same way. The realised FDR is the mean false share among promotions (0 when nothing is promoted), with its Monte Carlo standard error.
+- **Real-data resampling** (400 splits): dev's subjects are split at random into a calibration half and a batch half; the rules run on the batch half with the real outcomes. The same on S15's choose half. This checks the guarantees where the model is wrong (dependent tests, smoothed likelihoods).
+
+### Decision rule (fixed before the runs)
+
+1. A candidate **qualifies** when all hold:
+   - on S7's dev: at least 10 promoted, and the Wilson 95% lower bound of their precision ≥ 0.90;
+   - on S15's choose half (reachable): promoted precision ≥ 0.90 when at least 10 are promoted;
+   - realised FDR ≤ 0.10 + 2 standard errors in both simulation scenarios and in both resamplings.
+2. Among the qualifiers, the one with the **largest Known-decided share on S7's dev** wins (Known promoted + refuted, over hypotheses). Ties within 0.5 points go to the simpler rule: K1, then K2, K4, K3.
+3. The default becomes the hybrid with the winner as its Known tier. If nothing qualifies, S7b's step stays and is relabelled Believed-only (no Known tier).
+4. **Confirm** (C2, read once): confirmed when the Known tier's precision has a Wilson 95% lower bound ≥ 0.90. Its Known-decided share against S7b's whole-batch e-BH (11%) and its precision against S7b's (0.974 dev, 0.956 S15 confirm) are reported with it.
+
+### Predictions (registered before the runs)
+
+| # | Prediction |
+|---|---|
+| V1 | K3 promotes at least 1.5 times K1's 215 on S7's dev, at precision ≥ 0.95; its Known-decided share is ≥ 15% |
+| V2 | K2 promotes more than K1 (at least 1.2 times) and fewer than K3 |
+| V3 | K4 promotes more than K1 |
+| V4 | Model simulation: K1, K2, K3 and K4 all have realised FDR ≤ 0.10 in both scenarios; S7b's B1 exceeds 0.5 under planted nulls |
+| V5 | Resampling: K1–K4 have realised FDR ≤ 0.10 on S7's dev and on S15's choose half |
+| V6 | The mean e-value of false dev hypotheses is ≤ 1.2 in every prior quartile (K2's condition holds roughly) |
+| V7 | The chosen rule is K3 |
+| V8 | C2 has 800–2,500 pairs |
+| V9 | On C2 the Known tier's precision is ≥ 0.93, Wilson lower bound ≥ 0.90, and its Known-decided share is > 11% |
+
+**Amendment (2026-10-29, before any S7c run).** As registered, K1, K2 and K4 promote `decide`'s supported hypotheses whose null is rejected (R ∩ S). The guarantee covers the rejected set R, and a subset of R need not keep it. So K1, K2 and K4 run on **gated** evidence: e = 0 (K1, K2) or p = 1 (K4) for a hypothesis `decide` does not support. A gated e-value is never larger than the e-value, so it stays valid, and the rejected set lies inside the supported set: the guarantee covers exactly what is promoted. K3's score is gated the same way already. The registered R ∩ S form is printed beside each.
+
+### Results (2026-10-29)
+
+**S7's dev** (2,950 hypotheses; `decide` supports 573 and refutes 113, at 0.965). The R ∩ S forms of K1, K2 and K4 gave the same sets as the gated forms, on every read.
+
+| Rule | Promoted (Known) | Precision [Wilson 95%] | Known-decided | Believed (precision) |
+|---|---|---|---|---|
+| K1 e-BH | 215 | 0.995 [0.974, 0.999] | 11.1% | 358 (0.961) |
+| K2 prior-weighted e-BH | 37 | 1.000 [0.906, 1.000] | 5.1% | 536 (0.972) |
+| K3 conformal selection | 573 | 0.974 [0.957, 0.984] | 23.3% | 0 |
+| K4 null-model BH | 573 | 0.974 [0.957, 0.984] | 23.3% | 0 |
+| ref, S7b's B1 | 572 | 0.974 [0.957, 0.984] | 23.2% | 1 (1.000) |
+
+**S15's choose half.** Reachable (5,236): `decide` supports 901 and refutes 129. K3, K4 and B1 promote all 901, at 0.949 [0.933, 0.962]; Known-decided 19.7%. K1 and K2 promote none, so their Known-decided share is the refutations alone (2.5%). With m = 5,236 and T5 left out, no e-value reaches e-BH's bar. All pairs (11,508): K3 and K4 promote all 2,119 supported, at 0.971; K1 and K2 none.
+
+**The guarantee checks.** Realised FDR, with the mean number promoted per batch in brackets:
+
+| Rule | Sim, mixed | Sim, planted nulls | Resampling, S7 dev | Resampling, S15 choose |
+|---|---|---|---|---|
+| K1 | 0.000 (0.0) | 0.000 (0.0) | 0.004 (105) | 0.000 (0) |
+| K2 | 0.000 (0.6) | 0.000 (0.0) | 0.000 (18) | 0.000 (0) |
+| K3 | 0.026 (617) | 0.003 (0.0) | 0.026 (286) | 0.051 (451) |
+| K4 | 0.026 (615) | 0.090 ± 0.014 (0.1) | 0.026 (286) | 0.051 (451) |
+| ref, B1 | 0.026 (608) | **1.000 (34)** | 0.026 (285) | 0.051 (451) |
+
+Under planted nulls (every hypothesis false), S7b's B1 promotes 34 per batch, all of them false. K3 and K4 promote almost nothing. That is what the guarantee buys. On real data the three promote the same sets, because `decide`'s supported set is already at a 3–5% false share, under q = 0.1. A guaranteed rule only prunes when that share rises.
+
+**Why K1 is low.** In the simulation the tests are independent given the truth. Then a product of Bayes factors rarely reaches e-BH's bar of m / (q k), and K1 promotes nothing. On real dev it promotes 215, because true hypotheses' positive results co-occur (T6 with T4) more often than independence predicts.
+
+**Why K2 is lower still.** The largest e-values belong to low-prior hypotheses: they need a large e to pass 0.9. High-prior ones stop early with a small e. Weighting by prior odds shrinks the first and cannot lift the second, so fewer pass.
+
+**The e-values of false hypotheses (V6).** Mean e by prior quartile on dev: 0.62, 0.73, 1.17 and **1.58**. For false hypotheses with high priors, the product of Bayes factors is not a valid e-value on real data. Plausible false hypotheses pass the tests more often than dev's pooled null likelihoods say. K1, K2 and K4 rest on those likelihoods; K3 does not.
+
+**The choice.** All four candidates qualify. K3 and K4 tie at 23.3% Known-decided on dev, so the registered order (K1, K2, K4, K3) picks **K4**.
+
+**The confirm read (C2, once).** 1,445 pairs, 2,877 hypotheses counted. `decide` supports 679 and refutes 168 (at 0.935).
+
+| Rule | Promoted (Known) | Precision [Wilson 95%] | Known-decided | Believed (precision) |
+|---|---|---|---|---|
+| K1 | 241 | 0.992 [0.970, 0.998] | 14.2% | 438 (0.934) |
+| K2 | 0 | | 5.8% | 679 (0.954) |
+| K3 | 679 | 0.954 [0.936, 0.968] | 29.4% | 0 |
+| **K4 (chosen)** | **679** | **0.954 [0.936, 0.968]** | **29.4%** | 0 |
+| ref, B1 | 679 | 0.954 [0.936, 0.968] | 29.4% | 0 |
+
+The Wilson lower bound is 0.936 ≥ 0.90: **confirmed**. Known-decided is 29.4%, against 11.1% for S7b's whole-batch e-BH on dev. The precision, 0.954, is below dev's 0.974 and level with S15's confirm read (0.956). The confirm run's other lines match the dev run's, timings aside.
+
+### Predictions scored
+
+| # | Result | Held? |
+|---|---|---|
+| V1 | K3: 573 = 2.7 × 215, at 0.974; Known-decided 23.3% | yes |
+| V2 | K2 promoted 37 on dev (0 on C2), fewer than K1 | **no** |
+| V3 | K4 573 > K1 215 | yes |
+| V4 | All of K1–K4 at or under 0.10 in both scenarios (K4 0.090 under planted nulls is the closest); B1 1.000 | yes |
+| V5 | At most 0.051 for K1–K4 on both sets | yes |
+| V6 | Top prior quartile 1.58 | **no** |
+| V7 | K4, by the tie order; K3 promoted the same sets | **no** |
+| V8 | 1,445 pairs | yes |
+| V9 | 0.954, lower bound 0.936, Known-decided 29.4% | yes |
+
+Six of nine held.
+
+### Decisions
+
+1. **The default batch step is the hybrid with K4 as its Known tier.** It is BH at q = 0.1 over the whole batch on null-model p-values, gated to `decide`'s supported (`hybrid_null_model_tiers` in `hypothesis.hpp`). `decide`'s other supported hypotheses are Believed and never Known.
+2. **What it guarantees.** Among the Known, FDR ≤ 0.1, **if** the three-way null likelihoods (fitted on S7's dev) are right for the batch's false hypotheses and the p-values are PRDS. V6 shows the first is off for the top prior quartile. The real-data resamplings still came in at 0.026 and 0.051, and the planted-null simulation at 0.090.
+3. **What changes in numbers.** Nothing, on every read so far: K4 promoted every hypothesis `decide` supported, and the Believed tier was empty. What changes is the claim. S7b's step promoted 34 false hypotheses per all-false batch; K4 promotes 0.1. The share decided stays at S7b's level (23% dev, 29% C2) instead of e-BH's 11%.
+4. **Open for Odin: K3 instead of K4.** K3 promoted the same sets on every read. Its guarantee needs no model, only a labelled calibration set drawn like the batch. K4 needs no labelled set at run time, which is why the registered order put it first. Switching changes no number so far.
+5. **K1 and K2 are not used.** K2 is dropped. K1 stays in the library (`bh_reject_e`).
+6. Refutations stay outside batch control, as in S7b.
+
+**Rule 10.** All of this is Cypha's own hypothesis machinery. It never produces an answer for CyphaLM.
+
+### Checks (CTest)
+
+`epistemic_test`'s S7c block (811 checks in all, 0 failed):
+
+- weighted e-BH against plain e-BH and planted cases;
+- conformal p-values (planted cases) and conformal selection's FDR by simulation;
+- null-model p-values: known answers, the stopping rule, and super-uniformity under the model;
+- the tiers;
+- the chosen rule on planted batches (batch of 4: Known; batch of 100: Believed; no null model: Believed);
+- the chosen rule's FDR by simulation, mixed and all-false.
+
+Planted bugs, each caught:
+
+- conformal denominator, the +1 and ties;
+- weights not rescaled;
+- stopping ignored;
+- outcomes from the true side;
+- all Known;
+- BH at q = 1.
+
+The normal `--gaps` run is byte-identical to main's (all ten output files; stdout apart from timings). So is `--test-kinds` without `--s7c`.
+
+### How to reproduce (S7c)
+
+```bash
+g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp -o pattern_learn
+# dev, S15's choose half, the simulations, the resamplings and the choice
+./pattern_learn --test-kinds enwik8 /root/work/f2/v2/aug/seeds.tsv /root/work/f2/wikidata/wd_values.tsv /root/work/f2/v2/aug/patterns.tsv out \
+  --phi-wd /root/work/f2/wikidata/phi.tsv --s15 bench/eval/temporal_holdout_dev.tsv --s7c
+# the single confirm read on C2
+./pattern_learn … final --phi-wd /root/work/f2/wikidata/phi.tsv --s15 bench/eval/temporal_holdout_dev.tsv --s7c --read-c2
+cmake --build build --target epistemic_test && build/epistemic_test   # 811 checks
+```
+
+The S7c lines start with `S7C`. `OUT.c2_items.tsv` lists C2's hypotheses with their results, prior, posterior, e-value, null p-value and tier. `OUT.c2.prereg.tsv` is C2's pre-registration log.

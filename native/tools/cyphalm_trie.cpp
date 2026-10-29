@@ -698,15 +698,20 @@ int cmd_context8k(const Args& a) {
     const PackedModel pm = pack(model);  // M4
     model.release();
 
-    // Index the training bytes only: wiki train + boundary + chat. No wiki holdout. The index takes T, after the class
-    // expert (B4C, a default; --no-cls leaves it out) is built on the same bytes, as in qa.
+    // Index the training bytes only: wiki train + boundary + chat. No wiki holdout. The index takes T, then the class
+    // expert (B4C, a default; --no-cls leaves it out) is built on the same bytes, which the index gives back (M16: so
+    // the class table is not resident during the index's scratch), as in qa.
     std::vector<std::uint8_t> T;
     const std::size_t all = training_text(data, cfg, T), tn = T.size();
-    int crc = 0;
-    const auto cc = default_cls(a, T.data(), T.size(), crc);
-    if (crc) return crc;
     const FmInfiniGram ig(std::move(T));
     std::cerr << "index built over " << tn << " bytes\n";
+    int crc = 0;
+    std::unique_ptr<ClassContext> cc;
+    if (!default_cls_spec(a).empty()) {
+        const std::vector<std::uint8_t> t = ig.text();
+        cc = default_cls(a, t.data(), t.size(), crc);
+    }
+    if (crc) return crc;
 
     const std::size_t kTrain = cfg.train, kSample = cfg.sample;
     const std::size_t H = kSample - kTrain, half = H / 2;
@@ -3436,22 +3441,25 @@ int cmd_qa(const Args& a, const QaOpts& o) {
         wiki_lm.packed = &pm;
     }
 
-    // T, the training text (wiki train + chat): the class expert is built from it first (B4), then InfiniGram takes it
-    // (M6 order, after the trie: A1c's tokens need the wiki trie before the chat text exists). Both builds come before
-    // the holdout arrays below, which they do not read. A served model (M11) loads both instead, and T is not made.
+    // T, the training text (wiki train + chat): InfiniGram takes it (M6 order, after the trie: A1c's tokens need the wiki
+    // trie before the chat text exists), then the class expert is built from the text the index gives back (M16: so the
+    // class table is not resident during the index's scratch). Both builds come before the holdout arrays below, which
+    // they do not read. A served model (M11) loads both instead, and T is not made.
     std::vector<std::uint8_t> T;
     const std::size_t all_followers = serve ? st.all_followers : training_text(data, cfg, T);
-    std::unique_ptr<ClassContext> cc = std::move(st.cc);
-    if (!serve && !o.cls.empty()) {
-        cc = make_class_context(o.cls);
-        if (!cc) return 1;
-        cc->build(T.data(), T.size());
-        std::cerr << "class table built\n";
-    }
     // InfiniGram takes T, unless the similar-context expert reads it (A4, src=all: its keys and its neighbours are T's).
     const bool sim_reads_t = !o.sim.empty() && parse_sim(o.sim).src != "wiki";
     FmInfiniGram ig = serve ? std::move(*st.ig) : sim_reads_t ? FmInfiniGram(T.data(), T.size()) : FmInfiniGram(std::move(T));
     std::cerr << (serve ? "served" : "index built") << "\n";  // S1: not const, --cards builds locate on it
+    std::unique_ptr<ClassContext> cc = std::move(st.cc);
+    if (!serve && !o.cls.empty()) {
+        cc = make_class_context(o.cls);
+        if (!cc) return 1;
+        if (!sim_reads_t) T = ig.text();  // M16: one walk through the index, so T was never copied
+        cc->build(T.data(), T.size());
+        if (!sim_reads_t) std::vector<std::uint8_t>().swap(T);
+        std::cerr << "class table built\n";
+    }
     if (!a.save.empty() && !save_qa(a.save, record, pm, w, cfg, wf, all_followers, fam_cut, ig, low.get(), cc.get())) return 1;
     // A4: the similar-context expert, keys over wiki train + chat (src=all: InfiniGram's bytes) or wiki train only
     // (src=wiki). M13: built here, before the per-byte holdout arrays, so its build does not sit on them; its lambdas

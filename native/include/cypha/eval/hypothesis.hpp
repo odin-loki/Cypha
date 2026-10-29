@@ -12,6 +12,8 @@
 //   7.1-7.3 (S7) test outcomes (positive, negative, inconclusive), the pre-registration log (I5, I6), e-values and
 //         Benjamini-Hochberg batch control, T1's functional check, T3's held-out rule check, measured s and c
 //   7.2 (S7b) three-way likelihoods: every result moves the posterior by P(result | true) / P(result | false)
+//   7.3 (S7c) batch rules that state their guarantee: weighted e-BH, conformal selection, null-model p-values; the
+//         two-tier hybrid (Known with a guarantee, Believed without); the default's Known tier is null-model BH
 //   11    invariants I1 (no hypothetical item in answers), I4 (independent evidence), I7 (refuted kept, blocks), I8 (labels)
 //
 // Nothing here answers a question. The stores are bookkeeping about what Cypha knows and does not (PLAN rules 9 and 10).
@@ -23,7 +25,9 @@
 #include <cmath>
 #include <cstdint>
 #include <deque>
+#include <functional>
 #include <map>
+#include <numeric>
 #include <optional>
 #include <set>
 #include <string>
@@ -546,6 +550,119 @@ inline std::vector<bool> bh_reject_e_among(const std::vector<double>& e_values, 
   const std::vector<bool> rej = bh_reject_e(e, q);
   for (std::size_t j = 0; j < at.size(); ++j) out[at[j]] = rej[j];
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// S7c (docs/reports/S7_HYPOTHESIS_TESTS.md, "S7c"): batch rules that state what they guarantee, and the two-tier hybrid
+// ---------------------------------------------------------------------------
+
+/// Weighted e-BH: the weights are rescaled to mean 1 over the batch (all zero: no rejection); the k largest w e are
+/// rejected, k the largest with w_(k) e_(k) >= m / (q k). FDR <= q (sum of the nulls' weights) / m <= q under any
+/// dependence, when each e-value is valid given its weight (weights fixed before the e-values are seen).
+inline std::vector<bool> weighted_e_bh(const std::vector<double>& e_values, const std::vector<double>& weights, double q = 0.1) {
+  const std::size_t m = std::min(e_values.size(), weights.size());
+  std::vector<bool> out(e_values.size(), false);
+  double ws = 0.0;
+  for (std::size_t i = 0; i < m; ++i) ws += std::max(0.0, weights[i]);
+  if (m == 0 || ws <= 0.0 || q <= 0.0) return out;
+  std::vector<double> we(m);
+  for (std::size_t i = 0; i < m; ++i) we[i] = std::max(0.0, weights[i]) * static_cast<double>(m) / ws * e_values[i];
+  std::vector<std::size_t> idx(m);
+  std::iota(idx.begin(), idx.end(), std::size_t{0});
+  std::stable_sort(idx.begin(), idx.end(), [&](std::size_t a, std::size_t b) { return we[a] > we[b]; });
+  std::size_t k = 0;
+  for (std::size_t i = 0; i < m; ++i)
+    if (we[idx[i]] >= static_cast<double>(m) / (q * static_cast<double>(i + 1))) k = i + 1;
+  for (std::size_t i = 0; i < k; ++i) out[idx[i]] = true;
+  return out;
+}
+
+/// Conformal p-values for selection (Jin and Candes 2023, the clipped score, deterministic ties). For a batch score s:
+/// p = (1 + #{calibration hypotheses that are false with score >= s}) / (n + 1), n the whole calibration set, true
+/// members included. BH on them (conformal_select) gives FDR <= q in finite samples when the calibration set and the
+/// batch are exchangeable, with no model assumption. Larger scores must mean "more likely true".
+inline std::vector<double> conformal_selection_pvalues(const std::vector<double>& calib_score, const std::vector<bool>& calib_true,
+                                                       const std::vector<double>& batch_score) {
+  std::vector<double> nulls;
+  const std::size_t n = std::min(calib_score.size(), calib_true.size());
+  for (std::size_t i = 0; i < n; ++i)
+    if (!calib_true[i]) nulls.push_back(calib_score[i]);
+  std::sort(nulls.begin(), nulls.end());
+  std::vector<double> p;
+  p.reserve(batch_score.size());
+  for (double s : batch_score) {
+    const std::size_t ge = static_cast<std::size_t>(nulls.end() - std::lower_bound(nulls.begin(), nulls.end(), s));
+    p.push_back((1.0 + static_cast<double>(ge)) / (static_cast<double>(n) + 1.0));
+  }
+  return p;
+}
+
+/// Conformal selection: BH at level q on conformal_selection_pvalues. True where a batch hypothesis is selected.
+inline std::vector<bool> conformal_select(const std::vector<double>& calib_score, const std::vector<bool>& calib_true,
+                                          const std::vector<double>& batch_score, double q = 0.1) {
+  return benjamini_hochberg(conformal_selection_pvalues(calib_score, calib_true, batch_score), q).reject;
+}
+
+/// P(e >= e_obs | h false) under the plan's three-way null likelihoods, by enumerating every outcome path of the loop
+/// (7.2: cheapest first, stopping at supported, refuted or irreducible as `decide` does) from the prior. A test without
+/// three-way likelihoods makes the answer 1 (no null model). Exact under the model; BH on these p-values controls the FDR
+/// when the model is right and the p-values are PRDS.
+inline double null_model_pvalue(const std::vector<HypTest>& plan, double prior, double e_obs, const HypothesisConfig& cfg = {}) {
+  for (const HypTest& t : plan)
+    if (!t.likelihoods.set()) return 1.0;
+  const double cut = e_obs * (1.0 - 1e-9);
+  double p = 0.0;
+  std::function<void(std::size_t, double, double, double, bool, int, double, double)> walk =
+      [&](std::size_t k, double prob, double post, double e, bool indep, int done, double moved, double last) {
+        if (k == plan.size()) {
+          if (e >= cut) p += prob;
+          return;
+        }
+        const HypTest& t = plan[k];
+        double fs = t.likelihoods.f[0] + t.likelihoods.f[1] + t.likelihoods.f[2];
+        if (fs <= 0.0) fs = 1.0;
+        for (int o = 0; o < 3; ++o) {
+          const double po = t.likelihoods.f[o] / fs;
+          if (po <= 0.0) continue;
+          const TestOutcome out = o == 0 ? TestOutcome::Positive : o == 1 ? TestOutcome::Negative : TestOutcome::Inconclusive;
+          const double bf = bayes_factor(out, t);
+          const double np = update_posterior(post, bf);
+          const bool ni = indep || (t.independent && out != TestOutcome::Inconclusive);
+          const double nm = moved + std::fabs(np - last);
+          const bool stop = (np > cfg.supported_p && ni) || np < cfg.refuted_p || (done + 1 >= cfg.irreducible_k && nm < cfg.irreducible_move);
+          if (stop) {
+            if (e * bf >= cut) p += prob * po;
+          } else {
+            walk(k + 1, prob * po, np, e * bf, ni, done + 1, nm, np);
+          }
+        }
+      };
+  walk(0, 1.0, prior, 1.0, false, 0, 0.0, prior);
+  return std::min(1.0, p);
+}
+
+/// The hybrid's two tiers (S7c): a promotion the batch rule keeps is Known; another hypothesis `decide` supports is
+/// Believed only, never Known (DISCOVERY 2.1). 0 none, 1 Believed, 2 Known.
+inline std::vector<int> hybrid_tiers(const std::vector<bool>& supported, const std::vector<bool>& known) {
+  std::vector<int> out(supported.size(), 0);
+  for (std::size_t i = 0; i < supported.size(); ++i)
+    if (supported[i]) out[i] = i < known.size() && known[i] ? 2 : 1;
+  return out;
+}
+
+/// S7c's chosen batch step, the hybrid with K4 as its Known tier: BH at level q over the whole batch on null-model
+/// p-values (null_model_pvalue of each hypothesis's plan, prior and e-value), gated to the hypotheses `decide` supports
+/// (p = 1 for the rest). Returns hybrid_tiers (2 Known, 1 Believed, 0 neither). Its guarantee: FDR <= q among the Known,
+/// if the plans' three-way null likelihoods are right and the p-values are PRDS. The batch is the shortest input.
+inline std::vector<int> hybrid_null_model_tiers(const std::vector<std::vector<HypTest>>& plans, const std::vector<double>& priors,
+                                                const std::vector<double>& e_values, const std::vector<bool>& supported, double q = 0.1,
+                                                const HypothesisConfig& cfg = {}) {
+  const std::size_t m = std::min({plans.size(), priors.size(), e_values.size(), supported.size()});
+  std::vector<double> p(m, 1.0);
+  for (std::size_t i = 0; i < m; ++i)
+    if (supported[i]) p[i] = null_model_pvalue(plans[i], priors[i], e_values[i], cfg);
+  return hybrid_tiers(std::vector<bool>(supported.begin(), supported.begin() + static_cast<std::ptrdiff_t>(m)),
+                      benjamini_hochberg(p, q).reject);
 }
 
 /// One entry of the pre-registration log (7.2 step 1). A plan is written before any of its tests runs; a result is
