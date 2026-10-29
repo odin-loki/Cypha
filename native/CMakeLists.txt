@@ -324,6 +324,16 @@ add_test(
 )
 set_tests_properties(native_cypha_save_load_test PROPERTIES TIMEOUT 300)
 
+# Branch A router save / load round trip (docs/reports/ROUTER_SAVE_LOAD_FIX.md).
+add_executable(branch_a_router_save_load_test tools/branch_a_router_save_load_test.cpp)
+target_link_libraries(branch_a_router_save_load_test PRIVATE cypha_core)
+cypha_mingw_apply_exe_link_options(branch_a_router_save_load_test)
+add_test(
+  NAME native_branch_a_router_save_load_test
+  COMMAND "$<TARGET_FILE:branch_a_router_save_load_test>" "${CMAKE_CURRENT_BINARY_DIR}/branch_a_router_save_load_test_out"
+)
+set_tests_properties(native_branch_a_router_save_load_test PROPERTIES TIMEOUT 300)
+
 # Cypha's OOD threshold learned from training rows (docs/reports/CYPHA_OOD_THRESHOLD.md): selftest for the CTest,
 # `measure` for the registered synthetic read.
 add_executable(cypha_ood_test tools/cypha_ood_test.cpp)
