@@ -2481,6 +2481,22 @@ add_test(NAME native_cyphalm_trie_selftest COMMAND "$<TARGET_FILE:cyphalm_trie>"
 set_tests_properties(native_cyphalm_trie_selftest PROPERTIES TIMEOUT 60)
 # --- end B1 block ---------------------------------------------------------------------------------
 
+# --- Tokens T0-T2: CyphaLM over tokens, beside the byte model (docs/TOKENS_PLAN.md) ------------------------
+# Header-only tokenizer.hpp and token_model.hpp; cyphalm_tok trains tokenizers by counting and scores token count
+# models in bits per byte. Only the selftest is a CTest (no corpus).
+add_executable(cyphalm_tok
+  tools/cyphalm_tok.cpp
+  src/cyphalm/fm_infinigram.cpp
+  third_party/libsais/libsais.c)
+target_include_directories(cyphalm_tok PRIVATE
+  "${CMAKE_CURRENT_SOURCE_DIR}/include"
+  "${CMAKE_CURRENT_SOURCE_DIR}/third_party"
+  "${CMAKE_CURRENT_SOURCE_DIR}/third_party/libsais")
+cypha_mingw_apply_exe_link_options(cyphalm_tok)
+add_test(NAME native_cyphalm_tok_selftest COMMAND "$<TARGET_FILE:cyphalm_tok>" selftest)
+set_tests_properties(native_cyphalm_tok_selftest PROPERTIES TIMEOUT 120)
+# --- end tokens block ----------------------------------------------------------------------------------
+
 # --- RAM_PROFILE M5: InfiniGram over a compressed index (bidirectional FM-index) -------------------
 # The CTest checks it gives InfiniGram's answers on random texts; --bench FILE BYTES times both.
 add_executable(fm_infinigram_test
