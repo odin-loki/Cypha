@@ -376,3 +376,170 @@ S="--sources bench/eval/temporal_holdout_dev.tsv tables $F/wikidata/wd_values.ts
 - `S8D_R1_DEV`, `S8D_R2_DEV` and `S8D_PROMO` are S8a's and S8b's dev hypothesis files, which S8d's calibration reads (S8d's report).
 - Times on the shared machine: `--gen-analogy` 40 s, about 300 MB; `--gen-anomaly` 17 minutes (G3's 500 cases each mine the rules again), about 460 MB. Runs are in `/root/work/s11c/runs` (not committed).
 - **Checks:** `native_epistemic_test` passes 1,215 checks (47 new). Five planted bugs each fail it: A1's comparison flipped, the qualifier never holding, `abduce` sorting worst first, `transfer` dropping the equality role, and G5's offset sign flipped. The other 8 CTests of HANDOFF §4.4 pass. S3's normal `--gaps` run is byte-identical (gap map `a77678d8ef7dfdef`, the cells, the demand and the v2 store files).
+
+## S11e: S11c's questions, settled by measurement (registered 2026-10-29, before any run)
+
+**Odin Loch** · 2026-10-29 · answers HANDOFF §5.21 under PLAN ledger 55 (decided by measurement, open to Odin's veto); Odin: "Do all"
+
+(The definitions, the reads, the rules and the predictions below were written and committed before any S11e code or run. Results are added under them.)
+
+**Rule 10.** Nothing here answers a question. The generators write hypotheses for Cypha's own store.
+
+**Data.** Dev only, unless S8e's fresh set is frozen in time (`bench/eval/s8e_slots_{dev,test}.tsv`, S8e's report). S8e's own rule says its test part is read once, by its gate. So S11e reads it only if S8e's report allows a second generator read; otherwise every result here is dev, and the fresh read waits. The dev data:
+- store T's dev subjects (bit 11 = 0) for G13, graded by Wikidata;
+- G3-P's dev cases on store K (S11c's construction, amendment 2);
+- read 1's dev queries and read 2 on S15 dev for G4;
+- the dev pools on S15 dev's bit-17 = 1 slots (S8d's slots), through S8d's source stage, graded on S15 dev's file as S11c did.
+
+### Item 1: G13 raises questions, never verdicts
+
+- **Now:** a questioned fact enters the source stage with P0 = 0.2 when G13's verdict names it wrong, else 0.8. So the verdict moves the prior.
+- **Question-only (`--g13-questions`):** every fact of an anomaly enters the source stage with **P0 = 0.5**, whatever the verdict. Only the sources decide. G13's verdict stays a diagnostic line in its own file.
+- **Measures, on dev, both modes on the same facts:** decided (supported or refuted), right decisions (supported and right by Wikidata, refuted and wrong by Wikidata), wrong decisions, supported precision, refuted share false. Wilson intervals.
+- **Rule 1:** question-only is adopted if, on dev, its wrong decisions are not more than the verdict mode's, and its right decisions are at least the verdict mode's minus 1.
+
+### Item 2: G3's order without its rule term
+
+- **The order with a weight w:** score(f) = min over f's explanations of [−log₂ P(f) − w · log₂ PCA(rule)], ties by the rule's support, then the fact. w = 1 is S11c's G3; w = 0 orders by the link predictor alone.
+- **Measured on G3-P's dev cases** (one run, the same explanations): w ∈ {0, 0.25, 0.5, 1}; recall@1, @5, @10, with bootstrap intervals of the differences from w = 1. A check: the ranks at w = 1 equal S11c's G3 ranks on every case.
+- **Rule 2:** the w with the highest dev recall@1 replaces w = 1 only if its recall@1 beats w = 1's with the bootstrap interval of the difference above 0 and its recall@10 is not lower by more than 0.02. Ties go to the larger w.
+- **The pool:** G3's dev pool rebuilt with the chosen w; its prior is the isotonic map from that w's score, fitted on G3-P's dev cases at that w. Source stage; promotions and precision against S11c's dev pool (11 promoted, 10 of 11 true).
+
+### Item 3: G4 without carried dates
+
+- **λ_date:** the weight of a value carried as a constant, for date relations (CyphaLM's `is_datey`: date and year types). S11c used λ = 0.25 for every relation.
+- **Measured on dev:** read 1 with λ = 0.25 for every relation against λ = 0.25 with λ_date = 0. MRR over all dev queries, on date queries and on the rest, with bootstrap intervals of the differences; the base rate's MRR on date queries beside them. Read 2 on S15 dev (`b` and `c` Hits@10, MRR). The dev pool rebuilt with λ_date = 0: G4's hypotheses by relation, their states after the loop and the source stage, promotions.
+- **Rule 3:** λ_date = 0 is adopted if the dev read-1 MRR over all queries does not fall: the bootstrap interval of the difference has its lower end at −0.005 or above.
+
+### Item 4: A6, spouse gaps
+
+- **Measured:** the number of spouse pairs with a birth year for both, in store K and store T. An add-one tail p of 0.005 needs at least 199 of them.
+- **Rule 4:** A6 is kept, with its threshold documented, while it is correct and costs nothing. It is cut only if it fires on a store with fewer than 199 values (a bug).
+
+### Item 5: S10 reads the new pools (report only)
+
+- S10's replay (`--schedule`) gains `--extra-dev DIR` and `--wd FILE`: it adds S11c-format pools from DIR to the dev pool. The files are `a.fresh_g3`, `g.fresh_g4`, `g.fresh_g5` (graded on the S15 file, as S10's own) and `a.fresh_g13` (graded by Wikidata), each with its source stage (`src_<g>.s8d_fresh.tsv`, `src_<g>.s8d_fresh_ran.tsv`) and its pre-registration log. A missing generator is skipped.
+- **Read, dev only:** S10's four configurations and uniform on (a) S8d's dev pool plus S11c's dev pools (the same slots: S15 dev's bit-17 = 1 half) and (b) S11c's dev pools alone. Report only: S10's gate read waits for a fresh set (S8e's, or one built for it). The test pools of S11c are not read again.
+- Without `--extra-dev`, `--schedule` is unchanged byte for byte.
+
+### Predictions (registered before any run)
+
+| # | Prediction |
+|---|---|
+| E1 | Item 1: question-only decides at least as many graded G13 facts as the verdict mode (16 on dev in S11c), with at most 1 wrong decision; rule 1 adopts it |
+| E2 | Item 2: w = 0 or 0.25 has the highest dev recall@1, at least 0.04 above w = 1, with recall@10 within 0.02; rule 2 replaces w = 1 |
+| E3 | Item 2: the rebuilt G3 dev pool promotes within ±2 of S11c's 11, with precision ≥ 0.9 |
+| E4 | Item 3: on date queries λ = 0.25 is within 0.01 of the base rate's MRR (carried dates do not help ranking); the overall dev MRR changes by less than 0.005; rule 3 adopts λ_date = 0 |
+| E5 | Item 3: G4's date hypotheses in the dev pool fall from 12 to at most 3; G4's dev promotions stay 0 |
+| E6 | Item 4: fewer than 30 spouse pairs with two birth years in store K, fewer still in T; A6 kept |
+| E7 | Item 5: on S8d's dev pool plus S11c's, S10's chosen configuration beats uniform at f = 0.25 by more than 10%; on S11c's pools alone it does not |
+
+### Results: S11e (2026-10-29, dev only)
+
+**No fresh read.** S8e's fresh set was not frozen when S11e finished: its branch holds the registration only (commit 2d17454), with no `bench/eval/s8e_slots_*` files. So every result below is on dev, and the one fresh read of items 1–3 waits for S8e's set. S11c's test pools and S15 test were not read for any choice. Tool: commit 2c07b6f; the dev runs took 53 minutes and 461 MB on a machine running about twenty jobs.
+
+**Parity.** Without the new flags every output is S11c's:
+- G3-P's dev cases: G3's ranks at w = 1 equal S11c's on 240 of 240 cases with a candidate;
+- the dev pools: `a.fresh_g3`, `g.fresh_g4`, `g.fresh_g5`, their logs, `a.g13p_dev.tsv`, `a.g13r.tsv` and `g.r1_queries.tsv` are byte-identical to S11c's dev files. `a.fresh_g13` differs only in its state column ("queued" against "Queued"), from S11c's own later case fix;
+- S11c's G4/G5 test read (`--gen-analogy --read-test`) reproduces line for line, with its query file byte-identical;
+- `--schedule` without `--extra-dev` prints S10's dev read line for line (timings aside).
+
+#### Item 1: G13 raises questions, never verdicts
+
+Store T's dev subjects: 52 questioned facts, 41 graded by Wikidata. The source stage as S8d calibrated it.
+
+| Mode | Supported (right) | Refuted (wrong by Wikidata) | Decided | Right decisions | Wrong decisions |
+|---|---:|---:|---:|---|---:|
+| **Verdict prior** (S11c: P0 0.2 if named wrong, else 0.8) | 7 (7) | 9 (9) | 16 | **16 / 16** [0.806, 1.000] | 0 |
+| Question only (P0 0.5) | 9 (8) | 0 | 9 | 8 / 9 [0.565, 0.980] | 1 |
+
+- **Why:** a DB-IB negative moves a fact from 0.5 to 0.074, above `decide`'s refute bound (0.05). From G13's 0.2 it moves to 0.023, and the fact is refuted. So the verdict's prior is what lets the sources refute the 9 wrong years. At 0.5, two facts G13 named wrong are supported by a DB-IB positive instead, one of them wrongly.
+- **Rule 1 is not met** (one more wrong decision; 8 right against 16). **G13 keeps its verdict prior.** It stays parked as a corrector: its verdict only sets the prior, and only the sources decide. That is S11c's pool as built, now measured against the alternative.
+
+#### Item 2: G3's order without its rule term
+
+G3-P's dev cases (S11c's construction): 257 read, 240 with a candidate.
+
+| w (rule term's weight) | Recall@1 | Recall@5 | Recall@10 | @1 − (w = 1) | @10 − (w = 1) |
+|---|---|---:|---|---|---|
+| **0** (the link predictor alone) | **0.634** [0.572, 0.696] | 0.809 | 0.837 [0.790, 0.879] | **+0.066 [+0.023, +0.113]** | +0.000 [−0.012, +0.012] |
+| 0.25 | 0.576 [0.514, 0.638] | 0.798 | 0.840 | +0.008 [+0.000, +0.019] | +0.004 |
+| 0.5 | 0.572 [0.510, 0.634] | 0.798 | 0.840 | +0.004 [+0.000, +0.012] | +0.004 |
+| 1 (S11c) | 0.568 [0.510, 0.630] | 0.798 | 0.837 [0.790, 0.879] | — | — |
+
+- **Rule 2 replaces w = 1 with w = 0.** Rules still decide which facts are candidates; the order among them is by the fact's own bits.
+- **The dev pool with w = 0** (75 hypotheses, the same facts): promoted 11, 10 of 11 true (0.909 [0.623, 0.984]), as with w = 1. Refuted 7 (4 of 4 graded false) against w = 1's 11 (4 of 5 false). Only the priors differ (the isotonic map is fitted on each order's own scores).
+
+#### Item 3: G4 without carried dates
+
+Read 1 (S8a's R1 random hide), dev, 1,201 queries; MRR with bootstrap intervals.
+
+| Queries | Base rate | λ = 0.25 (S11c) | λ_date = 0 | λ_date 0 − λ 0.25 |
+|---|---:|---|---|---|
+| **All** (1,201) | 0.108 | 0.160 (scored 66.8%) | 0.159 (scored 51.3%) | **−0.001 [−0.004, +0.001]** |
+| Date relations (263) | 0.038 | 0.099 (scored 76.4%) | 0.093 (scored 5.7%) | −0.006 [−0.017, +0.003] |
+| Other relations (938) | 0.127 | 0.177 | 0.177 | 0 |
+
+- On read 1, carried dates do help G4 rank hidden dates (+0.061 [+0.034, +0.093] over the base rate): an analog's year is often near the target's. Without them G4 still beats the base rate on dates (+0.055 [+0.030, +0.085]) through its equality and path roles.
+- Read 2 (S15 dev, store T) is unchanged: `b` Hits@10 0.056, MRR 0.049; `c` Hits@10 0.075, MRR 0.038.
+- **The dev pool:** 26 → 14 hypotheses. All 12 date hypotheses are gone, and all 12 were false (S11c: 12 of 12). Promotions stay 0. Refuted 25 (18 of 20 graded false) → 8 (4 of 6 false).
+- **Rule 3 is met** (lower end −0.004 ≥ −0.005): **λ_date = 0 is adopted.** As a promotion source, a carried date was always wrong; as a ranker, it helps a little.
+
+#### Item 4: A6, spouse gaps
+
+- Store K: 1,013 spouse pairs, 9 with a birth year for both (12 directed facts). Store T: 26 pairs, 2.
+- An add-one tail p of 0.005 needs at least 199 values, so A6 cannot fire on either store; it never fired. Rule 4: **A6 is kept**, its threshold documented, for a larger store.
+
+#### Item 5: S10 reads the new pools (report only)
+
+Dev only, f = 0.25 of the pool's cost, 1,000 draws × 5 seeds, as S10. V = confirmed value per 1,000 cost.
+
+| Pool | Hypotheses (slots) | Uniform V | S10's four configurations (random λ 0 / random λ 1 / P0 first λ 0 / P0 first λ 1) | Dev choice, gain over uniform | FDR U / S10 |
+|---|---|---:|---|---|---|
+| S8d's dev pool (S10's own, reproduced) | 1,398 (1,330) | 2.790 | 4.224 / 4.244 / 6.308 / 6.324 | P0 first λ 0, **+126%** | 0.101 / 0.093 |
+| S8d's + S11c's dev pools | 1,599 (1,390) | 7.234 | 8.464 / 8.477 / 9.683 / 9.740 | P0 first λ 0, **+33.9%** (above 1.1 × uniform in 0.905 of draws) | 0.077 / 0.081 |
+| S11c's dev pools alone (G3, G4, G5, G13) | 201 (191) | 10.280 | 22.438 / 22.856 / 16.860 / 17.032 | random order λ 0, **+118%** (in 0.986 of draws) | 0.067 / 0.083 |
+
+- S11c's pools are richer per cost than G2's and G6/G7's: uniform's V rises from 2.8 to 7.2 when they are added. Their value sits in a few arms (G3 places, G13 dates, G5 places).
+- The combined pool by generator (supported after the sources, true among them): G2 68 (11, 10), G6/G7 1,330 (16, 14), G3 75 (11, 10), G4 26 (0), G5 48 (2, 2), G13 52 (7, 7).
+- **The within-arm order flips between pools:** "highest P0 first" wins on S8d's pool and on the combination; random order wins on S11c's pools alone. S10's gate read found the same instability (P0 first won on dev and lost on the gate).
+- At f = 1 with retirement off, S10 and uniform tie exactly in 200 of 200 draws on both new pools, as they must.
+- **Report only.** S10's gate read waits for a fresh set; S11c's test pools were not read.
+
+#### Predictions, scored
+
+| # | Result |
+|---|---|
+| E1 | **Miss.** Question-only decided 9 (1 wrong), not ≥ 16 with ≤ 1 wrong; rule 1 keeps the verdict prior |
+| E2 | **Hit.** w = 0, recall@1 +0.066, recall@10 +0.000; rule 2 replaces w = 1 |
+| E3 | **Hit.** 11 promoted, 10 of 11 true (0.909) |
+| E4 | **Partial.** Overall change −0.001 and rule 3 adopts (hits); but on date queries λ = 0.25 beats the base rate by 0.061, not "within 0.01" (miss) |
+| E5 | **Hit.** G4's date hypotheses 12 → 0; promotions 0 |
+| E6 | **Hit.** 9 pairs in K, 2 in T; A6 kept |
+| E7 | **Partial.** On S8d's + S11c's pools S10 beats uniform by 33.9% (hit); on S11c's pools alone it beats it by 118%, not "does not" (miss) |
+
+4 hits, 2 partial, 1 miss.
+
+#### Decisions (decided by measurement under PLAN ledger 55, open to Odin's veto)
+
+1. **G13 keeps its verdict prior.** Its anomalies are questions for the source stage; the verdict sets only the prior (0.2 or 0.8), and only the sources decide. Question-only (0.5) was measured and rejected: it loses the sources' refutations.
+2. **G3 orders its added facts by the link predictor alone** (w = 0; `--g3-weights` applies rule 2's choice). Recall@1 +0.066 on dev; recall@10 unchanged.
+3. **G4 carries no dates as constants** (λ_date = 0; `--g4-date-lambda`). Ranking is unchanged overall; every carried date it proposed was false.
+4. **A6 is kept** for a larger store (it needs 199 spouse pairs with two birth years; this store has 9).
+5. **S10 on the new pools:** report only. S10 gains more on richer pools, but the within-arm order is not stable across pools.
+- The defaults are left as S11c's so that S11c's reads reproduce. The flags select the adopted settings, and the next pool read (S8e's fresh set) uses them. The one fresh read of items 1–3 happens there.
+
+#### How to reproduce (S11e)
+
+```bash
+g++ -O2 -std=c++20 -I native/include -pthread native/tools/pattern_learn.cpp -o pattern_learn
+F=/root/work/f2; E=enwik8; V=ppmi_svd_output/enwik8
+./pattern_learn --gen-anomaly $E $F/v2/aug/seeds.tsv $F/v2/aug/facts_f2.tsv $F/wikidata/wd_values.tsv $F/v2/aug/patterns.tsv bench/eval pdev/a --fresh-dev --g3-weights --g13-questions
+./pattern_learn --gen-analogy $E $F/v2/aug/seeds.tsv $F/v2/aug/facts_f2.tsv $F/wikidata/wd_values.tsv $F/v2/aug/patterns.tsv bench/eval $V data/cyphalm/simvec_ppmi32.bin pdev/g --fresh-dev --g4-date-lambda
+# the source stage and the grade, as S11c (pools a.fresh_g3w, a.fresh_g13q, g.fresh_g4d beside S11c's)
+./pattern_learn --schedule s10/comb --dev S10_DEV_DIR bench/eval/temporal_holdout_dev.tsv --gaps GAP_MAP --extra-dev S11C_DEV_POOLS --wd $F/wikidata/wd_values.tsv
+./pattern_learn --schedule s10/only --dev S10_DEV_DIR bench/eval/temporal_holdout_dev.tsv --gaps GAP_MAP --extra-dev S11C_DEV_POOLS --extra-only --wd $F/wikidata/wd_values.tsv
+```
+
+- `S11C_DEV_POOLS` is a directory holding S11c's dev pools with their source stage (`a.fresh_g3`, `g.fresh_g4`, `g.fresh_g5`, `a.fresh_g13`, `src_<g>.s8d_fresh.tsv`, `src_<g>.s8d_fresh_ran.tsv`). Runs are in `/root/work/s11e/runs` (not committed).
+- **Checks:** the nine CTests of HANDOFF §4.4 pass. `native_epistemic_test` passes 1,305 checks (12 new: the parts of an explanation's bits, w = 1 equal to S11c's order, a weight that changes the order, a fact counted at its best explanation, a rule with PCA below 1 scaled by w). Three planted bugs each fail it: the weight ignored (2 checks; the first version of the checks missed it, so the PCA-below-1 check was added), the support tie reversed (2 checks), and a fact kept at its worst explanation (1 check). S3's normal `--gaps` run is byte-identical (gap map `a77678d8ef7dfdef`, the cells, the demand and the 7 v2 store files).

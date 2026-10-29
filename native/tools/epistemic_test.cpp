@@ -2840,6 +2840,57 @@ static void test_analogy_S11c() {
     CHECK(an::derivable(rs2, "X", "occupation", "Writer"));
     CHECK(an::abduce(ix2, rs2, "X", "occupation", "Writer", [](const an::FactRef&) { return 3.0; }).empty() ||
           an::ranked_facts(an::abduce(ix2, rs2, "X", "occupation", "Writer", [](const an::FactRef&) { return 3.0; })).front().first.o != "Poet");
+    // S11e: the rule term's weight. The parts of an explanation's bits, and the order at w = 1 is S11c's order.
+    bool parts = !ex.empty();
+    for (const auto& e : ex) parts = parts && e.fact_bits == 3.0 && e.rule_bits >= 0 && e.bits == e.fact_bits + e.rule_bits;
+    CHECK(parts);
+    const auto w1 = an::ranked_facts_weighted(ex, 1.0);
+    bool same = w1.size() == rf.size();
+    for (std::size_t i = 0; same && i < rf.size(); ++i) same = w1[i].first == rf[i].first && w1[i].second == rf[i].second;
+    CHECK(same);
+    const auto rp1 = an::abduce(ix, rs, "Y", "nationality", "K0", bits);
+    const auto rpw = an::ranked_facts_weighted(rp1, 1.0), rpr = an::ranked_facts(rp1);
+    bool same2 = rpw.size() == rpr.size();
+    for (std::size_t i = 0; same2 && i < rpr.size(); ++i) same2 = rpw[i].first == rpr[i].first;
+    CHECK(same2);
+    const auto ex0 = an::abduce(ix, rs, "X", "occupation", "Writer", [](const an::FactRef&) { return 3.0; }, 5000, 0.0);
+    CHECK(!ex0.empty() && ex0.front().bits == 3.0 && ex0.front().rule_bits == ex.front().rule_bits);
+    // a cheap fact through a weak rule against a dearer fact through a strong rule: the weight decides
+    std::vector<an::Explanation> ew(3);
+    ew[0].add = {{"t", "r", "a"}}, ew[0].fact_bits = 2.0, ew[0].rule_bits = 3.0, ew[0].support = 10;
+    ew[1].add = {{"t", "r", "b"}}, ew[1].fact_bits = 3.0, ew[1].rule_bits = 0.5, ew[1].support = 10;
+    ew[2].add = {{"t", "r", "c"}}, ew[2].fact_bits = 2.0, ew[2].rule_bits = 3.0, ew[2].support = 20;  // ties a, more support
+    const auto o1 = an::ranked_facts_weighted(ew, 1.0), o0 = an::ranked_facts_weighted(ew, 0.0), oh = an::ranked_facts_weighted(ew, 0.5);
+    CHECK(o1.size() == 3 && o1[0].first.o == "b" && o1[1].first.o == "c" && o1[2].first.o == "a");
+    CHECK(o0.size() == 3 && o0[0].first.o == "c" && o0[1].first.o == "a" && o0[2].first.o == "b");
+    CHECK(oh.size() == 3 && oh[0].first.o == "b");
+    CHECK_NEAR(o1.empty() ? 0.0 : o1[0].second, 3.5, 1e-12);
+    // a rule with PCA below 1: the weight scales its bits (w = 0: the fact's bits alone; w = 0.5: half the rule's)
+    {
+      TripleStore gw;
+      for (int i = 0; i < 30; ++i) {
+        const std::string p = "bard" + std::to_string(i);
+        gw.add(p, "occupation", "Bard"), gw.add(p, "occupation", "Singer");
+      }
+      for (int i = 0; i < 10; ++i) gw.add("lonebard" + std::to_string(i), "occupation", "Bard");
+      for (int i = 0; i < 60; ++i) gw.add("smith" + std::to_string(i), "occupation", "Smith");
+      gw.add("Z", "occupation", "Singer");
+      const RuleIndex ixw(gw);
+      const RuleSet rsw(ixw, mine_rules(ixw), true);
+      auto three = [](const an::FactRef&) { return 3.0; };
+      const auto e1 = an::abduce(ixw, rsw, "Z", "occupation", "Singer", three);
+      const auto e0 = an::abduce(ixw, rsw, "Z", "occupation", "Singer", three, 5000, 0.0);
+      const auto eh = an::abduce(ixw, rsw, "Z", "occupation", "Singer", three, 5000, 0.5);
+      CHECK(!e1.empty() && e1.front().rule_bits > 0.1);
+      CHECK(!e0.empty() && e0.front().bits == 3.0);
+      CHECK(!e1.empty() && !eh.empty() && std::fabs(eh.front().bits - (3.0 + 0.5 * e1.front().rule_bits)) < 1e-12);
+    }
+    // one fact, two explanations: its best one counts
+    std::vector<an::Explanation> e2(2);
+    e2[0].add = {{"t", "r", "a"}}, e2[0].fact_bits = 2.0, e2[0].rule_bits = 4.0;
+    e2[1].add = {{"t", "r", "a"}}, e2[1].fact_bits = 2.0, e2[1].rule_bits = 1.0;
+    const auto r2 = an::ranked_facts_weighted(e2, 1.0);
+    CHECK(r2.size() == 1 && r2[0].second == 3.0);
   }
   // ---- G4: equality and path roles, the guards
   {

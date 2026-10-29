@@ -383,8 +383,10 @@ inline AnomalyExplanation explain_anomaly(const Anomaly& a, const AnomalyEvidenc
 struct Explanation {
   std::vector<FactRef> add;  // the missing facts (one, here)
   int rule = -1;             // index into RuleSet::rules()
-  double bits = 0;           // sum of the added facts' bits plus the rule's -log2 PCA
+  double bits = 0;           // sum of the added facts' bits plus rule_weight times the rule's -log2 PCA
   double support = 0;
+  double fact_bits = 0;      // the added facts' bits alone (S11e)
+  double rule_bits = 0;      // the rule's -log2 PCA alone (S11e)
 };
 
 /// Bits of a fact under the store: -log2 P(fact). The caller supplies it (S6's link predictor).
@@ -402,9 +404,10 @@ inline std::vector<std::string> vals_or_in(const RuleIndex& ix, const std::strin
 
 /// The explanations of (x, r, y) by the kept rules: each rule with head r and the one fact it still needs. Empty when a
 /// rule already derives it with nothing added (an explained observation has no explanation to propose) or none can.
-/// max_join bounds the join nodes read per path rule (a hub guard).
+/// max_join bounds the join nodes read per path rule (a hub guard). rule_weight weighs the rule's -log2 PCA in the
+/// bits (S11c: 1; S11e measures 0, 0.25, 0.5 and 1).
 inline std::vector<Explanation> abduce(const RuleIndex& ix, const RuleSet& rs, const std::string& x, const std::string& r, const std::string& y,
-                                       const FactBits& bits_of, std::size_t max_join = 5000) {
+                                       const FactBits& bits_of, std::size_t max_join = 5000, double rule_weight = 1.0) {
   std::vector<Explanation> out;
   const TripleStore& st = ix.store();
   const auto& R = rs.rules();
@@ -413,7 +416,8 @@ inline std::vector<Explanation> abduce(const RuleIndex& ix, const RuleSet& rs, c
     if (st.has(f.s, f.r, f.o)) return;
     Explanation e;
     e.add = {f}, e.rule = static_cast<int>(i), e.support = R[i].support;
-    e.bits = bits_of(f) - std::log2(std::max(1e-12, R[i].pca_conf()));
+    e.fact_bits = bits_of(f), e.rule_bits = -std::log2(std::max(1e-12, R[i].pca_conf()));
+    e.bits = e.fact_bits + rule_weight * e.rule_bits;
     out.push_back(std::move(e));
   };
   for (std::size_t i = 0; i < R.size(); ++i) {
@@ -458,6 +462,32 @@ inline std::vector<std::pair<FactRef, double>> ranked_facts(const std::vector<Ex
   for (const auto& e : ex)
     for (const auto& f : e.add)
       if (seen.insert(f).second) out.push_back({f, e.bits});
+  return out;
+}
+
+/// The distinct added facts ordered with the rule term weighted by w (S11e): each fact at its best explanation by
+/// fact_bits + w * rule_bits, ties by the rule's support (larger first), then the fact. At w = 1 this is ranked_facts'
+/// order on abduce's output; at w = 0 the facts are ordered by their own bits (the link predictor alone).
+inline std::vector<std::pair<FactRef, double>> ranked_facts_weighted(const std::vector<Explanation>& ex, double w) {
+  struct Best {
+    double score, support;
+  };
+  std::map<FactRef, Best> best;
+  for (const auto& e : ex) {
+    const double sc = e.fact_bits + w * e.rule_bits;
+    for (const auto& f : e.add) {
+      const auto it = best.find(f);
+      if (it == best.end() || sc < it->second.score || (sc == it->second.score && e.support > it->second.support)) best[f] = {sc, e.support};
+    }
+  }
+  std::vector<std::pair<FactRef, Best>> v(best.begin(), best.end());
+  std::sort(v.begin(), v.end(), [](const auto& a, const auto& b) {
+    if (a.second.score != b.second.score) return a.second.score < b.second.score;
+    if (a.second.support != b.second.support) return a.second.support > b.second.support;
+    return a.first < b.first;
+  });
+  std::vector<std::pair<FactRef, double>> out;
+  for (const auto& [f, b] : v) out.push_back({f, b.score});
   return out;
 }
 

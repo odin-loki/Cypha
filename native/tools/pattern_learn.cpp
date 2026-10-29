@@ -9777,6 +9777,67 @@ Pool load_pool(const string& dir, const string& s15_file, bool grade, const std:
     return P;
 }
 
+// S11e item 5: S11c-format pools from dir added to P (a.fresh_g3, g.fresh_g4, g.fresh_g5 graded on the S15 file's
+// bit-17 = 1 half, as load_pool; a.fresh_g13 graded by Wikidata), each with its source stage, its cost file and its
+// pre-registration log. A generator whose files are missing is skipped and named.
+int wd_grade10(const s7::WdObjs& wd, const string& s, const string& r, const string& o) {
+    const auto it = wd.find(s + '\x1f' + r);
+    const int ri = rel_index(r);
+    if (it == wd.end() || ri < 0 || it->second.empty()) return -1;
+    return s7::wd_match(ri, o, it->second) ? 1 : 0;
+}
+void add_extra(Pool& P, const string& dir, const string& s15_file, const s7::WdObjs& wd, const std::map<std::pair<string, string>, double>& demand, ArmSet& A) {
+    s8c::Grader G;
+    for (const s8c::Row& x : s8c::load_s15(s15_file))
+        if (!s8c::choose_half(x.s)) G.add(x);  // bit 17 = 1
+    const std::pair<const char*, const char*> gens[4] = {{"a", "g3"}, {"g", "g4"}, {"g", "g5"}, {"a", "g13"}};
+    for (const auto& [pre, g] : gens) {
+        const string hp = dir + "/" + pre + ".fresh_" + g + ".hyps.tsv", sp = dir + "/src_" + g + ".s8d_fresh.tsv", rp = dir + "/src_" + g + ".s8d_fresh_ran.tsv",
+                     lp = dir + "/" + pre + ".fresh_" + g + ".prereg.tsv";
+        if (!std::ifstream(hp) || !std::ifstream(sp) || !std::ifstream(rp)) {
+            std::cout << "S10 EXTRA " << dir << ": " << g << " skipped (files missing)\n";
+            continue;
+        }
+        const TsvTable H = read_tsv(hp), st = read_tsv(sp), ran = read_tsv(rp);
+        const vector<int> n = prereg_results(lp);
+        if (st.rows.size() != ran.rows.size() || st.rows.size() != H.rows.size())
+            throw std::runtime_error("extra pool " + dir + " " + g + ": the stage, cost and hypothesis files do not line up");
+        const std::size_t cs = st.col("subject"), cr = st.col("relation"), co = st.col("object"), cps = st.col("posterior_src"), csup = st.col("supported"),
+                          crun = ran.col("sources_run"), hgen = H.col("generator"), hp0 = H.col("P0");
+        std::size_t added = 0;
+        for (std::size_t i = 0; i < st.rows.size(); ++i) {
+            const auto& row = st.rows[i];
+            const auto& h = H.rows[i];
+            if (h[H.col("subject")] != row[cs] || h[H.col("relation")] != row[cr] || h[H.col("object")] != row[co])
+                throw std::runtime_error("extra pool " + dir + " " + g + ": row " + std::to_string(i) + " does not match");
+            Meta m;
+            m.gen = h[hgen], m.group = s8c::group_of(row[cr]), m.s = row[cs], m.r = row[cr], m.o = row[co];
+            cur::PoolItem it;
+            it.prior = std::atof(h[hp0].c_str());
+            it.posterior = std::atof(row[cps].c_str());
+            it.supported = row[csup] == "1";
+            const double cost = (i < n.size() ? n[i] : 0) + std::atof(ran.rows[i][crun].c_str());
+            if (cost < 1) ++P.min_cost_guard;
+            it.cost = std::max(1.0, cost);
+            const auto dit = demand.find({m.s, m.r});
+            it.demand = dit == demand.end() ? 0.0 : dit->second;
+            P.demand_items += it.demand > 0;
+            it.impact = ecs::hypothesis_impact(1.0, 0.0, it.demand);
+            it.reward = cur::pull_reward(it.supported, it.impact, it.prior, it.posterior);
+            it.bits = cur::bits_removed(it.prior, it.posterior);
+            it.arm = A.get(m.gen, m.group, ecs::tier_of(it.prior));
+            it.graded = m.gen == "G13" ? wd_grade10(wd, m.s, m.r, m.o) : G.grade(m.s, m.r, cypha::eval::sources::make_value(m.o));
+            P.total_cost += it.cost, P.impact_max = std::max(P.impact_max, it.impact);
+            P.items.push_back(it), P.meta.push_back(m);
+            ++added;
+        }
+        std::cout << "S10 EXTRA " << dir << ": " << g << " " << added << " hypotheses\n";
+    }
+    std::set<std::pair<string, string>> slots;
+    for (const Meta& m : P.meta) slots.insert({m.s, m.r});
+    P.slots = slots.size();
+}
+
 struct Config {
     string name;
     cur::WithinArm order = cur::WithinArm::Random;
@@ -9915,16 +9976,21 @@ void print_arms(const string& tag, const DrawSet& D, const ArmSet& A, double run
 int run(int argc, char** argv) {
     if (argc < 6 || string(argv[3]) != "--dev") {
         std::fprintf(stderr, "usage: pattern_learn --schedule OUT_PREFIX --dev DIR S15_FILE [--gate DIR S15_FILE] [--gaps GAP_MAP] [--draws N] [--draws-dev N] "
-                             "[--seeds K]\n");
+                             "[--seeds K] [--extra-dev DIR [--extra-only] --wd WD_VALUES]\n");
         return 2;
     }
     const double t0 = now_s();
     const string out = argv[2], dev_dir = argv[4], dev_s15 = argv[5];
-    string gate_dir, gate_s15, gaps;
+    string gate_dir, gate_s15, gaps, wd_file;
+    vector<string> extra_dev;
+    bool extra_only = false;
     std::size_t draws = 4000, draws_dev = 1000, seeds = 5;
     for (int i = 6; i < argc; ++i) {
         const string a = argv[i];
         if (a == "--gate" && i + 2 < argc) gate_dir = argv[i + 1], gate_s15 = argv[i + 2], i += 2;
+        else if (a == "--extra-dev" && i + 1 < argc) extra_dev.push_back(argv[++i]);  // S11e item 5
+        else if (a == "--extra-only") extra_only = true;
+        else if (a == "--wd" && i + 1 < argc) wd_file = argv[++i];
         else if (a == "--gaps" && i + 1 < argc) gaps = argv[++i];
         else if (a == "--draws" && i + 1 < argc) draws = std::strtoul(argv[++i], nullptr, 10);
         else if (a == "--draws-dev" && i + 1 < argc) draws_dev = std::strtoul(argv[++i], nullptr, 10);
@@ -9945,7 +10011,23 @@ int run(int argc, char** argv) {
         }
     }
     ArmSet A;
-    const Pool dev = load_pool(dev_dir, dev_s15, true, demand, A);
+    Pool dev = extra_only ? Pool{} : load_pool(dev_dir, dev_s15, true, demand, A);
+    if (!extra_dev.empty()) {  // S11e item 5 (report only)
+        const s7::WdObjs wd = wd_file.empty() ? s7::WdObjs{} : s7::load_wd_objs(wd_file);
+        for (const auto& d : extra_dev) add_extra(dev, d, dev_s15, wd, demand, A);
+        std::map<string, std::array<double, 4>> by;  // generator -> hypotheses, cost, supported, graded true among supported
+        for (std::size_t i = 0; i < dev.items.size(); ++i) {
+            auto& x = by[dev.meta[i].gen];
+            x[0] += 1, x[1] += dev.items[i].cost, x[2] += dev.items[i].supported, x[3] += dev.items[i].supported && dev.items[i].graded == 1;
+        }
+        string l = "S10 POOL DEV by generator (S11e; the G6/G7 count in the line below includes every non-G2 generator):";
+        for (const auto& [g, x] : by) {
+            char c[160];
+            std::snprintf(c, sizeof c, " %s %.0f (cost %.0f, supported %.0f, true %.0f)", g.c_str(), x[0], x[1], x[2], x[3]);
+            l += c;
+        }
+        std::cout << l << "\n";
+    }
     print_pool("DEV", dev, A);
     // ---- the four configurations on dev at f = 0.25; the registered choice
     const vector<Config> configs = {{"random order, lambda 0", cur::WithinArm::Random, 0.0},
@@ -11139,7 +11221,7 @@ void g13_planted(const Stores& S, const s8b::Corpus& C, const std::unordered_set
 
 // G13-R: store T's own anomalies, graded by Wikidata. Returns the G13 pool hypotheses of the split when asked.
 void g13_real(const Stores& S, const s8b::Corpus& C, const std::unordered_set<string>& amb, const s7::WdObjs& wd, bool read_test, const string& out,
-              int pool_split, vector<PoolItem>* pool) {
+              int pool_split, vector<PoolItem>* pool, vector<PoolItem>* qpool = nullptr) {
     const ecs::TripleStore T = s8a::make_store(S.tby);
     PageReader page;
     page.C = &C;
@@ -11228,6 +11310,11 @@ void g13_real(const Stores& S, const s8b::Corpus& C, const std::unordered_set<st
             x.s = fr.s, x.r = fr.r, x.o = fr.o, x.gen = "G13", x.prior = p0, x.score = 1 - p0, x.skip_loop = true;
             x.explain = p0 < 0.5 ? "named wrong" : "questioned";
             pool->push_back(x);
+            if (qpool) {  // S11e item 1: the same facts as questions only, P0 0.5 whatever the verdict
+                PoolItem q = x;
+                q.prior = 0.5, q.score = 0.5, q.explain = "questioned";
+                qpool->push_back(q);
+            }
         }
 }
 
@@ -11270,10 +11357,14 @@ bool derivation(const ecs::RuleIndex& ix, const ecs::RuleSet& rs, const an::Fact
 
 double fact_bits(const ecs::LinkPredictor& lp, const an::FactRef& f) { return -std::log2(std::max(1e-12, lp.prob(f.s, f.r, f.o))); }
 
+const double kRuleW[4] = {0.0, 0.25, 0.5, 1.0};  // S11e item 2: the rule term's weight in G3's order
 struct G3Read {
     vector<double> r1, r5, r10, rnd1, rnd5, rnd10, lp1, lp5, lp10, pca1, pca5, pca10;
     vector<std::pair<double, int>> calib;  // (bits, is the deleted fact) for every ranked candidate fact, for the prior
     std::size_t drawn = 0, explained = 0, no_cand = 0, lost_rule = 0;
+    vector<double> w1[4], w5[4], w10[4];          // S11e: recall at each kRuleW
+    vector<std::pair<double, int>> wcal[4];       // S11e: (score at that weight, hit) for the prior
+    std::size_t w_check = 0, w_mismatch = 0;      // S11e: ranks at w = 1 against S11c's
 };
 G3Read g3_planted(const Facts& kby, bool dev) {
     G3Read out;
@@ -11306,6 +11397,8 @@ G3Read g3_planted(const Facts& kby, bool dev) {
         std::size_t rank = 0, n = 0, rl = 0, rp = 0;
         vector<std::pair<double, int>> calib;
         string no_rule;
+        std::size_t rw[4] = {0, 0, 0, 0};          // S11e: ranks at each kRuleW
+        vector<std::pair<double, int>> wcal[4];
     };
     vector<One> res(cases.size());
     auto work = [&](std::size_t from, std::size_t step) {
@@ -11368,6 +11461,14 @@ G3Read g3_planted(const Facts& kby, bool dev) {
                 return std::size_t{0};
             };
             R.rl = rank_by([](const C2& a) { return a.lpb; }), R.rp = rank_by([](const C2& a) { return a.pcab; });
+            for (int k = 0; k < 4; ++k) {  // S11e item 2
+                const auto rw = an::ranked_facts_weighted(ex, kRuleW[k]);
+                for (std::size_t i = 0; i < rw.size(); ++i) {
+                    const bool hit = rw[i].first == c.B;
+                    R.wcal[k].push_back({rw[i].second, hit});
+                    if (hit && !R.rw[k]) R.rw[k] = i + 1;
+                }
+            }
         }
     };
     {
@@ -11385,8 +11486,15 @@ G3Read g3_planted(const Facts& kby, bool dev) {
             ++out.no_cand;
             if (!R.no_rule.empty()) ++lost[R.no_rule];
             for (auto* v : {&out.r1, &out.r5, &out.r10, &out.rnd1, &out.rnd5, &out.rnd10, &out.lp1, &out.lp5, &out.lp10, &out.pca1, &out.pca5, &out.pca10}) v->push_back(0);
+            for (int k = 0; k < 4; ++k) out.w1[k].push_back(0), out.w5[k].push_back(0), out.w10[k].push_back(0);
             continue;
         }
+        for (int k = 0; k < 4; ++k) {
+            const std::size_t q = R.rw[k];
+            out.w1[k].push_back(q && q <= 1), out.w5[k].push_back(q && q <= 5), out.w10[k].push_back(q && q <= 10);
+            out.wcal[k].insert(out.wcal[k].end(), R.wcal[k].begin(), R.wcal[k].end());
+        }
+        ++out.w_check, out.w_mismatch += R.rw[3] != R.rank;
         out.calib.insert(out.calib.end(), R.calib.begin(), R.calib.end());
         const double n = static_cast<double>(R.n);
         const std::size_t rank = R.rank, rl = R.rl, rp = R.rp;
@@ -11421,10 +11529,39 @@ void print_g3(const string& tag, const G3Read& R) {
     std::cout << b << "\n";
 }
 
+// S11e item 2: G3's recall at each rule weight on the cases read, and rule 2's choice (the index into kRuleW).
+int print_g3_weights(const string& tag, const G3Read& R) {
+    char b[768];
+    std::snprintf(b, sizeof b, "%s S11E WEIGHT CHECK ranks at w = 1 equal S11c's G3 ranks on %zu of %zu cases", tag.c_str(), R.w_check - R.w_mismatch, R.w_check);
+    std::cout << b << "\n";
+    for (int k = 0; k < 4; ++k) {
+        const auto c1 = s8a::boot_mean(R.w1[k]), c10 = s8a::boot_mean(R.w10[k]);
+        const auto d1 = boot_diff(R.w1[k], R.w1[3]), d10 = boot_diff(R.w10[k], R.w10[3]);
+        std::snprintf(b, sizeof b,
+                      "%s S11E RECALL w %.2f @1 %.3f [%.3f, %.3f] @5 %.3f @10 %.3f [%.3f, %.3f] | @1 - w1 %+.3f [%+.3f, %+.3f] | @10 - w1 %+.3f [%+.3f, %+.3f]",
+                      tag.c_str(), kRuleW[k], s8a::mean(R.w1[k]), c1.first, c1.second, s8a::mean(R.w5[k]), s8a::mean(R.w10[k]), c10.first, c10.second,
+                      s8a::mean(R.w1[k]) - s8a::mean(R.w1[3]), d1.first, d1.second, s8a::mean(R.w10[k]) - s8a::mean(R.w10[3]), d10.first, d10.second);
+        std::cout << b << "\n";
+    }
+    // rule 2: the highest recall@1 (ties to the larger w) replaces w = 1 only if its @1 difference interval is above 0
+    // and its @10 is not lower by more than 0.02
+    int best = 3;
+    for (int k = 3; k >= 0; --k)
+        if (s8a::mean(R.w1[k]) > s8a::mean(R.w1[best])) best = k;
+    int pick = 3;
+    if (best != 3) {
+        const auto d1 = boot_diff(R.w1[best], R.w1[3]);
+        if (d1.first > 0 && s8a::mean(R.w10[best]) >= s8a::mean(R.w10[3]) - 0.02) pick = best;
+    }
+    std::snprintf(b, sizeof b, "%s S11E RULE 2: highest recall@1 at w %.2f -> G3's order uses w %.2f", tag.c_str(), kRuleW[best], kRuleW[pick]);
+    std::cout << b << "\n";
+    return pick;
+}
+
 // G3's pool: the unexplained observations of the store with the pool's slots hidden; each distinct added fact that
-// falls in a hidden slot, at its best explanation.
+// falls in a hidden slot, at its best explanation. wi: the rule weight's index into kRuleW (S11c: 3, w = 1).
 void g3_pool(const Facts& kby, const std::set<std::pair<string, string>>& slots, const G3Read& dev_read, vector<PoolItem>& pool, std::size_t& held,
-             std::size_t& observations) {
+             std::size_t& observations, int wi = 3) {
     Facts red;
     held = 0;
     for (const auto& [s, fs] : kby)
@@ -11444,7 +11581,7 @@ void g3_pool(const Facts& kby, const std::set<std::pair<string, string>>& slots,
         for (const auto& [r, o] : fs) {
             if (an::derivable(rs, s, r, o)) continue;
             ++observations;
-            for (const auto& e : an::abduce(ix, rs, s, r, o, bits)) {
+            for (const auto& e : an::abduce(ix, rs, s, r, o, bits, 5000, kRuleW[wi])) {
                 const auto& f = e.add.front();
                 if (!slots.count({f.s, f.r})) continue;
                 auto it = best.find(f);
@@ -11455,7 +11592,7 @@ void g3_pool(const Facts& kby, const std::set<std::pair<string, string>>& slots,
     // the prior: an isotonic map from bits to P(the added fact is the deleted one), fitted on G3-P's dev cases
     vector<double> p;
     vector<int> y;
-    for (const auto& [bt, hit] : dev_read.calib) p.push_back(-bt), y.push_back(hit);
+    for (const auto& [bt, hit] : (wi == 3 ? dev_read.calib : dev_read.wcal[wi])) p.push_back(-bt), y.push_back(hit);
     ecs::IsotonicCalibrator cal;
     cal.fit(p, y);
     for (const auto& [f, bw] : best) {
@@ -11468,17 +11605,20 @@ void g3_pool(const Facts& kby, const std::set<std::pair<string, string>>& slots,
 
 int run_anomaly(int argc, char** argv) {
     if (argc < 9) {
-        std::fprintf(stderr, "usage: pattern_learn --gen-anomaly ENWIK8 SEEDS.tsv FACTS_F2.tsv WD_VALUES.tsv PATTERNS.tsv S15_DIR OUT_PREFIX [--read-test] [--fresh-dev | --fresh-test]\n");
+        std::fprintf(stderr, "usage: pattern_learn --gen-anomaly ENWIK8 SEEDS.tsv FACTS_F2.tsv WD_VALUES.tsv PATTERNS.tsv S15_DIR OUT_PREFIX [--read-test] [--fresh-dev | --fresh-test] "
+                             "[--g3-weights] [--g13-questions]\n");
         return 2;
     }
     const double t0 = now_s();
     const string out = argv[8], s15dir = argv[7];
-    bool read_test = false, fresh_dev = false, fresh_test = false;
+    bool read_test = false, fresh_dev = false, fresh_test = false, g3_weights = false, g13_questions = false;
     for (int i = 9; i < argc; ++i) {
         const string a = argv[i];
         if (a == "--read-test") read_test = true;
         else if (a == "--fresh-dev") fresh_dev = true;
         else if (a == "--fresh-test") fresh_test = true;
+        else if (a == "--g3-weights") g3_weights = true;      // S11e item 2
+        else if (a == "--g13-questions") g13_questions = true;  // S11e item 1
         else {
             std::fprintf(stderr, "unknown option %s\n", argv[i]);
             return 2;
@@ -11498,11 +11638,13 @@ int run_anomaly(int argc, char** argv) {
     std::cout << b << "\n";
     // ---- G13
     for (int sp = 0; sp < (read_test ? 2 : 1); ++sp) g13_planted(S, C, amb, sp == 0, out);
-    vector<PoolItem> g13pool;
-    g13_real(S, C, amb, wd, read_test, out, fresh_test ? 1 : 0, (fresh_dev || fresh_test) ? &g13pool : nullptr);
+    vector<PoolItem> g13pool, g13qpool;
+    g13_real(S, C, amb, wd, read_test, out, fresh_test ? 1 : 0, (fresh_dev || fresh_test) ? &g13pool : nullptr,
+             (fresh_dev || fresh_test) && g13_questions ? &g13qpool : nullptr);
     // ---- G3
     const G3Read dev3 = g3_planted(S.kby, true);
     print_g3("DEV G3-P", dev3);
+    const int g3w = g3_weights ? print_g3_weights("DEV G3-P", dev3) : 3;
     if (read_test) {
         const G3Read t3 = g3_planted(S.kby, false);
         print_g3("TEST G3-P", t3);
@@ -11534,6 +11676,21 @@ int run_anomaly(int argc, char** argv) {
         pool_loop(g13pool, T, C, out + ".fresh_g13.prereg.tsv");
         pool_states(ptag + " G13 (store T, " + (fresh_test ? "test" : "dev") + " subjects by bit 11)", g13pool);
         write_pool(out + ".fresh_g13.hyps.tsv", g13pool);
+        if (g3_weights) {  // S11e item 2: G3's pool with the chosen rule weight
+            vector<PoolItem> g3w_pool;
+            std::size_t held2 = 0, obs2 = 0;
+            g3_pool(S.kby, slots, dev3, g3w_pool, held2, obs2, g3w);
+            pool_loop(g3w_pool, st, C, out + ".fresh_g3w.prereg.tsv");
+            std::snprintf(b, sizeof b, "%s G3 (S11e, w %.2f) hypotheses %zu", ptag.c_str(), kRuleW[g3w], g3w_pool.size());
+            std::cout << b << "\n";
+            pool_states(ptag + " G3 (S11e)", g3w_pool);
+            write_pool(out + ".fresh_g3w.hyps.tsv", g3w_pool);
+        }
+        if (g13_questions) {  // S11e item 1: G13's facts as questions only
+            pool_loop(g13qpool, T, C, out + ".fresh_g13q.prereg.tsv");
+            pool_states(ptag + " G13 questions only (S11e)", g13qpool);
+            write_pool(out + ".fresh_g13q.hyps.tsv", g13qpool);
+        }
     }
     std::snprintf(b, sizeof b, "S11C --gen-anomaly done in %.1f s", now_s() - t0);
     std::cout << b << "\n";
@@ -11577,25 +11734,35 @@ struct QueryRow {
     double top_g4[3] = {0, 0, 0}, top_g5[2] = {0, 0};
     string top_g4o[3], top_g5o[2];
     bool scored_g4[3] = {false, false, false}, scored_g5[2] = {false, false};
+    std::size_t rank_g4d = 0;  // S11e item 3: lambda 0.25, 0 for date relations
+    double top_g4d = 0;
+    string top_g4do;
+    bool scored_g4d = false;
 };
 const double kLambda[3] = {0.0, 0.25, 1.0};
+// S11e item 3: the constant-role weight for (r): lambda, or lambda_date for date relations
+double g4_lambda(const string& r, double lambda, double lambda_date) {
+    const int ri = rel_index(r);
+    return ri >= 0 && is_datey(ri) ? lambda_date : lambda;
+}
 
 double rr(std::size_t k) { return k ? 1.0 / static_cast<double>(k) : 0.0; }
 
 int run_analogy(int argc, char** argv) {
     if (argc < 11) {
         std::fprintf(stderr, "usage: pattern_learn --gen-analogy ENWIK8 SEEDS.tsv FACTS_F2.tsv WD_VALUES.tsv PATTERNS.tsv S15_DIR VEC_PREFIX SIMVEC OUT_PREFIX "
-                             "[--read-test] [--fresh-dev | --fresh-test]\n");
+                             "[--read-test] [--fresh-dev | --fresh-test] [--g4-date-lambda]\n");
         return 2;
     }
     const double t0 = now_s();
     const string s15dir = argv[7], vecp = argv[8], simvec = argv[9], out = argv[10];
-    bool read_test = false, fresh_dev = false, fresh_test = false;
+    bool read_test = false, fresh_dev = false, fresh_test = false, g4_date = false;
     for (int i = 11; i < argc; ++i) {
         const string a = argv[i];
         if (a == "--read-test") read_test = true;
         else if (a == "--fresh-dev") fresh_dev = true;
         else if (a == "--fresh-test") fresh_test = true;
+        else if (a == "--g4-date-lambda") g4_date = true;  // S11e item 3
         else {
             std::fprintf(stderr, "unknown option %s\n", argv[i]);
             return 2;
@@ -11663,6 +11830,12 @@ int run_analogy(int argc, char** argv) {
             q.scored_g4[l] = !tr.empty();
             if (!tr.empty()) q.top_g4[l] = tr.front().second, q.top_g4o[l] = tr.front().first;
             q.rank_g4[l] = s8a::rank_value(st, ri, s, o, ob, as_cands(tr), nullptr, s8a::M_RULES, filt);
+        }
+        if (g4_date) {  // S11e item 3
+            const auto tr = an::transfer(st, ait->second, s, r, g4_lambda(r, kLambda[1], 0.0));
+            q.scored_g4d = !tr.empty();
+            if (!tr.empty()) q.top_g4d = tr.front().second, q.top_g4do = tr.front().first;
+            q.rank_g4d = s8a::rank_value(st, ri, s, o, ob, as_cands(tr), nullptr, s8a::M_RULES, filt);
         }
         for (int v = 0; v < 2; ++v) {
             const auto gc = g5_cands(*va[v], s, r, ob);
@@ -11748,6 +11921,34 @@ int run_analogy(int argc, char** argv) {
             std::cout << b << "\n";
         }
     }
+    if (g4_date) {  // S11e item 3, dev only: lambda 0.25 everywhere against lambda_date = 0, overall, on dates, on the rest
+        for (int part = 0; part < 3; ++part) {
+            vector<double> m25, md, mb;
+            double n25 = 0, nd = 0, nn = 0;
+            for (const auto& q : Q) {
+                if (!q.dev) continue;
+                const int ri = rel_index(q.r);
+                const bool date = ri >= 0 && is_datey(ri);
+                if ((part == 1 && !date) || (part == 2 && date)) continue;
+                m25.push_back(rr(q.rank_g4[1])), md.push_back(rr(q.rank_g4d)), mb.push_back(rr(q.rank_base));
+                n25 += q.scored_g4[1], nd += q.scored_g4d, nn += 1;
+            }
+            const auto d = boot_diff(md, m25), d25 = boot_diff(m25, mb), dd = boot_diff(md, mb);
+            const char* const pn[3] = {"all", "date relations", "other relations"};
+            std::snprintf(b, sizeof b,
+                          "DEV S11E G4 DATES %-15s n %4zu | MRR base %.3f, lambda 0.25 %.3f (scored %.3f), lambda_date 0 %.3f (scored %.3f) | lambda_date 0 - lambda 0.25 %+.3f "
+                          "[%+.3f, %+.3f] | lambda 0.25 - base %+.3f [%+.3f, %+.3f] | lambda_date 0 - base %+.3f [%+.3f, %+.3f]",
+                          pn[part], m25.size(), s8a::mean(mb), s8a::mean(m25), nn > 0 ? n25 / nn : 0.0, s8a::mean(md), nn > 0 ? nd / nn : 0.0,
+                          s8a::mean(md) - s8a::mean(m25), d.first, d.second, s8a::mean(m25) - s8a::mean(mb), d25.first, d25.second, s8a::mean(md) - s8a::mean(mb),
+                          dd.first, dd.second);
+            std::cout << b << "\n";
+            if (part == 0) {
+                std::snprintf(b, sizeof b, "DEV S11E RULE 3 (overall MRR difference interval lower end >= -0.005): [%+.3f, %+.3f] -> %s", d.first, d.second,
+                              d.first >= -0.005 ? "ADOPT lambda_date = 0" : "KEEP lambda 0.25 for dates");
+                std::cout << b << "\n";
+            }
+        }
+    }
     if (read_test) {
         std::snprintf(b, sizeof b, "TEST RULE (MRR beats the base rate, interval above 0): G4 [%+.3f, %+.3f] -> %s | G5 [%+.3f, %+.3f] -> %s", test_d4.first, test_d4.second,
                       test_d4.first > 0 ? "EARNS ITS PLACE" : "DOES NOT", test_d5.first, test_d5.second, test_d5.first > 0 ? "EARNS ITS PLACE" : "DOES NOT");
@@ -11773,6 +11974,7 @@ int run_analogy(int argc, char** argv) {
             std::map<string, vector<const s8a::S15Row*>> slot;
             for (const auto& R : rows) slot[R.s + '\x1f' + R.r].push_back(&R);
             s8a::RankAcc acc[4][2];  // base, G2, G4, G5 x b, c
+            s8a::RankAcc accd[2];    // S11e item 3: G4 with lambda_date = 0
             for (const auto& R : rows) {
                 if (R.label != 1 || (R.cat != "b" && R.cat != "c")) continue;
                 const int ri = rel_index(R.r);
@@ -11793,18 +11995,28 @@ int run_analogy(int argc, char** argv) {
                 s8a::rank_add(acc[2][c], s8a::rank_value(T, ri, R.s, R.v, ob, as_cands(tr), nullptr, s8a::M_RULES, filt), !tr.empty());
                 const auto gc = g5_on[vec].count(R.r) ? g5_cands(vaT, R.s, R.r, ob) : vector<ecs::RuleSet::Cand>{};
                 s8a::rank_add(acc[3][c], s8a::rank_value(T, ri, R.s, R.v, ob, gc, nullptr, s8a::M_RULES, filt), !gc.empty());
+                if (g4_date) {
+                    const auto trd = an::transfer(T, an::find_analogs(T, R.s, R.r), R.s, R.r, g4_lambda(R.r, kLambda[lam], 0.0));
+                    s8a::rank_add(accd[c], s8a::rank_value(T, ri, R.s, R.v, ob, as_cands(trd), nullptr, s8a::M_RULES, filt), !trd.empty());
+                }
             }
             const char* const nm[4] = {"base_rate", "G2_rules", "G4", "G5"};
             for (int g = 0; g < 4; ++g) {
                 s8a::print_rank(tag + " RANK b(unstated) " + nm[g], acc[g][0]);
                 s8a::print_rank(tag + " RANK c(future) " + nm[g], acc[g][1]);
             }
+            if (g4_date) {
+                s8a::print_rank(tag + " RANK b(unstated) G4_lambda_date_0 (S11e)", accd[0]);
+                s8a::print_rank(tag + " RANK c(future) G4_lambda_date_0 (S11e)", accd[1]);
+            }
         }
     }
     // ---- pools: the top candidate per slot with the pool's slots hidden
     if (fresh_dev || fresh_test) {
         // priors: isotonic from score to P(true) on read 1's dev hidden slots (truth: store K holds the top candidate)
-        ecs::IsotonicCalibrator cal[2];
+        ecs::IsotonicCalibrator cal[2], cal_d;
+        vector<double> pd;  // S11e item 3: the variant's top scores and truth on read 1's dev hidden slots
+        vector<int> yd;
         {
             vector<double> p[2];
             vector<int> y[2];
@@ -11819,8 +12031,10 @@ int run_analogy(int argc, char** argv) {
                 };
                 if (q.scored_g4[lam]) p[0].push_back(q.top_g4[lam]), y[0].push_back(holds(q.top_g4o[lam]));
                 if (q.scored_g5[vec] && g5_on[vec].count(q.r)) p[1].push_back(q.top_g5[vec]), y[1].push_back(holds(q.top_g5o[vec]));
+                if (g4_date && q.scored_g4d) pd.push_back(q.top_g4d), yd.push_back(holds(q.top_g4do));
             }
             for (int g = 0; g < 2; ++g) cal[g].fit(p[g], y[g]);
+            if (g4_date) cal_d.fit(pd, yd);
         }
         const auto slots = pool_slots(s15dir, fresh_test);
         Facts fred;
@@ -11833,11 +12047,21 @@ int run_analogy(int argc, char** argv) {
         const ecs::TripleStore fst = s8a::make_store(fred);
         const auto fobjs = s8a::objects_by_rel(fst, fred);
         const an::VectorAnalogy fva(fst, wv[vec]);
-        vector<PoolItem> pool[2];
+        vector<PoolItem> pool[2], poold;
         std::size_t in_store = 0;
         for (const auto& [s, r] : slots) {
             if (fst.facts_of(s).empty()) continue;
             ++in_store;
+            if (g4_date) {  // S11e item 3: G4 with lambda_date = 0
+                const auto trd = an::transfer(fst, an::find_analogs(fst, s, r), s, r, g4_lambda(r, kLambda[lam], 0.0));
+                if (!trd.empty()) {
+                    PoolItem x;
+                    x.s = s, x.r = r, x.o = trd.front().first, x.gen = "G4", x.score = trd.front().second;
+                    x.prior = std::min(0.98, std::max(0.02, cal_d.predict(x.score)));
+                    x.explain = "analog transfer (no carried dates)";
+                    poold.push_back(x);
+                }
+            }
             const auto tr = an::transfer(fst, an::find_analogs(fst, s, r), s, r, kLambda[lam]);
             if (!tr.empty()) {
                 PoolItem x;
@@ -11867,6 +12091,17 @@ int run_analogy(int argc, char** argv) {
             pool_loop(pool[g], fst, C, out + ".fresh_" + gn + ".prereg.tsv");
             pool_states(ptag + (g == 0 ? " G4" : " G5"), pool[g]);
             write_pool(out + ".fresh_" + gn + ".hyps.tsv", pool[g]);
+        }
+        if (g4_date) {
+            std::map<string, std::size_t> by;
+            for (const auto& x : poold) ++by[x.r];
+            string l;
+            for (const auto& [r, n] : by) l += " " + r + " " + std::to_string(n);
+            std::snprintf(b, sizeof b, "%s G4 (S11e, lambda_date 0) hypotheses %zu by relation:%s", ptag.c_str(), poold.size(), l.c_str());
+            std::cout << b << "\n";
+            pool_loop(poold, fst, C, out + ".fresh_g4d.prereg.tsv");
+            pool_states(ptag + " G4 (S11e, lambda_date 0)", poold);
+            write_pool(out + ".fresh_g4d.hyps.tsv", poold);
         }
     }
     std::snprintf(b, sizeof b, "S11C --gen-analogy done in %.1f s", now_s() - t0);
