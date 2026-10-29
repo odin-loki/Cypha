@@ -6,6 +6,7 @@ Committed **historical experiment dumps**. Not the living production lock.
 |------|------------|
 | [`archive/profiles/`](archive/profiles/) | D17 recipe traces (L1 / L2 / Wave2 BPTT), XOR kernel-LLR sweeps, and July 2026 bench captures. Formerly `artifacts/profiles/`. |
 | [`archive/cell_sweep/`](archive/cell_sweep/) | Preserved H15 @ 300k row. Live sweep writes `bench/results/cell_sweep/` (gitignored). |
+| [`s8c/`](s8c/) | S8c's DBpedia tables (evidence sources for the hypothesis store, CC BY-SA), kept for a byte-for-byte rebuild. Not an answer source. |
 | [`cyphalm/`](cyphalm/) | Runtime data for `cyphalm_trie`: the similar-context expert's word vectors (2.2 MB), loaded by default. Not an experiment dump. |
 
 **Living numbers** stay in [`bench/BASELINE_LOCK.json`](../bench/BASELINE_LOCK.json) (D17 **2.664 BPC**). New local captures go to `artifacts/` (gitignored) — do not add them here unless they document a lock re-pin.

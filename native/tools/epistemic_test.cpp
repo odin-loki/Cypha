@@ -1,12 +1,14 @@
 // Known-answer tests for cypha/eval/epistemic.hpp (docs/DISCOVERY.md sections 2.1-2.3, 3.1, 3.3, 10), hypothesis.hpp
 // (S5: 4, 6.3, 7.2-7.5; invariants I1, I4, I7, I8; S7: 7.1-7.3, I5, I6; S7b: three-way likelihoods, the batch step
-// among the supported), gap_map.hpp (S3: 3.2, 3.5), gen_links.hpp (S8b: G6, G7) and gen_rules.hpp (S8a: G2, G14); S7c's batch rules.
+// among the supported), gap_map.hpp (S3: 3.2, 3.5), gen_links.hpp (S8b: G6, G7), gen_rules.hpp (S8a: G2, G14), sources.hpp
+// (S8c: evidence sources) and worlds.hpp (S9); S7c's batch rules.
 // Returns nonzero if any check fails.
 #include "cypha/eval/epistemic.hpp"
 #include "cypha/eval/gap_map.hpp"
 #include "cypha/eval/gen_links.hpp"
 #include "cypha/eval/gen_rules.hpp"
 #include "cypha/eval/hypothesis.hpp"
+#include "cypha/eval/sources.hpp"
 #include "cypha/eval/worlds.hpp"
 
 #include <cmath>
@@ -2027,6 +2029,91 @@ static void test_worlds_S9() {
   CHECK(store_fingerprint(st) == fp0 && st.size() == n0);  // I9 again, after everything
 }
 
+// ---------------------------------------------------------------------------
+// S8c: evidence sources and their reliability (sources.hpp)
+// ---------------------------------------------------------------------------
+
+static void test_sources_S8c() {
+  namespace src = cypha::eval::sources;
+  // Names: accents folded, "(...)" and a comma tail dropped, "the" and " language" / " music" removed.
+  CHECK_STR(src::norm_name("São Paulo"), "sao paulo");
+  CHECK_STR(src::norm_name("Chicago, Illinois"), "chicago");
+  CHECK_STR(src::norm_name("The Beatles (band)"), "beatles");
+  CHECK_STR(src::norm_name("English language"), src::norm_name("English"));
+  CHECK_STR(src::norm_name("Rock music"), "rock");
+  CHECK_STR(src::fold_lower("Ærøskøbing Łódź"), "aroskobing lodz");  // a ligature folds to one letter
+  // Values: years and days.
+  const src::Value d = src::make_value("1879-03-14"), y = src::make_value("1879"), bc = src::make_value("-490");
+  CHECK(d.year == 1879 && d.day == "1879-03-14" && y.year == 1879 && y.day.empty() && bc.year == -490);
+  CHECK(src::make_value("Paris").year == -100000);
+  CHECK(src::same_value("birth_year", d, y) && src::same_value("birth_date", d, src::make_value("1879-03-14")));
+  CHECK(!src::same_value("birth_date", d, src::make_value("1879-03-15")) && src::same_value("birth_date", d, y));
+  CHECK(src::same_value("capital", src::make_value("New Delhi", "Q987"), src::make_value("Delhi, India", "Q987")));
+  CHECK(!src::same_value("capital", src::make_value("Delhi", "Q1353"), src::make_value("New Delhi", "Q987")));  // items differ
+  CHECK(src::same_value("capital", src::make_value("New Delhi"), src::make_value("new delhi", "Q987")));  // one item: by name
+  // A table's three-way answer: positive, negative only for a single-valued relation, inconclusive when not covered.
+  src::Table t;
+  t.add("India", "capital", "New Delhi", "Q987");
+  t.add("India", "language", "Hindi");
+  t.add_alias("Bharat", "India");
+  CHECK(src::answer(t, "India", "capital", src::make_value("New Delhi")) == TestOutcome::Positive);
+  CHECK(src::answer(t, "India", "capital", src::make_value("Mumbai")) == TestOutcome::Negative);
+  CHECK(src::answer(t, "India", "language", src::make_value("English")) == TestOutcome::Inconclusive);  // multi-valued
+  CHECK(src::answer(t, "India", "currency", src::make_value("Rupee")) == TestOutcome::Inconclusive);
+  CHECK(src::answer(t, "Bharat", "capital", src::make_value("Mumbai")) == TestOutcome::Negative);    // through the alias
+  CHECK(src::answer(t, "Atlantis", "capital", src::make_value("Mumbai")) == TestOutcome::Inconclusive);
+  // Homonyms stay apart: a subject keeps its "(...)" and comma parts (values drop them).
+  t.add("Georgia (country)", "capital", "Tbilisi");
+  t.add("Georgia (U.S. state)", "capital", "Atlanta");
+  t.add("Hanover", "country", "Germany");
+  CHECK_STR(src::norm_subject("Hanover, New Hampshire"), "hanover new hampshire");
+  CHECK(src::answer(t, "Georgia (U.S. state)", "capital", src::make_value("Tbilisi")) == TestOutcome::Negative);
+  CHECK(src::answer(t, "Georgia (country)", "capital", src::make_value("Tbilisi")) == TestOutcome::Positive);
+  CHECK(src::answer(t, "Hanover, New Hampshire", "country", src::make_value("United States")) == TestOutcome::Inconclusive);
+  // The lead paragraph: positive when named on word boundaries, never negative.
+  src::LeadText lt;
+  lt.add("Albert Einstein", "Albert Einstein (14 March 1879 – 18 April 1955) was a German-born theoretical physicist.");
+  CHECK(lt.answer("Albert Einstein", "birth_year", src::make_value("1879")) == TestOutcome::Positive);
+  CHECK(lt.answer("Albert Einstein", "death_year", src::make_value("1956")) == TestOutcome::Inconclusive);
+  CHECK(lt.answer("Albert Einstein", "occupation", src::make_value("Physicist")) == TestOutcome::Positive);
+  CHECK(lt.answer("Albert Einstein", "occupation", src::make_value("Chemist")) == TestOutcome::Inconclusive);
+  CHECK(lt.answer("Albert Einstein", "occupation", src::make_value("theoretical physicist")) == TestOutcome::Positive);
+  CHECK(lt.answer("Albert Einstein", "nationality", src::make_value("Germ")) == TestOutcome::Inconclusive);  // word boundaries
+  CHECK(lt.answer("Nobody", "birth_year", src::make_value("1879")) == TestOutcome::Inconclusive);
+  // Dawid-Skene recovers planted three-way likelihoods and the share of true items with no reference. When one source
+  // copies another, the fit follows the pair and overrates it (the report's caveat): it is no test of independence.
+  std::mt19937_64 rng(20261029);
+  std::uniform_real_distribution<double> U(0.0, 1.0);
+  const double pt[5][3] = {{0.80, 0.05, 0.15}, {0.60, 0.10, 0.30}, {0.40, 0.00, 0.60}, {0.70, 0.10, 0.20}, {0.50, 0.20, 0.30}};
+  const double pf[5][3] = {{0.03, 0.70, 0.27}, {0.05, 0.50, 0.45}, {0.05, 0.00, 0.95}, {0.10, 0.60, 0.30}, {0.04, 0.66, 0.30}};
+  auto draw = [&](const double* p) { const double u = U(rng); return u < p[0] ? 0 : u < p[0] + p[1] ? 1 : 2; };
+  std::vector<std::vector<int>> Y, Yc;
+  for (int i = 0; i < 20000; ++i) {
+    const bool truth = U(rng) < 0.3;
+    std::vector<int> y(5);
+    for (int j = 0; j < 5; ++j) y[j] = draw(truth ? pt[j] : pf[j]);
+    Y.push_back(y);
+    std::vector<int> yc = y;
+    yc[4] = U(rng) < 0.8 ? y[0] : draw(truth ? pt[4] : pf[4]);  // source 4 copies source 0 eight times in ten
+    Yc.push_back(yc);
+  }
+  const src::DSFit m = src::dawid_skene(Y, 5);
+  CHECK_NEAR(m.prior, 0.3, 0.02);
+  for (int j = 0; j < 5; ++j)
+    for (int k = 0; k < 3; ++k) {
+      CHECK_NEAR(m.t[j][k], pt[j][k], 0.03);
+      CHECK_NEAR(m.f[j][k], pf[j][k], 0.03);
+    }
+  const std::vector<double> post = src::ds_posterior(m, Y);
+  double brier = 0;
+  for (std::size_t i = 0; i < post.size(); ++i) brier += post[i] * (1 - post[i]);
+  CHECK(brier / static_cast<double>(post.size()) < 0.15);
+  const src::DSFit mc = src::dawid_skene(Yc, 5);
+  CHECK(mc.t[0][0] > pt[0][0] + 0.05 && mc.f[0][0] < pf[0][0]);  // the copied source looks better than it is
+  CHECK(src::outcome_index(TestOutcome::Negative) == 1 && src::single_valued("birth_place") && !src::single_valued("genre"));
+}
+
+
 static void test_gap_map() {
   // The gap id CyphaLM writes (cyphalm_trie dktext rows and its dev tags).
   CHECK_STR(gap_id("Honduras", "capital"), "G-AEC1");
@@ -2128,6 +2215,7 @@ int main() {
   test_gen_rules_S8a();
   test_s7c();
   test_worlds_S9();
+  test_sources_S8c();
   test_gap_map();
   std::printf("epistemic_test: %d checks, %d failed\n", g_checks, g_failed);
   return g_failed == 0 ? 0 : 1;

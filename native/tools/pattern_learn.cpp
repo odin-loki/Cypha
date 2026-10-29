@@ -90,6 +90,12 @@
 //   (S15) on the 2006-text store, S7's tests (T2 back) and loop deciding the rules' predictions, and G14 explaining
 //   contested slots. Cypha's own hypotheses only.
 //
+// S8c (2026-10-29, docs/reports/S8C_EVIDENCE_SOURCES.md):
+//   --sources S15_DEV TABLES WD_VALUES SEEDS FACTS_F2 OUT S8A_R1 S8A_R2 S8B_PROMO: evidence sources other than Wikidata
+//   (sources.hpp; DBpedia, the current Wikipedia lead, GeoNames; tables from scripts/evidence_sources.py), their
+//   reliability on S15's choose half and by Dawid-Skene, and S8's dev promotions with the accepted ones, graded on S15's
+//   confirm half. Cypha's own evidence only.
+//
 // S9 (2026-10-29, docs/reports/S9_WORLDS_AND_FRAGILITY.md):
 //   --worlds ENWIK8 SEEDS WD_VALUES FACTS_F2 S15_DEV OUT [--read-confirm]: possible worlds (worlds.hpp). T2 through worlds
 //   on S7's dev set and, once, on S15 dev's choose half; fragility of the v2 store (single points of failure, blast radius
@@ -114,6 +120,7 @@
 #include "cypha/eval/gap_map.hpp"
 #include "cypha/eval/gen_links.hpp"
 #include "cypha/eval/gen_rules.hpp"
+#include "cypha/eval/sources.hpp"
 #include "cypha/eval/worlds.hpp"
 
 #include <sys/resource.h>
@@ -7829,11 +7836,441 @@ int run(int argc, char** argv) {
 
 }  // namespace s9
 
+// ============================================================ S8c: other evidence sources and their reliability
+// pattern_learn --sources S15_DEV TABLES WD_VALUES SEEDS FACTS_F2 OUT_PREFIX S8A_R1 S8A_R2 S8B_PROMO
+// (DISCOVERY 7.1 T4/T5, 7.4, I4; docs/reports/S8C_EVIDENCE_SOURCES.md; Odin, 2026-10-29: "Get another evidence source").
+// Sources (sources.hpp): WD (S15 dev's true rows and D4's wd_values), DB-IB (DBpedia's mapping-based properties, TABLES/
+// dbpedia_ib.tsv), WP-LEAD (the current Wikipedia lead paragraph, TABLES/wp_lead.tsv, in place of DBpedia's abstracts),
+// GN (GeoNames, TABLES/geonames.tsv and geonames_alias.tsv) and TXT (the 2006-text store: non-Wikidata seeds and admitted
+// facts). Read 1: each source's three-way likelihoods per relation group on S15's choose half (bit 17 of FNV-1a(subject) =
+// 0), against S15's labels (agreement with Wikidata), and its coverage by S15 category (the copy test). Read 2:
+// Dawid-Skene over S8's dev hypotheses (no reference; an upper bound for correlated sources). Read 3: S8's dev hypotheses, their
+// recorded posteriors updated by the accepted sources, decided and batch-controlled as in S7b, graded on S15's confirm half.
+// Evidence for Cypha's own store only, never an answer for CyphaLM (PLAN rule 10). S15's test half is never read.
+namespace s8c {
+namespace src = cypha::eval::sources;
+using ecs::TestOutcome;
+
+constexpr int kNSrc = 5;
+const char* const kSrcName[kNSrc] = {"WD", "DB-IB", "WP-LEAD", "GN", "TXT"};
+enum { S_WD = 0, S_DB = 1, S_LEAD = 2, S_GN = 3, S_TXT = 4 };
+
+struct Row {
+    string id, s, sitem, stype, r, v, vitem, pair;
+    char cat = ' ';
+    int label = -1;
+};
+
+vector<Row> load_s15(const string& path) {
+    vector<Row> out;
+    std::ifstream f(path);
+    string l;
+    std::getline(f, l);
+    while (std::getline(f, l)) {
+        const auto c = split(l, '\t');
+        if (c.size() < 17) continue;
+        Row r;
+        r.id = c[0], r.s = c[1], r.sitem = c[2], r.stype = c[3], r.r = c[5], r.v = c[7], r.vitem = c[8];
+        r.cat = c[11].empty() ? ' ' : c[11][0];
+        r.label = c[15] == "1" ? 1 : c[15] == "0" ? 0 : -1;
+        r.pair = c[16];
+        out.push_back(std::move(r));
+    }
+    return out;
+}
+
+bool choose_half(const string& s) { return ((fnv(s) >> 17) & 1) == 0; }
+
+string group_of(const string& r) {
+    static const std::unordered_map<string, string> g = {
+        {"birth_date", "dates"}, {"death_date", "dates"}, {"birth_year", "dates"}, {"death_year", "dates"}, {"founded", "dates"},
+        {"dissolved", "dates"}, {"birth_place", "places"}, {"death_place", "places"}, {"located_in", "places"}, {"country", "places"},
+        {"capital", "places"}, {"largest_city", "places"}, {"headquarters", "places"}, {"location", "places"}};
+    const auto it = g.find(r);
+    if (it != g.end()) return it->second;
+    static const std::unordered_set<string> lex = {"occupation", "genre", "language", "currency", "nationality", "award_received",
+                                                   "educated_at", "member_of", "member_of_political_party", "party",
+                                                   "position_held", "class", "family", "order"};
+    return lex.count(r) ? "lexical" : "links";
+}
+
+struct Sources {
+    src::Table wd, db, gn, txt;
+    src::LeadText lead;
+    TestOutcome answer(int k, const string& s, const string& r, const src::Value& v) const {
+        switch (k) {
+            case S_WD: return src::answer(wd, s, r, v);
+            case S_DB: return src::answer(db, s, r, v);
+            case S_LEAD: return lead.answer(s, r, v);
+            case S_GN: return src::answer(gn, s, r, v);
+            default: return src::answer(txt, s, r, v);
+        }
+    }
+};
+
+// One S8 dev hypothesis with what its generator recorded.
+struct Hyp {
+    string gen, s, r, o;
+    double p0 = 0, post = 0;
+    bool promoted = false;
+};
+
+vector<Hyp> load_hyps(const string& path, const string& gen) {
+    vector<Hyp> out;
+    std::ifstream f(path);
+    string l;
+    std::getline(f, l);
+    const auto h = split(l, '\t');
+    auto col = [&](const char* n) { return static_cast<std::size_t>(std::find(h.begin(), h.end(), string(n)) - h.begin()); };
+    const std::size_t cs = col("subject"), cr = col("relation"), co = col("object"), cpr = col("posterior"), cpm = col("promoted"),
+                      csp = col("split");
+    std::size_t cp0 = col("P0");
+    if (cp0 >= h.size()) cp0 = col("prior");
+    while (std::getline(f, l)) {
+        const auto c = split(l, '\t');
+        if (c.size() < h.size()) continue;
+        if (csp < h.size() && c[csp] != "dev") continue;
+        Hyp x;
+        x.gen = gen, x.s = c[cs], x.r = c[cr], x.o = c[co];
+        x.p0 = std::atof(c[cp0].c_str()), x.post = std::atof(c[cpr].c_str());
+        x.promoted = cpm < h.size() && c[cpm] == "1";
+        out.push_back(std::move(x));
+    }
+    return out;
+}
+
+// The grader on S15 (one half): +1 true, 0 false, -1 ungraded (registered rule).
+struct Grader {
+    std::unordered_map<string, vector<std::pair<src::Value, int>>> slot;  // norm_subject(s) + '\x1f' + r -> (value, label)
+    void add(const Row& x) { slot[src::norm_subject(x.s) + '\x1f' + x.r].push_back({src::make_value(x.v, x.vitem), x.label}); }
+    int grade(const string& s, const string& r, const src::Value& v) const {
+        const auto it = slot.find(src::norm_subject(s) + '\x1f' + r);
+        if (it == slot.end()) return -1;
+        bool any_true = false, match_false = false;
+        for (const auto& [val, lab] : it->second) {
+            if (lab == 1) {
+                any_true = true;
+                if (src::same_value(r, val, v)) return 1;
+            } else if (lab == 0 && src::same_value(r, val, v)) {
+                match_false = true;
+            }
+        }
+        if (match_false) return 0;
+        return any_true && src::single_valued(r) ? 0 : -1;
+    }
+};
+
+double odds(double p) {
+    p = std::min(1.0 - 1e-12, std::max(1e-12, p));
+    return p / (1.0 - p);
+}
+
+int run(int argc, char** argv) {
+    if (argc < 11) {
+        std::fprintf(stderr, "usage: pattern_learn --sources S15_DEV TABLES WD_VALUES SEEDS FACTS_F2 OUT_PREFIX S8A_R1 S8A_R2 S8B_PROMO\n");
+        return 2;
+    }
+    const double t0 = now_s();
+    const string s15p = argv[2], tables = argv[3], out = argv[7];
+    char b[1024];
+    // ---- the sources
+    Sources S;
+    S.wd.name = "WD", S.db.name = "DB-IB", S.gn.name = "GN", S.txt.name = "TXT";
+    const vector<Row> rows = load_s15(s15p);
+    for (const Row& x : rows)
+        if (x.label == 1) S.wd.add(x.s, x.r, x.v, x.vitem);
+    {
+        std::ifstream f(argv[4]);  // D4's wd_values: subject, relation, surfaces, subject_item, value
+        string l;
+        std::getline(f, l);
+        while (std::getline(f, l)) {
+            const auto c = split(l, '\t');
+            if (c.size() < 5) continue;
+            for (const string& sf : split(c[2], '|'))
+                if (!sf.empty()) S.wd.add(c[0], c[1], sf, c[4]);
+        }
+    }
+    auto load_table = [&](src::Table& t, const string& path, int vcol, int qcol) {
+        std::ifstream f(path);
+        string l;
+        std::getline(f, l);
+        std::size_t n = 0;
+        while (std::getline(f, l)) {
+            const auto c = split(l, '\t');
+            if (static_cast<int>(c.size()) <= std::max(vcol, qcol)) continue;
+            t.add(c[0], c[1], c[static_cast<std::size_t>(vcol)], qcol >= 0 ? c[static_cast<std::size_t>(qcol)] : string());
+            ++n;
+        }
+        return n;
+    };
+    const std::size_t n_db = load_table(S.db, tables + "/dbpedia_ib.tsv", 2, 3);
+    const std::size_t n_gn = load_table(S.gn, tables + "/geonames.tsv", 2, -1);
+    {
+        std::ifstream f(tables + "/geonames_alias.tsv");
+        string l;
+        std::getline(f, l);
+        while (std::getline(f, l)) {
+            const auto c = split(l, '\t');
+            if (c.size() >= 2) S.gn.add_alias(c[0], c[1]);
+        }
+    }
+    std::size_t n_lead = 0;
+    {
+        std::ifstream f(tables + "/wp_lead.tsv");
+        string l;
+        std::getline(f, l);
+        while (std::getline(f, l)) {
+            const auto c = split(l, '\t');
+            if (c.size() >= 2) S.lead.add(c[0], c[1]), ++n_lead;
+        }
+    }
+    std::size_t n_txt = 0;
+    {
+        std::ifstream f(argv[5]);  // seeds: subject, relation, object, source, ...
+        string l;
+        std::getline(f, l);
+        while (std::getline(f, l)) {
+            const auto c = split(l, '\t');
+            if (c.size() >= 4 && c[3] != "wikidata" && c[3] != "source") S.txt.add(c[0], c[1], c[2]), ++n_txt;
+        }
+        std::ifstream g(argv[6]);  // admitted facts: subject, relation, object, ...
+        std::getline(g, l);
+        while (std::getline(g, l)) {
+            const auto c = split(l, '\t');
+            if (c.size() >= 3) S.txt.add(c[0], c[1], c[2]), ++n_txt;
+        }
+    }
+    std::snprintf(b, sizeof b, "S8C sources: S15 dev rows %zu | DB-IB rows %zu subjects %zu | WP-LEAD extracts %zu | GN facts %zu aliases %zu | "
+                  "TXT facts %zu | WD slots %zu", rows.size(), n_db, S.db.subjects.size(), n_lead, n_gn, S.gn.alias.size(), n_txt,
+                  S.wd.slots.size());
+    std::cout << b << "\n";
+
+    // ---- read 1: S15's choose half, agreement with Wikidata (S15's labels), per source and relation group
+    std::unordered_map<string, const Row*> by_id;
+    for (const Row& x : rows) by_id[x.id] = &x;
+    struct Cell {
+        ecs::TestTally t;
+        double cov[4] = {0, 0, 0, 0}, n[4] = {0, 0, 0, 0};  // true items covered / all, by category a, b, c, u
+    };
+    std::map<std::pair<int, string>, Cell> rel1;   // (source, relation)
+    std::map<std::pair<int, string>, Cell> grp1;   // (source, group or "all")
+    std::size_t pairs_choose = 0;
+    for (const Row& x : rows) {
+        if (x.label != 1 || !choose_half(x.s)) continue;
+        const auto fi = by_id.find(x.pair);
+        if (fi == by_id.end() || fi->second->label != 0) continue;
+        ++pairs_choose;
+        const Row& y = *fi->second;
+        const int ci = x.cat == 'a' ? 0 : x.cat == 'b' ? 1 : x.cat == 'c' ? 2 : 3;
+        for (int k = 1; k < kNSrc; ++k) {
+            const TestOutcome ot = S.answer(k, x.s, x.r, src::make_value(x.v, x.vitem));
+            const TestOutcome of = S.answer(k, y.s, y.r, src::make_value(y.v, y.vitem));
+            for (auto* m : {&rel1, &grp1}) {
+                const string key = m == &rel1 ? x.r : group_of(x.r);
+                for (const string& kk : {key, string(m == &grp1 ? "all" : "")}) {
+                    if (kk.empty()) continue;
+                    Cell& c = (*m)[{k, kk}];
+                    c.t.add(true, ot), c.t.add(false, of);
+                    c.n[ci] += 1, c.cov[ci] += ot != TestOutcome::Inconclusive;
+                }
+            }
+        }
+    }
+    std::ofstream rf(out + ".reliability.tsv");
+    rf << "source\tscope\tn_true\tn_false\tcoverage\tt_pos\tt_neg\tt_inc\tf_pos\tf_neg\tf_inc\tsens_covered\tfpr\tfpr_hi95\tlr_pos\tmi_bits"
+          "\tcov_a\tcov_b\tcov_c\tcov_u\n";
+    auto lr_pos = [](const ecs::TestTally& t) {
+        const ecs::OutcomeLikelihoods L = ecs::likelihoods_from(t);
+        return L.t[0] / L.f[0];
+    };
+    auto emit = [&](int k, const string& scope, const Cell& c) {
+        const auto& t = c.t;
+        const double nt = t.t_pos + t.t_neg + t.t_inc, nf = t.f_pos + t.f_neg + t.f_inc;
+        double cv[4];
+        for (int i = 0; i < 4; ++i) cv[i] = c.n[i] > 0 ? c.cov[i] / c.n[i] : -1;
+        std::snprintf(b, sizeof b, "%s\t%s\t%.0f\t%.0f\t%.4f\t%.0f\t%.0f\t%.0f\t%.0f\t%.0f\t%.0f\t%.4f\t%.4f\t%.4f\t%.2f\t%.5f\t%.3f\t%.3f\t%.3f\t%.3f\n",
+                      kSrcName[k], scope.c_str(), nt, nf, nt > 0 ? (t.t_pos + t.t_neg) / nt : 0.0, t.t_pos, t.t_neg, t.t_inc, t.f_pos,
+                      t.f_neg, t.f_inc, t.t_pos + t.t_neg > 0 ? t.t_pos / (t.t_pos + t.t_neg) : 0.0, nf > 0 ? t.f_pos / nf : 0.0,
+                      ecs::wilson_upper(t.f_pos, nf), lr_pos(t), t.mutual_information_bits(), cv[0], cv[1], cv[2], cv[3]);
+        rf << b;
+    };
+    for (const auto& [k, c] : grp1) emit(k.first, "group:" + k.second, c);
+    for (const auto& [k, c] : rel1) emit(k.first, "rel:" + k.second, c);
+    std::snprintf(b, sizeof b, "S8C read 1 (S15 choose half, %zu pairs; reference = S15's labels, i.e. agreement with Wikidata):", pairs_choose);
+    std::cout << b << "\n";
+    for (int k = 1; k < kNSrc; ++k)
+        for (const char* g : {"all", "dates", "places", "links", "lexical"}) {
+            const auto it = grp1.find({k, g});
+            if (it == grp1.end()) continue;
+            const auto& t = it->second.t;
+            const double nt = t.t_pos + t.t_neg + t.t_inc, nf = t.f_pos + t.f_neg + t.f_inc;
+            const auto& c = it->second;
+            std::snprintf(b, sizeof b,
+                          "  %-7s %-8s true %5.0f covered %.3f pos|true %.3f [%.3f, %.3f] | pos|false %.4f (hi95 %.4f) neg|false %.3f | "
+                          "LR+ %7.2f | cov a %.3f b %.3f c %.3f u %.3f",
+                          kSrcName[k], g, nt, nt > 0 ? (t.t_pos + t.t_neg) / nt : 0.0, nt > 0 ? t.t_pos / nt : 0.0,
+                          ecs::wilson_lower(t.t_pos, nt), ecs::wilson_upper(t.t_pos, nt), nf > 0 ? t.f_pos / nf : 0.0,
+                          ecs::wilson_upper(t.f_pos, nf), nf > 0 ? t.f_neg / nf : 0.0, lr_pos(t), c.n[0] ? c.cov[0] / c.n[0] : -1.0,
+                          c.n[1] ? c.cov[1] / c.n[1] : -1.0, c.n[2] ? c.cov[2] / c.n[2] : -1.0, c.n[3] ? c.cov[3] / c.n[3] : -1.0);
+            std::cout << b << "\n";
+        }
+
+    // ---- read 2: Dawid-Skene over S8's dev hypotheses (no reference)
+    vector<Hyp> hyps;
+    for (const auto& [path, gen] : {std::pair<string, string>{argv[8], "S8a-R1"}, {argv[9], "S8a-R2"}, {argv[10], "S8b"}}) {
+        auto v = load_hyps(path, gen);
+        hyps.insert(hyps.end(), v.begin(), v.end());
+    }
+    std::map<string, std::size_t> item_of;
+    vector<vector<int>> Y;
+    vector<std::array<string, 3>> items;
+    for (const Hyp& h : hyps) {
+        const string key = src::norm_subject(h.s) + '\x1f' + h.r + '\x1f' + src::norm_name(h.o);
+        if (item_of.count(key)) continue;
+        item_of[key] = Y.size();
+        items.push_back({h.s, h.r, h.o});
+        vector<int> y(kNSrc);
+        const src::Value v = src::make_value(h.o);
+        for (int k = 0; k < kNSrc; ++k) y[static_cast<std::size_t>(k)] = src::outcome_index(S.answer(k, h.s, h.r, v));
+        Y.push_back(std::move(y));
+    }
+    const src::DSFit ds = src::dawid_skene(Y, kNSrc);
+    const vector<double> post = src::ds_posterior(ds, Y);
+    std::snprintf(b, sizeof b, "S8C read 2 (Dawid-Skene over %zu distinct S8 dev hypotheses, %d iterations): share true %.3f", Y.size(),
+                  ds.iterations, ds.prior);
+    std::cout << b << "\n";
+    std::ofstream df(out + ".ds.tsv");
+    df << "source\tt_pos\tt_neg\tt_inc\tf_pos\tf_neg\tf_inc\taccuracy_conclusive\n";
+    for (int k = 0; k < kNSrc; ++k) {
+        const auto& T = ds.t[static_cast<std::size_t>(k)];
+        const auto& F = ds.f[static_cast<std::size_t>(k)];
+        const double num = ds.prior * T[0] + (1 - ds.prior) * F[1], den = ds.prior * (T[0] + T[1]) + (1 - ds.prior) * (F[0] + F[1]);
+        std::snprintf(b, sizeof b, "  %-7s P(pos|T) %.3f P(neg|T) %.3f P(inc|T) %.3f | P(pos|F) %.4f P(neg|F) %.3f P(inc|F) %.3f | accuracy when conclusive %.3f",
+                      kSrcName[k], T[0], T[1], T[2], F[0], F[1], F[2], den > 0 ? num / den : 0.0);
+        std::cout << b << "\n";
+        std::snprintf(b, sizeof b, "%s\t%.5f\t%.5f\t%.5f\t%.5f\t%.5f\t%.5f\t%.5f\n", kSrcName[k], T[0], T[1], T[2], F[0], F[1], F[2],
+                      den > 0 ? num / den : 0.0);
+        df << b;
+    }
+    // ---- the registered decision: which (source, group) become test kinds
+    std::map<std::pair<int, string>, ecs::OutcomeLikelihoods> accepted;
+    std::cout << "S8C decision (choose half; LR+ >= 10, false-positive Wilson hi < 0.10, coverage >= 0.05, copy test b, c < 0.9 of a; "
+                 "the Dawid-Skene dependence ratio is dropped, see the report's amendment):\n";
+    for (int k = 1; k < kNSrc; ++k) {
+        if (k == S_TXT) continue;  // the 2006-text store is the generators' own source: never independent (I4)
+        const Cell& all = grp1[{k, "all"}];
+        const double ca = all.n[0] ? all.cov[0] / all.n[0] : 0.0, cb = all.n[1] ? all.cov[1] / all.n[1] : 0.0,
+                     cc = all.n[2] ? all.cov[2] / all.n[2] : 0.0;
+        const bool copy_ok = ca > 0 && cb < 0.9 * ca && cc < 0.9 * ca;
+        for (const char* g : {"dates", "places", "links", "lexical"}) {
+            const auto it = grp1.find({k, g});
+            if (it == grp1.end()) continue;
+            const auto& t = it->second.t;
+            const double nt = t.t_pos + t.t_neg + t.t_inc, nf = t.f_pos + t.f_neg + t.f_inc;
+            const double cov = nt > 0 ? (t.t_pos + t.t_neg) / nt : 0.0, lr = lr_pos(t), fhi = ecs::wilson_upper(t.f_pos, nf);
+            const bool ok = lr >= 10 && fhi < 0.10 && cov >= 0.05 && copy_ok;
+            std::snprintf(b, sizeof b, "  %-7s %-8s LR+ %7.2f fpr_hi %.4f coverage %.3f copy-test (b %.3f, c %.3f of a %.3f) %s -> %s", kSrcName[k],
+                          g, lr, fhi, cov, cb, cc, ca, copy_ok ? "pass" : "fail", ok ? "ACCEPTED" : "no");
+            std::cout << b << "\n";
+            if (ok) accepted[{k, g}] = ecs::likelihoods_from(t);
+        }
+    }
+
+    // ---- read 3: promotion with the accepted sources, graded on S15's confirm half
+    Grader conf, choose;
+    for (const Row& x : rows) (choose_half(x.s) ? choose : conf).add(x);
+    struct Res {
+        double post2 = 0, e = 1;
+        bool indep = false, supported = false, refuted = false;
+        int graded = -1;
+        string by;
+        TestOutcome o[kNSrc] = {TestOutcome::Inconclusive, TestOutcome::Inconclusive, TestOutcome::Inconclusive,
+                                TestOutcome::Inconclusive, TestOutcome::Inconclusive};
+    };
+    vector<Res> res(hyps.size());
+    vector<double> evals(hyps.size());
+    vector<bool> sel(hyps.size());
+    for (std::size_t i = 0; i < hyps.size(); ++i) {
+        const Hyp& h = hyps[i];
+        Res& R = res[i];
+        const src::Value v = src::make_value(h.o);
+        double o = odds(h.post);
+        R.e = odds(h.post) / odds(h.p0);
+        for (int k = 0; k < kNSrc; ++k) R.o[k] = S.answer(k, h.s, h.r, v);
+        for (int k = 1; k < kNSrc; ++k) {
+            const auto it = accepted.find({k, group_of(h.r)});
+            if (it == accepted.end()) continue;
+            const int oi = src::outcome_index(R.o[k]);
+            const double bf = std::max(1e-6, it->second.t[oi]) / std::max(1e-6, it->second.f[oi]);
+            o *= bf, R.e *= bf;
+            if (R.o[k] != TestOutcome::Inconclusive) R.indep = true, R.by += string(R.by.empty() ? "" : "+") + kSrcName[k];
+        }
+        R.post2 = o / (1.0 + o);
+        R.supported = R.post2 > 0.9 && R.indep;
+        R.refuted = R.post2 < 0.05;
+        R.graded = conf.grade(h.s, h.r, v);
+        evals[i] = R.e, sel[i] = R.supported;
+    }
+    const vector<bool> keep_among = ecs::bh_reject_e_among(evals, sel, 0.1), keep_all = ecs::bh_reject_e(evals, 0.1);
+    std::ofstream pf(out + ".promo.tsv");
+    pf << "generator\tsubject\trelation\tobject\tP0\tposterior_gen\tWD\tDB-IB\tWP-LEAD\tGN\tTXT\tposterior_src\tsupported\tpromoted_among"
+          "\tpromoted_ebh\trefuted\tby\tgraded_confirm\tgraded_choose\tgen_promoted\n";
+    std::cout << "S8C read 3 (promotion; graded on S15's confirm half: precision = true / graded, Wilson 95%):\n";
+    std::map<string, std::array<double, 12>> tally;  // gen -> sup, sup_g, sup_t, among_g, among_t, ebh_g, ebh_t, ref_g, ref_f, gen_g, gen_t, n
+    for (std::size_t i = 0; i < hyps.size(); ++i) {
+        const Hyp& h = hyps[i];
+        const Res& R = res[i];
+        const int gch = choose.grade(h.s, h.r, src::make_value(h.o));
+        std::snprintf(b, sizeof b, "%s\t%s\t%s\t%s\t%.6f\t%.6f\t%s\t%s\t%s\t%s\t%s\t%.6f\t%d\t%d\t%d\t%d\t%s\t%d\t%d\t%d\n", h.gen.c_str(),
+                      h.s.c_str(), h.r.c_str(), h.o.c_str(), h.p0, h.post, ecs::test_outcome_name(R.o[0]), ecs::test_outcome_name(R.o[1]),
+                      ecs::test_outcome_name(R.o[2]), ecs::test_outcome_name(R.o[3]), ecs::test_outcome_name(R.o[4]), R.post2,
+                      R.supported ? 1 : 0, keep_among[i] ? 1 : 0, keep_all[i] ? 1 : 0, R.refuted ? 1 : 0, R.by.c_str(), R.graded, gch,
+                      h.promoted ? 1 : 0);
+        pf << b;
+        for (const string& g : {h.gen, string("all")}) {
+            auto& T = tally[g];
+            T[11] += 1;
+            if (R.supported) T[0] += 1;
+            if (R.graded >= 0) {
+                if (R.supported) T[1] += 1, T[2] += R.graded;
+                if (keep_among[i]) T[3] += 1, T[4] += R.graded;
+                if (keep_all[i]) T[5] += 1, T[6] += R.graded;
+                if (R.refuted) T[7] += 1, T[8] += 1 - R.graded;
+                if (h.promoted) T[9] += 1, T[10] += R.graded;
+            }
+        }
+    }
+    for (const auto& [g, T] : tally) {
+        std::snprintf(b, sizeof b,
+                      "  %-7s hyps %5.0f | supported %4.0f, graded %3.0f, precision %.3f [%.3f, %.3f] | BH among supported: graded %3.0f "
+                      "precision %.3f [%.3f, %.3f] | whole-batch e-BH: graded %3.0f precision %.3f [%.3f, %.3f] | refuted graded %3.0f, "
+                      "false %.3f | generator's own promotions graded %2.0f precision %.3f",
+                      g.c_str(), T[11], T[0], T[1], T[1] ? T[2] / T[1] : 0.0, ecs::wilson_lower(T[2], T[1]), ecs::wilson_upper(T[2], T[1]),
+                      T[3], T[3] ? T[4] / T[3] : 0.0, ecs::wilson_lower(T[4], T[3]), ecs::wilson_upper(T[4], T[3]), T[5],
+                      T[5] ? T[6] / T[5] : 0.0, ecs::wilson_lower(T[6], T[5]), ecs::wilson_upper(T[6], T[5]), T[7], T[7] ? T[8] / T[7] : 0.0,
+                      T[9], T[9] ? T[10] / T[9] : 0.0);
+        std::cout << b << "\n";
+    }
+    // P7: the hypothesis that started this.
+    {
+        const src::Value v = src::make_value("Mumbai");
+        std::cout << "  India capital Mumbai:";
+        for (int k = 0; k < kNSrc; ++k) std::cout << " " << kSrcName[k] << " " << ecs::test_outcome_name(S.answer(k, "India", "capital", v));
+        std::cout << "\n";
+    }
+    std::snprintf(b, sizeof b, "S8C seconds %.1f", now_s() - t0);
+    std::cout << b << "\n";
+    return 0;
+}
+
+}  // namespace s8c
+
 int main(int argc, char** argv) {
     if (argc >= 2 && string(argv[1]) == "--score-planted") return s6::run(argc, argv);  // S6 (hypothesis scoring)
     if (argc >= 2 && string(argv[1]) == "--test-kinds") return s7::run(argc, argv);  // S7 (testing hypotheses)
     if (argc >= 2 && string(argv[1]) == "--gen-links") return s8b::run(argc, argv);  // S8b (link prediction, G6 and G7)
     if (argc >= 2 && string(argv[1]) == "--gen-rules") return s8a::run(argc, argv);  // S8a (G2 rules, G14 contradictions)
+    if (argc >= 2 && string(argv[1]) == "--sources") return s8c::run(argc, argv);  // S8c (evidence sources and their reliability)
     if (argc >= 2 && string(argv[1]) == "--worlds") return s9::run(argc, argv);  // S9 (possible worlds, T2, fragility)
     if (argc >= 4 && string(argv[1]) == "--wilson") {
         double k = std::atof(argv[2]), n = std::atof(argv[3]);
