@@ -112,6 +112,7 @@ Cypha is Odin Loch's own C++ AI. **CyphaLM** is its language model: a packed byt
 | **S4c out-of-scope signal** | No candidate passes: topic distance 38% within 50 pages on Dolly (gate 90%); the markup control holds; Dolly's long answers are mostly in scope by content | `S4_UNSEEN_AND_FRONTIER.md` |
 | **S10 curiosity scheduler** | Gate not met (LCI 0.000): dev +126%, gate −5% (2.105 against 2.227); the gate set's value sits in one small arm that uniform also empties, and the highest-P0-first order reversed; uniform stays | `S10_CURIOSITY_SCHEDULER.md` |
 | **S11a G9 concepts, G11 open relations** | G9's gate not met (0 of 60 classes; nearer than the null on 50); no promotions. G11: 21 of 38 proposals hold (0.861), educated_at among them | `S11A_CONCEPTS_AND_OPEN_RELATIONS.md` |
+| **S11b G12 ABC** | Gate not met (LCI 0.000): open-form P@100 0 (degree 0.010); G12 removed by its rule 3; the closed form works (AUROC 0.68 against 0.47) | `S11B_ABC_DISCOVERY.md` |
 | **M17 lowered index freed after `--save`** | C1L + defaults with `--save` 204.5 → 186.7 MB; lossless | `RAM_PROFILE.md` |
 | Tool profile P2–P4 | Tagger and word-vector class tables cut from the class expert (the tagger stays as the question parser); `cypha_gate` deleted; `pattern_learn` fails the Q/A cut, flagged for Odin | `TOOL_PROFILE_P2_GRID.md` |
 | S-1b learned contexts | Cypha's own learner reaches PPMI-SVD's level (0.683 / 0.246 / 0.669); gates failed on rare words | `S1B_LEARNED_CONTEXTS.md` |
@@ -196,6 +197,7 @@ Run these on every change: `native_cyphalm_trie_selftest`, `native_fm_infinigram
 19. **S11a's questions:**
     - Name G11's 21 holding proposals, starting with educated_at, and hand them to F2 as new relations or phrasings? P10 needs Odin or the teacher for this.
     - G9's bar (Jaccard ≥ 0.5) cannot be reached on an occupation-heavy store. Accept the miss, or re-read on a richer store (for example with S15's added relations as attributes) with fresh held-out classes?
+20. **S11b's questions:** keep G12's closed form (AUROC 0.68 on test) as a support term in S6's P0 or as a test kind? It needs its own registered read. A wider grader for open ABC (any Wikidata property between A and C, not S15's 34) would need new Wikidata fetches.
 
 ---
 
