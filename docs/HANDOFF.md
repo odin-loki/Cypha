@@ -105,6 +105,7 @@ Cypha is Odin Loch's own C++ AI. **CyphaLM** is its language model: a packed byt
 | **S9 worlds, fragility** | I9 holds (43,409 worlds); T2 through worlds never says no (cut again); 76.9% of held facts are single points of failure; Wikidata's blast radius 62% | `S9_WORLDS_AND_FRAGILITY.md` |
 | **S8c evidence sources** (Odin: "get another evidence source") | DBpedia infobox reliable and independent of Wikidata (yes right 30 / 31 on the generators' hypotheses); Wikipedia leads fail like co-mention; S8's gate still not passed (15 graded, 0.667) | `S8C_EVIDENCE_SOURCES.md` |
 | **M16 FM index in place** | Built `qa` A0 132, defaults 170, C1L + defaults 185 MB (was 175 / 194 / 235); `context8k` 202; lossless | `RAM_PROFILE.md` |
+| **A4d similar-context recall, online keys** | Probe 128 (recall 0.94) and keys from the text being read: fresh −0.145, SCRIBE not falling, answers unchanged, 1.87× scoring time; `qa` holdout 1.8269 → **1.7895** | `A4_SIMILAR_CONTEXT_EXPERT.md` |
 | **hp-wrapper fixes** (Odin: "fix both") | Forecast rollouts read the trained model (8 min → 6 s); vocabularies other than 256 rejected; `cypha_slow` 56 / 56 | `SLOW_TEST_TRIAGE.md` |
 | Tool profile P2–P4 | Tagger and word-vector class tables cut from the class expert (the tagger stays as the question parser); `cypha_gate` deleted; `pattern_learn` fails the Q/A cut, flagged for Odin | `TOOL_PROFILE_P2_GRID.md` |
 | S-1b learned contexts | Cypha's own learner reaches PPMI-SVD's level (0.683 / 0.246 / 0.669); gates failed on rare words | `S1B_LEARNED_CONTEXTS.md` |
@@ -120,9 +121,9 @@ Cypha is Odin Loch's own C++ AI. **CyphaLM** is its language model: a packed byt
 |---|---|
 | BPC, holdout, learned mixture | 2.298 (bpc model); chat model 2.345 |
 | Fresh text | trie + IG 2.166; + class + copy 1.912; + class + similar-context 2.027 |
-| `qa` holdout, default model | trie + IG 2.0729 → **1.8269** with class + similar-context + copy (defaults since B4c, off inside answers; A4c's similar-context default: B4c read 1.8345); `context8k` 2.0715 → 1.8271 |
+| `qa` holdout, default model | trie + IG 2.0729 → **1.7895** with class + similar-context + copy (defaults since B4c, off inside answers; A4d's similar-context default; A4c read 1.8269, B4c 1.8345); `context8k` 2.0715 → 1.7897 |
 | Class expert's table | default `shape` = three orders, compact, seen once dropped (fresh 2.0853; Odin, 2026-10-28) |
-| Text, SCRIBE v2 | trie 0.014, trie + class 0.002, `sample`'s default (trie + similar-context + copy) 0.064 [0.052, 0.078] (A4c; B4c's 0.056), human 0.770 |
+| Text, SCRIBE v2 | trie 0.014, trie + class 0.002, `sample`'s default (trie + similar-context + copy) 0.063 [0.051, 0.078] (A4d; A4c 0.064, B4c 0.056), human 0.770 |
 | Reason codes (S1) | 82 / 100 dev, 169 / 200 test; `qa --cards` gives evidence cards |
 | Q/A, frozen test (C1L) | 0 right kept at 2% wrong; don't-know precision 0.635, recall 0.94 |
 | Q/A, dev, with D4's shard (C1L) | 2 right, 0 wrong at 2% wrong |
@@ -180,10 +181,10 @@ Run these on every change: `native_cyphalm_trie_selftest`, `native_fm_infinigram
 
 ## 6. Next work, in order
 
-1. **S8, promotion:** after Odin's calls (§5.13): `decide` requiring an independent yes, DBpedia as a test kind, more confirm-half hypotheses; then S9's consequence tests need confident rules into single-valued slots (a larger store); then S10 (the curiosity scheduler). (S7b, S7c, S8a, S8b, S8c, S9, M16, the hp fixes and the slow-test cut were done 2026-10-29; S1, S4, S6, S7, S15, the echo fix, A4c, M15 and serving from stored files 2026-10-28.)
+1. **S8, promotion:** after Odin's calls (§5.13): `decide` requiring an independent yes, DBpedia as a test kind, more confirm-half hypotheses; then S9's consequence tests need confident rules into single-valued slots (a larger store); then S10 (the curiosity scheduler). (S7b, S7c, S8a, S8b, S8c, S9, M16, A4d, the hp fixes and the slow-test cut were done 2026-10-29; S1, S4, S6, S7, S15, the echo fix, A4c, M15 and serving from stored files 2026-10-28.)
 2. **RAM:** free the lowered index once `qa --save` has written it (C1L + defaults with `--save` 205 → about 180 MB). Lower still would need a blockwise BWT; not needed now.
 3. **Forecast's event vocabulary** on a byte model (§5.10), after Odin's call.
-4. **Similar-context expert:** more probed lists (k 8,192's recall is 0.65), online keys. **S4:** the §3.4 unknown-unknown signals other than vocabulary (no producers yet).
+4. **Similar-context expert:** a cap or window on online keys before streams pass a few MiB (they cost 5.3 MB per MiB read). **S4:** the §3.4 unknown-unknown signals other than vocabulary (no producers yet).
 5. **On Odin's PC:** the 8B QE0 gate and timing, QE2 probe vectors, QE3, QE4 `pairs`, teacher Q/A text (QWEN3_EMBEDDING_DISSECTION §9).
 6. **Bill of work upkeep** with every commit.
 

@@ -25,6 +25,7 @@ Protocol for the numbers below: enwik9 bytes `[0, 7340032)` train, `[7340032, 83
 | + similar-context expert (A4), second half of the holdout | 1.939 | Over trie + InfiniGram + class (1.999); fresh text 2.088 → 2.027. `cls --sim`, `qa --sim`; an option, not a default ([report](reports/A4_SIMILAR_CONTEXT_EXPERT.md)) |
 | Similar-context expert, default in `qa` / `sample` / `context8k` (A4b) | 1.9686 | `qa` holdout trie + IG 2.0716 → 1.9686; off inside answers, so answers are unchanged; `sample` SCRIBE v2 0.014 → 0.061 (still word salad); `--no-sim` turns it off |
 | **Similar-context expert: distinct contexts stored once, k 8,192 (A4c, 2026-10-28)** | **1.8269** | `qa` holdout with class + copy (B4c: 1.8345); fresh trie + IG + class + sim 2.0275 → 2.0235 (−0.0040 [−0.0048, −0.0032]); the expert 40.0 → 19.3 MB; answers unchanged ([report](reports/A4_SIMILAR_CONTEXT_EXPERT.md), A4c) |
+| **Similar-context expert: probe 128 and online keys (A4d, 2026-10-29)** | **1.7895** | `qa` holdout with class + copy (A4c: 1.8269); `context8k` 1.7897; fresh trie + IG + class + sim 2.0235 → 1.8783 (−0.145 [−0.176, −0.118], read once); neighbour recall 0.65 → 0.94; online keys (contexts already read join the index; checked causal) cost 5.3 MB per MiB read; scoring 1.87×; answers unchanged ([report](reports/A4_SIMILAR_CONTEXT_EXPERT.md), A4d) |
 | **Class + similar-context + copy, defaults (B4c, 2026-10-28)** | **1.8345** | `qa` holdout (C1L chat model) trie + IG 2.0729 → 1.9944 (+ class) → 1.9224 (+ similar-context) → 1.8345 (+ copy, m 8, window 16,384); `context8k` the same. All three are off inside answers, so answers are unchanged (dev 520 / 520 rows, frozen test 800 / 800). `sample` takes similar-context + copy; the class expert only with `--cls` (SCRIBE v2 falls with it). `--no-cls`, `--no-sim`, `--no-copy` ([report](reports/B4C_ECHO_GATE.md)) |
 
 Surface scores of trie samples are about **0.74–0.83**. That is readable fragments, not answers.
@@ -82,7 +83,7 @@ Tool: `native/tools/scribe.cpp` over `native/include/cypha/eval/scribe.hpp` ([re
 | Control ladder, web text / books (own references) | 5 of 5 / 3 of 5 |
 | Held-out degradations followed | 7 of 9 families (blind to sentence order and truncation) |
 | CyphaLM trie samples / trie + class context / human, same prompts | 0.014 / 0.002 / 0.770 (word salad by SCRIBE; surface S said 0.749 / 0.901 / 0.904) |
-| `sample` with its defaults: trie + similar-context (+ copy) / + class | A4c's default 0.064 [0.052, 0.078]; B4c's 0.061 [0.049, 0.074] (0.056 with copy) / 0.025 (surface S 0.801 → 0.880: the two scores disagree; B4c) |
+| `sample` with its defaults: trie + similar-context (+ copy) / + class | A4d's default 0.063 [0.051, 0.078]; A4c's 0.064 [0.052, 0.078]; B4c's 0.061 [0.049, 0.074] (0.056 with copy) / 0.025 (surface S 0.801 → 0.880: the two scores disagree; B4c) |
 | Cost | about 1,000 texts/s on one core, about 0.4 GB, 14 s with the 32 MiB pack built |
 
 BPC and surface S are not generation scores. SCRIBE v2 is the one that passes its ladder.
