@@ -15,6 +15,8 @@
 //                not chance (chi-square lower tail of the observed log-variance against the variance under independent
 //                attributes, Benjamini-Hochberg over every formula of the table), when it is the shortest (a formula in
 //                the span of laws already kept is redundant) and when it holds on the held-out third of the entities.
+//                S12c options (LawConfig): power_min_exp measures a power law's spread on the attribute it predicts least
+//                precisely (T^(1/min|e|)); order_margin keeps an order at a lower share when it beats independence by a margin.
 //   plant_*      the planted-law gate's tables: ratio laws (Z = c X / Y, c X Y, c X^1.5, c X) on synthetic entities, and
 //                interval laws (Z = birth + c, birth + a gap) on real persons; the null shuffles Z.
 //
@@ -185,6 +187,9 @@ struct LawConfig {
   double order_heldout_viol = 0.10;
   double heldout_min = 0.8;
   std::size_t heldout_min_n = 5;
+  // S12c (docs/reports/S12A_DEDUCTION_LAWS_REFINEMENT.md, "S12c"); off by default, so S12a's reads are unchanged
+  bool power_min_exp = false;   // item 1: a power law's spread on the attribute it predicts least precisely, T^(1/min|e|)
+  double order_margin = -1.0;   // item 2: when >= 0, an order also needs its share at least this far above p0
 };
 
 namespace detail {
@@ -285,10 +290,28 @@ inline std::vector<Law> search_laws(const NumTable& t, const LawConfig& cfg = {}
       if (!held[i]) ltrain.push_back(l);
     }
     const double med = std::exp(median_of(lt));
-    L.spread = robust_sd(tt) / std::fabs(median_of(tt));
+    // S12c item 1: the law must predict each attribute it names within the bar; solved for attribute k the spread is the
+    // term's over |e_k|, so the least precisely predicted attribute (the smallest |e|) is checked: T^(1/m), m = min |e|
+    int m = 1;
+    if (cfg.power_min_exp) {
+      m = std::abs(e[0]);
+      for (int x : e) m = std::min(m, std::abs(x));
+    }
+    if (m == 1) {
+      L.spread = robust_sd(tt) / std::fabs(median_of(tt));
+    } else {
+      std::vector<double> u(lt.size());
+      for (std::size_t j = 0; j < lt.size(); ++j) u[j] = std::exp(lt[j] / m);
+      L.spread = robust_sd(u) / std::fabs(median_of(u));
+    }
     L.classic_cv = classic_cv(tt);
     double in = 0;
-    for (double x : tt) in += std::fabs(x / med - 1.0) <= cfg.ratio_tol;
+    if (m == 1) {
+      for (double x : tt) in += std::fabs(x / med - 1.0) <= cfg.ratio_tol;
+    } else {
+      const double lmed = median_of(lt);
+      for (double l : lt) in += std::fabs(std::exp((l - lmed) / m) - 1.0) <= cfg.ratio_tol;
+    }
     L.inlier = in / static_cast<double>(tt.size());
     L.screen = L.spread < cfg.cv_max && L.inlier >= cfg.inlier_min;
     double vnull = 0;
@@ -304,7 +327,11 @@ inline std::vector<Law> search_laws(const NumTable& t, const LawConfig& cfg = {}
     L.constant = ltrain.empty() ? med : std::exp(median_of(ltrain));
     double hin = 0;
     for (std::size_t j = 0; j < rows.size(); ++j)
-      if (held[rows[j]]) ++L.heldout_n, hin += std::fabs(tt[j] / L.constant - 1.0) <= cfg.ratio_tol;
+      if (held[rows[j]]) {
+        ++L.heldout_n;
+        if (m == 1) hin += std::fabs(tt[j] / L.constant - 1.0) <= cfg.ratio_tol;
+        else hin += std::fabs(std::exp((lt[j] - std::log(L.constant)) / m) - 1.0) <= cfg.ratio_tol;
+      }
     L.heldout_share = L.heldout_n ? hin / static_cast<double>(L.heldout_n) : 0.0;
     L.heldout_ok = L.heldout_n < cfg.heldout_min_n || L.heldout_share >= cfg.heldout_min;
     return L;
@@ -376,6 +403,7 @@ inline std::vector<Law> search_laws(const NumTable& t, const LawConfig& cfg = {}
       const double npairs = static_cast<double>(xs.size()) * static_cast<double>(xs.size() - 1);
       O.p0 = npairs > 0 ? cross / npairs : 1.0;
       O.p_value = O.p0 < 1.0 ? binomial_upper_tail(static_cast<double>(le), static_cast<double>(rows.size()), O.p0) : 1.0;
+      if (cfg.order_margin >= 0.0) O.screen = O.screen && O.inlier - O.p0 >= cfg.order_margin;  // S12c item 2
       O.heldout_n = hn;
       O.heldout_share = hn ? static_cast<double>(hle) / static_cast<double>(hn) : 0.0;
       O.heldout_ok = hn < cfg.heldout_min_n || 1.0 - O.heldout_share <= cfg.order_heldout_viol;
