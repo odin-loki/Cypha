@@ -681,3 +681,255 @@ for l in open(sys.argv[1], encoding='utf-8'):
     res[f[4]] = (n + 1, hit + (k >= 1 and len(' '.join(w[:k])) >= 3))
 for m, (n, h) in sorted(res.items()): print(sys.argv[1].split('/')[-1], m, 'messages', n, 'start_with_question_span', h)
 ```
+
+---
+
+## ANS: three answering questions, decided by measurement (registered 2026-10-29, before any run)
+
+**Odin Loch** · 2026-10-29 · HANDOFF §5.2–§5.4 · decided by measurement under PLAN ledger 55, open to Odin's veto
+
+Odin said "Do all". Flags 1–3 above (HANDOFF §5.2–§5.4) are decided here, each by a rule written before its run.
+
+**The configuration (C1L under today's defaults).** Span candidates, `ent_title`, the low-only token, 20% don't-know turns, D4's shard. The default experts (class, similar-context, copy) are on and off inside answers (B4c, A4d). Its dev read on main c74d2a3 (`/root/work/integ6/runs/VQ`):
+- trie: abstains on 50, precision 0.600, recall 1.00;
+- trie + IG: abstains on 66, precision 0.455, recall 1.00; the gate keeps 2 right, 0 wrong out of fold (full dev: `min_lp ≥ −0.8954`, 3 right);
+- trie + IG tags: 49, 21 complete, 30 with the right reason, 0 naming the question's entity;
+- holdout BPC with the defaults (trie + IG + class + similar-context + copy): 1.789464.
+
+These equal A1d's C1L lines.
+
+### 1. The low-only token (§5.2)
+
+- **The evidence is A1d's**, registered (Q25, Q29) and read: with a token on every turn (C1) the gate keeps 0 right; with the token on `low` only (C1L) it keeps 2 right, 0 wrong. C1L's frozen test was read once (TQ1).
+- **It still holds today.** The class, similar-context and copy experts are off inside answers, so every answer byte comes from the trie and InfiniGram, as in A1d. VQ reproduces A1d's C1L dev lines.
+- **Rule 1.** If VQ's `ABSTAIN`, `CV` and `FULLDEV_GATE` lines for both chat models equal A1d's C1L, the low-only token (`--fam-train low`) is the answering configuration's token form. No new run. The flag's default (`stat`) stays, so older commands keep their meaning.
+
+### 2. `ent_title` against `ent_bold` (§5.3)
+
+**What each reads.** Neither reads anything in the question except its spans.
+- `ent_title` counts `<title>span</title>` in the lowered training text (wiki train + Dolly). The span must be an article's title.
+- `ent_bold` counts `'''span`. The span must open some article's bold lead.
+- A real user question has no tags. So the useful question is: how often does each call an ordinary question unfamiliar?
+
+**New reads.**
+- `FAMREAD` (report only): for each dev question, the best span under each statistic and its count.
+- `FAMDOLLY` (report only): the token each statistic gives the 15,015 Dolly instructions, which are real user questions, with span candidates, at the same training-side cut.
+- Dev run **C1L_bold**: C1L with `--fam-stat ent_bold`.
+
+**Rule 2.** Switch to `ent_bold` only if all three hold on dev:
+- (a) its token meets D2 (abstain precision ≥ 0.8 with recall ≥ 0.5 on not-in-slice questions, `FAMTOK`) and `ent_title`'s does not;
+- (b) the trie + IG model's gate keeps at least as many right answers out of fold (2) and no more wrong ones (0) as C1L's;
+- (c) it marks no larger share of Dolly instructions `low` than `ent_title` does.
+
+Then the frozen test is read once with `ent_bold`. Otherwise `ent_title` stays.
+
+### 3. The entity in the tag (§5.4)
+
+**Design.**
+- **The entity frame in the low token** (A1d's `--fam-ent`, restored): a low token becomes `<|entity="E"|><|fam=low|>`. E is the don't-know row's own entity in training, and the chosen span at answer time. Answered turns and `high` questions still carry nothing.
+- **The tag with the entity last** (A1d's E1b order, `…relation=… gap=… entity="E"|>`). After the entity, the frame and the tag both continue `"|>`.
+- **Copy with its own weight inside a don't-know answer** (`--copy-dk`). Once an answer begins "I don't know" (where decode already switches to its longer limit), the copy expert is on in every model. Its lambdas are fit only on don't-know turns held out of training: the rows after the n_dk that training uses.
+- **Nothing else changes.** Ordinary answers keep copy off (B4c). Wiki text keeps the default copy lambdas. Inside a don't-know answer, the no-repeat rule counts only the answer's own bytes, as it does for the copy models.
+- So copy can follow the frame from ` entity="` into the tag.
+
+Dev run **DKC**.
+
+**Rule 3.** Adopt into the answering configuration only if all five hold on dev, for the trie + IG model (chat form):
+- (a) at least half of the tags name an entity that is a span of the question (`entity_in_question`), Wilson lower bound ≥ 0.30;
+- (b) the share of complete tags is not below VQ's (21 of 49) by more than 0.05;
+- (c) abstention precision and recall of both chat models are within one question of VQ's;
+- (d) the gate keeps at least 2 right and 0 wrong out of fold;
+- (e) holdout BPC (defaults, trie + IG) is within +0.003 of 1.789464.
+
+Then the frozen test is read once with DKC. Otherwise the code stays behind its flags, and the tag stays as it is.
+
+**The frozen test.** At most one read per adopted change, logged below.
+
+### Predictions (registered with the rules)
+
+| Id | Prediction |
+|---|---|
+| AN1 | `FAMDOLLY`: `ent_title` marks at least 85% of Dolly instructions `low`; `ent_bold` 30–70% |
+| AN2 | C1L_bold: the trie abstains on exactly the 18 `low` questions (precision 0.833, recall 0.50); trie + IG on 20–35, precision 0.45–0.75 |
+| AN3 | C1L_bold's gate out of fold: 1–2 right, 0–1 wrong |
+| AN4 | Rule 2 fails on (b): one of the 15 not-in-slice questions it now answers passes the gate, or a right answer is lost. `ent_title` stays |
+| AN5 | DKC's don't-know copy lambdas: at least 0.8 for matches of 8 bytes or more, at most 0.3 below 6 bytes |
+| AN6 | DKC: 50–90% of the trie + IG tags name the question's entity (VQ: 0) |
+| AN7 | DKC: abstentions within ±2 of VQ on both chat models; the gate 2 right, 0 wrong |
+| AN8 | DKC: holdout BPC within +0.002 of 1.789464 |
+| AN9 | DKC: the message names a span of the question in under 10% of abstentions (no frame points copy at "nothing about") |
+
+### Results (2026-10-29)
+
+**Tool.** `cyphalm_trie` at commit 4e59940, which adds `--fam-ent`, `--copy-dk` and `--fam-read`; nothing else changed. Runs are under `/root/work/ans/runs` (scripts `fr.sh`, `par.sh`, `bold.sh`, `dkc.sh`, `tbold.sh`, `tdkc.sh`). They ran under `nice -n 5` on 4 cores shared with about twenty other jobs (load 25–30). Wall times were 40–85 minutes; peak RSS 184.5–184.8 MB in every run.
+
+**Parity.** PAR is today's C1L with the new binary and no new flag.
+- Its rows file is byte-identical to main c74d2a3's VQ.
+- Its stdout differs only in one timing line (`SIM_LAT`).
+- Holdout BPC is unchanged: 2.072881 (trie + IG), 1.789464 (defaults).
+- Answers, BPC and every abstention line equal VQ's, so SCRIBE v2 and surface S are untouched too (`sample` is not changed).
+
+#### 1. The low-only token (§5.2)
+
+VQ's `RAW`, `CV`, `FULLDEV_GATE` and `ABSTAIN` lines for both chat models are identical to A1d's C1L (`/root/work/qa2/runs/C1L.out`).
+- trie: abstains on 50, precision 0.600, recall 1.00;
+- trie + IG: abstains on 66, precision 0.455; the gate keeps 2 right, 0 wrong out of fold.
+
+**Rule 1 holds.** The low-only token (`--fam-train low`) is the answering configuration's token form. No new run was needed.
+
+#### 2. `ent_title` against `ent_bold` (§5.3)
+
+**What each reads (FR, `--fam-only --fam-read`).** Its familiarity lines equal VQ's byte for byte.
+
+| | `ent_title` | `ent_bold` |
+|---|---|---|
+| What it counts | `<title>span</title>` in the lowered training text | `'''span`: some article's bold lead starts with the span |
+| Dolly instructions marked `low` (real user questions, at the training-side cut) | **14,014 of 15,015 = 0.933** [0.929, 0.937] | **4,980 = 0.332** [0.324, 0.339] |
+| Typical best span, not-in-slice dev questions | the entity, count 0 ("Mongolia", "Winston Churchill", "Google") | a common word that opens some bold lead: "born", "capital", "film", "tallest", count 1 |
+| Typical best span, in-slice | the article title ("Miss Marple", "alan parsons") | a leading word ("Miss", "alan", "1") |
+
+- **A real question has no title tag, but that is not what `ent_title` reads.** Both statistics read only the question's spans, counted in CyphaLM's training text.
+- **The difference is what they count.** A span is `high` under `ent_title` only if it is an article's title. So any question whose subject has no article of that exact name is `low`, and that is 93% of Dolly's real instructions. `ent_bold` is `high` for any span that opens a bold lead somewhere. That is often a common word, which is why it misses half of the not-in-slice questions.
+
+**C1L_bold (dev).** C1L with `--fam-stat ent_bold`.
+
+| Model (chat) | Abstained | Precision (not-in-slice) | Recall | Gate out of fold: right / wrong | Raw right |
+|---|---:|---|---|---|---:|
+| trie, `ent_title` (VQ) | 50 | 0.600 [0.462, 0.724] | 1.00 [0.886, 1.00] | 0 / 0 | 0 |
+| trie, `ent_bold` | 18 | **0.833** [0.608, 0.942] | 0.50 [0.332, 0.668] | 0 / 0 | 0 |
+| trie + IG, `ent_title` (VQ) | 66 | 0.455 | 1.00 | 2 / 0 | 7 |
+| trie + IG, `ent_bold` | 45 | 0.444 [0.309, 0.588] | 0.667 [0.488, 0.808] | **2 / 0** | 7 |
+
+Holdout BPC is identical to VQ's (outcome labels make the training text the same).
+
+**Rule 2 holds on all three counts:**
+- (a) the `ent_bold` token meets D2 (0.833 / 0.50); `ent_title`'s does not (0.600 / 1.00);
+- (b) the gate keeps 2 right, 0 wrong, the same as C1L;
+- (c) it marks 33% of Dolly instructions `low`, against 93%.
+
+So the frozen test was read once with `ent_bold`.
+
+**Frozen test, `ent_bold` (TBOLD; 200 questions, 50 not in the slice).** A1d's C1L test read (`ent_title`) is beside it.
+
+| Model (chat) | Abstained | Precision (not-in-slice) | Recall | Gated R / A / W | Raw right |
+|---|---:|---|---|---|---:|
+| trie, `ent_title` (A1d) | 74 | 0.635 [0.521, 0.736] | 0.94 [0.838, 0.979] | 0 / 200 / 0 | 0 |
+| trie, `ent_bold` | 27 | **0.963** [0.817, 0.993] | **0.52** [0.385, 0.652] | 0 / 200 / 0 | 0 |
+| trie + IG, `ent_title` (A1d) | 97 | 0.495 [0.397, 0.593] | 0.96 | 0 / 200 / 0 | 2 |
+| trie + IG, `ent_bold` | 63 | 0.540 [0.418, 0.657] | 0.68 [0.542, 0.792] | 0 / 200 / 0 | 2 |
+
+- **D2 is met on the frozen test for the first time** (CyphaLM's own message, trie model). It abstains on 26 of the 50 not-in-slice questions and on 1 in-slice one.
+- **The cost is recall.** Half of the questions with no article in the slice are answered (wrongly), not refused. Trie + IG refuses 34 of 50 instead of 48.
+- No gated answer changes: 0 right, 0 wrong in both.
+
+#### 3. The entity in the tag (§5.4)
+
+**The don't-know copy lambdas** (fit on 1,000 held-out don't-know turns, 158,244 bytes):
+
+| Copy match | Bytes | Copy right | λ trie | λ trie + IG |
+|---|---:|---:|---:|---:|
+| 3 bytes | 10,029 | 0.553 | 0.105 | 0.080 |
+| 4–5 | 7,899 | 0.551 | 0.195 | 0.140 |
+| 6–7 | 4,157 | 0.946 | 0.845 | 0.760 |
+| 8–11 | 7,469 | 0.967 | 0.955 | 0.945 |
+| 12–15 | 6,521 | 0.963 | 0.935 | 0.920 |
+| 16–31 | 11,881 | 0.962 | 0.930 | 0.910 |
+| 32+ | 1,031 | 0.971 | 0.935 | 0.900 |
+
+Inside a don't-know answer, a copy match of 6 bytes or more is right 95–97% of the time. The default copy lambdas, fit on wiki text, give such matches far less weight.
+
+**DKC (dev)** against VQ:
+
+| trie + IG (chat) | VQ | DKC |
+|---|---|---|
+| Abstained (not-in-slice) | 66 (30 / 30) | 65 (30 / 30) |
+| Tags written | 49 | 34 |
+| Tag names a span of the question | **0** [0, 0.073] | **34 of 34** [0.898, 1.00] |
+| Complete tags | 21 | 34 |
+| Reason code right | 30 | 25 |
+| Message names the question's entity | 0 | 0 |
+| Message entity = tag entity | — | **0 of 34** |
+| The answer writes the frame token itself (`<\|entity="Antares"\|><\|fam=low\|>I don't know.`) | 0 | **15** |
+| Message ends on the question's tail ("nothing about Economy of Canada?") | 0 | 13 |
+| Gate out of fold: right / wrong | 2 / 0 | 2 / 0 |
+| Holdout BPC, defaults (trie + IG) | 1.789464 | 1.789591 (+0.00013) |
+
+The trie model's lines are unchanged: 50 abstained, 0.600 / 1.00, no tags.
+
+**Rule 3 holds on all five counts:**
+- (a) 34 of 34 tags name a span of the question;
+- (b) complete tags 34 of 34, against 21 of 49;
+- (c) abstentions 50 / 65, against 50 / 66;
+- (d) the gate keeps 2 right, 0 wrong;
+- (e) BPC +0.00013.
+
+So the frozen test was read once with DKC.
+
+**Frozen test, DKC (TDKC).** Its dev lines are re-printed identical to DKC's.
+
+| trie + IG (chat) | A1d C1L test | DKC test |
+|---|---|---|
+| Abstained (not-in-slice) | 97 (48 / 50) | 97 (48 / 50) |
+| Tags / complete | 72 / 28 | 50 / **47** [0.838, 0.979 of tags] |
+| Tag names a span of the question | **0** | **49 of 50** [0.895, 0.996] |
+| Reason code right | 45 | 35 |
+| Message entity = tag entity | — | 0 of 50 |
+| The answer writes the frame token itself | 0 | 23 of 97 [0.164, 0.331] |
+| Message ends on the question's tail | 0 | 20 |
+| Gated R / A / W | 0 / 200 / 0 | 0 / 200 / 0 |
+
+The trie model's test lines equal A1d's: 74 abstained, 0.635 / 0.94.
+
+- **The tag now names the question's entity.** On the test, 49 of 50 tags do, against 0 of 72. That is what the gap map reads: DISCOVERY §3.5 parses the tag into demand +1 for that entity.
+- **The message does not.** The message comes before the tag. InfiniGram's long match still writes a training entity there ("nothing about Henrik Ibsen … entity=\"tungsten\""). So message and tag now disagree in every tagged answer. Before, both named the same wrong entity.
+- **Two new faults the rule did not cover.**
+  - In 23 of 97 test abstentions CyphaLM writes the frame token itself, with a training entity, before "I don't know.": InfiniGram continues a training don't-know prompt.
+  - In 20, copy carries the message on into the question's tail.
+- **Rule 3 adopts it, and I recommend Odin's veto.** It helps the tag (the gap map's input). It makes the visible answer worse: a control token in 24% of refusals, and a message that contradicts its own tag.
+
+#### Frozen Q/A test reads (`bench/eval/t_qa_wiki.tsv`)
+
+| Date | Change | Run | Result |
+|---|---|---|---|
+| 2026-10-28 | C1L (A1d) | TEST_C1L | above (A1d) |
+| 2026-10-28 | R3raw (A1d) | TEST_R3raw | above (A1d) |
+| 2026-10-29 | `ent_bold` in the token (ANS, rule 2) | TBOLD | trie 0.963 / 0.52; gated 0 / 0 |
+| 2026-10-29 | entity frame + `--copy-dk` (ANS, rule 3) | TDKC | tags name the entity 49 of 50; gated 0 / 0 |
+
+The two changes were read separately. Their combination (`ent_bold` with DKC) has not been read.
+
+#### Predictions, scored
+
+| Id | Result | Score |
+|---|---|---|
+| AN1 | `ent_title` 0.933, `ent_bold` 0.332 of Dolly marked `low` | **Hit** |
+| AN2 | trie exactly 18 at 0.833 / 0.50; trie + IG 45 abstained, precision 0.444 (predicted 20–35, 0.45–0.75) | **Partial** |
+| AN3 | gate 2 right, 0 wrong | **Hit** |
+| AN4 | rule 2 holds; `ent_bold` adopted | **Miss** |
+| AN5 | λ ≥ 0.90 from 8 bytes, ≤ 0.195 below 6 | **Hit** |
+| AN6 | 34 of 34 tags (100%; predicted 50–90%) | **Miss** (above the range) |
+| AN7 | abstentions 50 / 65 against 50 / 66; gate 2 / 0 | **Hit** |
+| AN8 | +0.00013 | **Hit** |
+| AN9 | the registered count (`message_entity_in_question`) 0 of 65; but 13 messages end on the question's tail, which that count does not catch | **Hit** by the registered count |
+
+6 hits, 1 partial, 2 misses.
+
+#### Decisions (by measurement under PLAN ledger 55, open to Odin's veto)
+
+| Question | Decision | Evidence |
+|---|---|---|
+| §5.2 low-only token | **The answering configuration's token form** (`--fam-train low`) | Rule 1: today's tool reproduces A1d's C1L; the token on every turn leaves the gate nothing (C1: 0 / 0), low-only keeps 2 / 0 |
+| §5.3 `ent_title` or `ent_bold` | **`ent_bold`** (rule 2) | Dev meets D2 (0.833 / 0.50), gate unchanged (2 / 0), 33% of real questions `low` against 93%; test 0.963 [0.817, 0.993] / 0.52, D2 met; recall falls from 0.94 to 0.52 |
+| §5.4 entity in the tag | **Adopted by rule 3; Odin's veto recommended** | Test: tags name the entity 49 of 50 (was 0), complete 47 of 50 (was 28 of 72); but the message never agrees with the tag (0 of 50), 23 of 97 refusals write the frame token, 20 messages end on the question's tail |
+
+**Next, measurable without a ruling.**
+- A message that follows the tag: the frame before "nothing about " as well (A1d's E1c form, `about {E};entity="{E}"`) with `--copy-dk`.
+- Stopping the frame-token echo: no frame in training prompts, only in the tag.
+- Each is a new registered dev read, then one test read.
+
+#### Checks
+
+- `cyphalm_trie selftest` passes. It now includes the frame and don't-know-context checks.
+- The nine CTests of HANDOFF §4.4 pass (9 of 9).
+- Without the new flags, rows and stdout are byte-identical to main's VQ (PAR).
+- The source compiles clean under `-Wall -Wextra`.
