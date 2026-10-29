@@ -1,12 +1,16 @@
 // Known-answer tests for cypha/eval/epistemic.hpp (docs/DISCOVERY.md sections 2.1-2.3, 3.1, 3.3, 10), hypothesis.hpp
-// (S5: 4, 6.3, 7.2-7.5; invariants I1, I4, I7, I8; S7: 7.1-7.3, I5, I6) and gap_map.hpp (S3: 3.2, 3.5).
+// (S5: 4, 6.3, 7.2-7.5; invariants I1, I4, I7, I8; S7: 7.1-7.3, I5, I6; S7b: three-way likelihoods, the batch step
+// among the supported), gap_map.hpp (S3: 3.2, 3.5), gen_links.hpp (S8b: G6, G7) and gen_rules.hpp (S8a: G2, G14).
 // Returns nonzero if any check fails.
 #include "cypha/eval/epistemic.hpp"
 #include "cypha/eval/gap_map.hpp"
+#include "cypha/eval/gen_links.hpp"
+#include "cypha/eval/gen_rules.hpp"
 #include "cypha/eval/hypothesis.hpp"
 
 #include <cmath>
 #include <cstdio>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -1159,6 +1163,373 @@ static void test_tests_S7() {
   CHECK(hl.verify());
 }
 
+// S7b (docs/reports/S7_HYPOTHESIS_TESTS.md, "S7b"): three-way likelihoods and the batch step among the supported.
+static void test_s7b() {
+  // likelihoods_from: the add-one mean of each row over (positive, negative, inconclusive).
+  TestTally tl;
+  for (int i = 0; i < 6; ++i) tl.add(true, TestOutcome::Positive);
+  tl.add(true, TestOutcome::Negative);
+  for (int i = 0; i < 3; ++i) tl.add(true, TestOutcome::Inconclusive);
+  tl.add(false, TestOutcome::Positive);
+  for (int i = 0; i < 4; ++i) tl.add(false, TestOutcome::Negative);
+  for (int i = 0; i < 5; ++i) tl.add(false, TestOutcome::Inconclusive);
+  const OutcomeLikelihoods L = likelihoods_from(tl);
+  CHECK(L.set() && !OutcomeLikelihoods{}.set());
+  CHECK_NEAR(L.t[0], 7.0 / 13, 1e-12);
+  CHECK_NEAR(L.t[1], 2.0 / 13, 1e-12);
+  CHECK_NEAR(L.t[2], 4.0 / 13, 1e-12);
+  CHECK_NEAR(L.f[0], 2.0 / 13, 1e-12);
+  CHECK_NEAR(L.f[1], 5.0 / 13, 1e-12);
+  CHECK_NEAR(L.f[2], 6.0 / 13, 1e-12);
+  // A test's BF: S7's two-way factor without likelihoods; the likelihood ratio with them, inconclusive included.
+  HypTest t;
+  t.sensitivity = 0.9, t.specificity = 0.8;
+  CHECK_NEAR(bayes_factor(TestOutcome::Positive, t), 4.5, 1e-12);
+  CHECK_NEAR(bayes_factor(TestOutcome::Inconclusive, t), 1.0, 1e-15);
+  t.likelihoods = L;
+  CHECK_NEAR(bayes_factor(TestOutcome::Positive, t), 3.5, 1e-12);
+  CHECK_NEAR(bayes_factor(TestOutcome::Negative, t), 0.4, 1e-12);
+  CHECK_NEAR(bayes_factor(TestOutcome::Inconclusive, t), 4.0 / 6, 1e-12);
+  {
+    HypTest tz = t;
+    tz.likelihoods.f[0] = 0.0;  // a zero likelihood is clamped: the factor is large, never infinite
+    CHECK_NEAR(bayes_factor(TestOutcome::Positive, tz), (7.0 / 13) / 1e-6, 1e-3);
+  }
+  // In the store: silence moves the posterior by its ratio, and is still no independent evidence (I4).
+  Hypothesis h = s7_hyp("h-3", true);
+  h.tests[0].likelihoods = L, h.tests[1].likelihoods = L;
+  HypothesisStore hs;
+  PreregLog log;
+  CHECK(hs.propose(h) && hs.score("h-3", 0.5) && hs.transition("h-3", HypState::Queued, "scored"));
+  CHECK(log.register_plan(*hs.find("h-3")));
+  CHECK(hs.transition("h-3", HypState::UnderTest, "test"));
+  auto r = hs.record_outcome("h-3", 0, TestOutcome::Inconclusive, &log);
+  CHECK(r.has_value() && *r == HypState::Queued);
+  CHECK_NEAR(hs.find("h-3")->posterior, (4.0 / 6) / (1 + 4.0 / 6), 1e-12);
+  CHECK(hs.find("h-3")->tests[0].inconclusive && !has_independent_evidence(*hs.find("h-3")));
+  CHECK(hs.transition("h-3", HypState::UnderTest, "test"));
+  r = hs.record_outcome("h-3", 1, TestOutcome::Positive, &log);  // odds 2/3 x 3.5 = 7/3: 0.7, queued
+  CHECK(r.has_value() && *r == HypState::Queued);
+  CHECK_NEAR(hs.find("h-3")->posterior, 0.7, 1e-12);
+  CHECK_NEAR(hs.find("h-3")->tests[1].bayes_factor, 3.5, 1e-12);  // record_result uses the three-way factor
+  CHECK_NEAR(e_value(*hs.find("h-3")), (4.0 / 6) * 3.5, 1e-12);
+  CHECK(log.verify());
+  {  // a posterior above 0.9 from silence alone is never supported
+    OutcomeLikelihoods sil;
+    sil.t[0] = 0.1, sil.t[1] = 0.1, sil.t[2] = 0.8, sil.f[0] = 0.1, sil.f[1] = 0.1, sil.f[2] = 0.08;  // silence: BF 10
+    Hypothesis g = s7_hyp("h-sil", true);
+    g.tests[0].likelihoods = sil, g.tests[1].likelihoods = sil;
+    HypothesisStore gs;
+    CHECK(gs.propose(g) && gs.score("h-sil", 0.5) && gs.transition("h-sil", HypState::Queued, "scored"));
+    CHECK(gs.transition("h-sil", HypState::UnderTest, "test"));
+    CHECK(gs.record_outcome("h-sil", 0, TestOutcome::Inconclusive) == HypState::Queued);
+    CHECK(gs.transition("h-sil", HypState::UnderTest, "test"));
+    const auto q = gs.record_outcome("h-sil", 1, TestOutcome::Inconclusive);
+    CHECK(q.has_value() && *q != HypState::Supported);
+    CHECK(gs.find("h-sil")->posterior > 0.9);
+  }
+  {  // without likelihoods an inconclusive result leaves the posterior exactly as it was (S7)
+    Hypothesis g = s7_hyp("h-2w", true);
+    HypothesisStore gs;
+    CHECK(gs.propose(g) && gs.score("h-2w", 0.37) && gs.transition("h-2w", HypState::Queued, "scored"));
+    CHECK(gs.transition("h-2w", HypState::UnderTest, "test"));
+    CHECK(gs.record_outcome("h-2w", 1, TestOutcome::Inconclusive) == HypState::Queued);
+    CHECK(gs.find("h-2w")->posterior == 0.37);
+  }
+  {  // the likelihoods are registered with the plan (I5): an edit of one breaks the chain
+    PreregLog a, b;
+    Hypothesis g1 = s7_hyp("p1", true), g2 = g1;
+    g2.tests[0].likelihoods = L;
+    CHECK(a.register_plan(g1) && b.register_plan(g2));
+    const std::string s1 = a.serialize(), s2 = b.serialize();
+    CHECK(s2.size() > s1.size());
+    const std::size_t at = s2.find("0.53846");
+    CHECK(at != std::string::npos);
+    std::string edited = s2;
+    if (at != std::string::npos) edited[at + 6] = edited[at + 6] == '9' ? '8' : '9';
+    CHECK(PreregLog::parse(s2).verify() && !PreregLog::parse(edited).verify());
+  }
+  // The batch step among the supported: BH at q 0.1 on p = 1/e over the selected only.
+  {
+    const std::vector<double> e = {1000, 1e9, 50, 2, 1.5, 400};
+    const std::vector<bool> sel = {true, false, true, true, true, true};
+    // Selected p: 0.001, 0.02, 0.5, 0.667, 0.0025; m 5, thresholds 0.02, 0.04, 0.06, 0.08, 0.1: the three smallest pass.
+    const auto rej = bh_reject_e_among(e, sel, 0.1);
+    CHECK(rej.size() == 6);
+    CHECK(rej[0] && !rej[1] && rej[2] && !rej[3] && !rej[4] && rej[5]);  // never the unselected one, however large its e
+    const auto all = bh_reject_e(e, 0.1);  // the whole batch (m 6) rejects the unselected one too
+    CHECK(all[0] && all[1] && all[2] && !all[3] && !all[4] && all[5]);
+    const auto none = bh_reject_e_among(e, std::vector<bool>(6, false), 0.1);
+    CHECK(none.size() == 6 && !none[0] && !none[1]);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// S8b: G6 neighbourhood scores, the one-pass link scorer, G7 path ranking (gen_links.hpp)
+// ---------------------------------------------------------------------------
+
+static void test_links_S8b() {
+  // G6: a and b share two private neighbours; a and c share only a hub. RA (1 / deg) penalises the hub more than AA does.
+  {
+    TripleStore st;
+    st.add("a", "r", "p1"), st.add("b", "r", "p1"), st.add("a", "r", "p2"), st.add("b", "r", "p2");
+    st.add("a", "r", "hub"), st.add("c", "r", "hub");
+    for (int i = 0; i < 20; ++i) st.add("x" + std::to_string(i), "r", "hub");
+    const auto ns = neighbour_scores(st, "a");
+    CHECK(ns.count("b") && ns.count("c"));
+    CHECK_NEAR(ns.at("b").cn, 2.0, 1e-12);
+    CHECK_NEAR(ns.at("c").cn, 1.0, 1e-12);
+    CHECK_NEAR(ns.at("b").aa, adamic_adar(st, "a", "b"), 1e-12);  // AA agrees with S6's adamic_adar
+    CHECK_NEAR(ns.at("c").aa, adamic_adar(st, "a", "c"), 1e-12);
+    CHECK_NEAR(ns.at("b").ra, 2.0 * 0.5, 1e-12);                   // p1 and p2 each have degree 2
+    CHECK_NEAR(ns.at("c").ra, 1.0 / 22.0, 1e-12);                  // the hub has 22 neighbours
+    CHECK(ns.at("c").ra / ns.at("c").aa < ns.at("b").ra / ns.at("b").aa);  // degree normalisation hits the hub hardest
+    CHECK_NEAR(ns.at("b").jaccard, 2.0 / 3.0, 1e-12);              // |{p1,p2}| / |{p1,p2,hub}|
+    CHECK(!ns.count("a"));
+  }
+  // The one-pass link scorer gives LinkPredictor::prob's numbers, with and without copy rules.
+  {
+    TripleStore st;
+    std::mt19937_64 rng(7);
+    const char* rel[] = {"born", "lives", "job", "nat"};
+    for (int i = 0; i < 60; ++i)
+      for (int k = 0; k < 4; ++k)
+        if (rng() % 3) st.add("s" + std::to_string(i), rel[k], "v" + std::to_string(rng() % 6));
+    for (const bool copy : {true, false}) {
+      const LinkPredictor lp(st, {1.0, copy});
+      const LinkScorer ls(st, {1.0, copy});
+      double worst = 0.0;
+      int compared = 0;
+      for (int i = 0; i < 60; ++i)
+        for (const char* r : rel) {
+          std::vector<std::string> cands;
+          for (int v = 0; v < 6; ++v)
+            if (!st.has("s" + std::to_string(i), r, "v" + std::to_string(v))) cands.push_back("v" + std::to_string(v));
+          const auto ps = ls.probs("s" + std::to_string(i), r, cands);
+          for (std::size_t c = 0; c < cands.size(); ++c, ++compared)
+            worst = std::max(worst, std::fabs(ps[c] - lp.prob("s" + std::to_string(i), r, cands[c])));
+        }
+      CHECK(compared > 500);
+      CHECK_NEAR(worst, 0.0, 1e-12);
+    }
+  }
+  // Logistic regression: one informative feature gets a positive weight and orders the rows.
+  {
+    std::vector<std::vector<double>> X;
+    std::vector<int> y;
+    for (int i = 0; i < 40; ++i) X.push_back({static_cast<double>(i % 10), 1.0}), y.push_back(i % 10 >= 5 ? 1 : 0);
+    y[3] = 1, y[17] = 0;  // not separable, so the fit is finite
+    Logistic lr;
+    lr.fit(X, y, 1.0);
+    CHECK(lr.ok);
+    CHECK(lr.w[0] > 0.0);
+    CHECK(lr.prob({9.0, 1.0}) > 0.8 && lr.prob({0.0, 1.0}) < 0.2);
+    Logistic one;
+    one.fit({{1.0}, {2.0}}, {1, 1});  // one label only: no fit
+    CHECK(!one.ok);
+  }
+  // G7: the planted rule born_in(X, C) and city_in(C, K) => nationality(X, K). People are born in 6 cities of 3
+  // countries; one person's nationality is missing. Path ranking puts the right country first and explains it by the
+  // path born_in > city_in. The walk probabilities are exact on a small chain.
+  {
+    TripleStore st;
+    const char* country[] = {"K0", "K1", "K2"};
+    for (int c = 0; c < 6; ++c) st.add("C" + std::to_string(c), "city_in", country[c % 3]);
+    for (int i = 0; i < 90; ++i) {
+      const int c = i % 6;
+      st.add("P" + std::to_string(i), "born_in", "C" + std::to_string(c));
+      if (i != 4) st.add("P" + std::to_string(i), "nationality", country[c % 3]);
+    }
+    // Popularity favours K0 (a dozen extra K0 nationals with no birthplace), so the base rate alone would be wrong for P4.
+    for (int i = 0; i < 12; ++i) st.add("Q" + std::to_string(i), "nationality", "K0");
+    const RelGraph g(st);
+    PathRanker pr(st, g, {});
+    const auto& M = pr.fit("nationality");
+    CHECK(M.ok);
+    bool has_rule_path = false;
+    for (const auto& p : M.paths) has_rule_path = has_rule_path || pr.path_name(p) == "born_in > city_in";
+    CHECK(has_rule_path);
+    std::vector<int> best;
+    const std::vector<std::string> cands = {"K0", "K1", "K2"};
+    const auto sc = pr.score("P4", "nationality", cands, &best);  // P4 is born in C4, in K1
+    CHECK(sc[1] > sc[0] && sc[1] > sc[2]);
+    CHECK(best[1] >= 0 && pr.path_name(M.paths[static_cast<std::size_t>(best[1])]) == "born_in > city_in");
+    CHECK(base_rate(st, "nationality", "K0") > base_rate(st, "nationality", "K1"));
+    // The walk along born_in > city_in from P4 reaches K1 with probability 1; along born_in alone, C4 with 1.
+    const int p4 = g.node("P4");
+    const auto d = pr.walks(p4, {{g.forward("born_in"), g.forward("city_in"), -1}, {g.forward("born_in"), -1, -1}}, SkipEdge{});
+    CHECK_NEAR(d[0].at(g.node("K1")), 1.0, 1e-12);
+    CHECK(d[0].size() == 1);
+    CHECK_NEAR(d[1].at(g.node("C4")), 1.0, 1e-12);
+    // Back along born_in^-1 from C4: 15 people, 1/15 each; leaving out the edge P4-C4 removes P4 and gives 1/14.
+    const int c4 = g.node("C4"), inv = g.forward("born_in") ^ 1;
+    const auto e = pr.walks(c4, {{inv, -1, -1}}, SkipEdge{});
+    CHECK(e[0].size() == 15);
+    CHECK_NEAR(e[0].at(p4), 1.0 / 15.0, 1e-12);
+    const auto f = pr.walks(c4, {{inv, -1, -1}}, SkipEdge{p4, g.forward("born_in"), c4});
+    CHECK(f[0].size() == 14 && !f[0].count(p4));
+    CHECK_NEAR(f[0].begin()->second, 1.0 / 14.0, 1e-12);
+  }
+  // A length-1 path: everyone works where they live, so works_in is predicted by the path lives_in alone.
+  {
+    TripleStore st;
+    for (int i = 0; i < 40; ++i) {
+      st.add("W" + std::to_string(i), "lives_in", "T" + std::to_string(i % 4));
+      if (i != 6) st.add("W" + std::to_string(i), "works_in", "T" + std::to_string(i % 4));
+    }
+    for (int i = 0; i < 10; ++i) st.add("V" + std::to_string(i), "works_in", "T0");  // popularity favours T0
+    const RelGraph g(st);
+    PathRanker pr(st, g, {});
+    const auto& M = pr.fit("works_in");
+    CHECK(M.ok);
+    bool one = false;
+    for (const auto& p : M.paths) one = one || pr.path_name(p) == "lives_in";
+    CHECK(one);
+    const auto sc = pr.score("W6", "works_in", {"T0", "T1", "T2", "T3"});  // W6 lives in T2
+    CHECK(sc[2] > sc[0] && sc[2] > sc[1] && sc[2] > sc[3]);
+  }
+  // The hub guard: a walk does not go on through an intermediate node with more edges of the step's type than `hub`.
+  {
+    TripleStore st;
+    st.add("a", "nat", "H");
+    for (int i = 0; i < 30; ++i) st.add("p" + std::to_string(i), "nat", "H"), st.add("p" + std::to_string(i), "born", "T");
+    const RelGraph g(st);
+    PathRanker::Config small;
+    small.hub = 10;
+    PathRanker guarded(st, g, small), open(st, g, {});
+    const std::array<int, 3> path{g.forward("nat"), g.forward("nat") ^ 1, g.forward("born")};
+    CHECK(guarded.walks(g.node("a"), {path}, SkipEdge{})[0].empty());       // H has 31 nat^-1 edges, over 10
+    CHECK_NEAR(open.walks(g.node("a"), {path}, SkipEdge{})[0].at(g.node("T")), 30.0 / 31.0, 1e-12);  // a itself has no born edge
+  }
+}
+
+// ---------------------------------------------------------------------------
+// S8a: G2 rule induction and G14 contradiction resolution (gen_rules.hpp)
+// ---------------------------------------------------------------------------
+
+static void test_gen_rules_S8a() {
+  // The binomial tail.
+  CHECK_NEAR(binomial_upper_tail(8, 10, 0.5), 56.0 / 1024.0, 1e-12);
+  CHECK_NEAR(binomial_upper_tail(0, 5, 0.2), 1.0, 1e-15);
+  CHECK_NEAR(binomial_upper_tail(6, 5, 0.2), 0.0, 1e-15);
+  CHECK_NEAR(binomial_upper_tail(5, 5, 0.2), std::pow(0.2, 5), 1e-15);
+
+  TripleStore st;
+  // A planted const rule: 30 painters, all artists. Another 20 people have occupation(lawyer) and a random other value.
+  for (int i = 0; i < 30; ++i) {
+    const std::string x = "P" + std::to_string(i);
+    st.add(x, "occupation", "Painter");
+    if (i < 27) st.add(x, "occupation", "Artist");  // 27 of 30: PCA 0.9
+  }
+  for (int i = 0; i < 20; ++i) st.add("L" + std::to_string(i), "occupation", "Lawyer"), st.add("L" + std::to_string(i), "occupation", "V" + std::to_string(i));
+  // A spurious rule: 100 subjects; 80% are "common"; the first 50 also have tag z. tag(z) => kind(common) has support 40 and
+  // PCA 0.8, but common's base rate is 0.8, so it is no better than chance and BH keeps it out.
+  for (int i = 0; i < 100; ++i) {
+    const std::string x = "C" + std::to_string(i);
+    st.add(x, "kind", i % 5 ? "common" : "rare" + std::to_string(i));
+    if (i < 50) st.add(x, "tag", "z");
+  }
+  // An inverse rule: 15 offices, successor and predecessor both stated.
+  for (int i = 0; i < 15; ++i) {
+    st.add("A" + std::to_string(i), "successor", "B" + std::to_string(i));
+    st.add("B" + std::to_string(i), "predecessor", "A" + std::to_string(i));
+  }
+  // A path rule: 12 people born in a town whose country is their nationality. One more is born there, nationality unknown.
+  for (int i = 0; i < 12; ++i) {
+    const std::string town = "Town" + std::to_string(i % 4), land = "Land" + std::to_string(i % 4);
+    st.add("H" + std::to_string(i), "birth_place", town);
+    st.add("H" + std::to_string(i), "nationality", land);
+    if (i < 4) st.add(town, "country", land);
+  }
+  st.add("H99", "birth_place", "Town1");
+  st.add("H99", "occupation", "Painter");  // G2 should propose Artist for H99
+
+  const RuleIndex ix(st);
+  const std::vector<Rule> rules = mine_rules(ix);
+  auto find = [&](const std::string& text) -> const Rule* {
+    for (const auto& R : rules)
+      if (R.text() == text) return &R;
+    return nullptr;
+  };
+  const Rule* planted = find("occupation(X, Painter) => occupation(X, Artist)");
+  CHECK(planted != nullptr);
+  if (planted) {
+    CHECK(planted->kept);
+    CHECK_NEAR(planted->support, 27, 0);
+    CHECK_NEAR(planted->pca_body, 31, 0);  // the 30 painters and H99
+    CHECK_NEAR(planted->body, 31, 0);
+    CHECK_NEAR(planted->pca_conf(), 27.0 / 31.0, 1e-12);
+    CHECK_NEAR(planted->head_coverage(), 1.0, 1e-12);  // every Artist fact
+    CHECK_NEAR(planted->p0, 27.0 / 98.0, 1e-12);        // Artist's share of the 98 occupation facts
+    CHECK(planted->p_value < 1e-10);
+    CHECK(rule_t3(*planted) != TestOutcome::Negative);
+  }
+  const Rule* spurious = find("tag(X, z) => kind(X, common)");
+  CHECK(spurious != nullptr);
+  if (spurious) {
+    CHECK_NEAR(spurious->support, 40, 0);
+    CHECK_NEAR(spurious->pca_conf(), 0.8, 1e-12);
+    CHECK_NEAR(spurious->p0, 0.8, 1e-12);  // common's share of kind
+    CHECK(spurious->p_value > 0.3);
+    CHECK(!spurious->kept);  // PCA >= 0.5 and support >= 10, but no better than its base rate
+  }
+  const Rule* inv = find("predecessor(Y, X) => successor(X, Y)");
+  CHECK(inv != nullptr && inv->kept && inv->support == 15 && inv->pca_conf() == 1.0);
+  const Rule* path = find("birth_place(X, Z) & country(Z, Y) => nationality(X, Y)");
+  CHECK(path != nullptr && path->kept && path->support == 12 && path->kind == RuleKind::Path);
+  if (path) {  // H99 is born in Town1 but has no nationality: in the body, outside the PCA body
+    CHECK_NEAR(path->body, 13, 0);
+    CHECK_NEAR(path->pca_body, 12, 0);
+    CHECK_NEAR(path->pca_conf(), 1.0, 1e-12);
+    CHECK_NEAR(path->std_conf(), 12.0 / 13.0, 1e-12);
+  }
+  for (const auto& R : rules) CHECK(!R.kept || (R.support >= 10 && R.pca_conf() >= 0.5));
+
+  const RuleSet rs(ix, rules);
+  const auto c = rs.candidates("H99", "occupation");
+  CHECK(!c.empty() && c[0].o == "Artist");
+  if (!c.empty()) CHECK_NEAR(c[0].score, 27.0 / 31.0, 1e-12);
+  const auto n = rs.candidates("H99", "nationality");
+  CHECK(n.size() == 1 && n[0].o == "Land1");
+  const auto succ = rs.candidates("B3", "successor");  // no successor stated for B3; the inverse needs a predecessor of someone
+  CHECK(succ.empty());
+  // Consequences (T2): if H99 is a painter, the planted rule makes it an artist.
+  bool has_artist = false;
+  for (const auto& q : rs.consequences("H99", "occupation", "Painter")) has_artist = has_artist || (q.s == "H99" && q.r == "occupation" && q.o == "Artist");
+  CHECK(has_artist);
+  bool has_succ = false;  // predecessor(Q, P) => successor(P, Q)
+  for (const auto& q : rs.consequences("Q", "predecessor", "P")) has_succ = has_succ || (q.s == "P" && q.r == "successor" && q.o == "Q");
+  CHECK(has_succ);
+  // Noisy-or and the maximum.
+  const RuleSet rs_max(ix, rules, false);
+  CHECK(!rs_max.candidates("H99", "occupation").empty());
+
+  // G14.
+  ContestedSlot slot{"Al Gore", "birth_place", "Washington, D.C.", "Carthage", 1, 2};
+  ContestFacts f;
+  f.a_contains_b = true;
+  CHECK(explain_contest(slot, f).kind == HiddenVar::Granularity);
+  ContestFacts d;
+  d.is_date = true, d.day_gap = 10;
+  CHECK(explain_contest(slot, d).kind == HiddenVar::Calendar);
+  d.day_gap = 400;
+  CHECK(explain_contest(slot, d).kind == HiddenVar::SourceError);
+  ContestFacts tv;
+  tv.time_varying = true;
+  const auto et = explain_contest(slot, tv);
+  CHECK(et.kind == HiddenVar::Time && et.bits == 3.0);
+  ContestFacts er;
+  er.t4_a = 1, er.t4_b = 0;
+  const auto e1 = explain_contest(slot, er);
+  CHECK(e1.kind == HiddenVar::SourceError && e1.wrong == 1 && e1.bits == 4.0);
+  er.t4_a = 0;
+  CHECK(explain_contest(slot, er).wrong == 0);  // no page evidence: b has more sources, so a is wrong
+  slot.sources_a = slot.sources_b = 1;
+  CHECK(explain_contest(slot, er).wrong == 1);  // a tie: the later value
+  CHECK_STR(hidden_var_name(HiddenVar::Granularity), "granularity");
+  CHECK_STR(rule_kind_name(RuleKind::Inverse), "inverse");
+}
+
 static void test_gap_map() {
   // The gap id CyphaLM writes (cyphalm_trie dktext rows and its dev tags).
   CHECK_STR(gap_id("Honduras", "capital"), "G-AEC1");
@@ -1255,6 +1626,9 @@ int main() {
   test_labels_I8();
   test_scoring_S6();
   test_tests_S7();
+  test_s7b();
+  test_links_S8b();
+  test_gen_rules_S8a();
   test_gap_map();
   std::printf("epistemic_test: %d checks, %d failed\n", g_checks, g_failed);
   return g_failed == 0 ? 0 : 1;

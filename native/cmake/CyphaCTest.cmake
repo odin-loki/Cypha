@@ -49,7 +49,7 @@ function(cypha_ctest_name_is_slow test_name out_var)
       OR "${test_name}" MATCHES "^native_throughput_lock")
     set(_slow TRUE)
   endif()
-  # Domain smokes d21–d76 (bench grids, overnight tiers, math-integration sweeps).
+  # Domain smokes d21–d57 (bench grids, overnight tiers, math-integration sweeps; d39–d76 hybrid-era cut 2026-10-29).
   if("${test_name}" MATCHES "^native_d(2[1-9]|[3-7][0-9])_")
     set(_slow TRUE)
   endif()

@@ -97,6 +97,10 @@ Cypha is Odin Loch's own C++ AI. **CyphaLM** is its language model: a packed byt
 | **S7 hypothesis tests** | I5, I6 met (`PreregLog`, schema triggers); s and c measured for T1, T3–T6 (T4 0.99 / 0.83, T5 0.77 / 1.00); T2 cut (no rule fires); the loop supports 56, all true, but decides only 6% | `S7_HYPOTHESIS_TESTS.md` |
 | **S15 temporal holdout** | Built and frozen: 38,393 facts (a 10,521 / b 8,574 / c 1,917 / u 17,381) plus false pairs, dev / test by subject; Dolly holds 35 of the c pairs, so CyphaLM-based generators drop them | `S15_TEMPORAL_HOLDOUT.md` |
 | **Slow CTest triage** | All 38 failures date from the hp cutover (`0653e25`): 35 test the removed hybrid model, 2 are hp-wrapper defects (vocabularies under 256), 1 time limit | `SLOW_TEST_TRIAGE.md` |
+| **S7b loop calibration** | Three-way likelihoods (T4 silence BF 0.64; a T4 match 29.4), the store's φ for T1 (s 0.755 → 0.822), BH among the supported; the loop decides 23% (S7: 3.5%); confirmed on S15 dev (0.956) | `S7_HYPOTHESIS_TESTS.md` |
+| **S8b G6 / G7 link prediction** | Hits@10 0.334 test (base 0.176); BH promotes nothing under S7's loop (gate not measurable); S15 b / c reachable 6–9%; S6's gate missed on S15's pairs (0.658) | `S8B_LINK_PREDICTION.md` |
+| **S8a G2 rules, G14** | Rules readable (taxonomy, inverse, path); Hits@10 0.230; promotions 0.818 (S15 grader, n 11); gate not readable on the 2006-text store; G14 parked; T2 fires but is cut (never negative) | `S8A_RULES_AND_CONTRADICTIONS.md` |
+| **Slow-test cut** (Odin) | 35 hybrid-era tests and 5,255 lines removed; the canary test fixed (it measured a cold model); `cypha_slow` 91 → 56 | `SLOW_TEST_TRIAGE.md` |
 | Tool profile P2–P4 | Tagger and word-vector class tables cut from the class expert (the tagger stays as the question parser); `cypha_gate` deleted; `pattern_learn` fails the Q/A cut, flagged for Odin | `TOOL_PROFILE_P2_GRID.md` |
 | S-1b learned contexts | Cypha's own learner reaches PPMI-SVD's level (0.683 / 0.246 / 0.669); gates failed on rare words | `S1B_LEARNED_CONTEXTS.md` |
 | S5 hypothesis store, S3 gap map | `hypothesis.hpp` (I1, I4, I7, I8), `gap_map.hpp`, `pattern_learn --gaps`: 27,842 gaps with VOI. CyphaLM's dev tags name their question's slot 0 / 750 | `S3_S5_GAP_MAP_AND_HYPOTHESES.md` |
@@ -140,12 +144,12 @@ Odin asked on 2026-10-28 to reduce CyphaLM's RAM. Every cut was measured against
 
 ### 4.4 CTests
 
-Run these on every change: `native_cyphalm_trie_selftest`, `native_fm_infinigram_test`, `native_epistemic_test`, `native_thought_test`, `native_geometry_test`, `native_ecs_lci_test`, `native_scribe_selftest`, `native_cyphalm_neural_smoke`, `native_class_context_test`. `native_fm_infinigram_test` runs 191,885 checks (locate included), `native_epistemic_test` 654 (S4, S6, S7), `native_class_context_test` 1,043 (M15). `pattern_learn` builds with `g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp`; its S3 `--gaps` run must stay byte-identical.
+Run these on every change: `native_cyphalm_trie_selftest`, `native_fm_infinigram_test`, `native_epistemic_test`, `native_thought_test`, `native_geometry_test`, `native_ecs_lci_test`, `native_scribe_selftest`, `native_cyphalm_neural_smoke`, `native_class_context_test`. `native_fm_infinigram_test` runs 191,885 checks (locate included), `native_epistemic_test` 781 (S4, S6, S7, S7b, S8a, S8b), `native_class_context_test` 1,043 (M15). `pattern_learn` builds with `g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp`; its S3 `--gaps` run must stay byte-identical.
 
 ### 4.5 CI
 
 - All six jobs of `ci.yml` passed on 2026-10-28. Two causes of red were fixed: `cypha_gate.cpp` included `unistd.h` (Windows MSVC; the tool is deleted), and `native_cyphalm_neural_smoke`'s kernel-parity limit was a flat 1e-6 on log-probabilities down to −15, inside float32 rounding (now scaled by 1 + |log p|; planted kernel bugs still fail it).
-- **Outside CI:** the 38 failing `cypha_slow` tests are triaged ([SLOW_TEST_TRIAGE](reports/SLOW_TEST_TRIAGE.md)). 35 test the Hybrid GRIA+LSTM model removed on 2026-09-18 (cut candidates, §5); 2 show hp-wrapper defects with small vocabularies; `forecast_smoke` needs about 6 min (mostly kernel time) against a 300 s limit. CI runs `-LE cypha_slow`, so none of them turns a job red.
+- **Outside CI:** the 35 hybrid-era slow tests are cut (2026-10-29). Of the 56 left, 2 fail: `native_predictive_codec_smoke` (the hp recipe forces a 256-symbol vocabulary, so a 64-symbol request generates bytes ≥ 64) and `native_forecast_smoke` (the rollouts call `reset_context()` about 1,200 times, each building a cold production-size hp model: 6 min against a 300 s limit). The canary test is fixed. CI runs `-LE cypha_slow`.
 
 ---
 
@@ -160,18 +164,19 @@ Run these on every change: `native_cyphalm_trie_selftest`, `native_fm_infinigram
 7. **Track S:** where gap demand comes from; Wikidata's type-level rate as P(exists); finer entity types (S3/S5 report). Answered 2026-10-28: the reason code describes what CyphaLM has read ("most honest"), and S1 stays at 82% ("if the data isn't there, it isn't there").
 8. **PPMI-SVD without the evaluation bytes** as the standard vector file (its leak is worth 0.001 BPC).
 9. **Decided by measurement (PLAN ledger 62), open to Odin's veto:** DISCOVERY §3.3's missing mass for text is Good–Turing with the page as the unit (S4: within 4%; n₁/N undercounts by 20–50%); S6's P0 keeps the constraint term and judges its parts by one joint test (S6b).
-10. **Slow-test cuts: answered 2026-10-29, delete** the 35 hybrid-era tests and the code only they use (PLAN ledger 63; the cut is running). Still open: the hp wrapper's small-vocabulary defects and `forecast_smoke`'s time.
+10. **hp wrapper semantics** (SLOW_TEST_TRIAGE "Cut"; the hybrid-era cut itself is done, PLAN ledger 63): `reset_context()` builds a cold model; the codec needs that, but forecast rollouts lose all training to it. Should forecast use `reset_stream(false)` (changes its output)? Should `init_default_sequence` honour a vocabulary under 256 or reject it?
 11. **S15 defaults, open to Odin's veto:** the Wikidata response cache (2.35 MB) is committed for audit; D4's T-QA exclusion is kept, so the benchmark is thin on CyphaLM's own 8 MiB slice (105 train subjects).
-12. **S7's questions** (batch control too strict; a "not found" outcome as evidence; re-estimating φ) are being settled by measurement (S7b, PLAN ledger 55).
-13. **When the 1 TB run ends:** move `trie_stream_train.cpp` onto `packed_trie.hpp` (and `pack()`, M4).
+12. **S7b's choices, open to Odin's veto** (PLAN ledger 66): the batch step is BH among the supported, which is selective (it kept 575 of 576 on dev; the precision comes from the 0.9 posterior threshold); whole-batch e-BH keeps the formal guarantee and decides 11% at 0.995. Should fusion also use the store's φ (it changes the store and needs its own read)?
+13. **S8's promotion gate** needs a stronger independent test than T4's co-mention (it promoted "India capital Mumbai"): T5 where the slot did not come from Wikidata, or G16 on Odin's PC; and a larger 2006-text store for R2. G6 / G7 work only on closed candidate sets (6–9% of S15's values reachable); open typed candidates are the next design choice. Should S6's gate be read on S15's harder pairs from now on?
+14. **When the 1 TB run ends:** move `trie_stream_train.cpp` onto `packed_trie.hpp` (and `pack()`, M4).
 
 ---
 
 ## 6. Next work, in order
 
-1. **S8** generators batch 1 (G2 rule induction, G14 contradiction resolution, G6 and G7 link prediction; G16 teacher runs on Odin's PC) and **S7b** (the test loop's likelihoods, batch control and φ): running 2026-10-29, with S15 as the fresh source (its test half read once per change, logged). S6's next change rides on S8's link evidence. (S1, S4, S6, S7, S15, the echo fix, A4c, M15 and serving from stored files were done 2026-10-28.)
+1. **S8, promotion:** a stronger independent test (T5 where eligible, G16 on Odin's PC) with S7b's loop; open candidate sets for G6 / G7; a larger 2006-text store. Then S9 (possible worlds). (S7b, S8a, S8b and the slow-test cut were done 2026-10-29; S1, S4, S6, S7, S15, the echo fix, A4c, M15 and serving from stored files 2026-10-28.)
 2. **RAM:** the FM-index build's peak when building (M16, running: libsais scratch, 4 bytes per text byte; C1L + defaults 235 MB). When the class expert joins `sample`'s or `chat`'s defaults, their `--save` / `--model` should carry its table.
-3. **The slow-test cuts** (§5.10), after Odin's call.
+3. **hp wrapper semantics** (§5.10), after Odin's call.
 4. **Similar-context expert:** more probed lists (k 8,192's recall is 0.65), online keys. **S4:** the §3.4 unknown-unknown signals other than vocabulary (no producers yet).
 5. **On Odin's PC:** the 8B QE0 gate and timing, QE2 probe vectors, QE3, QE4 `pairs`, teacher Q/A text (QWEN3_EMBEDDING_DISSECTION §9).
 6. **Bill of work upkeep** with every commit.

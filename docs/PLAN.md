@@ -935,6 +935,7 @@ Everything raised on 2026-10-26, and where this plan covers it.
 | 63 | Delete the 35 hybrid-era `cypha_slow` tests and the code only they use (2026-10-29: "Delete them") | [`reports/SLOW_TEST_TRIAGE.md`](reports/SLOW_TEST_TRIAGE.md) |
 | 64 | The text score the decision rules use is SCRIBE v2; surface S is reported alongside (2026-10-29) | [`reports/SCRIBE_V2.md`](reports/SCRIBE_V2.md); HANDOFF §2 rule 5 |
 | 65 | Keep `pattern_learn` as Track S's fact and hypothesis tool; it never answers (2026-10-29) | [`TOOL_PROFILE_PLAN.md`](TOOL_PROFILE_PLAN.md); HANDOFF §5 |
+| 66 | Decided by measurement under row 55 (2026-10-29), open to Odin's veto: the hypothesis loop uses three-way likelihoods; T1's φ comes from the store; the batch step is BH among the supported (selective; whole-batch e-BH remains the guaranteed alternative); confirmed on S15 dev at 0.956 (S7b) | [`reports/S7_HYPOTHESIS_TESTS.md`](reports/S7_HYPOTHESIS_TESTS.md) |
 
 ---
 

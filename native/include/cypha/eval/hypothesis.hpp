@@ -11,6 +11,7 @@
 //   7.5   refutation: kept, counted against the generator and the rule, blocks regeneration while cooling
 //   7.1-7.3 (S7) test outcomes (positive, negative, inconclusive), the pre-registration log (I5, I6), e-values and
 //         Benjamini-Hochberg batch control, T1's functional check, T3's held-out rule check, measured s and c
+//   7.2 (S7b) three-way likelihoods: every result moves the posterior by P(result | true) / P(result | false)
 //   11    invariants I1 (no hypothetical item in answers), I4 (independent evidence), I7 (refuted kept, blocks), I8 (labels)
 //
 // Nothing here answers a question. The stores are bookkeeping about what Cypha knows and does not (PLAN rules 9 and 10).
@@ -375,6 +376,14 @@ struct HypScores {
   double plausibility = 0.0, novelty_bits = 0.0, impact = 0.0, testability = 0.0, cost = 1.0, eig = 0.0, voi = 0.0;
 };
 
+/// S7b: a test's three-way likelihoods: P(outcome | h true) in t and P(outcome | h false) in f, outcomes in the order
+/// positive, negative, inconclusive. Unset (all zero): S7's two-way model (s and c; an inconclusive result has BF 1).
+struct OutcomeLikelihoods {
+  double t[3] = {0.0, 0.0, 0.0};
+  double f[3] = {0.0, 0.0, 0.0};
+  bool set() const { return t[0] + t[1] + t[2] > 0.0 && f[0] + f[1] + f[2] > 0.0; }
+};
+
 /// One pre-registered test (7.2 step 1) and, once run, its result.
 struct HypTest {
   std::string kind;              // e.g. "T5 Wikidata"
@@ -391,6 +400,7 @@ struct HypTest {
   double bayes_factor = 1.0;
   double posterior_after = 0.0;
   bool inconclusive = false;     // S7: the test ran and could not tell (BF 1)
+  OutcomeLikelihoods likelihoods; // S7b: when set, every result's BF comes from them, an inconclusive one included
 };
 
 struct HypHistory {
@@ -423,7 +433,7 @@ struct Hypothesis {
 };
 
 /// I4: evidence counts as independent only when the test says so and does not come from the generator itself. An
-/// inconclusive result (S7) is no evidence.
+/// inconclusive result (S7) is no independent evidence, even when its likelihood ratio moves the posterior (S7b).
 inline bool independent_evidence(const Hypothesis& h, const HypTest& t) {
   return t.done && !t.inconclusive && t.independent && t.source != h.generator;
 }
@@ -497,6 +507,15 @@ inline double bayes_factor(TestOutcome o, double s, double c) {
   return o == TestOutcome::Inconclusive ? 1.0 : bayes_factor(o == TestOutcome::Positive, s, c);
 }
 
+/// S7b: the BF of a result of test t. With three-way likelihoods, P(o | true) / P(o | false), each kept at or above 1e-6;
+/// without them, S7's two-way factor from s and c (inconclusive: 1).
+inline double bayes_factor(TestOutcome o, const HypTest& t) {
+  if (!t.likelihoods.set()) return bayes_factor(o, t.sensitivity, t.specificity);
+  const int i = o == TestOutcome::Positive ? 0 : o == TestOutcome::Negative ? 1 : 2;
+  constexpr double e = 1e-6;
+  return std::max(e, t.likelihoods.t[i]) / std::max(e, t.likelihoods.f[i]);
+}
+
 /// The e-value of a hypothesis against its null (h false): the product of its results' Bayes factors. With the tests'
 /// true s and c and results independent given the truth, its expectation under the null is 1, so it is a valid e-value
 /// at every stopping point (7.2 step 4).
@@ -513,6 +532,20 @@ inline std::vector<bool> bh_reject_e(const std::vector<double>& e_values, double
   p.reserve(e_values.size());
   for (double e : e_values) p.push_back(e_to_p(e));
   return benjamini_hochberg(p, q).reject;
+}
+
+/// S7b, the chosen batch step: Benjamini-Hochberg at level q on p = 1/e among the selected hypotheses only (those
+/// `decide` supports). Unselected entries are never rejected. Selective: it does not control the FDR over the whole
+/// batch; S7b chose it by measured precision (the S7 report, "S7b").
+inline std::vector<bool> bh_reject_e_among(const std::vector<double>& e_values, const std::vector<bool>& selected, double q = 0.1) {
+  std::vector<double> e;
+  std::vector<std::size_t> at;
+  for (std::size_t i = 0; i < e_values.size() && i < selected.size(); ++i)
+    if (selected[i]) e.push_back(e_values[i]), at.push_back(i);
+  std::vector<bool> out(e_values.size(), false);
+  const std::vector<bool> rej = bh_reject_e(e, q);
+  for (std::size_t j = 0; j < at.size(); ++j) out[at[j]] = rej[j];
+  return out;
 }
 
 /// One entry of the pre-registration log (7.2 step 1). A plan is written before any of its tests runs; a result is
@@ -549,6 +582,8 @@ class PreregLog {
       if (k) text += '\x1e';
       text += t.kind + '\x1f' + t.source + '\x1f' + t.predicted + '\x1f' + t.refuted_if + '\x1f' + (t.disconfirmation ? "1" : "0") +
               '\x1f' + (t.independent ? "1" : "0") + '\x1f' + num(t.sensitivity) + '\x1f' + num(t.specificity);
+      if (t.likelihoods.set())  // S7b
+        for (int i = 0; i < 3; ++i) text += '\x1f' + num(t.likelihoods.t[i]) + '\x1f' + num(t.likelihoods.f[i]);
     }
     append("plan", h.id, text);
     plans_[h.id] = h.tests;
@@ -729,6 +764,15 @@ struct TestTally {
   }
 };
 
+/// S7b: three-way likelihoods from a tally, `a` added to each cell (a = 1: the Dirichlet(1, 1, 1) mean of each row).
+inline OutcomeLikelihoods likelihoods_from(const TestTally& tl, double a = 1.0) {
+  OutcomeLikelihoods L;
+  const double nt = tl.t_pos + tl.t_neg + tl.t_inc + 3.0 * a, nf = tl.f_pos + tl.f_neg + tl.f_inc + 3.0 * a;
+  const double ct[3] = {tl.t_pos, tl.t_neg, tl.t_inc}, cf[3] = {tl.f_pos, tl.f_neg, tl.f_inc};
+  for (int i = 0; i < 3; ++i) L.t[i] = (ct[i] + a) / nt, L.f[i] = (cf[i] + a) / nf;
+  return L;
+}
+
 /// T3, held-out prediction for a rule (7.1): `hits` of `n` hidden cases the rule predicted right. Positive when the
 /// Wilson 95% lower bound of the hidden precision is at least `lo_min`, negative when its upper bound is below `hi_max`,
 /// inconclusive otherwise or with fewer than `min_n` hidden cases.
@@ -881,7 +925,7 @@ class HypothesisStore {
     HypTest& t = h->tests[k];
     t.done = true;
     t.positive = positive;
-    t.bayes_factor = bayes_factor(positive, t.sensitivity, t.specificity);
+    t.bayes_factor = bayes_factor(positive ? TestOutcome::Positive : TestOutcome::Negative, t);
     h->posterior = t.posterior_after = update_posterior(h->posterior, t.bayes_factor);
     const HypState next = decide(*h, cfg_);
     transition(id, next, t.kind + (positive ? " positive" : " negative"));
@@ -894,8 +938,9 @@ class HypothesisStore {
   }
 
   /// S7: a three-way result. With a log, the test must be in the hypothesis's registered plan (same kind, same place)
-  /// and the log must accept the result first (I5); otherwise nothing changes. An inconclusive result has BF 1: the
-  /// posterior stays, the test counts as done, and 7.2 step 5 is applied as for any other result.
+  /// and the log must accept the result first (I5); otherwise nothing changes. An inconclusive result has BF 1 (S7b: its
+  /// likelihood ratio when the test has three-way likelihoods), the test counts as done, and 7.2 step 5 is applied as for
+  /// any other result. It is never independent evidence.
   std::optional<HypState> record_outcome(const std::string& id, std::size_t k, TestOutcome outcome, PreregLog* log = nullptr) {
     Hypothesis* h = find_mut(id);
     if (!h || h->state != HypState::UnderTest || k >= h->tests.size() || h->tests[k].done) return std::nullopt;
@@ -907,7 +952,8 @@ class HypothesisStore {
     HypTest& t = h->tests[k];
     t.done = true;
     t.inconclusive = true;
-    t.bayes_factor = 1.0;
+    t.bayes_factor = bayes_factor(TestOutcome::Inconclusive, t);  // S7b: 1 unless the test has three-way likelihoods
+    if (t.likelihoods.set()) h->posterior = update_posterior(h->posterior, t.bayes_factor);
     t.posterior_after = h->posterior;
     const HypState next = decide(*h, cfg_);
     transition(id, next, t.kind + " inconclusive");

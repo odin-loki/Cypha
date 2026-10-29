@@ -1,5 +1,7 @@
 ﻿# Math Integration Bench Report
 
+> **Removed 2026-10-29.** The `cypha_bench_run` domains this report names as gates, d39–d76 except d42, d43, d56 and d57, were deleted with their CTests and `bench/config/` profiles (Odin: "Delete them"). They measured the Hybrid GRIA+LSTM model, removed on 2026-09-18. This report is kept as written. See [SLOW_TEST_TRIAGE.md](../docs/reports/SLOW_TEST_TRIAGE.md), "Cut".
+
 Generated: 2026-06-23 07:04:39 UTC
 
 Build: `C:\Users\odinl\OneDrive\Desktop\Cypha\native\build_math`

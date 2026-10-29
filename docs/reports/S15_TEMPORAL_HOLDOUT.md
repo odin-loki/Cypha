@@ -194,7 +194,8 @@ Every read of `temporal_holdout_test.tsv` by a generator is logged here, with it
 
 | Date | Generator | Change | Report |
 |---|---|---|---|
-| (none yet) | | | |
+| 2026-10-29 | G6 and G7 link prediction, their combination (S8b) | read once, the final setting chosen on dev (commit d50fdcd): Hits by category on the 2006-text store, and promotion through S7's loop | [S8B_LINK_PREDICTION.md](S8B_LINK_PREDICTION.md) |
+| 2026-10-29 | G2 rule induction and G14 contradiction resolution (S8a), on the 2006-text store | the first read; the registered setting, commit 10bef62 | [S8A_RULES_AND_CONTRADICTIONS.md](S8A_RULES_AND_CONTRADICTIONS.md) |
 
 ## How to rebuild
 
