@@ -1,13 +1,15 @@
 // Known-answer tests for cypha/eval/epistemic.hpp (docs/DISCOVERY.md sections 2.1-2.3, 3.1, 3.3, 10), hypothesis.hpp
 // (S5: 4, 6.3, 7.2-7.5; invariants I1, I4, I7, I8; S7: 7.1-7.3, I5, I6; S7b: three-way likelihoods, the batch step
-// among the supported) and gap_map.hpp (S3: 3.2, 3.5).
+// among the supported), gap_map.hpp (S3: 3.2, 3.5) and gen_links.hpp (S8b: G6, G7).
 // Returns nonzero if any check fails.
 #include "cypha/eval/epistemic.hpp"
 #include "cypha/eval/gap_map.hpp"
+#include "cypha/eval/gen_links.hpp"
 #include "cypha/eval/hypothesis.hpp"
 
 #include <cmath>
 #include <cstdio>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -1261,6 +1263,145 @@ static void test_s7b() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// S8b: G6 neighbourhood scores, the one-pass link scorer, G7 path ranking (gen_links.hpp)
+// ---------------------------------------------------------------------------
+
+static void test_links_S8b() {
+  // G6: a and b share two private neighbours; a and c share only a hub. RA (1 / deg) penalises the hub more than AA does.
+  {
+    TripleStore st;
+    st.add("a", "r", "p1"), st.add("b", "r", "p1"), st.add("a", "r", "p2"), st.add("b", "r", "p2");
+    st.add("a", "r", "hub"), st.add("c", "r", "hub");
+    for (int i = 0; i < 20; ++i) st.add("x" + std::to_string(i), "r", "hub");
+    const auto ns = neighbour_scores(st, "a");
+    CHECK(ns.count("b") && ns.count("c"));
+    CHECK_NEAR(ns.at("b").cn, 2.0, 1e-12);
+    CHECK_NEAR(ns.at("c").cn, 1.0, 1e-12);
+    CHECK_NEAR(ns.at("b").aa, adamic_adar(st, "a", "b"), 1e-12);  // AA agrees with S6's adamic_adar
+    CHECK_NEAR(ns.at("c").aa, adamic_adar(st, "a", "c"), 1e-12);
+    CHECK_NEAR(ns.at("b").ra, 2.0 * 0.5, 1e-12);                   // p1 and p2 each have degree 2
+    CHECK_NEAR(ns.at("c").ra, 1.0 / 22.0, 1e-12);                  // the hub has 22 neighbours
+    CHECK(ns.at("c").ra / ns.at("c").aa < ns.at("b").ra / ns.at("b").aa);  // degree normalisation hits the hub hardest
+    CHECK_NEAR(ns.at("b").jaccard, 2.0 / 3.0, 1e-12);              // |{p1,p2}| / |{p1,p2,hub}|
+    CHECK(!ns.count("a"));
+  }
+  // The one-pass link scorer gives LinkPredictor::prob's numbers, with and without copy rules.
+  {
+    TripleStore st;
+    std::mt19937_64 rng(7);
+    const char* rel[] = {"born", "lives", "job", "nat"};
+    for (int i = 0; i < 60; ++i)
+      for (int k = 0; k < 4; ++k)
+        if (rng() % 3) st.add("s" + std::to_string(i), rel[k], "v" + std::to_string(rng() % 6));
+    for (const bool copy : {true, false}) {
+      const LinkPredictor lp(st, {1.0, copy});
+      const LinkScorer ls(st, {1.0, copy});
+      double worst = 0.0;
+      int compared = 0;
+      for (int i = 0; i < 60; ++i)
+        for (const char* r : rel) {
+          std::vector<std::string> cands;
+          for (int v = 0; v < 6; ++v)
+            if (!st.has("s" + std::to_string(i), r, "v" + std::to_string(v))) cands.push_back("v" + std::to_string(v));
+          const auto ps = ls.probs("s" + std::to_string(i), r, cands);
+          for (std::size_t c = 0; c < cands.size(); ++c, ++compared)
+            worst = std::max(worst, std::fabs(ps[c] - lp.prob("s" + std::to_string(i), r, cands[c])));
+        }
+      CHECK(compared > 500);
+      CHECK_NEAR(worst, 0.0, 1e-12);
+    }
+  }
+  // Logistic regression: one informative feature gets a positive weight and orders the rows.
+  {
+    std::vector<std::vector<double>> X;
+    std::vector<int> y;
+    for (int i = 0; i < 40; ++i) X.push_back({static_cast<double>(i % 10), 1.0}), y.push_back(i % 10 >= 5 ? 1 : 0);
+    y[3] = 1, y[17] = 0;  // not separable, so the fit is finite
+    Logistic lr;
+    lr.fit(X, y, 1.0);
+    CHECK(lr.ok);
+    CHECK(lr.w[0] > 0.0);
+    CHECK(lr.prob({9.0, 1.0}) > 0.8 && lr.prob({0.0, 1.0}) < 0.2);
+    Logistic one;
+    one.fit({{1.0}, {2.0}}, {1, 1});  // one label only: no fit
+    CHECK(!one.ok);
+  }
+  // G7: the planted rule born_in(X, C) and city_in(C, K) => nationality(X, K). People are born in 6 cities of 3
+  // countries; one person's nationality is missing. Path ranking puts the right country first and explains it by the
+  // path born_in > city_in. The walk probabilities are exact on a small chain.
+  {
+    TripleStore st;
+    const char* country[] = {"K0", "K1", "K2"};
+    for (int c = 0; c < 6; ++c) st.add("C" + std::to_string(c), "city_in", country[c % 3]);
+    for (int i = 0; i < 90; ++i) {
+      const int c = i % 6;
+      st.add("P" + std::to_string(i), "born_in", "C" + std::to_string(c));
+      if (i != 4) st.add("P" + std::to_string(i), "nationality", country[c % 3]);
+    }
+    // Popularity favours K0 (a dozen extra K0 nationals with no birthplace), so the base rate alone would be wrong for P4.
+    for (int i = 0; i < 12; ++i) st.add("Q" + std::to_string(i), "nationality", "K0");
+    const RelGraph g(st);
+    PathRanker pr(st, g, {});
+    const auto& M = pr.fit("nationality");
+    CHECK(M.ok);
+    bool has_rule_path = false;
+    for (const auto& p : M.paths) has_rule_path = has_rule_path || pr.path_name(p) == "born_in > city_in";
+    CHECK(has_rule_path);
+    std::vector<int> best;
+    const std::vector<std::string> cands = {"K0", "K1", "K2"};
+    const auto sc = pr.score("P4", "nationality", cands, &best);  // P4 is born in C4, in K1
+    CHECK(sc[1] > sc[0] && sc[1] > sc[2]);
+    CHECK(best[1] >= 0 && pr.path_name(M.paths[static_cast<std::size_t>(best[1])]) == "born_in > city_in");
+    CHECK(base_rate(st, "nationality", "K0") > base_rate(st, "nationality", "K1"));
+    // The walk along born_in > city_in from P4 reaches K1 with probability 1; along born_in alone, C4 with 1.
+    const int p4 = g.node("P4");
+    const auto d = pr.walks(p4, {{g.forward("born_in"), g.forward("city_in"), -1}, {g.forward("born_in"), -1, -1}}, SkipEdge{});
+    CHECK_NEAR(d[0].at(g.node("K1")), 1.0, 1e-12);
+    CHECK(d[0].size() == 1);
+    CHECK_NEAR(d[1].at(g.node("C4")), 1.0, 1e-12);
+    // Back along born_in^-1 from C4: 15 people, 1/15 each; leaving out the edge P4-C4 removes P4 and gives 1/14.
+    const int c4 = g.node("C4"), inv = g.forward("born_in") ^ 1;
+    const auto e = pr.walks(c4, {{inv, -1, -1}}, SkipEdge{});
+    CHECK(e[0].size() == 15);
+    CHECK_NEAR(e[0].at(p4), 1.0 / 15.0, 1e-12);
+    const auto f = pr.walks(c4, {{inv, -1, -1}}, SkipEdge{p4, g.forward("born_in"), c4});
+    CHECK(f[0].size() == 14 && !f[0].count(p4));
+    CHECK_NEAR(f[0].begin()->second, 1.0 / 14.0, 1e-12);
+  }
+  // A length-1 path: everyone works where they live, so works_in is predicted by the path lives_in alone.
+  {
+    TripleStore st;
+    for (int i = 0; i < 40; ++i) {
+      st.add("W" + std::to_string(i), "lives_in", "T" + std::to_string(i % 4));
+      if (i != 6) st.add("W" + std::to_string(i), "works_in", "T" + std::to_string(i % 4));
+    }
+    for (int i = 0; i < 10; ++i) st.add("V" + std::to_string(i), "works_in", "T0");  // popularity favours T0
+    const RelGraph g(st);
+    PathRanker pr(st, g, {});
+    const auto& M = pr.fit("works_in");
+    CHECK(M.ok);
+    bool one = false;
+    for (const auto& p : M.paths) one = one || pr.path_name(p) == "lives_in";
+    CHECK(one);
+    const auto sc = pr.score("W6", "works_in", {"T0", "T1", "T2", "T3"});  // W6 lives in T2
+    CHECK(sc[2] > sc[0] && sc[2] > sc[1] && sc[2] > sc[3]);
+  }
+  // The hub guard: a walk does not go on through an intermediate node with more edges of the step's type than `hub`.
+  {
+    TripleStore st;
+    st.add("a", "nat", "H");
+    for (int i = 0; i < 30; ++i) st.add("p" + std::to_string(i), "nat", "H"), st.add("p" + std::to_string(i), "born", "T");
+    const RelGraph g(st);
+    PathRanker::Config small;
+    small.hub = 10;
+    PathRanker guarded(st, g, small), open(st, g, {});
+    const std::array<int, 3> path{g.forward("nat"), g.forward("nat") ^ 1, g.forward("born")};
+    CHECK(guarded.walks(g.node("a"), {path}, SkipEdge{})[0].empty());       // H has 31 nat^-1 edges, over 10
+    CHECK_NEAR(open.walks(g.node("a"), {path}, SkipEdge{})[0].at(g.node("T")), 30.0 / 31.0, 1e-12);  // a itself has no born edge
+  }
+}
+
 static void test_gap_map() {
   // The gap id CyphaLM writes (cyphalm_trie dktext rows and its dev tags).
   CHECK_STR(gap_id("Honduras", "capital"), "G-AEC1");
@@ -1358,6 +1499,7 @@ int main() {
   test_scoring_S6();
   test_tests_S7();
   test_s7b();
+  test_links_S8b();
   test_gap_map();
   std::printf("epistemic_test: %d checks, %d failed\n", g_checks, g_failed);
   return g_failed == 0 ? 0 : 1;

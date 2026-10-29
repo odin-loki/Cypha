@@ -79,6 +79,11 @@
 //   --test-kinds ENWIK8 SEEDS WD_VALUES PATTERNS OUT [--read-test]: s and c of the tests T1-T6 (DISCOVERY 7.1) on known-true
 //   and known-false hypotheses, and 7.2's loop with pre-registration (I5, I6) and BH batch control. Self-assessment only.
 //
+// S8b (2026-10-29, docs/reports/S8B_LINK_PREDICTION.md):
+//   --gen-links ENWIK8 SEEDS FACTS_F2 WD_VALUES PATTERNS S15_DIR OUT [--read-test]: link prediction, G6 (neighbourhoods) and
+//   G7 (relation paths): rediscovery of hidden facts, their top candidates through S7's loop, the S15 temporal holdout, and
+//   S6's plausibility with path evidence on S15's pairs. Cypha's own hypotheses only.
+//
 // Build: g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp -o pattern_learn
 // Usage: pattern_learn <enwik8> <outdir> [--cv] [--folds K] [--min-train N] [--base-rate A] [--sample N] [--seed S]
 //          [--wikidata FILE [--wikidata-gold-only]] [--phi FILE] [--shard FILE --dev DEV --test TEST [--slice-end B] [--holdout-from B]]
@@ -96,6 +101,7 @@
 #include "cypha/eval/ecs.hpp"
 #include "cypha/eval/epistemic.hpp"
 #include "cypha/eval/gap_map.hpp"
+#include "cypha/eval/gen_links.hpp"
 
 #include <sys/resource.h>
 
@@ -113,6 +119,7 @@
 #include <iostream>
 #include <map>
 #include <memory>
+#include <numeric>
 #include <random>
 #include <set>
 #include <sstream>
@@ -4591,9 +4598,1018 @@ int run(int argc, char** argv) {
 
 }  // namespace s7
 
+// ============================================================ S8b: link prediction, G6 and G7 (docs/reports/S8B_LINK_PREDICTION.md)
+//
+// pattern_learn --gen-links ENWIK8 SEEDS.tsv FACTS_F2.tsv WD_VALUES.tsv PATTERNS.tsv S15_DIR OUT_PREFIX [--read-test]
+// Four reads; the test halves print only with --read-test (read once, for the final setting):
+//   ROD   rediscovery on the full store (S6's and S7's seed store): 10% of the triples hidden at random, and separately
+//         the 10% least connected (lowest deg s + deg o); each hidden slot's objects ranked among r's objects by the base
+//         rate, S6's link predictor (LP), G6 (CN, Jaccard, Adamic-Adar, resource allocation), G7 (path ranking) and their
+//         combination; Hits@1, Hits@10, MRR. Dev and test by bit 17 of FNV-1a(subject).
+//   PROMO the chosen generator's top candidate for each hidden slot of the random hide, through S7's loop (T1, T6, T4,
+//         S7's dev s and c; T5 left out, Wikidata being the truth), BH at q 0.1; judged by the hidden facts and Wikidata.
+//   S15   the temporal holdout (T9): the 2006-text store (text seeds and F2's facts, no Wikidata row) ranks values for
+//         S15's slots it lacks; Hits by S15 category, and promotion judged by S15. S15's own dev and test halves.
+//   GATE  S6's next change: P0 with G7's path evidence on S15's true and false pairs (one per subject, its slot removed
+//         from the full store); z pools and isotonic fits on S15 dev, read on S15 test.
+// Nothing here answers a question: these are Cypha's own hypotheses (PLAN rule 10).
+namespace s8b {
+
+using ecs::TestOutcome;
+constexpr TestOutcome kPos = TestOutcome::Positive, kNeg = TestOutcome::Negative, kInc = TestOutcome::Inconclusive;
+
+enum Gen { kBase, kLP, kCN, kJac, kAA, kRA, kG7, kCombo, kNGen };
+const char* const kGenName[kNGen] = {"base_rate", "LP", "G6_CN", "G6_Jaccard", "G6_AA", "G6_RA", "G7_paths", "combination"};
+// S7's dev point estimates of s and c (S7 report; its loop's registered inputs), in cost order.
+struct TestKind {
+    const char* name;
+    const char* source;
+    bool disconfirmation, independent;
+    double s, c;
+};
+const TestKind kKinds[3] = {{"T1 consistency", "store", true, false, 0.7551, 0.9184},
+                            {"T6 compression", "store", false, false, 0.2553, 0.9493},
+                            {"T4 corpus", "corpus", true, true, 0.9933, 0.8137}};
+
+// The article text, its pages and the type lexicons T1 and T4 read (S7's pass, the same files).
+struct Corpus {
+    string data;
+    vector<PageRef> pages;
+    std::unordered_map<string, int> page_of;
+};
+bool load_corpus(const char* enwik8, const char* wd_path, const char* patterns_path, Corpus& C) {
+    if (!read_file(enwik8, C.data)) { std::fprintf(stderr, "cannot read %s\n", enwik8); return false; }
+    g_dump = &C.data;
+    long total = 0, redirects = 0;
+    C.pages = list_pages(C.data, total, redirects);
+    for (std::size_t i = 0; i < C.pages.size(); ++i) C.page_of[C.pages[i].title] = static_cast<int>(i);
+    for (const PageRef& pg : C.pages) {
+        PageFlags fl;
+        scan_page(C.data, pg, fl);
+        const string nk = norm_ent(pg.title);
+        g_titles.insert(nk);
+        if (fl.place) g_place.insert(nk);
+        if (fl.person) g_person.insert(nk);
+        if (fl.country) g_country.insert(nk);
+    }
+    long ns = 0, ng = 0;
+    if (!load_wikidata(wd_path, false, C.page_of, ns, ng)) { std::fprintf(stderr, "cannot read %s\n", wd_path); return false; }
+    for (const Seed& sd : g_seeds) {
+        const RT ty = kRel[sd.rel].type;
+        if (ty == T_PLACE || ty == T_PLACE_LINK) { g_place.insert(sd.o.k1); if (!sd.o.k2.empty()) g_place.insert(sd.o.k2); }
+        if (ty == T_PERSON) g_person.insert(sd.o.k1);
+        if (ty == T_LEX && sd.o.k1.size() >= 3) g_lex[sd.o.k1] |= 1ULL << sd.rel;
+        if (string(kRel[sd.rel].name) == "located_in") g_loc[norm_ent(sd.subj)].insert(sd.o.k1);
+    }
+    std::ifstream f(patterns_path);
+    string l;
+    std::getline(f, l);
+    while (std::getline(f, l)) {
+        const auto c = split(l, '\t');
+        if (c.size() < 11 || c[10] != "1" || rel_index(c[0]) < 0) continue;
+        Pat p;
+        p.rel = rel_index(c[0]);
+        p.key = c[1];
+        p.family = family_of(p.key);
+        p.kept = true;
+        g_patmap[p.key].push_back(static_cast<int>(g_pats.size()));
+        g_pats.push_back(p);
+    }
+    return true;
+}
+
+// Does value a (S15 or Wikidata form) name object b? Dates by year (year relations) or compatible date; others by
+// normalised name (S7's rule).
+bool same_value(int ri, const string& a, const string& b) {
+    if (is_datey(ri)) {
+        const Date A = parse_date_str(a), B = parse_date_str(b);
+        if (!A.ok() || !B.ok()) return false;
+        return kRel[ri].type == T_YEAR ? A.y == B.y : date_compat(A, B);
+    }
+    const string ka = norm_ent(a);
+    return !ka.empty() && ka == norm_ent(b);
+}
+
+// A relation's objects indexed by normalised name, or by year for a date relation; find() keeps the ones same_value
+// accepts.
+struct ValueIndex {
+    int ri = -1;
+    const vector<string>* objs = nullptr;
+    std::unordered_map<string, vector<int>> by_key;
+    string key(const string& v) const {
+        if (ri >= 0 && is_datey(ri)) {
+            const Date D = parse_date_str(v);
+            return D.ok() ? std::to_string(D.y) : string();
+        }
+        return norm_ent(v);
+    }
+    void build(const string& r, const vector<string>& o) {
+        ri = rel_index(r), objs = &o, by_key.clear();
+        for (std::size_t i = 0; i < o.size(); ++i) {
+            const string k = key(o[i]);
+            if (!k.empty()) by_key[k].push_back(static_cast<int>(i));
+        }
+    }
+    vector<int> find(const string& v) const {
+        vector<int> out;
+        const string k = key(v);
+        const auto it = k.empty() ? by_key.end() : by_key.find(k);
+        if (it == by_key.end()) return out;
+        for (int i : it->second)
+            if (same_value(ri, v, (*objs)[static_cast<std::size_t>(i)])) out.push_back(i);
+        return out;
+    }
+};
+
+// Each relation's objects in a store, distinct and sorted, with how many triples hold each.
+std::map<string, vector<std::pair<string, std::size_t>>> objects_by_rel(const ecs::TripleStore& st) {
+    std::map<string, std::map<string, std::size_t>> m;
+    for (const auto& [s, fs] : st.subjects())
+        for (const auto& f : fs) ++m[f.r][f.o];
+    std::map<string, vector<std::pair<string, std::size_t>>> out;
+    for (auto& [r, os] : m) out[r].assign(os.begin(), os.end());
+    return out;
+}
+
+// One query: a slot (s, r), its candidates (r's objects not already held by s for r) and their scores.
+struct Target {
+    string value, cat;  // the true value (a store object, or S15's form) and S15's category
+    vector<int> cands;  // the candidates it names (empty: unreachable)
+};
+struct Query {
+    string s, r;
+    bool dev = true;
+    vector<string> cands;
+    vector<double> base, lp, cn, jac, aa, ra, g7;
+    vector<int> g7_best;
+    vector<Target> targets;
+    vector<char> truth;  // per candidate: names a target (left out of the competition, the filtered setting)
+};
+
+// The scores of every candidate of q (store st; PathRanker pr on st's graph).
+void score_query(Query& q, const ecs::TripleStore& st, const ecs::LinkScorer& ls, ecs::PathRanker& pr) {
+    const std::size_t n = q.cands.size();
+    q.base.resize(n), q.cn.assign(n, 0), q.jac.assign(n, 0), q.aa.assign(n, 0), q.ra.assign(n, 0);
+    for (std::size_t i = 0; i < n; ++i) q.base[i] = ecs::base_rate(st, q.r, q.cands[i]);
+    q.lp = ls.probs(q.s, q.r, q.cands);
+    const auto ns = ecs::neighbour_scores(st, q.s);
+    for (std::size_t i = 0; i < n; ++i) {
+        const auto it = ns.find(q.cands[i]);
+        if (it == ns.end()) continue;
+        q.cn[i] = it->second.cn, q.jac[i] = it->second.jaccard, q.aa[i] = it->second.aa, q.ra[i] = it->second.ra;
+    }
+    q.g7 = pr.score(q.s, q.r, q.cands, &q.g7_best);
+}
+
+double logit_c(double p) {
+    p = std::min(1 - 1e-12, std::max(1e-12, p));
+    return std::log(p / (1 - p));
+}
+vector<double> combo_features(const Query& q, std::size_t i) {
+    return {logit_c(q.lp[i]), std::log1p(1000.0 * q.ra[i]), q.g7[i], std::log(std::max(1e-12, q.base[i]))};
+}
+
+// A generator's primary score per candidate (ties go to the base rate, then mid-rank).
+vector<double> primary(const Query& q, int g, const ecs::Logistic* combo) {
+    switch (g) {
+        case kBase: return q.base;
+        case kLP: return q.lp;
+        case kCN: return q.cn;
+        case kJac: return q.jac;
+        case kAA: return q.aa;
+        case kRA: return q.ra;
+        case kG7: return q.g7;
+        default: {
+            vector<double> v(q.cands.size(), 0.0);
+            for (std::size_t i = 0; combo && i < v.size(); ++i) v[i] = combo->logit(combo_features(q, i));
+            return v;
+        }
+    }
+}
+
+double rank_of(const Query& q, const vector<double>& p, int t) {
+    double higher = 0, ties = 0;
+    for (std::size_t j = 0; j < q.cands.size(); ++j) {
+        if (static_cast<int>(j) == t || q.truth[j]) continue;
+        if (p[j] > p[static_cast<std::size_t>(t)] || (p[j] == p[static_cast<std::size_t>(t)] && q.base[j] > q.base[static_cast<std::size_t>(t)])) higher += 1;
+        else if (p[j] == p[static_cast<std::size_t>(t)] && q.base[j] == q.base[static_cast<std::size_t>(t)]) ties += 1;
+    }
+    return 1 + higher + 0.5 * ties;
+}
+// The best rank among the candidates a target names; 0 when it names none.
+double target_rank(const Query& q, const Target& t, const vector<double>& p) {
+    double best = 0;
+    for (int c : t.cands) {
+        const double r = rank_of(q, p, c);
+        if (best == 0 || r < best) best = r;
+    }
+    return best;
+}
+// The top candidate by (primary, base rate), the lower index on a tie; -1 when there is none.
+int top_of(const Query& q, const vector<double>& p) {
+    int b = -1;
+    for (std::size_t j = 0; j < q.cands.size(); ++j)
+        if (b < 0 || p[j] > p[static_cast<std::size_t>(b)] || (p[j] == p[static_cast<std::size_t>(b)] && q.base[j] > q.base[static_cast<std::size_t>(b)]))
+            b = static_cast<int>(j);
+    return b;
+}
+
+struct CI {
+    double mean = 0, lo = 0, hi = 0;
+};
+CI boot(const vector<double>& v, std::uint64_t seed) {
+    CI c;
+    if (v.empty()) return c;
+    c.mean = std::accumulate(v.begin(), v.end(), 0.0) / static_cast<double>(v.size());
+    std::mt19937_64 rng(seed);
+    vector<double> bs;
+    for (int rep = 0; rep < 2000; ++rep) {
+        double t = 0;
+        for (std::size_t k = 0; k < v.size(); ++k) t += v[rng() % v.size()];
+        bs.push_back(t / static_cast<double>(v.size()));
+    }
+    std::sort(bs.begin(), bs.end());
+    c.lo = bs[49], c.hi = bs[1949];
+    return c;
+}
+
+// Hits@1, Hits@10 and MRR of every generator over a set of queries; per-target rows go to `rows`.
+struct GenRead {
+    vector<double> rr, h1, h10;
+};
+std::array<GenRead, kNGen> evaluate(const vector<Query>& qs, bool dev, const ecs::Logistic* combo, const vector<const ecs::Logistic*>* combo_per_query = nullptr) {
+    std::array<GenRead, kNGen> out;
+    for (std::size_t qi = 0; qi < qs.size(); ++qi) {
+        const Query& q = qs[qi];
+        if (q.dev != dev) continue;
+        for (int g = 0; g < kNGen; ++g) {
+            const vector<double> p = primary(q, g, g == kCombo && combo_per_query ? (*combo_per_query)[qi] : combo);
+            for (const Target& t : q.targets) {
+                const double r = target_rank(q, t, p);
+                out[static_cast<std::size_t>(g)].rr.push_back(r > 0 ? 1.0 / r : 0.0);
+                out[static_cast<std::size_t>(g)].h1.push_back(r > 0 && r <= 1.0 ? 1.0 : 0.0);
+                out[static_cast<std::size_t>(g)].h10.push_back(r > 0 && r <= 10.0 ? 1.0 : 0.0);
+            }
+        }
+    }
+    return out;
+}
+
+// Logistic rows for the combination: each reachable target's candidate against 20 drawn non-truth candidates.
+ecs::Logistic fit_combo(const vector<Query>& qs, const std::function<bool(const Query&)>& use, std::uint64_t seed) {
+    std::mt19937_64 rng(seed);
+    vector<vector<double>> X;
+    vector<int> y;
+    for (const Query& q : qs) {
+        if (!use(q)) continue;
+        vector<std::size_t> others;
+        for (std::size_t j = 0; j < q.cands.size(); ++j)
+            if (!q.truth[j]) others.push_back(j);
+        for (const Target& t : q.targets) {
+            if (t.cands.empty()) continue;
+            X.push_back(combo_features(q, static_cast<std::size_t>(t.cands[0]))), y.push_back(1);
+            for (int k = 0; k < 20 && !others.empty(); ++k) X.push_back(combo_features(q, others[rng() % others.size()])), y.push_back(0);
+        }
+    }
+    ecs::Logistic lr;
+    lr.fit(X, y, 1.0);
+    return lr;
+}
+
+// The candidates of slot (s, r) in store st: r's objects, less those s already holds for r.
+vector<string> candidates(const ecs::TripleStore& st, const std::map<string, vector<std::pair<string, std::size_t>>>& objs, const string& s, const string& r) {
+    vector<string> out;
+    const auto it = objs.find(r);
+    if (it == objs.end()) return out;
+    for (const auto& [o, n] : it->second)
+        if (!st.has(s, r, o)) out.push_back(o);
+    return out;
+}
+
+// One hypothesis through S7's loop: pre-registered, its tests cheapest first, then decide. Returns the outcomes.
+struct LoopItem {
+    string s, r, o;
+    bool dev = true;
+    double score = 0, prior = 0.5, post = 0;
+    int truth = -1;  // 1 true, 0 false, -1 unjudged
+    TestOutcome out[3] = {kInc, kInc, kInc};
+    string state;
+    bool promoted = false;
+    string explain;
+};
+void run_tests(LoopItem& h, const ecs::TripleStore& st, const ecs::LinkPredictor& lp, const Corpus& C) {
+    const int ri = rel_index(h.r);
+    h.out[0] = s7::t1(st, h.s, h.r, h.o);
+    const double p = lp.prob(h.s, h.r, h.o);
+    const double dl_others = ecs::compression_gain_bits(lp, st, h.s, h.r, h.o) - std::log2(std::max(1e-12, p));
+    h.out[1] = dl_others > 0 ? kPos : dl_others < 0 ? kNeg : kInc;  // S7's eps 0
+    h.out[2] = kInc;
+    const auto pit = C.page_of.find(h.s);
+    if (ri >= 0 && pit != C.page_of.end()) {
+        TestOutcome o4[2];
+        s7::t4(s7::scan_rel(C.data, C.pages[static_cast<std::size_t>(pit->second)], ri), ri, h.o, o4);
+        h.out[2] = o4[1];  // S7's choice: pattern or co-mention
+    }
+}
+// S7's loop over one batch (one split): pre-registration, the tests in cost order, decide, BH at q 0.1.
+struct LoopRead {
+    double judged_sup = 0, true_sup = 0, judged_pro = 0, true_pro = 0, judged_ref = 0, false_ref = 0, n = 0, sup = 0, pro = 0, ref = 0, unjudged_pro = 0;
+    bool log_ok = true;
+    std::size_t log_entries = 0;
+};
+LoopRead run_loop(vector<LoopItem*>& items, const string& log_path) {
+    ecs::HypothesisStore hs;
+    ecs::PreregLog log;
+    LoopRead R;
+    for (std::size_t i = 0; i < items.size(); ++i) {
+        LoopItem& x = *items[i];
+        ecs::Hypothesis h;
+        h.id = "S8b-" + std::to_string(i);
+        h.key = x.r + '|' + x.s + '|' + x.o;
+        h.statement = x.s + " " + x.r + " " + x.o;
+        h.generator = "G6/G7 link prediction";
+        for (const TestKind& K : kKinds) {
+            ecs::HypTest t;
+            t.kind = K.name, t.source = K.source, t.predicted = "positive", t.refuted_if = "negative";
+            t.disconfirmation = K.disconfirmation, t.independent = K.independent, t.sensitivity = K.s, t.specificity = K.c;
+            h.tests.push_back(t);
+        }
+        hs.propose(h);
+        hs.score(h.id, x.prior);
+        hs.transition(h.id, ecs::HypState::Queued, "scored");
+        if (!log.register_plan(*hs.find(h.id))) continue;
+        for (std::size_t k = 0; k < 3; ++k) {
+            if (hs.find(h.id)->state != ecs::HypState::Queued) break;
+            hs.transition(h.id, ecs::HypState::UnderTest, "next test");
+            hs.record_outcome(h.id, k, x.out[k], &log);
+        }
+    }
+    vector<double> e;
+    for (std::size_t i = 0; i < items.size(); ++i) e.push_back(ecs::e_value(*hs.find("S8b-" + std::to_string(i))));
+    const auto rej = ecs::bh_reject_e(e, 0.1);
+    for (std::size_t i = 0; i < items.size(); ++i) {
+        LoopItem& x = *items[i];
+        const auto* h = hs.find("S8b-" + std::to_string(i));
+        x.post = h->posterior, x.state = ecs::hyp_state_name(h->state);
+        R.n += 1;
+        if (h->state == ecs::HypState::Supported) {
+            R.sup += 1;
+            if (x.truth >= 0) R.judged_sup += 1, R.true_sup += x.truth;
+            x.promoted = rej[i];
+            if (x.promoted) {
+                R.pro += 1;
+                if (x.truth >= 0) R.judged_pro += 1, R.true_pro += x.truth;
+                else R.unjudged_pro += 1;
+            }
+        } else if (h->state == ecs::HypState::Refuted) {
+            R.ref += 1;
+            if (x.truth >= 0) R.judged_ref += 1, R.false_ref += 1 - x.truth;
+        }
+    }
+    R.log_ok = log.verify();
+    R.log_entries = log.entries().size();
+    std::ofstream lf(log_path);
+    lf << log.serialize();
+    return R;
+}
+string loop_line(const string& tag, const LoopRead& R) {
+    char b[768];
+    std::snprintf(b, sizeof b,
+                  "%s hypotheses %.0f | supported %.0f (judged %.0f, true %.0f, precision %.3f [%.3f, %.3f]) | promoted after BH %.0f (judged %.0f, "
+                  "true %.0f, precision %.3f [%.3f, %.3f], unjudged %.0f) | refuted %.0f (judged %.0f, false %.0f, precision %.3f) | log %zu entries verify %s",
+                  tag.c_str(), R.n, R.sup, R.judged_sup, R.true_sup, R.judged_sup > 0 ? R.true_sup / R.judged_sup : 0.0, ecs::wilson_lower(R.true_sup, R.judged_sup),
+                  ecs::wilson_upper(R.true_sup, R.judged_sup), R.pro, R.judged_pro, R.true_pro, R.judged_pro > 0 ? R.true_pro / R.judged_pro : 0.0,
+                  ecs::wilson_lower(R.true_pro, R.judged_pro), ecs::wilson_upper(R.true_pro, R.judged_pro), R.unjudged_pro, R.ref, R.judged_ref, R.false_ref,
+                  R.judged_ref > 0 ? R.false_ref / R.judged_ref : 0.0, R.log_entries, R.log_ok ? "ok" : "BROKEN");
+    return b;
+}
+
+// Isotonic prior from dev items' scores and truths (judged only), clamped to [0.02, 0.98].
+void set_priors(vector<LoopItem>& items) {
+    vector<double> p;
+    vector<int> y;
+    for (const LoopItem& x : items)
+        if (x.dev && x.truth >= 0) p.push_back(x.score), y.push_back(x.truth);
+    ecs::IsotonicCalibrator cal;
+    cal.fit(p, y);
+    for (LoopItem& x : items) x.prior = std::min(0.98, std::max(0.02, cal.predict(x.score)));
+}
+
+// AUROC of scores over (true, false) pairs, with a 95% bootstrap interval over pairs (S6's seed and resamples).
+struct PairRead {
+    double auc = 0, lo = 0, hi = 0;
+};
+double auroc_of(const vector<std::pair<double, int>>& v0) {
+    auto v = v0;
+    std::sort(v.begin(), v.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+    double rp = 0, np = 0, nn = 0;
+    for (std::size_t i = 0; i < v.size();) {
+        std::size_t j = i;
+        while (j < v.size() && v[j].first == v[i].first) ++j;
+        const double mid = 0.5 * static_cast<double>(i + 1 + j);
+        for (std::size_t k = i; k < j; ++k)
+            if (v[k].second) rp += mid, ++np; else ++nn;
+        i = j;
+    }
+    return np && nn ? (rp - np * (np + 1) / 2) / (np * nn) : 0.5;
+}
+PairRead pair_auroc(const vector<std::pair<double, double>>& pairs) {  // (true score, false score)
+    auto flat = [&](const vector<std::size_t>& idx) {
+        vector<std::pair<double, int>> v;
+        for (std::size_t k : idx) v.push_back({pairs[k].first, 1}), v.push_back({pairs[k].second, 0});
+        return auroc_of(v);
+    };
+    vector<std::size_t> all(pairs.size());
+    std::iota(all.begin(), all.end(), 0);
+    PairRead r;
+    r.auc = flat(all);
+    std::mt19937_64 rng(20261028);
+    vector<double> bs;
+    for (int rep = 0; rep < 2000 && !pairs.empty(); ++rep) {
+        vector<std::size_t> idx;
+        for (std::size_t k = 0; k < pairs.size(); ++k) idx.push_back(rng() % pairs.size());
+        bs.push_back(flat(idx));
+    }
+    std::sort(bs.begin(), bs.end());
+    if (!bs.empty()) r.lo = bs[49], r.hi = bs[1949];
+    return r;
+}
+
+struct S15Row {
+    string id, s, r, value, cat, pair;
+    int label = 0;
+};
+vector<S15Row> load_s15(const string& path) {
+    vector<S15Row> out;
+    std::ifstream f(path);
+    string l;
+    std::getline(f, l);
+    while (std::getline(f, l)) {
+        const auto c = split(l, '\t');
+        if (c.size() < 17) continue;
+        out.push_back({c[0], c[1], c[5], c[7], c[11], c[16], c[15] == "1" ? 1 : 0});
+    }
+    return out;
+}
+
+int run(int argc, char** argv) {
+    if (argc < 9) {
+        std::fprintf(stderr, "usage: pattern_learn --gen-links ENWIK8 SEEDS.tsv FACTS_F2.tsv WD_VALUES.tsv PATTERNS.tsv S15_DIR OUT_PREFIX [--read-test]\n");
+        return 2;
+    }
+    const double t0 = now_s();
+    const string out = argv[8];
+    bool read_test = false;
+    for (int i = 9; i < argc; ++i) {
+        if (string(argv[i]) == "--read-test") read_test = true;
+        else { std::fprintf(stderr, "unknown option %s\n", argv[i]); return 2; }
+    }
+    char b[1024];
+    Corpus C;
+    if (!load_corpus(argv[2], argv[5], argv[6], C)) return 1;
+    // ---- the full store (S6's and S7's) and the 2006-text store
+    ecs::TripleStore full, text;
+    std::set<string> seen;
+    vector<std::array<string, 3>> triples;  // the full store's, sorted
+    {
+        std::map<string, vector<std::pair<string, string>>> by_subj;
+        std::ifstream f(argv[3]);
+        string l;
+        std::getline(f, l);
+        while (std::getline(f, l)) {
+            const auto c = split(l, '\t');
+            if (c.size() != 6 || rel_index(c[1]) < 0 || c[0].empty() || c[2].empty()) continue;
+            if (seen.insert(c[0] + '\x1f' + c[1] + '\x1f' + c[2]).second) by_subj[c[0]].push_back({c[1], c[2]});
+            if (c[3] == "category" || c[3] == "infobox" || c[3] == "table") text.add(c[0], c[1], c[2]);
+        }
+        for (auto& [s, fs] : by_subj) {
+            std::sort(fs.begin(), fs.end());
+            for (const auto& [r, o] : fs) full.add(s, r, o), triples.push_back({s, r, o});
+        }
+        std::ifstream g(argv[4]);
+        std::getline(g, l);
+        while (std::getline(g, l)) {
+            const auto c = split(l, '\t');
+            if (c.size() >= 3 && rel_index(c[1]) >= 0 && !c[0].empty() && !c[2].empty()) text.add(c[0], c[1], c[2]);
+        }
+    }
+    const s7::WdObjs wd = s7::load_wd_objs(argv[5]);
+    std::snprintf(b, sizeof b, "S8b STORES full %zu triples (%zu subjects) | 2006-text %zu triples (%zu subjects) | Wikidata slots %zu | pages %zu",
+                  full.size(), full.subjects().size(), text.size(), text.subjects().size(), wd.size(), C.pages.size());
+    std::cout << b << "\n";
+
+    // ================================================================ ROD: rediscovery on the full store
+    auto deg = [&](const string& x) { return static_cast<double>(full.neighbours(x).size()); };
+    const std::size_t nh = triples.size() / 10;
+    vector<std::size_t> order(triples.size());
+    std::iota(order.begin(), order.end(), 0);
+    vector<std::size_t> hide_random = order, hide_least = order;
+    {
+        std::mt19937_64 rng(20261029);
+        for (std::size_t i = hide_random.size(); i > 1; --i) std::swap(hide_random[i - 1], hide_random[rng() % i]);
+        hide_random.resize(nh);
+        std::stable_sort(hide_least.begin(), hide_least.end(), [&](std::size_t a, std::size_t c) {
+            const double da = deg(triples[a][0]) + deg(triples[a][2]), dc = deg(triples[c][0]) + deg(triples[c][2]);
+            if (da != dc) return da < dc;
+            return fnv(triples[a][0] + '\x1f' + triples[a][1] + '\x1f' + triples[a][2]) < fnv(triples[c][0] + '\x1f' + triples[c][1] + '\x1f' + triples[c][2]);
+        });
+        hide_least.resize(nh);
+    }
+    struct RodSet {
+        string name;
+        ecs::TripleStore st;
+        vector<Query> qs;
+        std::unique_ptr<ecs::RelGraph> g;
+        std::unique_ptr<ecs::PathRanker> pr;
+        std::unique_ptr<ecs::LinkPredictor> lp;
+    };
+    RodSet sets[2];
+    sets[0].name = "random", sets[1].name = "least";
+    for (int k = 0; k < 2; ++k) {
+        RodSet& S = sets[k];
+        std::set<std::size_t> hid((k == 0 ? hide_random : hide_least).begin(), (k == 0 ? hide_random : hide_least).end());
+        std::map<std::pair<string, string>, vector<string>> slots;  // (s, r) -> hidden objects
+        for (std::size_t i = 0; i < triples.size(); ++i) {
+            if (hid.count(i)) slots[{triples[i][0], triples[i][1]}].push_back(triples[i][2]);
+            else S.st.add(triples[i][0], triples[i][1], triples[i][2]);
+        }
+        const auto objs = objects_by_rel(S.st);
+        S.g = std::make_unique<ecs::RelGraph>(S.st);
+        S.pr = std::make_unique<ecs::PathRanker>(S.st, *S.g, ecs::PathRanker::Config{});
+        S.lp = std::make_unique<ecs::LinkPredictor>(S.st, ecs::LinkPredictor::Config{});
+        const ecs::LinkScorer ls(S.st, {});
+        const double tq = now_s();
+        std::size_t reach = 0, tg = 0;
+        for (const auto& [slot, os] : slots) {
+            Query q;
+            q.s = slot.first, q.r = slot.second;
+            q.dev = ((fnv(q.s) >> 17) & 1) == 0;
+            if (!q.dev && !read_test) continue;
+            q.cands = candidates(S.st, objs, q.s, q.r);
+            q.truth.assign(q.cands.size(), 0);
+            for (const string& o : os) {
+                Target t;
+                t.value = o;
+                const auto it = std::lower_bound(q.cands.begin(), q.cands.end(), o);
+                if (it != q.cands.end() && *it == o) t.cands.push_back(static_cast<int>(it - q.cands.begin())), q.truth[static_cast<std::size_t>(t.cands[0])] = 1;
+                reach += !t.cands.empty(), ++tg;
+                q.targets.push_back(t);
+            }
+            score_query(q, S.st, ls, *S.pr);
+            S.qs.push_back(std::move(q));
+        }
+        std::snprintf(b, sizeof b, "ROD %s: hidden %zu triples in %zu slots | reduced store %zu | scored %zu slots (%s) in %.1f s | reachable %zu of %zu targets",
+                      S.name.c_str(), nh, slots.size(), S.st.size(), S.qs.size(), read_test ? "dev and test" : "dev only", now_s() - tq, reach, tg);
+        std::cout << b << "\n";
+    }
+    // The combination: cross-fitted on dev (two folds by bit 18), then fitted on all dev for test and the other reads.
+    auto fold = [](const Query& q) { return ((fnv(q.s) >> 18) & 1) != 0; };
+    const ecs::Logistic combo_a = fit_combo(sets[0].qs, [&](const Query& q) { return q.dev && !fold(q); }, 11);
+    const ecs::Logistic combo_b = fit_combo(sets[0].qs, [&](const Query& q) { return q.dev && fold(q); }, 12);
+    const ecs::Logistic combo = fit_combo(sets[0].qs, [](const Query& q) { return q.dev; }, 13);
+    if (combo.ok) {
+        std::snprintf(b, sizeof b, "S8b COMBINATION weights (logit LP, log RA, G7, log base) %.4f %.4f %.4f %.4f intercept %.4f", combo.w[0], combo.w[1], combo.w[2],
+                      combo.w[3], combo.b);
+        std::cout << b << "\n";
+    } else std::cout << "S8b COMBINATION not fitted\n";
+    vector<const ecs::Logistic*> cross;
+    for (const Query& q : sets[0].qs) cross.push_back(fold(q) ? &combo_a : &combo_b);
+    auto rod_lines = [&](const string& tag, const std::array<GenRead, kNGen>& R) {
+        for (int g = 0; g < kNGen; ++g) {
+            const GenRead& G = R[static_cast<std::size_t>(g)];
+            const CI h1 = boot(G.h1, 1), h10 = boot(G.h10, 2), mrr = boot(G.rr, 3);
+            std::snprintf(b, sizeof b, "%s %-12s n %zu hits1 %.4f [%.4f, %.4f] hits10 %.4f [%.4f, %.4f] mrr %.4f [%.4f, %.4f]", tag.c_str(), kGenName[g], G.rr.size(),
+                          h1.mean, h1.lo, h1.hi, h10.mean, h10.lo, h10.hi, mrr.mean, mrr.lo, mrr.hi);
+            std::cout << b << "\n";
+        }
+    };
+    // Per relation (dev, random hide; or the given split), every generator's Hits@10 and MRR.
+    auto per_relation = [&](const string& tag, const vector<Query>& qs, bool dev, const ecs::Logistic* cmb, const vector<const ecs::Logistic*>* cq) {
+        std::map<string, std::array<std::array<double, 3>, kNGen>> m;  // r -> gen -> {n, hits10, rr}
+        for (std::size_t qi = 0; qi < qs.size(); ++qi) {
+            const Query& q = qs[qi];
+            if (q.dev != dev) continue;
+            for (int g = 0; g < kNGen; ++g) {
+                const auto p = primary(q, g, g == kCombo && cq ? (*cq)[qi] : cmb);
+                for (const Target& t : q.targets) {
+                    const double r = target_rank(q, t, p);
+                    auto& a = m[q.r][static_cast<std::size_t>(g)];
+                    a[0] += 1, a[1] += r > 0 && r <= 10 ? 1 : 0, a[2] += r > 0 ? 1 / r : 0;
+                }
+            }
+        }
+        for (const auto& [r, gs] : m) {
+            string line = tag + " " + r + " n " + std::to_string(static_cast<int>(gs[0][0]));
+            for (int g = 0; g < kNGen; ++g) {
+                std::snprintf(b, sizeof b, " | %s h10 %.3f mrr %.3f", kGenName[g], gs[static_cast<std::size_t>(g)][1] / gs[static_cast<std::size_t>(g)][0],
+                              gs[static_cast<std::size_t>(g)][2] / gs[static_cast<std::size_t>(g)][0]);
+                line += b;
+            }
+            std::cout << line << "\n";
+        }
+    };
+    const auto dev_random = evaluate(sets[0].qs, true, &combo, &cross);
+    rod_lines("ROD random DEV", dev_random);
+    per_relation("ROD_REL random DEV", sets[0].qs, true, &combo, &cross);
+    // Choices on dev (random hide): G6's measure, then the generator for PROMO and S15; and the earn-its-place rule.
+    auto mean = [](const vector<double>& v) { return v.empty() ? 0.0 : std::accumulate(v.begin(), v.end(), 0.0) / static_cast<double>(v.size()); };
+    int g6 = kCN;
+    for (int g : {kCN, kJac, kAA, kRA})
+        if (mean(dev_random[static_cast<std::size_t>(g)].rr) > mean(dev_random[static_cast<std::size_t>(g6)].rr) + 1e-12) g6 = g;
+    int chosen = kBase;
+    for (int g : std::array<int, 5>{kBase, kLP, g6, kG7, kCombo})
+        if (mean(dev_random[static_cast<std::size_t>(g)].rr) > mean(dev_random[static_cast<std::size_t>(chosen)].rr) + 1e-12) chosen = g;
+    std::snprintf(b, sizeof b, "S8b CHOICE (dev MRR, random hide): G6 measure %s, generator %s", kGenName[g6], kGenName[chosen]);
+    std::cout << b << "\n";
+    for (int g : std::array<int, 4>{kLP, g6, kG7, kCombo}) {
+        vector<double> d;
+        const auto& A = dev_random[static_cast<std::size_t>(g)].rr;
+        const auto& B = dev_random[kBase].rr;
+        for (std::size_t i = 0; i < A.size(); ++i) d.push_back(A[i] - B[i]);
+        const CI c = boot(d, 4);
+        std::snprintf(b, sizeof b, "S8b EARN %-12s dev MRR minus base %.4f [%.4f, %.4f] -> %s", kGenName[g], c.mean, c.lo, c.hi, c.lo > 0 ? "earns its place" : "does not beat the base rate");
+        std::cout << b << "\n";
+    }
+    const auto dev_least = evaluate(sets[1].qs, true, &combo);
+    rod_lines("ROD least DEV", dev_least);
+    // Dates: every generator's Hits@10 on the five date relations (L4).
+    auto dates_line = [&](const string& tag, const vector<Query>& qs, bool dev, const ecs::Logistic* cmb, const vector<const ecs::Logistic*>* cq) {
+        static const std::set<string> D = {"birth_year", "death_year", "birth_date", "death_date", "founded"};
+        vector<Query> sub;
+        vector<const ecs::Logistic*> csub;
+        for (std::size_t qi = 0; qi < qs.size(); ++qi)
+            if (D.count(qs[qi].r) && qs[qi].dev == dev) sub.push_back(qs[qi]), csub.push_back(cq ? (*cq)[qi] : cmb);
+        const auto R = evaluate(sub, dev, cmb, &csub);
+        string line = tag;
+        for (int g = 0; g < kNGen; ++g) {
+            std::snprintf(b, sizeof b, " | %s h10 %.4f", kGenName[g], mean(R[static_cast<std::size_t>(g)].h10));
+            line += b;
+        }
+        std::cout << line << " (n " << R[0].h10.size() << ")\n";
+    };
+    dates_line("ROD_DATES random DEV", sets[0].qs, true, &combo, &cross);
+    if (read_test) {
+        rod_lines("ROD random TEST", evaluate(sets[0].qs, false, &combo));
+        per_relation("ROD_REL random TEST", sets[0].qs, false, &combo, nullptr);
+        rod_lines("ROD least TEST", evaluate(sets[1].qs, false, &combo));
+        dates_line("ROD_DATES random TEST", sets[0].qs, false, &combo, nullptr);
+    }
+    {
+        std::ofstream f(out + ".rod.tsv");
+        f << "hide\tsplit\tsubject\trelation\tvalue\treachable\tcandidates";
+        for (int g = 0; g < kNGen; ++g) f << '\t' << kGenName[g];
+        f << "\n";
+        for (int k = 0; k < 2; ++k)
+            for (std::size_t qi = 0; qi < sets[k].qs.size(); ++qi) {
+                const Query& q = sets[k].qs[qi];
+                vector<vector<double>> ps;
+                for (int g = 0; g < kNGen; ++g) ps.push_back(primary(q, g, g == kCombo && k == 0 && q.dev ? cross[qi] : &combo));
+                for (const Target& t : q.targets) {
+                    f << sets[k].name << '\t' << (q.dev ? "dev" : "test") << '\t' << q.s << '\t' << q.r << '\t' << t.value << '\t' << !t.cands.empty() << '\t' << q.cands.size();
+                    for (int g = 0; g < kNGen; ++g) f << '\t' << target_rank(q, t, ps[static_cast<std::size_t>(g)]);
+                    f << "\n";
+                }
+            }
+    }
+
+    // ================================================================ PROMO: the chosen generator's top candidates through S7's loop
+    auto explain = [](const Query& q, int c, ecs::PathRanker& pr) {
+        const auto* M = pr.model(q.r);
+        const int k = q.g7_best.empty() ? -1 : q.g7_best[static_cast<std::size_t>(c)];
+        return M && k >= 0 ? pr.path_name(M->paths[static_cast<std::size_t>(k)]) : string("-");
+    };
+    {
+        RodSet& S = sets[0];
+        vector<LoopItem> items;
+        for (std::size_t qi = 0; qi < S.qs.size(); ++qi) {
+            const Query& q = S.qs[qi];
+            const auto p = primary(q, chosen, chosen == kCombo && q.dev ? cross[qi] : &combo);
+            const int top = top_of(q, p);
+            if (top < 0) continue;
+            LoopItem h;
+            h.s = q.s, h.r = q.r, h.o = q.cands[static_cast<std::size_t>(top)], h.dev = q.dev, h.score = p[static_cast<std::size_t>(top)];
+            h.explain = explain(q, top, *S.pr);
+            const int ri = rel_index(h.r);
+            if (q.truth[static_cast<std::size_t>(top)]) h.truth = 1;
+            else {
+                const auto wit = wd.find(h.s + '\x1f' + h.r);
+                if (wit != wd.end()) h.truth = s7::wd_match(ri, h.o, wit->second) ? 1 : 0;
+            }
+            items.push_back(h);
+        }
+        set_priors(items);
+        const double tt = now_s();
+        for (LoopItem& h : items)
+            if (h.dev || read_test) run_tests(h, S.st, *S.lp, C);
+        std::snprintf(b, sizeof b, "PROMO tests ran on %zu hypotheses in %.1f s (generator %s)", items.size(), now_s() - tt, kGenName[chosen]);
+        std::cout << b << "\n";
+        for (const bool dev : {true, false}) {
+            if (!dev && !read_test) continue;
+            vector<LoopItem*> batch;
+            double judged = 0, top_true = 0;
+            for (LoopItem& h : items)
+                if (h.dev == dev) batch.push_back(&h), judged += h.truth >= 0, top_true += h.truth == 1;
+            const LoopRead R = run_loop(batch, out + (dev ? ".promo_dev.prereg.tsv" : ".promo_test.prereg.tsv"));
+            std::snprintf(b, sizeof b, "PROMO %s top candidates judged %.0f of %zu, true %.0f (precision of the top candidate %.3f)", dev ? "DEV" : "TEST", judged,
+                          batch.size(), top_true, judged > 0 ? top_true / judged : 0.0);
+            std::cout << b << "\n" << loop_line(string("PROMO ") + (dev ? "DEV" : "TEST"), R) << "\n";
+            const bool measurable = R.judged_pro >= 10;
+            std::snprintf(b, sizeof b, "PROMO %s GATE promotion precision %s", dev ? "DEV" : "TEST",
+                          !measurable ? "not measurable (fewer than 10 judged promotions)" : R.true_pro / R.judged_pro >= 0.9 ? "met (>= 0.9)" : "missed (< 0.9)");
+            std::cout << b << "\n";
+        }
+        std::ofstream f(out + ".promo.tsv");
+        f << "split\tsubject\trelation\tobject\tscore\tprior\tT1\tT6\tT4\tposterior\tstate\tpromoted\ttruth\tpath\n";
+        for (const LoopItem& h : items) {
+            if (!h.dev && !read_test) continue;
+            f << (h.dev ? "dev" : "test") << '\t' << h.s << '\t' << h.r << '\t' << h.o << '\t' << h.score << '\t' << h.prior << '\t' << ecs::test_outcome_name(h.out[0])
+              << '\t' << ecs::test_outcome_name(h.out[1]) << '\t' << ecs::test_outcome_name(h.out[2]) << '\t' << h.post << '\t' << h.state << '\t' << h.promoted << '\t'
+              << h.truth << '\t' << h.explain << "\n";
+        }
+    }
+
+    // ================================================================ S15: the temporal holdout on the 2006-text store
+    const string s15dir = argv[7];
+    const vector<S15Row> s15dev = load_s15(s15dir + "/temporal_holdout_dev.tsv");
+    const vector<S15Row> s15test = read_test ? load_s15(s15dir + "/temporal_holdout_test.tsv") : vector<S15Row>{};
+    {
+        const auto objs = objects_by_rel(text);
+        std::map<string, vector<string>> names;  // r -> its objects (the candidates of an empty slot)
+        std::map<string, ValueIndex> vidx;
+        for (const auto& [r, os] : objs) {
+            for (const auto& [o, n] : os) names[r].push_back(o);
+            vidx[r].build(r, names[r]);
+        }
+        const ecs::RelGraph g(text);
+        ecs::PathRanker pr(text, g, {});
+        const ecs::LinkScorer ls(text, {});
+        const ecs::LinkPredictor lp(text, {});
+        vector<Query> qs;
+        vector<vector<string>> falses;
+        std::map<string, std::array<double, 2>> reach_cat;  // category -> {targets, reachable}
+        for (const auto* rows : {&s15dev, &s15test}) {
+            std::map<std::pair<string, string>, vector<const S15Row*>> slots;
+            for (const S15Row& x : *rows) slots[{x.s, x.r}].push_back(&x);
+            for (const auto& [slot, xs] : slots) {
+                const auto oit = objs.find(slot.second);
+                if (oit == objs.end() || text.facts_of(slot.first).empty() || text.has_relation(slot.first, slot.second)) continue;
+                Query q;
+                q.s = slot.first, q.r = slot.second, q.dev = rows == &s15dev;
+                q.cands = candidates(text, objs, q.s, q.r);
+                q.truth.assign(q.cands.size(), 0);
+                const int ri = rel_index(q.r);
+                vector<string> fv;
+                for (const S15Row* x : xs) {
+                    if (!x->label) { fv.push_back(x->value); continue; }
+                    Target t;
+                    t.value = x->value, t.cat = x->cat;
+                    if (q.cands == names[q.r]) t.cands = vidx[q.r].find(x->value);  // the slot is empty: all of r's objects
+                    else
+                        for (std::size_t j = 0; j < q.cands.size(); ++j)
+                            if (same_value(ri, x->value, q.cands[j])) t.cands.push_back(static_cast<int>(j));
+                    for (int j : t.cands) q.truth[static_cast<std::size_t>(j)] = 1;
+                    if (q.dev) reach_cat[t.cat][0] += 1, reach_cat[t.cat][1] += !t.cands.empty();
+                    q.targets.push_back(t);
+                }
+                if (q.targets.empty()) continue;
+                score_query(q, text, ls, pr);
+                qs.push_back(std::move(q));
+                falses.push_back(fv);
+            }
+        }
+        for (const auto& [c, v] : reach_cat) {
+            std::snprintf(b, sizeof b, "S15 DEV category %s targets %.0f reachable %.0f (%.3f)", c.c_str(), v[0], v[1], v[0] > 0 ? v[1] / v[0] : 0.0);
+            std::cout << b << "\n";
+        }
+        auto cat_lines = [&](const string& tag, bool dev) {
+            for (const string cat : {"a", "b", "c", "u", "*"}) {
+                vector<Query> sub;
+                for (const Query& q : qs) {
+                    if (q.dev != dev) continue;
+                    Query c = q;
+                    c.targets.clear();
+                    for (const Target& t : q.targets)
+                        if (cat == "*" || t.cat == cat) c.targets.push_back(t);
+                    if (!c.targets.empty()) sub.push_back(std::move(c));
+                }
+                const auto R = evaluate(sub, dev, &combo);
+                for (int g : std::array<int, 5>{kBase, kLP, g6, kG7, kCombo}) {
+                    const GenRead& G = R[static_cast<std::size_t>(g)];
+                    vector<double> rr_r, h10_r;  // among reachable targets
+                    std::size_t k = 0;
+                    for (const Query& q : sub)
+                        for (const Target& t : q.targets) {
+                            if (!t.cands.empty()) rr_r.push_back(G.rr[k]), h10_r.push_back(G.h10[k]);
+                            ++k;
+                        }
+                    const CI h10 = boot(G.h10, 5), h10r = boot(h10_r, 6);
+                    std::snprintf(b, sizeof b, "%s category %s %-12s n %zu hits1 %.4f hits10 %.4f [%.4f, %.4f] mrr %.4f | reachable n %zu hits10 %.4f [%.4f, %.4f] mrr %.4f",
+                                  tag.c_str(), cat.c_str(), kGenName[g], G.rr.size(), mean(G.h1), h10.mean, h10.lo, h10.hi, mean(G.rr), h10_r.size(), h10r.mean,
+                                  h10r.lo, h10r.hi, mean(rr_r));
+                    std::cout << b << "\n";
+                }
+            }
+        };
+        cat_lines("S15 DEV", true);
+        if (read_test) cat_lines("S15 TEST", false);
+        // Promotion on S15's slots: the chosen generator's top candidate, judged by S15.
+        vector<LoopItem> items;
+        for (std::size_t qi = 0; qi < qs.size(); ++qi) {
+            const Query& q = qs[qi];
+            const auto p = primary(q, chosen, &combo);
+            const int top = top_of(q, p);
+            if (top < 0) continue;
+            LoopItem h;
+            h.s = q.s, h.r = q.r, h.o = q.cands[static_cast<std::size_t>(top)], h.dev = q.dev, h.score = p[static_cast<std::size_t>(top)];
+            h.truth = q.truth[static_cast<std::size_t>(top)] ? 1 : 0;
+            h.explain = explain(q, top, pr);
+            items.push_back(h);
+        }
+        set_priors(items);
+        for (LoopItem& h : items) run_tests(h, text, lp, C);
+        for (const bool dev : {true, false}) {
+            if (!dev && !read_test) continue;
+            vector<LoopItem*> batch;
+            double top_true = 0;
+            for (LoopItem& h : items)
+                if (h.dev == dev) batch.push_back(&h), top_true += h.truth == 1;
+            const LoopRead R = run_loop(batch, out + (dev ? ".s15_dev.prereg.tsv" : ".s15_test.prereg.tsv"));
+            std::snprintf(b, sizeof b, "S15 %s PROMO top candidates %zu, true %.0f (%.3f)", dev ? "DEV" : "TEST", batch.size(), top_true,
+                          batch.empty() ? 0.0 : top_true / static_cast<double>(batch.size()));
+            std::cout << b << "\n" << loop_line(string("S15 ") + (dev ? "DEV" : "TEST") + " PROMO", R) << "\n";
+        }
+        std::ofstream f(out + ".s15.tsv");
+        f << "split\tsubject\trelation\tvalue\tcategory\treachable\tcandidates";
+        for (int g : std::array<int, 5>{kBase, kLP, g6, kG7, kCombo}) f << '\t' << kGenName[g];
+        f << "\ttop\ttop_path\n";
+        for (const Query& q : qs) {
+            const auto pc = primary(q, chosen, &combo);
+            const int top = top_of(q, pc);
+            for (const Target& t : q.targets) {
+                f << (q.dev ? "dev" : "test") << '\t' << q.s << '\t' << q.r << '\t' << t.value << '\t' << t.cat << '\t' << !t.cands.empty() << '\t' << q.cands.size();
+                for (int g : std::array<int, 5>{kBase, kLP, g6, kG7, kCombo}) f << '\t' << target_rank(q, t, primary(q, g, &combo));
+                f << '\t' << (top >= 0 ? q.cands[static_cast<std::size_t>(top)] : "") << '\t' << (top >= 0 ? explain(q, top, pr) : "-") << "\n";
+            }
+        }
+        std::snprintf(b, sizeof b, "S15 queries %zu (dev %zu)", qs.size(), static_cast<std::size_t>(std::count_if(qs.begin(), qs.end(), [](const Query& q) { return q.dev; })));
+        std::cout << b << "\n";
+    }
+
+    // ================================================================ GATE: S6's next change on S15's pairs
+    {
+        const auto fobjs = objects_by_rel(full);
+        std::map<string, vector<string>> fnames;
+        std::map<string, ValueIndex> fidx;
+        for (const auto& [r, os] : fobjs) {
+            for (const auto& [o, n] : os) fnames[r].push_back(o);
+            fidx[r].build(r, fnames[r]);
+        }
+        // A value's store object for r: the most held object it names, s's own triple not counted (the first on a tie).
+        auto map_value = [&](const string& r, const string& v, const string& s) -> string {
+            const auto it = fobjs.find(r);
+            if (it == fobjs.end()) return "";
+            string best;
+            std::size_t bn = 0;
+            for (int i : fidx[r].find(v)) {
+                const auto& [o, n] = it->second[static_cast<std::size_t>(i)];
+                const std::size_t left = n - (full.has(s, r, o) ? 1 : 0);
+                if (left >= 1 && left > bn) best = o, bn = left;
+            }
+            return best;
+        };
+        struct GPair {
+            string s, r, ot, of;
+            bool dev = true;
+            double lp_t = 0, lp_f = 0, aa_t = 0, aa_f = 0, hard_t = 1, hard_f = 1, g7_t = 0, g7_f = 0, p0_t = 0, p0_f = 0, p1_t = 0, p1_f = 0;
+        };
+        vector<GPair> pairs;
+        std::mt19937_64 rng(20261029);
+        for (const auto* rows : {&s15dev, &s15test}) {
+            std::map<string, const S15Row*> by_id;
+            for (const S15Row& x : *rows) by_id[x.id] = &x;
+            std::map<string, vector<GPair>> by_subj;
+            for (const S15Row& x : *rows) {
+                if (!x.label || rel_index(x.r) < 0 || !fobjs.count(x.r)) continue;
+                const auto fit = by_id.find(x.pair);
+                if (fit == by_id.end()) continue;
+                bool other = false;
+                for (const auto& f : full.facts_of(x.s)) other = other || f.r != x.r;
+                if (!other) continue;
+                GPair p;
+                p.s = x.s, p.r = x.r, p.dev = rows == &s15dev;
+                p.ot = map_value(x.r, x.value, x.s), p.of = map_value(x.r, fit->second->value, x.s);
+                if (p.ot.empty() || p.of.empty() || p.ot == p.of) continue;
+                by_subj[x.s].push_back(p);
+            }
+            for (auto& [s, ps] : by_subj) pairs.push_back(ps[rng() % ps.size()]);
+        }
+        std::set<std::pair<string, string>> removed;
+        for (const GPair& p : pairs) removed.insert({p.s, p.r});
+        ecs::TripleStore gs;
+        for (const auto& t : triples)
+            if (!removed.count({t[0], t[1]})) gs.add(t[0], t[1], t[2]);
+        vector<GPair> kept;
+        for (const GPair& p : pairs)
+            if (gs.count(p.r, p.ot) >= 1 && gs.count(p.r, p.of) >= 1 && !gs.facts_of(p.s).empty()) kept.push_back(p);
+        const ecs::RelGraph g(gs);
+        ecs::PathRanker pr(gs, g, {});
+        const ecs::LinkPredictor lp(gs, {});
+        for (GPair& p : kept) {
+            if (!p.dev && !read_test) continue;
+            const int ri = rel_index(p.r);
+            p.lp_t = lp.prob(p.s, p.r, p.ot), p.lp_f = lp.prob(p.s, p.r, p.of);
+            p.aa_t = ecs::adamic_adar(gs, p.s, p.ot), p.aa_f = ecs::adamic_adar(gs, p.s, p.of);
+            p.hard_t = s6::hard_constraint(gs, p.s, ri, p.ot), p.hard_f = s6::hard_constraint(gs, p.s, ri, p.of);
+            const auto sc = pr.score(p.s, p.r, {p.ot, p.of});
+            p.g7_t = sc[0], p.g7_f = sc[1];
+        }
+        std::size_t nd = 0, nt = 0;
+        for (const GPair& p : kept) (p.dev ? nd : nt)++;
+        std::snprintf(b, sizeof b, "GATE pairs drawn %zu (one per subject), kept %zu (dev %zu, test %zu) | reduced store %zu of %zu", pairs.size(), kept.size(), nd, nt,
+                      gs.size(), full.size());
+        std::cout << b << "\n";
+        // z pools and isotonic fits on dev pairs.
+        vector<double> vl, va, vg;
+        for (const GPair& p : kept)
+            if (p.dev) vl.push_back(logit_c(p.lp_t)), vl.push_back(logit_c(p.lp_f)), va.push_back(std::log1p(p.aa_t)), va.push_back(std::log1p(p.aa_f)), vg.push_back(p.g7_t),
+                vg.push_back(p.g7_f);
+        const auto zl = ecs::pool_stats(vl), za = ecs::pool_stats(va), zg = ecs::pool_stats(vg);
+        auto raw0 = [&](double lpv, double aav) { return ecs::zscore(logit_c(lpv), zl) + ecs::zscore(std::log1p(aav), za); };
+        auto raw1 = [&](double lpv, double aav, double g7v) { return raw0(lpv, aav) + ecs::zscore(g7v, zg); };
+        ecs::IsotonicCalibrator c0, c1;
+        {
+            vector<double> x0, x1;
+            vector<int> y;
+            for (const GPair& p : kept)
+                if (p.dev)
+                    x0.push_back(raw0(p.lp_t, p.aa_t)), x1.push_back(raw1(p.lp_t, p.aa_t, p.g7_t)), y.push_back(1), x0.push_back(raw0(p.lp_f, p.aa_f)),
+                        x1.push_back(raw1(p.lp_f, p.aa_f, p.g7_f)), y.push_back(0);
+            c0.fit(x0, y), c1.fit(x1, y);
+        }
+        for (GPair& p : kept) {
+            p.p0_t = ecs::plausibility_prior(1.0, c0.predict(raw0(p.lp_t, p.aa_t)), p.hard_t);
+            p.p0_f = ecs::plausibility_prior(1.0, c0.predict(raw0(p.lp_f, p.aa_f)), p.hard_f);
+            p.p1_t = ecs::plausibility_prior(1.0, c1.predict(raw1(p.lp_t, p.aa_t, p.g7_t)), p.hard_t);
+            p.p1_f = ecs::plausibility_prior(1.0, c1.predict(raw1(p.lp_f, p.aa_f, p.g7_f)), p.hard_f);
+        }
+        for (const bool dev : {true, false}) {
+            if (!dev && !read_test) continue;
+            vector<std::pair<double, double>> v0, v1, vlp, vaa, vg7, vh;
+            vector<double> dpair;
+            for (const GPair& p : kept) {
+                if (p.dev != dev) continue;
+                v0.push_back({p.p0_t, p.p0_f}), v1.push_back({p.p1_t, p.p1_f}), vlp.push_back({p.lp_t, p.lp_f}), vaa.push_back({p.aa_t, p.aa_f});
+                vg7.push_back({p.g7_t, p.g7_f}), vh.push_back({p.hard_t, p.hard_f});
+            }
+            const char* tag = dev ? "DEV" : "TEST";
+            for (const auto& [name, v] : vector<std::pair<string, vector<std::pair<double, double>>>>{
+                     {"P0_S6b", v0}, {"P0_prime", v1}, {"LP", vlp}, {"AA", vaa}, {"G7", vg7}, {"hard", vh}}) {
+                const PairRead r = pair_auroc(v);
+                std::snprintf(b, sizeof b, "GATE %s %-9s pairs %zu auroc %.4f [%.4f, %.4f]", tag, name.c_str(), v.size(), r.auc, r.lo, r.hi);
+                std::cout << b << "\n";
+            }
+            // P0' minus P0: the same pairs, paired bootstrap.
+            std::mt19937_64 rng2(20261028);
+            vector<double> bs;
+            auto flat = [](const vector<std::pair<double, double>>& v, const vector<std::size_t>& idx) {
+                vector<std::pair<double, int>> f;
+                for (std::size_t k : idx) f.push_back({v[k].first, 1}), f.push_back({v[k].second, 0});
+                return auroc_of(f);
+            };
+            for (int rep = 0; rep < 2000 && !v0.empty(); ++rep) {
+                vector<std::size_t> idx;
+                for (std::size_t k = 0; k < v0.size(); ++k) idx.push_back(rng2() % v0.size());
+                bs.push_back(flat(v1, idx) - flat(v0, idx));
+            }
+            std::sort(bs.begin(), bs.end());
+            const double d = pair_auroc(v1).auc - pair_auroc(v0).auc;
+            const PairRead g1 = pair_auroc(v1);
+            std::snprintf(b, sizeof b, "GATE %s P0_prime_minus_P0 %.4f [%.4f, %.4f] | S6's gate (P0_prime >= 0.75): %s", tag, d, bs.empty() ? 0.0 : bs[49],
+                          bs.empty() ? 0.0 : bs[1949], g1.auc >= 0.75 ? "met" : "missed");
+            std::cout << b << "\n";
+        }
+        std::ofstream f(out + ".gate.tsv");
+        f << "split\tsubject\trelation\ttrue\tfalse\tLP_t\tLP_f\tAA_t\tAA_f\thard_t\thard_f\tG7_t\tG7_f\tP0_t\tP0_f\tP0prime_t\tP0prime_f\n";
+        for (const GPair& p : kept) {
+            if (!p.dev && !read_test) continue;
+            f << (p.dev ? "dev" : "test") << '\t' << p.s << '\t' << p.r << '\t' << p.ot << '\t' << p.of << '\t' << p.lp_t << '\t' << p.lp_f << '\t' << p.aa_t << '\t'
+              << p.aa_f << '\t' << p.hard_t << '\t' << p.hard_f << '\t' << p.g7_t << '\t' << p.g7_f << '\t' << p.p0_t << '\t' << p.p0_f << '\t' << p.p1_t << '\t'
+              << p.p1_f << "\n";
+        }
+    }
+    struct rusage ru;
+    getrusage(RUSAGE_SELF, &ru);
+    std::snprintf(b, sizeof b, "S8b seconds %.1f max_rss_mb %.1f", now_s() - t0, static_cast<double>(ru.ru_maxrss) / 1024.0);
+    std::cout << b << "\n";
+    return 0;
+}
+
+}  // namespace s8b
+
 int main(int argc, char** argv) {
     if (argc >= 2 && string(argv[1]) == "--score-planted") return s6::run(argc, argv);  // S6 (hypothesis scoring)
     if (argc >= 2 && string(argv[1]) == "--test-kinds") return s7::run(argc, argv);  // S7 (testing hypotheses)
+    if (argc >= 2 && string(argv[1]) == "--gen-links") return s8b::run(argc, argv);  // S8b (link prediction, G6 and G7)
     if (argc >= 4 && string(argv[1]) == "--wilson") {
         double k = std::atof(argv[2]), n = std::atof(argv[3]);
         std::printf("%.0f/%.0f = %.3f  Wilson95 [%.3f, %.3f]\n", k, n, n > 0 ? k / n : 0.0, ecs::wilson_lower(k, n), ecs::wilson_upper(k, n));
