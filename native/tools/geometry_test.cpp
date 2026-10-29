@@ -852,6 +852,116 @@ void test_determinism(const Teacher& t) {
   CHECK(h1 != h3);
 }
 
+// ---------------------------------------------------------------------------------------------
+// (i) S-1c: the cached forces are bit-identical; the information-weighted evidence count
+// ---------------------------------------------------------------------------------------------
+
+void test_s1c() {
+  std::printf("(i) S-1c: cached forces, scratch reuse, information-weighted count\n");
+  // add_pair_force_known with the norms and cosine computed once gives the same bits as add_pair_force
+  {
+    ItemStore s = ItemStore::random(12, 32, 901);
+    s.mean(3)[0] = 0.0f;  // not unit length: the norms matter
+    int same = 0, total = 0;
+    for (int i = 0; i < 12; ++i)
+      for (int j = 0; j < 12; ++j) {
+        if (i == j) continue;
+        for (int m : {8, 32}) {
+          detail::DeltaAcc a1, a2;
+          a1.d = a2.d = 32;
+          std::vector<double> tmp;
+          const double f = 0.37 * (i + 1) - 0.11 * j;
+          detail::add_pair_force(s, i, j, f, m, a1, tmp);
+          const double ni = detail::norm(s.mean(i), m), nj = detail::norm(s.mean(j), m);
+          const double c = cosine(s.mean(i), s.mean(j), m);
+          detail::add_pair_force_known(s, i, j, f, m, ni, nj, c, a2);
+          ++total;
+          bool eq = a1.ids == a2.ids;
+          for (std::size_t k = 0; eq && k < a1.ids.size(); ++k)
+            eq = std::memcmp(a1.g[k].data(), a2.g[k].data(), sizeof(double) * 32) == 0;
+          same += eq ? 1 : 0;
+        }
+      }
+    std::printf("  cached forces bit-identical on %d of %d pairs\n", same, total);
+    CHECK(same == total);
+  }
+  // a zero vector: both forms give zero force on both sides
+  {
+    ItemStore s = ItemStore::random(3, 16, 902);
+    for (int j = 0; j < 16; ++j) s.mean(1)[j] = 0.0f;
+    detail::DeltaAcc a2;
+    a2.d = 16;
+    detail::add_pair_force_known(s, 0, 1, 1.0, 16, detail::norm(s.mean(0), 16), 0.0, 0.0, a2);
+    double mx = 0;
+    for (const auto& g : a2.g)
+      for (double v : g) mx = std::max(mx, std::fabs(v));
+    CHECK(mx == 0.0);
+  }
+  // the scratch buffer is reused across calls and stores: the same steps on two stores interleaved give the same
+  // states as each run alone
+  {
+    ItemStore x = ItemStore::random(30, 32, 903), y = ItemStore::random(30, 32, 904);
+    ItemStore x2 = x, y2 = y;
+    StepOptions o;
+    o.tau = 0.1;
+    o.eta = 5;
+    PullPushExample ex;
+    std::mt19937_64 e(905);
+    std::vector<PullPushExample> xs, ys;
+    for (int k = 0; k < 40; ++k) {
+      ex.a = (int)(e() % 30);
+      ex.b = (int)(e() % 30);
+      ex.cands.clear();
+      for (int c = 0; c < 5 + (int)(e() % 7); ++c) ex.cands.push_back((int)(e() % 30));
+      (k % 2 ? ys : xs).push_back(ex);
+    }
+    for (std::size_t k = 0; k < xs.size(); ++k) {
+      pull_push_step(x, xs[k], o);
+      pull_push_step(y, ys[k], o);
+    }
+    for (const auto& q : xs) pull_push_step(x2, q, o);
+    for (const auto& q : ys) pull_push_step(y2, q, o);
+    CHECK(x.state_hash() == x2.state_hash());
+    CHECK(y.state_hash() == y2.state_hash());
+  }
+  // the evidence count: off adds 1 per observation; on adds 1 - H(p)/ln k, small for a flat softmax
+  {
+    ItemStore s = ItemStore::random(20, 32, 906);
+    PullPushExample ex;
+    ex.a = 0;
+    ex.b = 1;
+    for (int c = 2; c < 12; ++c) ex.cands.push_back(c);
+    StepOptions off;
+    off.use_mask = false;
+    ItemStore s1 = s;
+    pull_push_step(s1, ex, off);
+    CHECK(s1.n[0] == 1.0f && s1.n[1] == 1.0f);
+    StepOptions on = off;
+    on.info_count = true;
+    on.tau = 1000.0;  // nearly flat softmax: almost no information
+    ItemStore s2 = s;
+    const StepStats st2 = pull_push_step(s2, ex, on);
+    std::printf("  information share at tau 1000: %.6f (n gains %.6f)\n", st2.info, (double)s2.n[0]);
+    CHECK(st2.info >= 0.0 && st2.info < 0.01);
+    CHECK_NEAR(s2.n[0], st2.info, 1e-6);
+    CHECK_NEAR(s2.n[1], st2.info, 1e-6);
+    // a peaked softmax: the positive is the anchor's own direction, the candidates far away
+    ItemStore s3 = s;
+    std::copy(s3.mean(0), s3.mean(0) + 32, s3.mean(1));
+    for (int c = 2; c < 12; ++c)
+      for (int j = 0; j < 32; ++j) s3.mean(c)[j] = -s3.mean(0)[j] + (j == c ? 0.01f : 0.0f);
+    StepOptions on2 = off;
+    on2.info_count = true;
+    on2.tau = 0.05;
+    const StepStats st3 = pull_push_step(s3, ex, on2);
+    std::printf("  information share, peaked softmax at tau 0.05: %.6f\n", st3.info);
+    CHECK(st3.info > 0.95 && st3.info <= 1.0);
+    CHECK_NEAR(s3.n[0], st3.info, 1e-6);
+    // with the option on, the evidence count grows more slowly, so the step K = Sigma / (n + kappa0) stays larger
+    CHECK(s2.n[0] < s1.n[0]);
+  }
+}
+
 }  // namespace
 
 int main() {
@@ -866,6 +976,7 @@ int main() {
   test_mrl(t, ps);
   test_confidence_check(t);
   test_determinism(t);
+  test_s1c();
   const double s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
   std::printf("\n%d checks, %d failed (%.1f s)\n", g_checks, g_failed, s);
   return g_failed == 0 ? 0 : 1;
