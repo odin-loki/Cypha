@@ -204,3 +204,166 @@ Two cautions:
 6. **Pattern shape.** Use POS and chunk classes in the gaps (E1/E2) so that "was born at Guildford in Surrey" and "was born in Surrey" share a pattern.
 7. **Calibration.** Fit the isotonic map of PLAN 7.5 on a 100-fact audit that is not drawn from the held-out checks, and estimate `phi` and `a` from Wikidata.
 8. **Frozen test.** Load `facts_f2.tsv` into the Q/A tool and score `t_qa_wiki.tsv` once, with the full pipeline. This tool has not seen it.
+
+---
+
+## F2b: capital, author and director (registered 2026-10-29, before any run)
+
+**Odin Loch** · 2026-10-29 · closes F2's open item in the bill of work · follows [D4](D4_WIKIDATA_SEEDS_AND_FACT_SHARD.md) ("Why capital, author and director still fail") and S11a's G11 ([S11A](S11A_CONCEPTS_AND_OPEN_RELATIONS.md))
+
+(The design, the arms, the reads, the rules and the predictions below were written and committed before any F2b run. Results are added under them.)
+
+**Question.** D4 gave capital, author and director enough Wikidata seeds, but no kept pattern: a subject's own article rarely states these relations, and when it does, the wording varies. Two fixes were named: reading other articles (cross-article evidence) and generalising the gap between the two mentions (pattern classes). Does either give these relations patterns that pass F2's gate, with facts that agree with Wikidata?
+
+**Rule 10.** Patterns read text into facts for Cypha's store. Nothing here answers a question.
+
+**What was looked at before this was written.** Counts of a few phrasings in all of enwik8 (no seed, label or gold value read): "capital of [[" 96, "capital, [[" 145, "is the capital of" 22, "novel by [[" 63, "written by [[" 223, "directed by [[" 242, "attended [[" 77, "educated at [[" 37. And S11a's G11 dev proposals (`/root/work/s11a/runs/dev.out`): own-article phrasings such as "[S] was directed by [O]" (10 pairs), "[S] is a novel by [O]" (5), "[S] was founded by [O]" (8), "[S] attended [O]" and "[S] was educated at [O]" (educated_at, which is not one of `pattern_learn`'s relations).
+
+### The changes (flags; without them every output is byte-identical)
+
+1. **Cross-article reading, `--f2b-xa`.** Every sentence of every article is read, not only the subject's own article. The fact's subject can be a **link** in the sentence: a link to an article (resolved through enwik8's redirects) whose page has seeds. Its slot is written `[L]`, so these patterns are learned apart from F2's `[S]` and `[P]`. The object is any candidate F2 already reads (link, capitalised chunk, date, lexicon string) or a mention of the page's own subject (the city's article: "[O] is the capital of [L]"). Type checks are F2's, with the subject's type taken from the linked page (a capital's subject must be a country-like page). The same 80/20 folds by subject apply, keyed by the linked page's title. A pattern's check counts once per (pattern, subject, object) in a fold, wherever it is stated, so a fact repeated in many articles does not inflate its pattern's checks. At extraction, every article can give a fact about a linked subject; each article's sentence is a separate evidence item.
+2. **Wildcard gaps, `--f2b-wild 1|2`.** Beside each exact pattern, a generalised one: the gap's tokens are kept at its ends and the middle becomes `<*>` (one or more tokens). Mode 1 keeps the first gap token and the last two ("is <*> novel by": "is a novel by", "is a 1957 novel by", "is a science fiction novel by"); mode 2 keeps only the last two ("<*> novel by"). The gap limit stays 6 tokens. One pair of mentions gives one evidence item, however many of its patterns match.
+3. **Word classes in gaps, `--f2b-classes FILE`.** Beside each exact pattern, one where every gap word that is not a function word (F2's stop-word list) becomes its k-means class (`classes_k256.tsv`: 256 classes over S-1b's 50,000 word vectors, [S1B](S1B_LEARNED_CONTEXTS.md)); digits and month names stay `#` and `<M>`.
+
+F2's gate is unchanged: at least 20 checks and a Wilson lower bound of at least 0.7.
+
+### Arms (all with `--cv --wikidata`, D4's published setting)
+
+| Arm | Flags |
+|---|---|
+| A0 | none (D4) |
+| A1 | `--f2b-xa` |
+| A2 | `--f2b-wild 1` |
+| A3 | `--f2b-xa --f2b-wild 1` |
+| A4 | `--f2b-xa --f2b-wild 2` |
+| A5 | `--f2b-xa --f2b-classes classes_k256.tsv` |
+
+### The reads
+
+- **Gold.** D4's gold fifth: subjects whose Wikidata values are never seeds, only scores. It is split in two by another hash bit (`(fnv(subject) >> 50) & 1`): **gold-dev** (0) for the choice, **gold-test** (1) read once, for the chosen arm and A0, with `--f2b-read-test`.
+- **Measures, per relation and pooled:** kept patterns; admitted facts (P ≥ 0.8); agreement of admitted facts with Wikidata on gold subjects (right / checked, Wilson 95%), as D4's `score_gold`; the share of admitted facts with two or more evidence sentences, and with grade Moderate or better.
+- **Hand check:** 30 admitted facts of the chosen arm in capital, author and director (fixed seed 20261029; all of them if fewer), judged from my own knowledge, after the test read.
+- **G11 cross-reference (report only):** which of S11a's G11 dev phrasings map onto a relation `pattern_learn` already has, and whether the chosen arm keeps a pattern for it. Naming a new relation (educated_at) is Odin's (PLAN P10).
+
+### Decision rules
+
+1. **Dev choice.** Among A1–A5, the arms whose pooled gold-dev agreement has a Wilson lower bound of at least 0.85 and a point estimate no more than 0.03 below A0's are eligible. The eligible arm with the most admitted facts in capital, author and director together is chosen; ties go to fewer kept patterns. If none is eligible, F2b recommends nothing and the test read is A1's.
+2. **Per relation (test).** F2's open item is closed for a relation if the chosen arm keeps at least one pattern for it and its admitted facts on gold-test agree with Wilson lower bound ≥ 0.7 on at least 10 checked facts. With fewer than 10 checked, it is "kept, too few gold facts to grade", and the hand check decides (at least 8 of 10 right).
+3. **Recommendation for the default.** The chosen arm is recommended as `pattern_learn`'s default if its pooled gold-test agreement has a Wilson lower bound of at least 0.85 and is no more than 0.03 below A0's on the same half. It is **not switched here**: S3's gap map and every store built on it (S7–S11) are frozen on the default run. The switch is a decision for Odin, with the downstream stores rebuilt.
+
+### Predictions
+
+| # | Prediction |
+|---|---|
+| F1 | A0 reproduces D4: 70 kept patterns, 1,216 admitted facts, gold 173/182 |
+| F2 | Cross-article reading (A1) keeps at least one pattern for at least two of capital, author and director |
+| F3 | Wildcards alone (A2) keep no capital pattern, and add at most 5 kept patterns in all |
+| F4 | The chosen arm admits at least 100 facts in capital, author and director together |
+| F5 | The chosen arm's pooled gold-test agreement has a Wilson lower bound of at least 0.85 |
+| F6 | With cross-article reading, at least 10% of admitted facts have two or more evidence sentences, and some reach grade Moderate (F2 and D4: 1 of 920) |
+| F7 | The chosen arm runs in at most 3× A0's time and peaks under 300 MB |
+| F8 | Hand check: at least 26 of 30 right |
+
+### Results (run 2026-10-29)
+
+The machine was shared with about twenty other jobs (load 27–36 on 4 cores), so every run took about 10 to 30 times the 21 s of an idle one. Outputs are in `/root/work/f2b/runs` (`dev/`, `test/`).
+
+**Parity.** Without the new flags, `pattern_learn` is byte-identical to main's (ae631f5) on S3's run: 10 of 10 output files, and stdout apart from timings; the gap map files equal S3's reference (`a77678d8ef7dfdef`). `pattern_learn --f2b-selftest` passes 16 checks, and five planted bugs each make it fail: a wildcard keeping one end token instead of two, classes applied to stop words, the slots swapped, titles not capitalised, and redirects not followed. `pattern_learn.cpp` is not a CMake target, so no CTest compiles the changed file.
+
+#### Dev (gold-dev half only)
+
+| Arm | Kept (all) | Kept cap/auth/dir | Admitted (all) | Admitted cap/auth/dir | Gold-dev right/checked | Wilson 95% | >=2 evidence | Moderate+ | Time (s) | Peak MB |
+|---|---:|---|---:|---|---|---|---:|---:|---:|---:|
+| A0 | 70 | 0/0/0 | 1,216 | 0/0/0 | 77/81 = 0.951 | [0.880, 0.981] | 16 (0.013) | 0 | 581 | 121 |
+| A1 | 74 | 0/0/0 | 1,243 | 0/0/0 | 77/81 = 0.951 | [0.880, 0.981] | 16 (0.013) | 0 | 1129 | 123 |
+| A2 | 83 | 0/0/0 | 1,256 | 0/0/0 | 80/84 = 0.952 | [0.884, 0.981] | 18 (0.014) | 0 | 600 | 122 |
+| A3 | 87 | 0/0/0 | 1,283 | 0/0/0 | 80/84 = 0.952 | [0.884, 0.981] | 18 (0.014) | 0 | 1153 | 125 |
+| A4 | 104 | 0/0/0 | 1,385 | 0/0/0 | 86/93 = 0.925 | [0.853, 0.963] | 38 (0.027) | 0 | 1159 | 126 |
+| A5 | 108 | 0/0/0 | 1,244 | 0/0/0 | 77/81 = 0.951 | [0.880, 0.981] | 17 (0.014) | 0 | 443 | 132 |
+
+- **Capital, author and director: no arm keeps a pattern or admits a fact.**
+  - **Author** comes closest. Cross-article reading finds "[O] ' s [L]" ("Tolkien's [[The Hobbit]]"): 16 of 18 checks right (0.889), Wilson lower bound 0.672. It is two checks short of the gate.
+  - **Director:** the best is the wildcard "[P] <*> directed by [O]" (A4), 7 of 10.
+  - **Capital:** cross-article candidates such as "in [O] , [L]" ("in [[Luanda]], [[Angola]]") state where a city is, not a capital: 0.10–0.23. "[O] is the capital of [L]" never reaches two training subjects. A capital's lead sentence usually puts a parenthesis between the city and the country ("Brussels (… ''Brüssel'') is the capital of [[Belgium]]"), so the gap exceeds 6 tokens, and only about six short "X is the capital of [[Y]]" leads exist in enwik8.
+- **What the changes do add is dates.**
+  - **A1:** 4 kept patterns, "[L] ( # - [O]", read people's years from other articles ("the British naturalist Charles Darwin (1809 - 1882)").
+  - **A2:** wildcards keep 13 more date variants ("[S] ( <*> # - [O] )").
+  - **A4:** most facts, +169, at gold-dev 0.925.
+  - **A5:** word classes add 38 kept patterns and 28 facts.
+- **Evidence.** Cross-article reading leaves almost every fact on one sentence: 1.3–2.7% have two or more evidence items, and none reaches grade Moderate.
+- **The dev choice (rule 1).** Every arm is eligible (Wilson lower bound ≥ 0.85, point within 0.03 of A0's 0.951). Every arm admits 0 facts in the three relations, so the rule's tie-break (fewest kept patterns) chooses **A1**. The rule's main criterion was empty for every arm.
+
+#### Test (gold-test half, read once)
+
+| Arm | Gold-test right/checked | Wilson 95% |
+|---|---|---|
+| A0 | 96/101 = 0.950 | [0.889, 0.979] |
+| A1 | 97/102 = 0.951 | [0.890, 0.979] |
+
+A0's two halves together are 173/182, D4's number.
+
+#### Decisions (by the registered rules)
+
+- **Rule 2: F2's open item is not closed.** Capital, author and director have no kept pattern in the chosen arm or any other. The registered hand check of their facts has nothing to check.
+- **Rule 3: A1 meets the recommendation rule.** Its gold-test lower bound is 0.890, and its point estimate is within 0.03 of A0's.
+- **But I do not recommend switching yet.** A supplementary hand check (not registered) of A1's 27 new facts finds **19 right and 8 wrong**.
+  - **The 8:** every one is a country's period read as a death date ("Belgium (1940 - 1945)", France 1944, Italy 1943, the Commonwealth of England 1653, each as death date and death year).
+  - **Why they pass:** D4's Wikidata "founder" seeds widen the person lexicon with country names. The European Space Agency, the European Coal and Steel Community and Benelux list Belgium, France and Italy as founders. So these countries pass the person-subject check.
+  - **Why gold misses them:** Wikidata has no death date for a country, so the gold check never sees these facts.
+  - **The 19 right:** Darwin 1882, Celsius 1744, Fahrenheit 1736, Galileo 1642, Davy 1829, Capra 1991, and others.
+  - The switch was never made here, because S3's store and everything built on it are frozen. It is a decision for Odin, after the person-lexicon leak is fixed.
+
+#### G11's phrasings (report only)
+
+| G11 dev phrasing | Relation in `pattern_learn` | Best F2 candidate (A1 = A4) | Kept |
+|---|---|---|---|
+| "[S] was directed by [O]" | director | "[P] was directed by [O]" 6/9 | no |
+| "[S] is a novel by [O]" | author | 3/4 | no |
+| "[S] was born at [O]" | birth_place | 8/8 (lower 0.676) | no |
+| "[S] is a city located in [O]" | located_in | 11/11 (lower 0.741) | no (11 checks) |
+| "[S] is the county seat of [O]" | located_in | 8/8 | no |
+| "[S] was founded in [O]" | founded | 14/16 | no |
+| "[S] died in [O]" | death_place | "[P] died in [O]" 28/32 | yes (D4's) |
+| "[S] attended [O]", "[S] was educated at [O]" | none (educated_at is not a relation) | — | Odin's (P10) |
+
+The text states these relations correctly but rarely. F2's 20-check gate is what stops them, not precision.
+
+#### Why the item stays open, and what would close it
+
+- **The limit is the text, not the patterns.** Each relation needs 20 held-out statements, in one wording, about subjects that have seeds. Cross-article reading mostly found statements about books, films and countries that have no seeds, or found long ones.
+- **Options (for Odin):**
+  1. A larger text, such as the 1 TB corpus: checks grow with the text.
+  2. A gate that pools a relation's pattern family (the core with its context variants and wildcards) before counting checks. That changes F2's gate.
+  3. Fix the person-lexicon leak (a Wikidata seed object should widen a type lexicon only when Wikidata's own type of the object agrees).
+  4. educated_at as a new relation (PLAN P10).
+
+#### Predictions, scored
+
+| # | Prediction | Result |
+|---|---|---|
+| F1 | A0 reproduces D4 | **Hit:** 70 kept, 1,216 admitted, gold 173/182 |
+| F2 | A1 keeps a pattern for two of capital, author and director | **Miss:** none for any |
+| F3 | A2 keeps no capital pattern and adds at most 5 kept patterns | **Partial:** no capital pattern, but 13 more kept (date variants) |
+| F4 | The chosen arm admits at least 100 facts in the three relations | **Miss:** 0 |
+| F5 | The chosen arm's gold-test Wilson lower bound ≥ 0.85 | **Hit:** 0.890 |
+| F6 | ≥ 10% of admitted facts with two or more evidence items, some Moderate | **Miss:** 1.3%, none Moderate |
+| F7 | At most 3× A0's time, under 300 MB | **Hit:** A1 1.9× (dev) and 2.6× (test), 124 MB |
+| F8 | Hand check ≥ 26 of 30 | **Not scorable:** no facts in the three relations (supplementary: 19 of 27 cross-article facts right) |
+
+3 hits, 1 partial, 3 misses, 1 not scorable.
+
+#### Reproduce
+
+```bash
+g++ -O2 -std=c++20 -I native/include -pthread native/tools/pattern_learn.cpp -o pattern_learn
+E=/root/cdata/enwik8; W=/root/work/f2/wikidata/wd_values.tsv; C=/root/work/sem/classes_k256.tsv
+./pattern_learn --f2b-selftest
+./pattern_learn $E A0 --cv --wikidata $W --f2b-gold-split                      # dev half only
+./pattern_learn $E A1 --cv --wikidata $W --f2b-gold-split --f2b-xa
+./pattern_learn $E A2 --cv --wikidata $W --f2b-gold-split --f2b-wild 1
+./pattern_learn $E A3 --cv --wikidata $W --f2b-gold-split --f2b-xa --f2b-wild 1
+./pattern_learn $E A4 --cv --wikidata $W --f2b-gold-split --f2b-xa --f2b-wild 2
+./pattern_learn $E A5 --cv --wikidata $W --f2b-gold-split --f2b-xa --f2b-classes $C
+./pattern_learn $E T0 --cv --wikidata $W --f2b-read-test                       # the test read, once (A0 and A1)
+./pattern_learn $E T1 --cv --wikidata $W --f2b-read-test --f2b-xa
+```

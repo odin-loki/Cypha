@@ -302,3 +302,112 @@ g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp -o pattern_l
   /root/work/f2/v2/aug/facts_f2.tsv bench/eval/temporal_holdout_dev.tsv OUT [--read-confirm]
 ```
 Outputs: `OUT.dev_items.tsv`, `OUT.dev_rules.tsv`, `OUT.confirm_items.tsv` (with `--read-confirm`), `OUT.fragility.tsv`, `OUT.spof.tsv`, `OUT.blast.tsv` and `OUT.cards.txt`. Runs are in `/root/work/s9/runs/` (`final.*`).
+
+## S9b: S9's questions settled by measurement (2026-10-29)
+
+**Odin Loch** · 2026-10-29 · HANDOFF §5.14, open to Odin's veto (PLAN ledger 55) · T2 in the loop and the loop's part of Wikidata are in [S7_HYPOTHESIS_TESTS.md](S7_HYPOTHESIS_TESTS.md), "S7d"
+
+(The reads, the rules and the predictions below were written and committed before any S9b run. Results are added under them.)
+
+### §4.4 use 1 against rule 10
+
+DISCOVERY §4.4's first use, "Odin's explicit what-if questions, answered as labelled hypotheticals", would have Cypha answer a question itself. **Rule 10 wins.** Worlds, cards and fragility stay Cypha's data: cards may become training text for CyphaLM through the documented paths and their leak checks, or a record for Odin. No path that answers is built.
+
+### Wikidata as one source or per claim (fragility's part)
+
+- `--worlds --s9b` runs S9's fragility twice on the v2 store: Wikidata as one source instance (`wikidata`, as S9 ran) and per claim (`wikidata|subject|relation|object`). It reports states, held facts, single points of failure and the blast radius both ways.
+- The choice is S7d's rule 2: one source unless no Known promotion rests on Wikidata alone.
+
+### Single points of failure in S3's gap map
+
+- **The flag.** `pattern_learn … --gaps FILE --gaps-spof SPOF.tsv` adds S9's single points of failure (`OUT.spof.tsv`) to S3's map as a new gap kind, `fragile` (DISCOVERY §13 S3 names "contested and fragile lists"). Without the flag S3's output is byte-identical.
+  - One gap per (entity, relation). A slot that already has a contradiction or certainty gap gets none: those already ask about it.
+  - Its p is the fact's P, its demand 0, its status open. VOI as for every gap (S3's placeholder test).
+- **What it changes.** Gaps by kind; the share of the top 100 and top 1,000 by VOI that are fragile; the old gaps' mean rank shift.
+- **Does fragility point at errors?** Among held facts with no Wikidata source, whose slot Wikidata covers: the share that disagrees with Wikidata, for single points of failure against facts with two or more sources. The difference gets a bootstrap 95% interval over subjects (2,000 resamples).
+- **Rule.** The fragile kind joins S3's documented command (with `--gaps-spof`) when the difference's interval lies above 0: then fragility points at errors, and asking about these slots has value. Otherwise it stays a flag. S3's parity reference stays the run without it either way.
+
+### Predictions (registered before the runs)
+
+| # | Prediction |
+|---|---|
+| F1 | Per claim, single points of failure stay within 1 point of S9's 76.9% of held, and no source instance's blast radius exceeds 100 |
+| F2 | The fragile kind adds 12,000–17,000 gaps after the slots already asked about are left out |
+| F3 | Fragile gaps take more than half of the top 1,000 by VOI |
+| F4 | Single points of failure disagree with Wikidata more often than multi-source facts, but the interval includes 0: the kind stays a flag |
+
+### Results (run 2026-10-29)
+
+Tools: `pattern_learn --worlds … --s9b` and `pattern_learn … --gaps … --gaps-spof` (commit e4afd6f). The `--s9b` run takes about 400 s on a loaded machine at 280 MB. Without the flags, every output of `--worlds` and S3's run is byte-identical to main's.
+
+#### Wikidata per claim
+
+| | One source (S9) | Per claim |
+|---|---|---|
+| States | — | equal for all 23,366 facts |
+| Held | 22,418 | 22,418 |
+| Single points of failure | 17,234 (76.9%) | 17,256 (77.0%) |
+| Largest blast radius | Wikidata 13,936 (62.2% of held) | an infobox page, 43 |
+| Wikidata's instances | 1, radius 13,936 | 17,904, radius at most 1 (mean 0.73) |
+
+- Per claim, nothing about each fact changes. Only the blast radius does: Wikidata stops being one thing that can fail.
+- That is exactly the dependence the one-source count is there to show. A wrong or vandalised provider fails many claims at once. **One source, as S9 ran, by S7d's rule 2.**
+
+#### Single points of failure in S3's gap map
+
+- S9's 17,234 single points of failure give **10,454 fragile gaps**: one per slot, and 738 slots already had a certainty or contradiction gap.
+- The fragile gaps' median p is 0.664 (one source, no rival), their median VOI 0.48.
+
+| | Without the flag | With `--gaps-spof` |
+|---|---|---|
+| Gaps | 27,842 | 38,296 |
+| Fragile in the top 100 / 1,000 / 5,000 | — | 22 / 239 / 807 |
+| The old top 100 still in the top 100 | 100 | 78 |
+
+- The old gaps keep their order among themselves. They move down by 8,912 places on average.
+
+**Does fragility point at errors?** These are held facts with no Wikidata source whose slot Wikidata covers:
+
+| | Facts | Disagree with Wikidata |
+|---|---:|---|
+| Single points of failure | 2,215 | 875 (0.395 [0.375, 0.416]) |
+| Two or more sources, not single points of failure | 5 | 1 (0.200 [0.036, 0.625]) |
+
+- The difference is +0.195 [−0.283, +0.414] (bootstrap over 1,106 subjects). **The interval includes 0, so the fragile kind stays a flag.**
+- The comparison has almost nothing on one side. Facts without a Wikidata source almost never have a second source. So this store cannot say whether fragility points at errors.
+- What it does say: 39.5% of the text-only single-source facts that Wikidata covers disagree with it. That is the size of the certainty problem these gaps would ask about.
+
+### Predictions scored (S9b)
+
+| # | Prediction | Result |
+|---|---|---|
+| F1 | Per claim, single points of failure within 1 point of 76.9%; no instance's blast radius above 100 | **Hit:** 77.0%; largest 43 |
+| F2 | The fragile kind adds 12,000–17,000 gaps | **Miss:** 10,454 (one per slot: several facts often share a slot) |
+| F3 | Fragile gaps take more than half of the top 1,000 | **Miss:** 239 |
+| F4 | Single points of failure disagree more, but the interval includes 0; the kind stays a flag | **Hit**, though the comparison group is only 5 facts |
+
+2 hits, 2 misses.
+
+### Decisions (S9b), open to Odin's veto
+
+1. **§4.4 use 1:** rule 10 wins. Worlds and cards stay data.
+2. **Wikidata counts as one source** (S7d's rule 2), as S9 ran.
+3. **The fragile kind stays behind `--gaps-spof`.** Its value cannot be shown on this store. S3's documented command and parity reference are unchanged.
+
+### Checks
+
+- `native_epistemic_test` passes 1,310 checks, 17 of them new. The new checks cover:
+  - fragile gaps (one per slot; none where a certainty or contradiction gap asks; their place in ties);
+  - `supporting_independent_sources`;
+  - a planted case where K4's stated null likelihoods understate how often false hypotheses pass. There K4 over-promotes while K3 keeps its bar.
+- Planted bugs, each caught: the certainty gap ignored (2 checks fail); negative results counted as support (1); the fragile kind not last (1); a second fragile gap per slot (2).
+- S3's `--gaps` run is byte-identical to main's, all 10 files (gap map `a77678d8ef7dfdef`).
+- `--worlds` without `--s9b`: every output file is byte-identical to main's, and stdout matches apart from timings.
+
+### Reproduce (S9b)
+
+```bash
+./pattern_learn --worlds enwik8 seeds.tsv wd_values.tsv facts_f2.tsv bench/eval/temporal_holdout_dev.tsv s9 --s9b
+./pattern_learn enwik8 OUT --cv --wikidata wd_values.tsv --dev DEV --gaps OUT/gap_map.tsv --demand ROWS --parse PARSE --gaps-spof s9.spof.tsv
+```
+Runs are in `/root/work/s9b/runs/` (`s9n.*`, `gspof`).

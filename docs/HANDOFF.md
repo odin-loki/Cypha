@@ -51,7 +51,7 @@ Cypha is Odin Loch's own C++ AI. **CyphaLM** is its language model: a packed byt
 9. **Never touch `native/tools/trie_stream_train.cpp` or `scripts/run_train.sh`.** Odin's live 1 TB training run uses them. The tool keeps its own copy of the trie and moves to the library only after the run ends, at Odin's call.
 10. **Work style.** Odin likes parallel agents in small usage chunks, each with a clear brief and file ownership, so they don't collide. Another Claude session may be pushing to `main` at the same time (SCRIBE v2 did on 2026-10-28): fetch before every publish.
 11. **No Qwen inference in the cloud container** (PLAN ledger 54). Analytics on the weights only; inference and distillation run on Odin's PC.
-12. **Settle open design questions by measurement**, with the evidence recorded (PLAN ledger 55).
+12. **S7c, settled by measurement (S7d, PLAN ledger 77), open to veto:** K4 stays (K3 promotes the same sets; K4 stays under its bar with plausible nulls, 0.054 at 80% false). Fusion: the store's φ is recommended (admitted 1,216 → 1,214, agreement unchanged); switching changes S3's map and the v2 store, so it is **Odin's call**.
 
 ---
 
@@ -118,6 +118,10 @@ Cypha is Odin Loch's own C++ AI. **CyphaLM** is its language model: a packed byt
 | **Tokens T0–T2** | Five tokenizers learned by counting; token Kneser–Ney + ∞-gram beat the byte model by 0.17 bits per byte, but byte-level Kneser–Ney does as well; Unigram and BPE 4k go to T4 | `TOKENS_T0_T2.md` |
 | **Tokens T3 bridge** | Exact byte probabilities from token models (5e-16 on a planted chain); real-text gap 0.0017 bits per byte; T4 ready | `TOKENS_T3_T4.md` |
 | **K4/K5 thought bindings** | All primitives bound; rule-10 guard; first processes beat their baselines (diagnosis −22% cost, ach +0.25, CUSUM 3.4× faster on 1σ); DIF applicability not adopted (LCI 0.50) | `K4_K5_THOUGHT_BINDINGS.md` |
+| **S11e S11c's questions** | Decided on dev: G3 by the link predictor alone, G4 without carried dates, G13 keeps its verdict prior (questions-only loses the refutations), A6 kept; S10 +34% on S8d's + S11c's dev pools (report only) | `S11C_ANALOGY_ANOMALY_ABDUCTION.md` |
+| **S9b / S7d** | T2 out, Wikidata one source, K4 stays, the store's φ recommended for fusion (Odin's call), fragile gaps behind a flag | `S9_WORLDS_AND_FRAGILITY.md`, `S7_HYPOTHESIS_TESTS.md` |
+| **F2b capital, author, director** | Not closed: no kept pattern in six arms (author 16 of 18 checks); cross-article reading and wildcards add dates; a person-lexicon leak blocks any switch | `F2_PATTERN_LEARNING.md` |
+| **S12a G1, G15, G19, G20** | Planted-law gate not met (recall 0.853, gate 0.90; no false law); G15 kept (density, unit conversions); G1 depth ≥ 2 precision 0.071; G19 not earned; G20 refuted; no promotions | `S12A_DEDUCTION_LAWS_REFINEMENT.md` |
 | **M17 lowered index freed after `--save`** | C1L + defaults with `--save` 204.5 → 186.7 MB; lossless | `RAM_PROFILE.md` |
 | Tool profile P2–P4 | Tagger and word-vector class tables cut from the class expert (the tagger stays as the question parser); `cypha_gate` deleted; `pattern_learn` fails the Q/A cut, flagged for Odin | `TOOL_PROFILE_P2_GRID.md` |
 | **FC0 forecasting audit** (Odin: "bring this into parity") | The committed CSVs are UTF-16 and no row was ever read; on readable data the sequence model throws (9 of 13 event ids ≥ 256); the VIEWS score reads the holdout; `crps()` gives 100 where the exact value is 470; the drift test cannot fail. Plan FC0–FC16 with ARCHITECTURE, DATA and EVALUATION; status lines corrected (FC1) | `FC0_FORECAST_AUDIT.md` |
@@ -163,7 +167,7 @@ Odin asked on 2026-10-28 to reduce CyphaLM's RAM. Every cut was measured against
 
 ### 4.4 CTests
 
-Run these on every change: `native_cyphalm_trie_selftest`, `native_fm_infinigram_test`, `native_epistemic_test`, `native_thought_test`, `native_geometry_test`, `native_ecs_lci_test`, `native_scribe_selftest`, `native_cyphalm_neural_smoke`, `native_class_context_test`, `native_cyphalm_tok_selftest` (180 checks), `native_token_bridge_test` (9,352 checks), `native_thought_bindings_test` (120 checks). `native_fm_infinigram_test` runs 191,885 checks (locate included), `native_epistemic_test` 1,293 (S4, S4b, S4b-b, S4c, S6, S7, S7b, S7c, S8a, S8b, S8c, S8d, S9, S10, S11a, S11c), `native_class_context_test` 1,043 (M15). `pattern_learn` builds with `g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp`; its S3 `--gaps` run must stay byte-identical. Since S11c it uses `std::thread`: older glibc (before 2.34) needs `-pthread`. `pattern_learn --signals DIR` (S4b) runs after S3's passes; without it the run is byte-identical. `--signals-scope dev|test` (S4c) runs after S4b's signals; without it the output is S4b's.
+Run these on every change: `native_cyphalm_trie_selftest`, `native_fm_infinigram_test`, `native_epistemic_test`, `native_thought_test`, `native_geometry_test`, `native_ecs_lci_test`, `native_scribe_selftest`, `native_cyphalm_neural_smoke`, `native_class_context_test`, `native_cyphalm_tok_selftest` (180 checks), `native_token_bridge_test` (9,352 checks), `native_thought_bindings_test` (120 checks). `native_fm_infinigram_test` runs 191,885 checks (locate included), `native_epistemic_test` 1,359 (S4, S4b, S4b-b, S4c, S6, S7, S7b, S7c, S7d, S8a, S8b, S8c, S8d, S9, S9b, S10, S11a, S11c, S11e, S12a), `native_class_context_test` 1,043 (M15). `pattern_learn` builds with `g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp`; its S3 `--gaps` run must stay byte-identical. `--gaps-spof` (S9b) is off by default; the F2b flags are off by default. Since S11c it uses `std::thread`: older glibc (before 2.34) needs `-pthread`. `pattern_learn --signals DIR` (S4b) runs after S3's passes; without it the run is byte-identical. `--signals-scope dev|test` (S4c) runs after S4b's signals; without it the output is S4b's.
 
 ### 4.5 CI
 
@@ -192,7 +196,7 @@ Run these on every change: `native_cyphalm_trie_selftest`, `native_fm_infinigram
     - Should a source need at least 10 graded positives before it may promote? GeoNames passed on 2.
     - Grade more DBpedia occupations and genres? They failed on 29 wrong values.
     - DBpedia's data licence.
-14. **S9's questions:** DISCOVERY §4.4 use 1 (answering Odin's what-if questions) breaks rule 10, so nothing answers; drop it, or keep cards as data only? May a confirm-only test (T2: LR 3.35 dev, 10.5 S15) enter the loop by its three-way LR? Count Wikidata as one source or per claim (its 62% blast radius)? Merge S9's single points of failure into S3's gap map (it changes S3's output)?
+14. **S9, settled by measurement (S9b, PLAN ledger 77), open to veto:** use 1 dropped (rule 10 wins; worlds stay data). T2 stays out of the loop (+0.14 points). Wikidata counts as one source. Single points of failure are fragile gaps behind `--gaps-spof`; their value cannot be shown on this store.
 15. **When the 1 TB run ends:** move `trie_stream_train.cpp` onto `packed_trie.hpp` (and `pack()`, M4).
 16. **S4b's alarm threshold:** runs of pages on one topic raise false alarms (taxonomy pages for vocabulary, American football pages for surprise; 1 each in about 1,600 pages). Should such runs open gaps? A threshold of 100,000 instead of 20,000 silences both, at about 5 more pages of delay for the vocabulary signal.
 17. **S4c's questions:** should the out-of-scope gate be read on Dolly's own-voice answers (brainstorming, creative writing) or on another corpus, since most of S4b's Dolly pages are encyclopedic prose? Adopt TF-IDF novelty beside the vocabulary signal for new page types (100% within 50 pages, median 16, against 95.5%, median 24)? Add a scope gap kind to DISCOVERY §3.2?
@@ -205,7 +209,7 @@ Run these on every change: `native_cyphalm_trie_selftest`, `native_fm_infinigram
     - G9's bar (Jaccard ≥ 0.5) cannot be reached on an occupation-heavy store. Accept the miss, or re-read on a richer store (for example with S15's added relations as attributes) with fresh held-out classes?
     - G11's dev choice between C1 and C2 was decided by date links (344 of C1's 419 holding pairs). Without them C2 wins (87 against 78) and proposes developer, headquarters, member_of, spouse and country. Register the skip with the choice as it falls, and read S15 test once (S11a-b)?
 20. **S11b's questions:** keep G12's closed form (AUROC 0.68 on test) as a support term in S6's P0 or as a test kind? It needs its own registered read. A wider grader for open ABC (any Wikidata property between A and C, not S15's 34) would need new Wikidata fetches.
-21. **S11c's questions:** use G13's anomalies only as questions for the source stage, never as verdicts (through the sources they were right 21 of 21)? Keep A6 (spouse gaps) for a larger store, or cut it? Drop G3's rule term from its order (the link predictor alone ranks the right fact first more often)? Stop G4 carrying dates as constants (every carried date was wrong)? Both halves of S15 test now carry a pool read, so a future fresh set needs new slots (S8e builds them).
+21. ~~S11c's questions~~ **Decided by measurement 2026-10-29 (S11e, PLAN ledger 76), open to veto:** G13 keeps its verdict prior (questions-only lost the sources' refutations); G3 orders by the link predictor alone; G4 carries no dates; A6 kept for a larger store. The one fresh read of the three waits for S8e's set; S10's gate read waits for a fresh set.
 22. **Byte-level Kneser–Ney for the byte model** (Tokens T0–T2): on the dev holdout, Kneser–Ney over bytes at order 8–12 with the ∞-gram beats the byte trie + InfiniGram by 0.18–0.19 bits per byte (order 12 costs 1.3 GB unpacked). Being measured as a byte-model change with its own registered rule and fresh read (BKN), open to veto.
 23. **K5's open choices:** try a calibration map (or θ from it) for the DIF applicability classifier under a registered read; benchmarks with known answers for `fermi_estimate` and the planning processes; wire traces to the experiment DB.
 24. **Forecasting to parity** ([FORECAST_PLAN](FORECAST_PLAN.md) §9, PLAN ledger 75; [FC0](reports/FC0_FORECAST_AUDIT.md)). Nine calls, each with a recommendation:
@@ -218,6 +222,8 @@ Run these on every change: `native_cyphalm_trie_selftest`, `native_fm_infinigram
     - **Qt and Studio:** no panels until FC12.
     - **PR gate:** add the fast forecast set to it.
     - **Public wording:** "under repair" until FC14.
+25. **F2b's questions:** the 20-check gate, not precision, stops capital, author and director (and G11's phrasings: "was born at" 8 of 8, "is a city located in" 11 of 11). Pool a relation's pattern family before counting checks (a gate change), or wait for a larger text? The person-lexicon leak is being fixed by measurement (LEXFIX). educated_at as a new relation (P10)?
+26. **S12a's questions:** measure a power law's spread on the attribute it predicts? Keep orders at 90% when they clearly beat independence? Cap G1 at depth 3 or calibrate its prior by depth (depths 4–6 were never right)? Remove G19, or keep it for a richer store? A larger numeric extraction (enwik9's infoboxes) for G15? G17 and G18 wait for FCAST.
 
 ---
 
