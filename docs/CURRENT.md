@@ -96,6 +96,8 @@ Tool: `cyphalm_trie qa` (dev 130 questions, frozen test 200; coverage at a 2% wr
 |---|---|
 | A0, CyphaLM alone | 0.0% coverage at 2% wrong on dev; raw right 0–2 / 130 |
 | A1d don't-know token (span candidates, `ent_title`, `low` only) | dev precision 0.600, recall 1.00; frozen test 0.635 / 0.94 ([report](reports/A1D_A2B_ANSWERING_VARIANTS.md)) |
+| Don't-know token with `ent_bold` (ANS, ledger 79) | low-only: frozen test trie precision 0.963 [0.817, 0.993], recall 0.52 [0.385, 0.652] (D2 met for the first time); trie + IG 0.540 / 0.68; gated 0 right, 0 wrong |
+| Entity in the tag (ANS, ledger 80, veto recommended) | `--fam-ent` + `--copy-dk`: tags name the question's entity 49 of 50 on test (was 0 of 72); the message never agrees with the tag; 23 of 97 refusals write the frame token |
 | With D4's shard (C1L) | dev 2 right, 0 wrong at 2% wrong; test 0 / 0 (the shard covers 3 test questions) |
 | R3 with F2R raw frames | dev 2 right / 1 wrong out of fold; test 1 / 0 |
 | trie + IG + class (tags) + copy, holdout second half | 1.8437 BPC (trie + IG 2.0735); with the shard it echoed the question until B4c turned the experts off inside answers |

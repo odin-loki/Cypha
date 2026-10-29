@@ -119,6 +119,7 @@ Cypha is Odin Loch's own C++ AI. **CyphaLM** is its language model: a packed byt
 | **Tokens T3 bridge** | Exact byte probabilities from token models (5e-16 on a planted chain); real-text gap 0.0017 bits per byte; T4 ready | `TOKENS_T3_T4.md` |
 | **K4/K5 thought bindings** | All primitives bound; rule-10 guard; first processes beat their baselines (diagnosis −22% cost, ach +0.25, CUSUM 3.4× faster on 1σ); DIF applicability not adopted (LCI 0.50) | `K4_K5_THOUGHT_BINDINGS.md` |
 | **K6/K7 chunking, mining, calibration map** | K6 gate met (chunk accuracy 0.969, hit rate 0.33, wrong-answer rise below +0.005); K7a met with a noise floor of one (0.96); K7b not met (edit precision 0.685; the LCI guard held); DIF calibration map not adopted | `K6_K7_CHUNKING_AND_MINING.md` |
+| **ANS answering questions** | Low-only token kept; `ent_bold` adopted (frozen test 0.963 / 0.52, D2 met for the first time); entity in the tag adopted by rule, veto recommended | `A1D_A2B_ANSWERING_VARIANTS.md` |
 | **S11e S11c's questions** | Decided on dev: G3 by the link predictor alone, G4 without carried dates, G13 keeps its verdict prior (questions-only loses the refutations), A6 kept; S10 +34% on S8d's + S11c's dev pools (report only) | `S11C_ANALOGY_ANOMALY_ABDUCTION.md` |
 | **S9b / S7d** | T2 out, Wikidata one source, K4 stays, the store's φ recommended for fusion (Odin's call), fragile gaps behind a flag | `S9_WORLDS_AND_FRAGILITY.md`, `S7_HYPOTHESIS_TESTS.md` |
 | **F2b capital, author, director** | Not closed: no kept pattern in six arms (author 16 of 18 checks); cross-article reading and wildcards add dates; a person-lexicon leak blocks any switch | `F2_PATTERN_LEARNING.md` |
@@ -180,9 +181,9 @@ Run these on every change: `native_cyphalm_trie_selftest`, `native_fm_infinigram
 ## 5. Decisions waiting for Odin
 
 1. ~~`pattern_learn` fails the tool-profile cut.~~ **Answered 2026-10-29: keep it** (PLAN ledger 65). It is Track S's fact and hypothesis tool (fact store, D4, F2R, the gap map, S4, S6, S7, S8); it never answers a question (rule 10).
-2. **The `low`-only don't-know token** (A1D/A2B): the form that lets the token and the fact shard work together (dev 2 right, 0 wrong). Odin allowed the token; this is a narrower form.
-3. **`ent_title` against `ent_bold`.** `ent_title` reads XML title tags; `ent_bold` reads none and meets D2 on dev (0.833 / 0.50) but halves recall.
-4. **The entity in the tag** needs a copy weight that depends on context (inside the answer or not). That changes the mixture.
+2. ~~The `low`-only don't-know token.~~ **Decided by measurement 2026-10-29 (ANS, PLAN ledger 78): kept** as the answering form; today's tool reproduces A1d's C1L dev read.
+3. ~~`ent_title` against `ent_bold`.~~ **Decided by measurement 2026-10-29 (ANS, ledger 79): `ent_bold`.** Frozen test 0.963 / 0.52 (D2 met) against 0.635 / 0.94; `ent_title` marks 93% of real user questions unfamiliar because it needs an exact article title.
+4. **The entity in the tag (ANS, ledger 80):** adopted by its registered rule (`--fam-ent` + `--copy-dk`: tags name the entity 49 of 50 on test), **veto recommended**: the message never agrees with the tag, and 23 of 97 refusals write the frame token. Next, by measurement: the frame before "nothing about" too, and no frame in training prompts. Defaults are unchanged until Odin decides.
 5. ~~Class and copy with the fact shard.~~ **Answered by B4c:** the same gate works for class and copy; rule 3 holds, and both are defaults where the rules hold.
 6. ~~Which text score the rules use.~~ **Answered 2026-10-29: SCRIBE v2** (PLAN ledger 64), with surface S reported alongside. So the class expert stays out of `sample`'s default (SCRIBE v2 falls with it, 0.061 → 0.025).
 7. **Track S:** where gap demand comes from; Wikidata's type-level rate as P(exists); finer entity types (S3/S5 report). Answered 2026-10-28: the reason code describes what CyphaLM has read ("most honest"), and S1 stays at 82% ("if the data isn't there, it isn't there").
