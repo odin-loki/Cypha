@@ -1175,6 +1175,42 @@ ClassifyAtHResult classify_at_h(const CyphaInferModel& m, const double* h, const
   return out;
 }
 
+namespace {
+
+/// The GH gate's numbers for latent ``h``: the per-dimension squared Mahalanobis distance from the world prior,
+/// the baseline ``r_base = 1 / mean(1/v)`` and the inflated ``r_eff``. ``gh_infer_at_h`` and
+/// ``gh_anomaly_score_at_h`` both use it, so ``predict`` and ``update`` score a row identically.
+struct GhGateNumbers {
+  double mahal_sq{0.0};
+  double r_base{0.0};
+  double r_eff{0.0};
+};
+
+GhGateNumbers gh_gate_numbers(const CyphaInferModel& m, const double* h, double chi, double psi) {
+  const int d = m.d_latent;
+  GhGateNumbers g;
+  for (int j = 0; j < d; ++j) {
+    const double dj = h[j] - m.mu_world[static_cast<std::size_t>(j)];
+    g.mahal_sq += dj * dj * m.inv_v[static_cast<std::size_t>(j)];
+  }
+  g.mahal_sq /= static_cast<double>(d);
+
+  const double inv_mean = mean_inv_v(m);
+  g.r_base = 1.0 / (inv_mean + kEps);
+  g.r_eff = nig_r_eff_scalar(std::max(g.mahal_sq, 0.0), g.r_base, chi, psi);
+  return g;
+}
+
+}  // namespace
+
+double gh_anomaly_score_at_h(const CyphaInferModel& m, const double* h, double chi, double psi) {
+  if (m.labels.empty() || m.d_latent <= 0) {
+    return 0.0;  // gh_infer_at_h returns r_eff 1 with no baseline here, which scores 0
+  }
+  const GhGateNumbers gate = gh_gate_numbers(m, h, chi, psi);
+  return gh_infer_anomaly_score(gate.r_eff, gate.r_base);
+}
+
 GhInferAtHResult gh_infer_at_h(const CyphaInferModel& m, const double* h, double chi, double psi, double alpha,
                                const CyphaInferOptions* kernel_opt) {
   GhInferAtHResult out;
@@ -1188,16 +1224,10 @@ GhInferAtHResult gh_infer_at_h(const CyphaInferModel& m, const double* h, double
     return out;
   }
 
-  double mahal_sq = 0.0;
-  for (int j = 0; j < d; ++j) {
-    const double dj = h[j] - m.mu_world[static_cast<std::size_t>(j)];
-    mahal_sq += dj * dj * m.inv_v[static_cast<std::size_t>(j)];
-  }
-  mahal_sq /= static_cast<double>(d);
-
-  const double inv_mean = mean_inv_v(m);
-  const double r_base = 1.0 / (inv_mean + kEps);
-  out.r_eff = nig_r_eff_scalar(std::max(mahal_sq, 0.0), r_base, chi, psi);
+  const GhGateNumbers gate = gh_gate_numbers(m, h, chi, psi);
+  const double mahal_sq = gate.mahal_sq;
+  const double r_base = gate.r_base;
+  out.r_eff = gate.r_eff;
   out.r_base = r_base;
   const double gh_scale = r_base / std::max(out.r_eff, r_base);
   out.t_adj = m.temperature / std::max(gh_scale, 0.01);

@@ -238,4 +238,11 @@ std::vector<RetrieveHit> retrieve_from_x(const CyphaInferModel& m, const double*
 /// pinned at 0 for every input. See docs/reports/NUMERICAL_KERNEL_AUDIT_2026-09-17.md (R2).
 double gh_infer_anomaly_score(double r_eff, double r_base);
 
+/// The ``anomaly_score`` ``Cypha::predict`` reports on its GH path for latent ``h``, without the class scores:
+/// ``gh_infer_anomaly_score(r_eff, r_base)`` with ``gh_infer_at_h``'s own ``r_eff`` and ``r_base`` (one shared
+/// computation, so the two agree to the bit). 0 for a model with no classes or no latent. ``Cypha::update`` scores
+/// each training row with it before learning the row, to learn the OOD threshold
+/// (docs/reports/CYPHA_OOD_THRESHOLD.md).
+double gh_anomaly_score_at_h(const CyphaInferModel& m, const double* h, double chi, double psi);
+
 }  // namespace cypha

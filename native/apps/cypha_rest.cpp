@@ -86,7 +86,8 @@ struct SessPred {
 std::vector<SessPred> g_sess;
 
 constexpr double kGhNigAdaptAlpha = 0.98;
-/// Python ``InferenceEngine.OOD_THRESHOLD`` (anomaly_score > threshold → is_ood).
+/// Python ``InferenceEngine.OOD_THRESHOLD`` (anomaly_score > threshold → is_ood). Used only when a view has no
+/// ``Cypha`` object; otherwise ``Cypha::ood_threshold()`` (learned from training rows) decides.
 constexpr double kOodThreshold = 3.0;
 
 /// In-memory model slot keyed by registry ``name/version`` (FUTURE.md §5).
@@ -1046,7 +1047,8 @@ std::string json_predict_impl(const nlohmann::json& body, ModelView v) {
     llr_for_scores = std::move(gh.llrs);
     // Pair r_eff with the baseline it was formed against, not with mahal_ema (different units).
     anomaly = cypha::gh_infer_anomaly_score(r_eff, gh.r_base);
-    is_ood = anomaly > kOodThreshold;
+    // The model's learned threshold (docs/reports/CYPHA_OOD_THRESHOLD.md); the fixed 3.0 without a model object.
+    is_ood = anomaly > (v.cypha != nullptr ? v.cypha->ood_threshold() : kOodThreshold);
   } else {
     const bool self_correct = body.value("self_correct", false);
     const int max_passes = body.value("self_correct_max_passes", 3);

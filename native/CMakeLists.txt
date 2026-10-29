@@ -324,6 +324,17 @@ add_test(
 )
 set_tests_properties(native_cypha_save_load_test PROPERTIES TIMEOUT 300)
 
+# Cypha's OOD threshold learned from training rows (docs/reports/CYPHA_OOD_THRESHOLD.md): selftest for the CTest,
+# `measure` for the registered synthetic read.
+add_executable(cypha_ood_test tools/cypha_ood_test.cpp)
+target_link_libraries(cypha_ood_test PRIVATE cypha_core)
+cypha_mingw_apply_exe_link_options(cypha_ood_test)
+add_test(
+  NAME native_cypha_ood_test
+  COMMAND "$<TARGET_FILE:cypha_ood_test>" selftest "${CMAKE_CURRENT_BINARY_DIR}/cypha_ood_test_out"
+)
+set_tests_properties(native_cypha_ood_test PROPERTIES TIMEOUT 300)
+
 add_executable(cypha_one_smoke tools/cypha_one_smoke.cpp)
 target_link_libraries(cypha_one_smoke PRIVATE cypha_core)
 cypha_mingw_apply_exe_link_options(cypha_one_smoke)

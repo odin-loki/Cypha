@@ -237,6 +237,22 @@ class Cypha {
   /// Active-learning score from last ``predict`` softmax: entropy × (1 − max p).
   double active_query_score() const { return last_active_query_score_; }
 
+  /// OOD threshold ``predict`` compares ``anomaly_score`` with: the (1 - target rate) quantile of the current model's
+  /// anomaly scores on the latents of the last ``kOodWindow`` training rows (``update`` keeps each row's latent, encoded
+  /// just before learning it). Recomputed after updates, when first needed. Until ``kOodMinScores`` rows are held it is
+  /// the old fixed ``kOodThreshold`` (docs/reports/CYPHA_OOD_THRESHOLD.md).
+  double ood_threshold() const;
+  /// Target false OOD rate on in-distribution inputs (default 0.05).
+  double ood_target_rate() const { return ood_target_; }
+  void set_ood_target_rate(double rate);
+  /// The held latents (``ood_rows_held() x d``, ring storage order) and the next slot once the ring is full.
+  const std::vector<double>& ood_latents() const { return ood_h_; }
+  std::size_t ood_rows_held() const { return ood_count_; }
+  std::size_t ood_head() const { return ood_head_; }
+  static constexpr std::size_t kOodWindow = 1024;
+  static constexpr std::size_t kOodMinScores = 50;
+  static constexpr double kOodThreshold = 3.0;
+
   bool load_regression_json(const std::string& path);
 
  private:
@@ -249,6 +265,8 @@ class Cypha {
   void import_save_state(const CNode& st);
   void import_save_hparams(const CNode& st);
   void import_regression_state(const CNode& reg);
+  void record_ood_latent(const std::vector<double>& h);
+  void reset_ood_threshold();
 
   std::unique_ptr<CyphaInferModel> infer_;
   std::unique_ptr<CyphaDifMemoryState> mem_;
@@ -289,9 +307,16 @@ class Cypha {
   std::unique_ptr<EwcRegularizer> ewc_;
   double ewc_lambda_{0.0};
   double last_active_query_score_{0.0};
+  double ood_target_{0.05};
+  std::vector<double> ood_h_;  // ring of training rows' latents, kOodWindow x d at most
+  std::size_t ood_count_{0};
+  std::size_t ood_head_{0};
+  mutable double ood_tau_{kOodThreshold};  // cache of ood_threshold()
+  mutable bool ood_dirty_{false};
+  mutable double ood_tau_chi_{0.0};  // the GH session the cached threshold was scored with
+  mutable double ood_tau_psi_{0.0};
 
   std::mt19937 rng_{424242};
-  static constexpr double kOodThreshold = 3.0;
   static constexpr double kGhNigAdaptAlpha = 0.98;
 };
 
