@@ -101,7 +101,8 @@ function Convert-GdeltExportLine([string]$line) {
     $day = [int]$sql.Substring(6, 2)
     $a1 = ($fields[6] -replace '"', '').Trim()
     $a2 = ($fields[16] -replace '"', '').Trim()
-    $cameo = ($fields[26] -replace '"', '').Trim()
+    # EventBaseCode (3 digits), not EventCode: a 4-digit EventCode ("1823") gave root 182 in from_cameo (code / 10).
+    $cameo = ($fields[27] -replace '"', '').Trim()
     $gold = ($fields[30] -replace '"', '').Trim()
     if ($a1 -eq '' -or $a2 -eq '') { return $null }
     $theater = "GLB"

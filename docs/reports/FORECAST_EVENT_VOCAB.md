@@ -116,3 +116,70 @@ Tool: `forecast_vocab_bench` at commit a18b16d. Train 200,000 events, dev 40,000
 | F5 | Unmasked samples from trained hp_pair invalid under 1% | **Hit:** 0.6% |
 | F6 | ngram at least 100 times faster than hp_pair, under 100 MB | **Hit:** about 2,000 times faster to train and 1,500 times to score; 56 MB |
 | F7 | The chosen candidate's top-1 on test is 0.10 to 0.30 | Scored at the test read |
+
+## The test read (once, after commit 5a57f62)
+
+Each candidate trained on train, read dev with learning on (unscored), then was scored on test (2026-10-11 and 10-12, 40,000 events). Load average about 25 to 30.
+
+| Candidate | Bits per event [95%] | Minus hp_pair [95%] | Top-1 | Brier | ECE | Raw draws invalid | Train, µs per event | Score, µs per event | Peak |
+|---|---|---|---|---|---|---|---:|---:|---:|
+| uniform | 9.7177 | +5.9733 [+5.9280, +6.0159] | 0.000 | 0.999 | 0.001 | 0 | 0 | 1 | 56 MB |
+| unigram | 4.9302 [4.8680, 4.9920] | +1.1858 [+1.1291, +1.2428] | 0.201 | 0.930 | 0.019 | 0 | 0.2 | 1 | 56 MB |
+| ngram order 2 | 3.7412 [3.6965, 3.7883] | −0.0032 [−0.0106, +0.0042] | 0.382 | 0.815 | 0.010 | 0 | 0.2 | 1 | 56 MB |
+| **hp_pair (the dev choice)** | **3.7444 [3.7017, 3.7897]** | — | 0.368 | 0.821 | 0.046 | 0.007 | 523 | 2,760 | 297 MB |
+| hp_base256 | 3.7752 [3.7302, 3.8220] | +0.0308 [+0.0251, +0.0365] | 0.365 | 0.823 | 0.047 | 0.007 | 384 | 2,858 | 297 MB |
+| hp_theater | 3.7626 [3.7183, 3.8086] | +0.0181 [+0.0105, +0.0250] | 0.378 | 0.821 | 0.050 | 0.003 | 511 | 2,682 | 1,281 MB |
+
+- **Rule 3:** no candidate beats hp_pair by more than 0.02 bits per event with its interval above 0. ngram order 2 ties it again (−0.0032, interval across 0). **The dev choice stands: hp_pair at table bits 18.**
+- The test window is harder than dev for every model (about +0.19 bits per event); the ordering is the same.
+- **Calibration:** ngram's top-1 probability is better calibrated (ECE 0.010 against hp_pair's 0.046). hp is a little overconfident on events.
+- Masked samples: 0 invalid of 10,000 for every candidate.
+
+### Prediction F7, scored
+
+| # | Prediction | Result |
+|---|---|---|
+| F7 | The chosen candidate's top-1 on test is 0.10 to 0.30 | **Miss:** 0.368. One event of context predicts the next exactly more often than expected, because consecutive GDELT events often repeat (the same article) |
+
+Predictions over all: 4 hits (F1, F4, F5, F6), 3 misses (F2, F3, F7).
+
+## After the test read: a speed change
+
+- The rollout tree takes a full 842-way distribution at every new node, which for hp_pair is 44 hp branches. On the repo's data that is 693 nodes, so `native_forecast_smoke` timed out at 300 s on this loaded machine (load 25).
+- hp's bit-tree fan-out skips bytes at or above the size asked for. So hp_pair now asks for bytes 0–43 (hi) and 0–83 (lo), and hp_theater for 0–7 and 0–119; raw draws still take all 256. On one state the values below the cut equal the full fan-out exactly.
+- **Not bit-exact over a stream:** a rerun of dev with the change gives 3.555459 bits per event, against 3.555452. 13,914 of 40,000 per-event values moved, by at most 0.0002 bits (mean 7e-6). So the fan-out touches some hp state that a smaller fan-out touches differently. That is about 0.01% of the 0.02 decision margin, and no decision changes. The tables above are the registered runs.
+- With it, `native_forecast_smoke` passes in 166 s at load 29; the full distribution is about twice as fast.
+
+## The decision
+
+**The forecast's sequence model is hp_pair: each event is written as two CyphaLM bytes, theater × level then CAMEO root, at hp table bits 18.** All 842 ids train, score and roll out; rollouts only ever produce valid events. It ties a Kneser–Ney event bigram in bits per event on dev and test. It is about 1,500 times slower, but it keeps the forecast on CyphaLM's model, as rule 1 says. It is open to Odin's veto: ngram order 2 is the measured alternative. It is equally accurate, better calibrated, 56 MB, and microseconds per event.
+
+## Checks
+
+- `native_forecast_event_model_test` (new, in CI): 37 checks.
+  - What it checks: codes, UTF-16, every kind's normalisation, scoring, sampling, rewind and digest, and Kneser–Ney against a direct count.
+  - Five planted bugs each make it fail: Kneser–Ney adding continuations for seen n-grams; no renormalisation over valid bytes; a rewind that does nothing; the CAMEO root off by one; UTF-16 big-endian not detected.
+- `native_forecast_smoke` (cypha_slow): every kind trained on a cycle of ids 300, 450, 600 and 750 continues it in rollouts (share 1.0; a cold model 0.0). Learning stays unchanged through rollouts, and the same seed gives the same tree. The pipeline on the repo's data trains on ids up to 797 and builds a 693-node tree.
+- `native_forecast_drift_backtest`, `native_forecast_gdelt_poll`, `native_views_leaderboard_bench`: pass on the decoded data.
+- The 9 CTests from HANDOFF §4.4 pass.
+
+## Also found
+
+- **The node estimator** now sees real MID features (28 records) and scores 0 of its held-out records. On main it scored 1 on the constant all-zero features. That is outside this change.
+- **`scripts/fetch_forecast_data.ps1`** took the CAMEO code from `EventCode`, whose 4-digit codes give a wrong root. It now takes `EventBaseCode`, as `forecast_gdelt_window.py` does.
+- No converter maps any event to the Africa theater; its 120 ids are never seen in data.
+
+## How to reproduce
+
+```bash
+python3 -I scripts/forecast_gdelt_window.py DATA 20260929 20260930 20261001 20261002 20261003 20261004 20261005 \
+  20261006 20261007 20261008 20261009 20261010 20261011 20261012 --max-per-day 20000
+TR=$(ls DATA/gdelt_2026092[9].csv DATA/gdelt_20260930.csv DATA/gdelt_2026100[1-8].csv | paste -sd,)
+DV=DATA/gdelt_20261009.csv,DATA/gdelt_20261010.csv; TE=DATA/gdelt_20261011.csv,DATA/gdelt_20261012.csv
+forecast_vocab_bench --kind ngram --order 2 --train $TR --dev $DV --out dev/ngram2
+forecast_vocab_bench --kind hp_pair --hp-bits 18 --train $TR --dev $DV --out dev/hp_pair
+forecast_vocab_bench --kind hp_pair --hp-bits 18 --train $TR --dev $DV --test $TE --read-test --out test/hp_pair
+python3 -I scripts/forecast_vocab_compare.py dev ngram2 hp_pair --ref ngram2
+```
+
+The days' zip SHA-256s are in `FORECAST_EVENT_VOCAB.manifest.tsv`.

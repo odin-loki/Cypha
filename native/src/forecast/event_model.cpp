@@ -73,8 +73,11 @@ class HpUnit {
   const cyphalm::HpSequenceBackend& hp() const { return model_->hp_backend(); }
   void cold() { model_->reset_context(); }
   void begin_stream() { model_->reset_stream(false); }
-  std::vector<double> probs() {
-    auto lp = hp().next_byte_log_probs(256);
+  // P(next byte) for bytes 0 .. n - 1. hp's bit-tree fan-out skips subtrees past n, and gives the same value for
+  // every byte below n as the full fan-out (exactly; a composite model mixes only full distributions, so it always
+  // scores all 256).
+  std::vector<double> probs(int n = 256) {
+    auto lp = hp().next_byte_log_probs(hp().is_composite() ? 256 : n);
     for (auto& v : lp) v = std::exp(v);
     return lp;
   }
@@ -154,7 +157,11 @@ class HpPairModel final : public EventModel {
  public:
   HpPairModel(const EventVocabulary& vocab, const EventModelConfig& cfg, bool by_meaning)
       : name_(by_meaning ? "hp_pair" : "hp_base256"), code_(make_pair_code(vocab, by_meaning)),
-        unit_(cfg.hp_table_bits, cfg.seed), n_(vocab.size()) {}
+        unit_(cfg.hp_table_bits, cfg.seed), n_(vocab.size()) {
+    hi_n_ = static_cast<int>(code_.valid_hi.back()) + 1;
+    lo_n_.assign(256, 0);
+    for (const auto h : code_.valid_hi) lo_n_[h] = static_cast<int>(code_.valid_lo[h].back()) + 1;
+  }
 
   std::string name() const override { return name_; }
 
@@ -179,17 +186,17 @@ class HpPairModel final : public EventModel {
 
   double log2_prob(std::uint32_t id) override {
     const auto& e = code_.of_id.at(id);
-    const double ph = masked_prob(unit_.probs(), code_.valid_hi, e.hi);
+    const double ph = masked_prob(unit_.probs(hi_n_), code_.valid_hi, e.hi);
     HpPoint here({&unit_});
     unit_.observe(e.hi);
-    const double pl = masked_prob(unit_.probs(), code_.valid_lo[e.hi], e.lo);
+    const double pl = masked_prob(unit_.probs(lo_n_[e.hi]), code_.valid_lo[e.hi], e.lo);
     here.rewind();
     return std::log2(ph) + std::log2(pl);
   }
 
   std::vector<double> distribution() override {
     std::vector<double> out(n_, 0.0);
-    const auto p = unit_.probs();
+    const auto p = unit_.probs(hi_n_);
     double sum = 0.0;
     for (const auto h : code_.valid_hi) sum += p[h];
     HpPoint here({&unit_});
@@ -200,7 +207,7 @@ class HpPairModel final : public EventModel {
         continue;
       }
       unit_.observe(static_cast<std::uint8_t>(h));
-      const auto q = unit_.probs();
+      const auto q = unit_.probs(lo_n_[h]);
       here.rewind();
       double qs = 0.0;
       for (const auto l : code_.valid_lo[h]) qs += q[l];
@@ -213,13 +220,13 @@ class HpPairModel final : public EventModel {
   }
 
   std::uint32_t sample(double temperature, std::mt19937& rng) override {
-    const auto h = static_cast<std::uint32_t>(sample_index(unit_.probs(), code_.valid_hi, temperature, rng));
+    const auto h = static_cast<std::uint32_t>(sample_index(unit_.probs(hi_n_), code_.valid_hi, temperature, rng));
     if (code_.valid_lo[h].size() == 1) {
       return static_cast<std::uint32_t>(code_.id_of[h][code_.valid_lo[h][0]]);
     }
     HpPoint here({&unit_});
     unit_.observe(static_cast<std::uint8_t>(h));
-    const auto l = sample_index(unit_.probs(), code_.valid_lo[h], temperature, rng);
+    const auto l = sample_index(unit_.probs(lo_n_[h]), code_.valid_lo[h], temperature, rng);
     here.rewind();
     return static_cast<std::uint32_t>(code_.id_of[h][l]);
   }
@@ -241,9 +248,9 @@ class HpPairModel final : public EventModel {
 
   double observe(std::uint32_t id) override {
     const auto& e = code_.of_id.at(id);
-    const double ph = masked_prob(unit_.probs(), code_.valid_hi, e.hi);
+    const double ph = masked_prob(unit_.probs(hi_n_), code_.valid_hi, e.hi);
     unit_.observe(e.hi);
-    const double pl = masked_prob(unit_.probs(), code_.valid_lo[e.hi], e.lo);
+    const double pl = masked_prob(unit_.probs(lo_n_[e.hi]), code_.valid_lo[e.hi], e.lo);
     unit_.observe(e.lo);
     return -(std::log2(ph) + std::log2(pl));
   }
@@ -262,6 +269,8 @@ class HpPairModel final : public EventModel {
   PairCode code_;
   HpUnit unit_;
   std::size_t n_;
+  int hi_n_{256};
+  std::vector<int> lo_n_;
   std::optional<HpPoint> mark_;
 };
 
@@ -318,9 +327,9 @@ class HpTheaterModel final : public EventModel {
 
   double log2_prob(std::uint32_t id) override {
     const auto s = sym_.at(id);
-    double lp = std::log2(masked_prob(theater_->probs(), valid_sym_, s));
+    double lp = std::log2(masked_prob(theater_->probs(kTheaters + 1), valid_sym_, s));
     if (s < static_cast<std::uint32_t>(kTheaters)) {
-      lp += std::log2(masked_prob(local_[s]->probs(), valid_local_[s], local_of_[id]));
+      lp += std::log2(masked_prob(local_[s]->probs(static_cast<int>(valid_local_[s].size())), valid_local_[s], local_of_[id]));
     } else {
       lp -= 1.0;  // PAD or UNK, uniform
     }
@@ -329,7 +338,7 @@ class HpTheaterModel final : public EventModel {
 
   std::vector<double> distribution() override {
     std::vector<double> out(n_, 0.0);
-    const auto pt = theater_->probs();
+    const auto pt = theater_->probs(kTheaters + 1);
     double sum = 0.0;
     for (const auto s : valid_sym_) sum += pt[s];
     for (const auto s : valid_sym_) {
@@ -339,7 +348,7 @@ class HpTheaterModel final : public EventModel {
         out[1] += ps * 0.5;
         continue;
       }
-      const auto pl = local_[s]->probs();
+      const auto pl = local_[s]->probs(static_cast<int>(valid_local_[s].size()));
       double ls = 0.0;
       for (const auto i : valid_local_[s]) ls += pl[i];
       for (const auto i : valid_local_[s]) {
@@ -350,11 +359,11 @@ class HpTheaterModel final : public EventModel {
   }
 
   std::uint32_t sample(double temperature, std::mt19937& rng) override {
-    const auto s = sample_index(theater_->probs(), valid_sym_, temperature, rng);
+    const auto s = sample_index(theater_->probs(kTheaters + 1), valid_sym_, temperature, rng);
     if (s == static_cast<std::size_t>(kTheaters)) {
       return static_cast<std::uint32_t>(std::uniform_int_distribution<int>(0, 1)(rng));
     }
-    const auto i = sample_index(local_[s]->probs(), valid_local_[s], temperature, rng);
+    const auto i = sample_index(local_[s]->probs(static_cast<int>(valid_local_[s].size())), valid_local_[s], temperature, rng);
     return ids_[s][i];
   }
 
