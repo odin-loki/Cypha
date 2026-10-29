@@ -708,3 +708,91 @@ With the C library's mmap threshold fixed by environment variable (test runs onl
 **Still open.**
 - **The FM-index build** sets the built peak: libsais's 4-byte scratch per byte. A lower-memory BWT, or freeing what is resident at that moment, is the next step. A served model never builds it.
 - **The heap.** The C library holds memory freed by earlier steps. Without code changes, a fixed mmap threshold takes the unchanged tool's E build to 169 MB. That is an environment setting, not code (Odin: "don't worry about the OS"), so it is recorded here, not adopted.
+
+## M16: the FM-index build's peak (registered 2026-10-28, before any run)
+
+**Question.** After M15, building a `qa` model peaks inside the FM-index build: C1L+E went 111 → 215 MB (first BWT) → 235 MB (second BWT), E peaked at 194 MB. libsais needs 4 bytes of suffix-array scratch per text byte (T is about 21 MB, so 85 MB). Can the build's peak come down without changing a byte of the index?
+
+**Where the memory goes (from the code).** The build holds, at its first BWT, the text, a copy for the BWT and the scratch: about 6 bytes a text byte. Each wavelet tree is built by copying each node's sequence into a left and a right part, so the build makes and frees n bytes per tree level, and the C library keeps some of it. At the second BWT it holds the reversed text, the scratch and the first tree. In `qa` the class table (19.5 MB) is also resident, since it is built from T first.
+
+**Change (lossless), in three parts.**
+1. **Both BWTs in place.** The forward BWT overwrites the text. The reversed text for the second BWT is rebuilt from the first tree by one LF walk (from the empty suffix back to the start, which yields the text backwards), written into the same buffer. No copy of the text is kept.
+2. **Trees filled without copies.** The tree's shape depends only on the byte counts, so it is made first (the same split rule and the same node order). Then one pass over the sequence appends each byte's bit to every node on its path. Nothing but the tree's own bits is allocated.
+3. **In `qa`, the index before the class table.** `FmInfiniGram::text()` gives the text back from the index (one LF walk over the reversed text's tree, which yields the text in order). The index is built from T first, then the class table from the text the index returns. The class table is no longer resident during the scratch. When the similar-context expert reads T (`src=all`), T is copied into the index as before and kept.
+
+**Decision rule (fixed before the runs).**
+1. **Lossless.** The index is byte-identical: the stored `ig.fm` and `low.fm` files equal the unchanged tool's. Every printed number and the rows file are byte-identical to the unchanged tool (wip/integ2 `95b5883`: main `e8748a2` with S4, S6, M15 and A4c) for A0 (`--no-cls --no-copy`), E (the defaults) and C1L+E. Timing fields are excepted (`build_s`, `LATENCY`, `SIM_LAT`'s p50 and p99). `native_fm_infinigram_test` passes unchanged, and new checks show the new build path gives the same index as the old one and that `text()` returns the text.
+2. **Peaks** are `VmHWM` in kB / 1000, at least two runs per configuration and tool. A change is kept if it lowers the built peak of E and C1L+E by more than the repeat spread.
+3. **No OS-specific calls** (Odin: "don't worry about the OS").
+4. **Time.** A `qa` build is at most 10% slower.
+
+**Target.** C1L+E built at 200 MB or less, with repeat runs within 2 MB.
+
+**Predictions (registered before the runs).**
+
+| # | Prediction |
+|---|---|
+| M16a | The unchanged tool (`95b5883`) peaks inside the FM-index build in E and C1L+E, at the second BWT: C1L+E 225–240 MB, E 185–200 MB |
+| M16b | Harness (the index alone over a 21 MB text): the new build's peak addition is at least 20 MB below the old one's |
+| M16c | The index is byte-identical from both build paths; `text()` returns the text exactly; `native_fm_infinigram_test` passes unchanged |
+| M16d | With the index built before the class table, C1L+E built is 200 MB or less (the target) and E 180 MB or less; repeats within 2 MB |
+| M16e | The two LF walks and the tree fill add under 10 s to a `qa` build, and the index build alone is at most 50% slower than before |
+| M16f | In C1L, the lowered index's build (the 203.9 MB phase in M15's trace) falls by at least 20 MB |
+
+### Results: M16 (2026-10-29)
+
+**How it was run.**
+- `cyphalm_trie qa` on the 8 MiB protocol. The unchanged tool is wip/integ2 `95b5883`; the changed one is `ec0d773` (that commit plus M16). Configurations as in M15, with B4c's and A4c's defaults: **A0** (`--no-cls --no-copy`), **E** (the defaults) and **C1L+E**, and `context8k` with its defaults.
+- Peaks are `VmHWM` in kB / 1000. M15's wrapper polled `VmRSS` every 0.25 s next to the tool's stamped progress lines, to place each peak in a phase.
+- Runs alternated the two tools, one at a time, on a machine shared with three other agents, so wall times are noisy.
+- A harness (scratch, not committed) built only the index over wiki train plus the raw Dolly file (20.6 MB), moved in.
+
+**Harness: the index alone (20.6 MB of text).**
+
+| Build | Peak added over the text | Resident after | Build time | `text()` |
+|---|---:|---:|---:|---:|
+| Before M16 | 114.4 / 114.5 MB | index + 21 MB of heap the tree build left | 2.70 / 2.76 s | — |
+| M16 | 94.8 / 94.8 MB | the index (28.9 MB) and nothing else | 3.52 / 3.61 s | 5.6 / 5.8 s |
+
+- A first version rebuilt the reversed text by one LF walk through the forward tree. It used the same memory but took 8–9 s, since every step is a cache miss per tree level. libsais's inverse BWT does the same in place in about a second with the same 4-byte scratch as a BWT, so the build uses it; `text()` keeps the walk, which needs no scratch.
+
+**Parity.**
+- **Index.** `native_fm_infinigram_test` gains golden hashes: the stored index of 12 fixed texts (1 to 300,000 bytes, 1 to 256 symbols, half zeros or none), written by the build before M16, through both constructors. The M16 build gives the same bytes. A planted bug that only renumbers the tree's nodes (every query still right) fails 9 of the 12. `text()` returns each text exactly. 191,909 checks in all.
+- **`qa` stores.** `qa --save` writes byte-identical stores with both tools: E (`cls.cc`, `ig.fm`, `model.pk`, `qa.meta`) and C1L+E (the same plus `low.fm`).
+- **Output.** Every A0, E and C1L+E run, with and without `--save`, printed the unchanged tool's lines (timing masked) with byte-identical rows. `context8k` printed the unchanged tool's 224 lines (timing masked).
+- All 9 CTests from HANDOFF §4.4 pass.
+
+**Peaks** (MB; repeat runs listed).
+
+| Configuration | Unchanged tool | M16 | Where M16 peaks |
+|---|---:|---:|---|
+| A0 | 175.3 | **132.2** | the index build (the scratch over T) |
+| E | 194.0 / 194.2 (`--save`) | **169.9 / 170.1** (`--save`) | the holdout arrays after the similar-context build |
+| C1L+E | 235.2 | **184.6 / 184.5** | the lowered index's build (A1c's token step) |
+| C1L+E with `--save` (the lowered index kept for the store) | 260.8 | **204.5** | after the store: the lowered index is still resident |
+| `context8k` | 225.8 | **202.3** | after the class table (the unchanged tool: the index build) |
+
+- **Where the unchanged tool peaked.** In C1L+E at the second BWT (215.2 at the first, 235.2 at the second), in E at both (194.0), and in A0 inside the index build too (175.3; M15 had placed A0's peak at the similar-context build).
+- **The index build now** reaches 132.3 MB in E (it was the 194.0 peak) and 178.5 MB in C1L+E. After it the process drops to 68.4 MB (E), since the in-place build leaves no heap behind.
+- **The lowered index's build** (C1L only, before the chat text exists) falls 204.3 → 184.6 MB and is now C1L+E's peak.
+
+**Time.** The index build takes about 1 s more (the inverse BWT and the one-pass tree fill), and `text()` about 6 s once per run with the class table. Whole runs took the same or less (E 551 / 554 s, C1L+E 571 / 646 s, A0 458 / 486 s, against the unchanged tool), within the machine's noise.
+
+#### Predictions, scored
+
+| # | Prediction | Result |
+|---|---|---|
+| M16a | The unchanged tool peaks inside the index build at the second BWT: C1L+E 225–240, E 185–200 MB | **Hit.** C1L+E 235.2 at the second BWT; E 194.0, reached at both BWTs |
+| M16b | Harness: the new build's peak addition at least 20 MB lower | **Miss, by 0.4 MB:** 114.4 → 94.8 (−19.6) |
+| M16c | The index byte-identical from both paths; `text()` exact; the CTest passes | **Hit** (golden hashes, `qa` stores, 191,909 checks) |
+| M16d | C1L+E built 200 MB or less, E 180 or less, repeats within 2 MB | **Hit.** C1L+E 184.6 / 184.5; E 169.9 / 170.1 |
+| M16e | Under 10 s added to a `qa` build; the index build at most 50% slower | **Hit.** About 7 s of added work (1 s in the index, 6 s `text()`); the index build +33% (2.7 → 3.6 s) |
+| M16f | The lowered index's build in C1L falls by at least 20 MB | **Miss, by 0.3 MB:** 204.3 → 184.6 (−19.7) |
+
+**Decision.** By the rule (lossless; E −24 MB, C1L+E −51 MB, A0 −43 MB, context8k −24 MB, far beyond the 0.2 MB repeat spread; time within 10%), M16 is adopted.
+- A built `qa` model now peaks at 132 MB (A0), 170 MB (E) and 185 MB (C1L+E), against 175, 194 and 235. The 200 MB target for C1L+E is met.
+- `FmInfiniGram::text()` gives a stored or built index's text back, so code that needs T can take it from the index instead of keeping a copy.
+
+**Still open.**
+- **`--save` keeps the lowered index** (26 MB) to the end of the run, so C1L+E with `--save` peaks at 204.5 MB. Freeing it once the store is written would take that under 200 (M14's rule; not done here).
+- **The libsais scratch** (4 bytes a text byte) is now the index build's whole cost above its text and one tree. Lower would need a blockwise BWT with a merge; at 185 MB built and under 200 served, it is not needed now.

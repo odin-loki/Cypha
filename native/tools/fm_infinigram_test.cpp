@@ -220,6 +220,63 @@ void one_text(std::mt19937_64& g, std::size_t n, int sigma, bool repeats) {
     locate_text(t, q, fm, n * 1000003u + static_cast<std::uint64_t>(sigma) * 101u + (repeats ? 7u : 0u));
 }
 
+// M16: the stored index of fixed texts, hashed (FNV-1a 64 of the whole file). The values were written by the build
+// before M16 (both BWTs from copies, trees from per-node copies), so the build's every path must give the same bytes.
+struct GoldenText {
+    std::size_t n;
+    int sigma;
+    bool zeros;  // about half the bytes 0 (the $ row also holds 0)
+};
+const GoldenText kGolden[] = {{1, 1, false},    {2, 2, true},       {3, 256, false},     {64, 2, false},
+                              {1000, 26, false}, {1000, 256, true},  {4096, 4, false},    {65537, 26, true},
+                              {65537, 256, false}, {300000, 26, false}, {300000, 256, true}, {300000, 3, false}};
+std::vector<std::uint8_t> golden_text(const GoldenText& gt, std::uint64_t seed) {
+    std::mt19937_64 g(seed);
+    std::vector<std::uint8_t> t(gt.n);
+    for (auto& c : t) {
+        // Skewed over the alphabet (a common byte, then rarer ones), as text is.
+        const std::uint64_t r = g();
+        int s = static_cast<int>((r % 1000) * (r % 1000) / 1000000.0 * gt.sigma);
+        if (s >= gt.sigma) s = gt.sigma - 1;
+        c = static_cast<std::uint8_t>(gt.zeros && (r >> 40) % 2 == 0 ? 0 : (gt.sigma == 256 ? s : 'a' + s));
+    }
+    return t;
+}
+std::uint64_t file_hash(const std::string& path) {
+    std::ifstream in(path, std::ios::binary);
+    std::uint64_t h = 1469598103934665603ull;
+    for (std::istreambuf_iterator<char> it(in), end; it != end; ++it) h = (h ^ static_cast<unsigned char>(*it)) * 1099511628211ull;
+    return h;
+}
+const std::uint64_t kGoldenHash[std::size(kGolden)] = {  // --golden on the build before M16 (wip/integ2 95b5883)
+    0xc34d6c70ab37eb3eull, 0x028b29520a4ce81aull, 0xcb629568b366ab5eull, 0xa7e674806d853eeaull,
+    0xcf6a57e93b576d74ull, 0x73b69cdf7e11b997ull, 0x195a3db83f72551cull, 0xdc6188804005d67eull,
+    0xbfbdb39297955f30ull, 0xe2dc266da68403aaull, 0x8ea33b3301ce9429ull, 0x4d1b693bcae09a32ull};
+int golden(bool print) {
+    const std::string path = "fm_infinigram_golden.fmig";
+    for (std::size_t i = 0; i < std::size(kGolden); ++i) {
+        std::vector<std::uint8_t> t = golden_text(kGolden[i], 1000 + i);
+        const FmInfiniGram a(t.data(), t.size());  // the copying constructor
+        a.save(path);
+        const std::uint64_t ha = file_hash(path);
+        std::vector<std::uint8_t> moved = t;
+        const FmInfiniGram b(std::move(moved));    // the consuming one (qa's)
+        b.save(path);
+        const std::uint64_t hb = file_hash(path);
+        if (print) std::printf("golden %zu n %zu sigma %d zeros %d hash %016llx %016llx\n", i, kGolden[i].n, kGolden[i].sigma,
+                               kGolden[i].zeros ? 1 : 0, static_cast<unsigned long long>(ha), static_cast<unsigned long long>(hb));
+        else {
+            checks += 2;  // M16: the index gives its text back
+            if ((a.text() != t || b.text() != t) && failures++ < 10) std::printf("FAIL golden %zu: text() differs\n", i);
+            if ((ha != kGoldenHash[i] || hb != kGoldenHash[i]) && failures++ < 10)
+                std::printf("FAIL golden %zu: hash %016llx %016llx, want %016llx\n", i, static_cast<unsigned long long>(ha),
+                            static_cast<unsigned long long>(hb), static_cast<unsigned long long>(kGoldenHash[i]));
+        }
+    }
+    std::remove(path.c_str());
+    return 0;
+}
+
 double now() { return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
 
 int bench(const char* path, std::size_t bytes) {
@@ -264,10 +321,12 @@ int bench(const char* path, std::size_t bytes) {
 
 int main(int argc, char** argv) {
     if (argc == 4 && std::strcmp(argv[1], "--bench") == 0) return bench(argv[2], std::strtoull(argv[3], nullptr, 10));
+    if (argc == 2 && std::strcmp(argv[1], "--golden") == 0) return golden(true);
     std::mt19937_64 g(20261028);
     for (int sigma : {1, 2, 4, 26, 256})
         for (std::size_t n : {std::size_t{1}, std::size_t{2}, std::size_t{7}, std::size_t{100}, std::size_t{3000}})
             for (bool rep : {false, true}) one_text(g, n, sigma, rep);
+    golden(false);  // M16
     std::printf("fm_infinigram_test: %zu checks (queries and stored files %zu, locate %zu), %zu failed\n", checks,
                 checks - locate_checks, locate_checks, failures);
     return failures ? 1 : 0;

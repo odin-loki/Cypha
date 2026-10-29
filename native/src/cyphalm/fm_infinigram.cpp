@@ -49,9 +49,10 @@ void RankBits::finish() {
     cum[(w.size() + 7) / 8] = c;
 }
 
-void AlphaTree::build(std::vector<std::uint8_t> seq) {
+void AlphaTree::build(const std::uint8_t* seq, std::size_t n, std::size_t zero_at) {
     std::fill(std::begin(freq_), std::end(freq_), 0);
-    for (auto c : seq) ++freq_[c];
+    for (std::size_t i = 0; i < n; ++i) ++freq_[seq[i]];
+    if (zero_at <= n) ++freq_[0];
     std::vector<int> syms;
     for (int c = 0; c < 256; ++c)
         if (freq_[c]) syms.push_back(c);
@@ -61,12 +62,36 @@ void AlphaTree::build(std::vector<std::uint8_t> seq) {
         return;
     }
     nodes_.reserve(syms.size() - 1);
-    root_ = make_(syms, 0, syms.size(), seq);
+    root_ = shape_(syms, 0, syms.size());
+    // M16: each byte's path from the root (node * 2 + its bit there, 1: it goes right), then one pass over the
+    // sequence appends each byte's bit to every node on its path. A node's bits are its subsequence's, in order.
+    std::vector<std::uint32_t> path[256];
+    for (int c : syms)
+        for (int v = root_; v >= 0;) {
+            const Node& nd = nodes_[static_cast<std::size_t>(v)];
+            const bool right = c > nd.mid;
+            path[c].push_back(static_cast<std::uint32_t>(v) * 2 + (right ? 1 : 0));
+            v = right ? nd.right : nd.left;
+        }
+    std::vector<std::size_t> at(nodes_.size(), 0);
+    auto put = [&](int c) {
+        for (const std::uint32_t e : path[c]) {
+            const std::size_t v = e >> 1, i = at[v]++;
+            if (e & 1) nodes_[v].bits.w[i >> 6] |= std::uint64_t{1} << (i & 63);
+        }
+    };
+    for (std::size_t i = 0; i < n; ++i) {
+        if (i == zero_at) put(0);
+        put(seq[i]);
+    }
+    if (zero_at == n) put(0);
+    for (auto& nd : nodes_) nd.bits.finish();
 }
 
-int AlphaTree::make_(const std::vector<int>& syms, std::size_t a, std::size_t b, std::vector<std::uint8_t>& seq) {
+// The tree's shape from the counts alone: a node splits its byte range where the two sides' counts are closest, and
+// nodes are numbered parent, left subtree, right subtree. Each node's bits are sized to its subsequence, left at 0.
+int AlphaTree::shape_(const std::vector<int>& syms, std::size_t a, std::size_t b) {
     if (b - a == 1) return -(syms[a] + 1);
-    // Split where the two sides' counts are closest.
     std::uint64_t W = 0, acc = 0, best = ~std::uint64_t{0};
     for (std::size_t i = a; i < b; ++i) W += freq_[syms[i]];
     std::size_t cut = a + 1;
@@ -77,25 +102,10 @@ int AlphaTree::make_(const std::vector<int>& syms, std::size_t a, std::size_t b,
     }
     const int id = static_cast<int>(nodes_.size());
     nodes_.emplace_back();
-    const int mid = syms[cut - 1];
-    nodes_[static_cast<std::size_t>(id)].mid = mid;
-    std::size_t nl = 0;
-    {
-        RankBits& rb = nodes_[static_cast<std::size_t>(id)].bits;
-        rb.reset(seq.size());
-        for (std::size_t i = 0; i < seq.size(); ++i)
-            if (seq[i] > mid) rb.w[i >> 6] |= std::uint64_t{1} << (i & 63);
-            else ++nl;
-        rb.finish();
-    }
-    std::vector<std::uint8_t> L, R;
-    L.reserve(nl);
-    R.reserve(seq.size() - nl);
-    for (auto c : seq) (c <= mid ? L : R).push_back(c);
-    seq.clear();
-    seq.shrink_to_fit();
-    const int l = make_(syms, a, cut, L);
-    const int r = make_(syms, cut, b, R);
+    nodes_[static_cast<std::size_t>(id)].mid = syms[cut - 1];
+    nodes_[static_cast<std::size_t>(id)].bits.reset(static_cast<std::size_t>(W));
+    const int l = shape_(syms, a, cut);
+    const int r = shape_(syms, cut, b);
     nodes_[static_cast<std::size_t>(id)].left = l;
     nodes_[static_cast<std::size_t>(id)].right = r;
     return id;
@@ -156,24 +166,16 @@ void AlphaTree::read(std::istream& in) {
         if (!ok(nd.left) || !ok(nd.right) || nd.mid < 0 || nd.mid > 255) throw std::runtime_error("FmInfiniGram: stored index damaged");
 }
 
-// BWT of t$ as n + 1 bytes, the $ row holding 0 (libsais gives the n others and
-// the $ row). With in_place the text's own buffer becomes the BWT.
-static std::vector<std::uint8_t> bwt(std::vector<std::uint8_t>& t, bool in_place, std::size_t& dollar) {
-    const std::size_t n = t.size();
-    std::vector<std::uint8_t> u;
-    std::vector<std::uint8_t>& out = in_place ? t : u;
-    if (!in_place) u.resize(n + 1);
+// M16: the BWT of t$ written over t: its n bytes are every row but the $ row, in row order (the tree takes the $
+// row's 0 from AlphaTree::build's zero_at, so t never grows). Returns the $ row. The scratch is 4 bytes a text byte.
+static std::size_t bwt_in_place(std::vector<std::uint8_t>& t) {
     std::int32_t p = 0;
     {
-        std::vector<std::int32_t> A(n);
-        p = libsais_bwt(t.data(), out.data(), A.data(), static_cast<std::int32_t>(n), 0, nullptr);
+        std::vector<std::int32_t> A(t.size());
+        p = libsais_bwt(t.data(), t.data(), A.data(), static_cast<std::int32_t>(t.size()), 0, nullptr);
     }
     if (p < 0) throw std::runtime_error("FmInfiniGram: libsais_bwt failed");
-    out.resize(n + 1);
-    std::memmove(out.data() + p + 1, out.data() + p, n - static_cast<std::size_t>(p));
-    out[static_cast<std::size_t>(p)] = 0;
-    dollar = static_cast<std::size_t>(p);
-    return in_place ? std::move(t) : u;
+    return static_cast<std::size_t>(p);
 }
 
 }  // namespace fm_detail
@@ -187,9 +189,40 @@ FmInfiniGram::FmInfiniGram(std::vector<std::uint8_t>&& text) : n_(text.size()) {
     for (auto c : text) ++freq[c];
     C_[0] = 1;
     for (int c = 1; c < 256; ++c) C_[c] = C_[c - 1] + freq[c - 1];
-    fwd_.build(fm_detail::bwt(text, false, dT_));
-    std::reverse(text.begin(), text.end());
-    rev_.build(fm_detail::bwt(text, true, dR_));
+    // M16: both BWTs in the text's own buffer, no copy. The forward BWT overwrites the text; once its tree is built,
+    // libsais inverts that BWT in place (the same 4-byte scratch as a BWT) and the text is reversed for the second.
+    std::vector<std::uint8_t> t = std::move(text);
+    text.clear();
+    dT_ = fm_detail::bwt_in_place(t);
+    fwd_.build(t.data(), n_, dT_);
+    if (n_) {
+        std::vector<std::int32_t> A(n_ + 1);
+        if (libsais_unbwt(t.data(), t.data(), A.data(), static_cast<std::int32_t>(n_), nullptr,
+                          static_cast<std::int32_t>(dT_)) < 0)
+            throw std::runtime_error("FmInfiniGram: libsais_unbwt failed");
+    }
+    std::reverse(t.begin(), t.end());
+    dR_ = fm_detail::bwt_in_place(t);
+    rev_.build(t.data(), n_, dR_);
+}
+
+// One LF walk from the empty suffix (row 0) back through a tree's BWT: out[k] is the byte k + 1 places before the end
+// of that BWT's text, so the reversed text's tree gives the text in order. No scratch, but a cache miss a tree level.
+void FmInfiniGram::walk_(const fm_detail::AlphaTree& tree, std::size_t dollar, std::uint8_t* out) const {
+    std::size_t row = 0;
+    for (std::size_t k = 0; k < n_; ++k) {
+        std::size_t r = 0;
+        const int c = tree.access(row, r);
+        if (c == 0 && dollar < row) --r;  // the $ row's stored 0 is not a byte of the text
+        out[k] = static_cast<std::uint8_t>(c);
+        row = C_[c] + r;
+    }
+}
+
+std::vector<std::uint8_t> FmInfiniGram::text() const {
+    std::vector<std::uint8_t> t(n_);
+    walk_(rev_, dR_, t.data());
+    return t;
 }
 
 namespace {
