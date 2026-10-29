@@ -157,7 +157,7 @@ Odin asked on 2026-10-28 to reduce CyphaLM's RAM. Every cut was measured against
 
 ### 4.4 CTests
 
-Run these on every change: `native_cyphalm_trie_selftest`, `native_fm_infinigram_test`, `native_epistemic_test`, `native_thought_test`, `native_geometry_test`, `native_ecs_lci_test`, `native_scribe_selftest`, `native_cyphalm_neural_smoke`, `native_class_context_test`. `native_fm_infinigram_test` runs 191,885 checks (locate included), `native_epistemic_test` 1,237 (S4, S4b, S4c, S6, S7, S7b, S7c, S8a, S8b, S8c, S8d, S9, S10, S11a), `native_class_context_test` 1,043 (M15). `pattern_learn` builds with `g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp`; its S3 `--gaps` run must stay byte-identical. `pattern_learn --signals DIR` (S4b) runs after S3's passes; without it the run is byte-identical. `--signals-scope dev|test` (S4c) runs after S4b's signals; without it the output is S4b's.
+Run these on every change: `native_cyphalm_trie_selftest`, `native_fm_infinigram_test`, `native_epistemic_test`, `native_thought_test`, `native_geometry_test`, `native_ecs_lci_test`, `native_scribe_selftest`, `native_cyphalm_neural_smoke`, `native_class_context_test`. `native_fm_infinigram_test` runs 191,885 checks (locate included), `native_epistemic_test` 1,246 (S4, S4b, S4b-b, S4c, S6, S7, S7b, S7c, S8a, S8b, S8c, S8d, S9, S10, S11a), `native_class_context_test` 1,043 (M15). `pattern_learn` builds with `g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp`; its S3 `--gaps` run must stay byte-identical. `pattern_learn --signals DIR` (S4b) runs after S3's passes; without it the run is byte-identical. `--signals-scope dev|test` (S4c) runs after S4b's signals; without it the output is S4b's.
 
 ### 4.5 CI
 
@@ -197,6 +197,7 @@ Run these on every change: `native_cyphalm_trie_selftest`, `native_fm_infinigram
 19. **S11a's questions:**
     - Name G11's 21 holding proposals, starting with educated_at, and hand them to F2 as new relations or phrasings? P10 needs Odin or the teacher for this.
     - G9's bar (Jaccard ≥ 0.5) cannot be reached on an occupation-heavy store. Accept the miss, or re-read on a richer store (for example with S15's added relations as attributes) with fresh held-out classes?
+    - G11's dev choice between C1 and C2 was decided by date links (344 of C1's 419 holding pairs). Without them C2 wins (87 against 78) and proposes developer, headquarters, member_of, spouse and country. Register the skip with the choice as it falls, and read S15 test once (S11a-b)?
 20. **S11b's questions:** keep G12's closed form (AUROC 0.68 on test) as a support term in S6's P0 or as a test kind? It needs its own registered read. A wider grader for open ABC (any Wikidata property between A and C, not S15's 34) would need new Wikidata fetches.
 
 ---

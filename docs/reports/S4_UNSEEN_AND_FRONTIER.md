@@ -776,3 +776,125 @@ done
 
 - The S4c lines are on stdout: `S4c SCOPE`, `SIGNAL_O_SET`, `SIGNAL_O_SAME`, and the SIGNAL lines of O1-register to O5-novelty.
 - Test outputs (sha256 prefix): `units.tsv` 6c5e5f67215316b5 (30,850 rows), `signal_gaps.tsv` 75f7569e3c57f088, `.planted.tsv` 37db7de14ca78b22. `plain_pages.xml` 6b1f2dcc97bbc302.
+
+## S4b-b: date links in the unparsed rate (registered 2026-10-29, before any run)
+
+**Odin Loch** · 2026-10-29 · follows S4b · the same change is measured for G11 in [S11A_CONCEPTS_AND_OPEN_RELATIONS.md](S11A_CONCEPTS_AND_OPEN_RELATIONS.md), "S11a-b", where the definition is given
+
+(The design, the rule and the predictions below were written and committed before any run of the changed code. Results are added under them.)
+
+**Question.** S4b's unparsed signal U counts a sentence as eligible when it has at least two entity mentions, links or the page's subject. A linked year counts as a mention. So "Milne (January 18, [[1882]] – January 31, [[1956]])" is eligible, while the same sentence with unlinked years is not. Whether a 2006 editor linked a year is markup, not content. Should U skip a link that sits inside a date candidate, as G11 may? Decided by measurement (PLAN ledger 55).
+
+**Rule 10.** U is Cypha's self-assessment. Nothing here answers a question.
+
+### The change
+
+- In U's eligibility test, a link that sits inside a date candidate (S11a-b's definition: every token of its display inside one of `find_dates`' candidates) is not an entity mention.
+- Nothing else changes: the parse test, q_τ's form, the score, the alarm rule, V, Σ and S4c.
+
+### Reads (dev only)
+
+- **A dev mode:** `pattern_learn --signals DIR --signals-scope u-dev`. It builds U twice in one run, **keep** (S4b's reader) and **skip** (the change), on S4c's dev split:
+  - calibration: C's pages whose body starts before 19,718,592 (q_τ and the fixed reference come from these);
+  - stream: C's pages from 19,718,592 to 30,000,000;
+  - pools: D-dev (Dolly records with an even line number, as S4c) and L.
+  - S is never scored in this mode, and V, Σ and S4c are not run.
+- **Measured, for both:** the unparsed rate by page type over all of C (S4b's calibration stream); eligible and parsed sentences; U units (n ≥ 3); on the dev stream with the running reference, the event rate and alarms; D-dev and L detections within 50 units at π = 1.
+- Both variants share the signal's name, so their planted replicates draw the same seeds.
+
+### Decision rule (fixed now)
+
+U skips links inside date candidates when, on the dev stream with the running reference, both hold:
+1. its alarms do not rise (skip ≤ keep);
+2. it keeps at least 300 stream units (S4b's minimum for the rule).
+
+Otherwise U keeps its current reader. G11's decision (S11a-b) is separate: one definition, two decisions.
+
+**After the choice (no choice depends on it).** If the skip is adopted, U has one test read for this change: S4b's `--signals` run (C, S, D, L), with S4b's inputs. It restates S4b's U numbers for the changed reader. It never revisits the decision.
+
+### Predictions (registered before any run)
+
+| # | Prediction |
+|---|---|
+| D5a | Over C, the skip removes 10–30% of U's eligible sentences |
+| D5b | Person pages' unparsed rate over C rises from 0.966 to 0.97–0.99: many parsed person sentences are dates whose only other mention is the subject. The other types stay at 0.99 or above |
+| D5c | On the dev stream (running reference), both variants have at most one alarm and an event rate in [0.03, 0.08] |
+| D5d | Neither variant detects D-dev or L (S4b's U saw neither) |
+| D6 | Without `--signals`, the run is byte-identical; S3's `--gaps` files are byte-identical |
+
+### Results on dev (2026-10-29)
+
+`pattern_learn --signals DIR --signals-scope u-dev`, at commit 24727fc (S3's run first, as S4b).
+
+**Over all of C** (S4b's calibration stream):
+
+| Type | Eligible sentences, keep → skip | Parsed | Unparsed rate |
+|---|---|---|---|
+| country | 848 → 787 | 4 → 4 | 0.9953 → 0.9949 |
+| person | 6,226 → 5,790 | 209 → 206 | 0.9664 → 0.9644 |
+| place | 4,163 → 3,860 | 0 → 0 | 1.0000 → 1.0000 |
+| other | 19,215 → 18,223 | 0 → 0 | 1.0000 → 1.0000 |
+| all | 30,452 → 28,660 (−5.9%) | 213 → 210 | 0.9930 → 0.9927 |
+
+- Keep's counts equal S4b's own, line for line: the shared builder reads as before.
+- Few parsed sentences lose their eligibility (3 of 213): a sentence a date pattern parses usually names other links besides the date.
+
+**On the dev split** (calibration: C before 19,718,592; stream: the rest of C):
+
+| | Keep | Skip |
+|---|---|---|
+| Units: calibration, stream | 842, 701 | 832, 697 |
+| Stream, running reference: event rate, alarms | 0.0571, 0 | 0.0588, 0 |
+| Stream, fixed reference: event rate, alarms | 0.0599, 0 | 0.0617, 0 |
+| 200 random orders (fixed) | 0.057 alarms per 1,000 | 0.057 |
+| D-dev | no units | no units |
+| L at π = 1, within 50 / within 200 | 0 / 200, 0 / 200 | 0 / 200, 0 / 200 |
+
+### Decision (registered rule)
+
+- Alarms do not rise (0 → 0), and the stream keeps 697 units (at least 300).
+- **So U leaves out links inside date candidates** (`kUSkipDateLinks`, commit 24727fc). G11 keeps its reader (S11a-b: the skip moved G11's dev choice).
+
+### The test read for this change (once, after the choice)
+
+S4b's `--signals` run (C, S, D, L) with S4b's inputs and the changed U. It restates S4b's U numbers; no choice depends on it.
+
+| | S4b | With the skip |
+|---|---|---|
+| U units: C, S, L | 1,543, 1,364, 21 | 1,529, 1,346, 21 |
+| S, running reference: event rate, alarms | 0.0625, 0 | 0.0633, 0 |
+| S, fixed reference: event rate, alarms | 0.0647, 0 | 0.0648, 0 |
+| S, 200 random orders | 0.123 alarms per 1,000 | 0.166 |
+| D | no units | no units |
+| L at π = 1, within 50 | 0 / 200 | 0 / 200 |
+
+- U's conclusions stand: no false alarm on S, and no detection of D or L.
+- **What changes in S4b's outputs:** `units.tsv` (U's rows only: 2,928 → 2,896; the vocabulary and surprise rows are byte-identical), and U's SIGNAL lines on stdout and in `stats.txt`. `signal_gaps.tsv` and `.planted.tsv` are byte-identical: U raises no alarm before or after. The same holds for S4c's runs (`--signals-scope dev`, checked): only U's lines and rows change; O1–O5, V and Σ are byte-identical.
+- Test outputs (sha256 prefix): `units.tsv` 6c777c7523e41d2c (11,344 rows).
+
+### Predictions, scored
+
+| # | Prediction | Result |
+|---|---|---|
+| D5a | The skip removes 10–30% of U's eligible sentences over C | **Miss:** 5.9% |
+| D5b | Person pages' unparsed rate rises to 0.97–0.99 | **Miss:** 0.9664 → 0.9644. Parsed sentences keep their other mentions |
+| D5c | Both variants: at most one alarm, event rate in [0.03, 0.08] on the dev stream | **Hit:** 0 and 0; 0.0571 and 0.0588 |
+| D5d | Neither detects D-dev or L | **Hit** |
+| D6 | Without `--signals`, byte-identical; S3's files byte-identical | **Hit** |
+
+### Checks
+
+- `native_epistemic_test`: 1,246 checks, 9 new (`test_date_links_S4bb`: `span_within` on dates, overlaps, two dates, none).
+- Three planted bugs are caught: overlap instead of containment (3 checks fail), strict bounds (2), the union of the spans (1).
+- The nine CTests of HANDOFF §4.4 pass.
+- S3's `--gaps` run: every file byte-identical (gap map `a77678d8ef7dfdef`); `stats.txt` differs only in timings.
+
+### Reproduce
+
+```bash
+g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp -o pattern_learn
+E=/root/cdata/enwik8; W=/root/work/f2/wikidata/wd_values.tsv; DEV=bench/eval/t_qa_wiki_dev.tsv; A=/root/work/answer; Q=/root/work/qa2/runs
+D=$A/d_rows.tsv,$A/d2_rows.tsv,$Q/E1a.rows.tsv,$Q/E1b.rows.tsv,$Q/E1c.rows.tsv,$Q/E1d.rows.tsv
+./pattern_learn $E OUT --cv --wikidata $W --dev $DEV --gaps OUT/gap_map.tsv --demand $D --parse $A/parse_dev.tsv \
+  --signals OUT --signals-dolly /root/work/s4b/runs/dolly_pages.xml --signals-gaps OUT/signal_gaps.tsv --signals-scope u-dev
+```

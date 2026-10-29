@@ -2676,6 +2676,23 @@ static void test_concepts_S11a() {
   CHECK(gf.gradable == 5.0 && gf.hits == 1.0);
 }
 
+// ---------------------------------------------------------------------------
+// S4b-b: a link inside a date candidate is not an entity mention for U (unknown_signals.hpp)
+// ---------------------------------------------------------------------------
+
+static void test_date_links_S4bb() {
+  using SP = std::vector<std::pair<int, int>>;
+  CHECK(span_within(2, 3, SP{{1, 4}}));             // "[[1882]]" inside "January 18 , 1882"
+  CHECK(span_within(1, 4, SP{{1, 4}}));             // the link is the whole date
+  CHECK(span_within(0, 1, SP{{0, 1}}));             // a lone linked year, its own one-token date
+  CHECK(!span_within(0, 2, SP{{1, 4}}));            // overlaps the date but starts before it ("[[War of 1812]]")
+  CHECK(!span_within(3, 5, SP{{1, 4}}));            // overlaps the date but ends after it
+  CHECK(!span_within(2, 3, SP{}));                  // no date candidates
+  CHECK(span_within(5, 6, SP{{0, 2}, {4, 7}}));     // inside the second of two dates
+  CHECK(!span_within(2, 5, SP{{0, 3}, {3, 6}}));    // across two dates: inside neither
+  CHECK(!span_within(7, 8, SP{{0, 2}, {4, 7}}));    // just after a date
+}
+
 static void test_gap_map() {
   // The gap id CyphaLM writes (cyphalm_trie dktext rows and its dev tags).
   CHECK_STR(gap_id("Honduras", "capital"), "G-AEC1");
@@ -2917,6 +2934,7 @@ int main() {
   test_scope_S4c();
   test_curiosity_S10();
   test_concepts_S11a();
+  test_date_links_S4bb();
   std::printf("epistemic_test: %d checks, %d failed\n", g_checks, g_failed);
   return g_failed == 0 ? 0 : 1;
 }
