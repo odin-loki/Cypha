@@ -3396,6 +3396,105 @@ static void test_abc_closed_S6c() {
   CHECK(ab::resolve("U.K.", red) == "United Kingdom" && ab::resolve("Paris", red) == "Paris");
 }
 
+// ---------------------------------------------------------------------------
+// S4d: the fresh split of the pages after kSignalPlainFrom, and the second alarm threshold (unknown_signals.hpp)
+// ---------------------------------------------------------------------------
+
+static void test_threshold_S4d() {
+  // The fresh split: P (S4c's control) q % 4 = 0, P2 q % 4 = 2, the fresh stream F q % 4 in {1, 3}.
+  CHECK(signal_fresh_part(0) == SignalFreshPart::P && signal_fresh_part(1) == SignalFreshPart::F && signal_fresh_part(2) == SignalFreshPart::P2);
+  CHECK(signal_fresh_part(3) == SignalFreshPart::F && signal_fresh_part(4) == SignalFreshPart::P && signal_fresh_part(1001) == SignalFreshPart::F);
+  {
+    std::size_t np = 0, nf = 0, n2 = 0;
+    for (std::size_t q = 0; q < 4000; ++q) {
+      const SignalFreshPart x = signal_fresh_part(q);
+      np += x == SignalFreshPart::P, nf += x == SignalFreshPart::F, n2 += x == SignalFreshPart::P2;
+    }
+    CHECK(np == 1000 && n2 == 1000 && nf == 2000);
+  }
+  // The second threshold.
+  CHECK(kSignalAHigh == 100000.0);
+  SignalRule lo, hi;
+  hi.A = kSignalAHigh;
+  CHECK(lo.A == 20000.0 && hi.alpha == lo.alpha && hi.p1 == lo.p1 && hi.cap == lo.cap && hi.min_ref == lo.min_ref);
+  // All events: R 5, 30, 155, 780, 3905, 19530, 97655, 488280. A = 20,000 alarms at the 7th, A = 100,000 at the 8th.
+  {
+    SRDetector a(lo), b(hi);
+    int at_a = 0, at_b = 0;
+    for (int t = 1; t <= 10; ++t) {
+      if (!at_a && a.step(true)) at_a = t;
+      if (!at_b && b.step(true)) at_b = t;
+    }
+    CHECK(at_a == 7 && at_b == 8);
+    CHECK_NEAR(b.alarm_R, 488280.0, 1e-6);
+  }
+  // On any event sequence the higher threshold alarms no more often and no sooner (both start at R = 0).
+  {
+    std::mt19937_64 rng(20261029);
+    std::bernoulli_distribution B(0.12);
+    int fewer = 0, ok_count = 0, ok_first = 0;
+    for (int r = 0; r < 300; ++r) {
+      SRDetector a(lo), b(hi);
+      int na = 0, nb = 0, fa = 0, fb = 0;
+      for (int t = 1; t <= 3000; ++t) {
+        const bool e = B(rng);
+        if (a.step(e)) ++na, fa = fa ? fa : t;
+        if (b.step(e)) ++nb, fb = fb ? fb : t;
+      }
+      ok_count += nb <= na;
+      ok_first += fb == 0 || (fa > 0 && fa <= fb);
+      fewer += nb < na;
+    }
+    CHECK(ok_count == 300 && ok_first == 300 && fewer > 0);
+  }
+  // P(an alarm within L units) <= L / A at p0: 2,000 streams of 5,000 units, bound 0.05 at A = 100,000 (0.25 at 20,000).
+  {
+    std::mt19937_64 rng(13);
+    std::bernoulli_distribution B(0.05);
+    int with_lo = 0, with_hi = 0;
+    for (int st = 0; st < 2000; ++st) {
+      SRDetector a(lo), b(hi);
+      bool any_a = false, any_b = false;
+      for (int t = 0; t < 5000; ++t) {
+        const bool e = B(rng);
+        any_a |= a.step(e), any_b |= b.step(e);
+      }
+      with_lo += any_a, with_hi += any_b;
+    }
+    CHECK(with_hi / 2000.0 <= 0.06 && with_hi < with_lo && with_lo / 2000.0 <= 0.27);
+  }
+  // The same replicates at both thresholds (pattern_learn seeds both from the signal's name): with no alarm before the
+  // plants, both runs carry the same R into each replicate, so A = 100,000 detects no sooner, and about one event later.
+  {
+    std::mt19937_64 rng(20261029);
+    std::normal_distribution<double> N(0.0, 1.0);
+    auto make = [&](std::size_t n, const std::string& set) {
+      std::vector<SignalUnit> v;
+      for (std::size_t i = 0; i < n; ++i) v.push_back({N(rng), 0, signal_unit_id(set, i)});
+      return v;
+    };
+    const auto C = make(1000, "C"), S = make(1200, "S");
+    std::vector<SignalUnit> pool;
+    for (std::size_t i = 0; i < 300; ++i) pool.push_back({2.5 + N(rng), 0, signal_unit_id("P", i)});
+    const SignalRun rl = signal_run(C, S, 1, true, lo), rh = signal_run(C, S, 1, true, hi);
+    CHECK(rl.alarms.empty() && rh.alarms.empty() && rl.r_before == rh.r_before);
+    std::vector<int> dl, dh;
+    int paired = 0;
+    for (int rep = 0; rep < 100; ++rep) {
+      const std::size_t t0 = 100 + static_cast<std::size_t>(rep) * 9;
+      std::mt19937_64 ra(1000 + static_cast<std::uint64_t>(rep)), rb(1000 + static_cast<std::uint64_t>(rep));
+      const int a = signal_planted(C, S, pool, 1, true, lo, rl, t0, 1.0, 200, ra).delay;
+      const int b = signal_planted(C, S, pool, 1, true, hi, rh, t0, 1.0, 200, rb).delay;
+      dl.push_back(a), dh.push_back(b);
+      paired += b == 0 || (a > 0 && a <= b);
+    }
+    CHECK(paired == 100);
+    const auto sl = signal_delay_stats(dl, 200), sh = signal_delay_stats(dh, 200);
+    CHECK(sl.within50 >= 95 && sh.within50 >= 95);
+    CHECK(sh.median >= sl.median && sh.median <= sl.median + 4);
+  }
+}
+
 static void test_gap_map() {
   // The gap id CyphaLM writes (cyphalm_trie dktext rows and its dev tags).
   CHECK_STR(gap_id("Honduras", "capital"), "G-AEC1");
@@ -3642,6 +3741,7 @@ int main() {
   test_fragile_S9b();
   test_laws_deep_S12a();
   test_abc_closed_S6c();
+  test_threshold_S4d();
   std::printf("epistemic_test: %d checks, %d failed\n", g_checks, g_failed);
   return g_failed == 0 ? 0 : 1;
 }

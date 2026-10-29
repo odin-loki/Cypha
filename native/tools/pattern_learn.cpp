@@ -3442,10 +3442,16 @@ void write_frontier(const FrontierOpt& F, const GapOpt& G, const string& data, c
 // S4c adds --signals-scope dev|test [--signals-plain PAGES.xml] [--signals-vec FILE]: the out-of-scope signal (O1 register,
 // O2 rare content words, O3 topic distance) on the first 50 prose words of a page, with pool P (wiki pages with their
 // markup removed, scripts/s4c_plain_pages.py) as the control. Without --signals-scope the output is S4b's.
+// S4d adds --signals-scope s4d-dev|s4d-test --signals-pools DIR (scripts/s4d_pools.py's files): O1-O5, V and U on S4d's
+// streams and pools (an own-voice pool, Wikipedia-namespace pages, the control P2, the fresh stream F), each at
+// A = 20,000 and A = 100,000 on the same replicates; and --signals-A X, the alarm threshold of S4b's and S4c's signals
+// (default 20,000: their output is unchanged).
 struct SignalOpt {
     string dir, dolly, gaps;
     vector<string> surprise;
     string scope, plain, vec = "data/cyphalm/simvec_ppmi32.bin";  // S4c: --signals-scope dev|test, --signals-plain, --signals-vec
+    string pools;          // S4d: --signals-pools DIR
+    double A = 20000.0;    // S4d: --signals-A X
 };
 
 namespace s4b {
@@ -3455,18 +3461,21 @@ struct Page {
     PageRef ref;
     int type = 3;  // write_gaps' rule: country 0, person 1, place 2, other 3
 };
-enum { kC = 0, kS = 1, kD = 2, kL = 3, kP = 4 };  // kP: S4c's control, wiki pages with their markup removed
-const char* const kSetName[5] = {"C", "S", "D", "L", "P"};
+enum { kC = 0, kS = 1, kD = 2, kL = 3, kP = 4, kY = 5 };  // kP: S4c's control, wiki pages with their markup removed; kY: S4d's Y
+const char* const kSetName[6] = {"C", "S", "D", "L", "P", "Y"};
 
 struct Signal {
     string name, gap_kind;
     vector<string> strata;
-    vector<ecs::SignalUnit> u[5];
-    vector<const Page*> pg[5];
-    vector<string> detail[5];
+    vector<ecs::SignalUnit> u[6];
+    vector<const Page*> pg[6];
+    vector<string> detail[6];
     vector<int> pools{kD, kL};  // the planted pools analysed
     string tag = "S4b";         // in the gap notes
     string header{};            // S4b-b: a line printed before the signal's analysis (empty: none)
+    double A = 20000.0;         // S4d: the alarm threshold
+    string seed_name{};         // S4d: the name the replicates' seeds use (empty: name), so two thresholds share replicates
+    std::array<string, 6> set_name{"C", "S", "D", "L", "P", "Y"};  // S4d: the sets' names in the output
 };
 
 // U: (eligible sentences, parsed ones) of a page. skip_dates (S4b-b): a link inside a date candidate is not a mention.
@@ -3555,7 +3564,10 @@ void gap_row(std::ostream& o, const Signal& g, const Page& p, int stratum, doubl
 }
 
 void analyse(const Signal& g, std::ofstream& gaps, std::ofstream& planted, const std::function<void(const string&)>& say) {
-    const ecs::SignalRule rule;
+    ecs::SignalRule rule;
+    rule.A = g.A;
+    const auto& nm = g.set_name;
+    const string& seed = g.seed_name.empty() ? g.name : g.seed_name;
     const int K = static_cast<int>(g.strata.size());
     char b[700];
     string per;
@@ -3565,8 +3577,10 @@ void analyse(const Signal& g, std::ofstream& gaps, std::ofstream& planted, const
         for (const auto& u : g.u[kS]) s += u.stratum == k;
         per += " " + g.strata[static_cast<std::size_t>(k)] + " " + std::to_string(c) + "/" + std::to_string(s);
     }
-    std::snprintf(b, sizeof b, "\nSIGNAL %s units C %zu S %zu D %zu L %zu%s | strata (C/S):%s", g.name.c_str(), g.u[kC].size(), g.u[kS].size(), g.u[kD].size(),
-                  g.u[kL].size(), std::find(g.pools.begin(), g.pools.end(), kP) != g.pools.end() ? (" P " + std::to_string(g.u[kP].size())).c_str() : "", per.c_str());
+    auto has = [&](int set) { return std::find(g.pools.begin(), g.pools.end(), set) != g.pools.end(); };
+    std::snprintf(b, sizeof b, "\nSIGNAL %s units %s %zu %s %zu %s %zu %s %zu%s%s | strata (C/S):%s", g.name.c_str(), nm[kC].c_str(), g.u[kC].size(), nm[kS].c_str(), g.u[kS].size(),
+                  nm[kD].c_str(), g.u[kD].size(), nm[kL].c_str(), g.u[kL].size(), has(kP) ? (" " + nm[kP] + " " + std::to_string(g.u[kP].size())).c_str() : "",
+                  has(kY) ? (" " + nm[kY] + " " + std::to_string(g.u[kY].size())).c_str() : "", per.c_str());
     say(b);
     if (g.u[kS].size() < 300 || g.u[kC].size() < 100) { say("  too few units for the rule"); return; }
     const ecs::SignalRun run[2] = {ecs::signal_run(g.u[kC], g.u[kS], K, true, rule), ecs::signal_run(g.u[kC], g.u[kS], K, false, rule)};
@@ -3600,7 +3614,7 @@ void analyse(const Signal& g, std::ofstream& gaps, std::ofstream& planted, const
         std::size_t n = 0, e = 0;
         for (const auto& u : g.u[set])
             if (ref.ready(u.stratum)) ++n, e += ref.p(u) < rule.alpha;
-        std::snprintf(b, sizeof b, "  SIGNAL_POOL %s %s units %zu scored %zu events %zu rate %.4f (fixed reference)", g.name.c_str(), kSetName[set], g.u[set].size(), n, e,
+        std::snprintf(b, sizeof b, "  SIGNAL_POOL %s %s units %zu scored %zu events %zu rate %.4f (fixed reference)", g.name.c_str(), nm[set].c_str(), g.u[set].size(), n, e,
                       n ? static_cast<double>(e) / static_cast<double>(n) : 0.0);
         say(b);
     }
@@ -3611,7 +3625,7 @@ void analyse(const Signal& g, std::ofstream& gaps, std::ofstream& planted, const
         bool demo = false;
         for (double pi : {1.0, 0.5, 0.2})
             for (int r = 0; r < 2; ++r) {
-                std::mt19937_64 rng(20261029ull ^ ecs::signal_unit_id(g.name + kSetName[set] + ref_name[r], static_cast<std::size_t>(pi * 10)));
+                std::mt19937_64 rng(20261029ull ^ ecs::signal_unit_id(seed + kSetName[set] + ref_name[r], static_cast<std::size_t>(pi * 10)));
                 std::uniform_int_distribution<std::size_t> T(100, nS - W);
                 vector<int> delays;
                 std::size_t plant_alarms = 0;
@@ -3624,14 +3638,14 @@ void analyse(const Signal& g, std::ofstream& gaps, std::ofstream& planted, const
                         demo = true;
                         const Page& p = *(d.plant ? g.pg[set] : g.pg[kS])[d.index];
                         gap_row(planted, g, p, (d.plant ? g.u[set] : g.u[kS])[d.index].stratum, static_cast<double>(d.events) / static_cast<double>(d.units),
-                                g.tag + " " + g.name + " (running reference), planted pool " + kSetName[set] + " at S unit " + std::to_string(t0) + ": alarm after " +
+                                g.tag + " " + g.name + " (running reference), planted pool " + nm[set] + " at S unit " + std::to_string(t0) + ": alarm after " +
                                     std::to_string(d.delay) + " units, R " + std::to_string(static_cast<long long>(d.R)) + ", events " + std::to_string(d.events) +
                                     " of the last " + std::to_string(d.units) + " units");
                     }
                 }
                 const ecs::SignalDelayStats st = ecs::signal_delay_stats(delays, W);
                 std::snprintf(b, sizeof b, "  SIGNAL_DETECT %s pool %s pi %.1f %-7s | within 50 %3zu/%zu within 200 %3zu/%zu | delay median %s p90 %s | alarm on a plant %zu",
-                              g.name.c_str(), kSetName[set], pi, ref_name[r], st.within50, st.reps, st.within_window, st.reps,
+                              g.name.c_str(), nm[set].c_str(), pi, ref_name[r], st.within50, st.reps, st.within_window, st.reps,
                               st.median > W ? ">200" : std::to_string(static_cast<int>(st.median)).c_str(), st.p90 > W ? ">200" : std::to_string(static_cast<int>(st.p90)).c_str(),
                               plant_alarms);
                 say(b);
@@ -3719,6 +3733,7 @@ void write_signals(const SignalOpt& O, const string& data, const vector<PageRef>
     // and skip (links inside date candidates are not mentions), on S4c's dev split: C's pages before kSignalDevSplit
     // calibrate, the rest of C is the stream, D's even records and L are the pools. S is never scored; V, Σ and S4c do not run.
     const bool udev = O.scope == "u-dev";
+    const bool s4d = O.scope == "s4d-dev" || O.scope == "s4d-test";  // S4d: its own streams and pools; S4b's U, V and Σ do not run
     if (udev) {
         vector<const Page*> ds[4];
         for (const Page* p : set[kC]) ds[p->ref.tb >= ecs::kSignalDevSplit ? kS : kC].push_back(p);
@@ -3750,13 +3765,13 @@ void write_signals(const SignalOpt& O, const string& data, const vector<PageRef>
             g.header = string("\nS4b-b U ") + vn + " (dev split: stream = C from " + std::to_string(ecs::kSignalDevSplit) + ")";
             sig.push_back(std::move(g));
         }
-    } else {
+    } else if (!s4d) {
         // U: the unparsed rate per page type.
         static const char* const own[4] = {"C", "S", "D", "L"};
         sig.push_back(unparsed_signal(set, own, kUSkipDateLinks, say));
     }
     // V: new words against Heaps, CyphaLM's view.
-    if (!udev) {
+    if (!udev && !s4d) {
         Signal g{"vocabulary", "lexical", {"tok50-299", "tok300-1499", "tok1500+"}, {}, {}, {}};
         std::unordered_set<string> vocab;
         vector<double> Np, Vp;
@@ -3799,7 +3814,7 @@ void write_signals(const SignalOpt& O, const string& data, const vector<PageRef>
         sig.push_back(std::move(g));
     }
     // Σ: CyphaLM's surprise, from cyphalm_trie surprise.
-    if (!O.surprise.empty() && !udev) {
+    if (!O.surprise.empty() && !udev && !s4d) {
         Signal g{"surprise", "prediction", {"bytes256-1023", "bytes1024-2047", "bytes2048"}, {}, {}, {}};
         std::map<std::pair<string, std::size_t>, std::pair<std::size_t, double>> sc;
         for (const string& path : O.surprise) {
@@ -3833,8 +3848,9 @@ void write_signals(const SignalOpt& O, const string& data, const vector<PageRef>
     // S4c: the out-of-scope signal, read from the first ecs::kOodWindow prose words of a page (docs/reports/S4_UNSEEN_AND_FRONTIER.md,
     // "S4c"). --signals-scope dev: C's first half calibrates, its second half is the stream (S is never scored); test: C
     // then S, as S4b. Pools: D's even (dev) or odd (test) Dolly records, P's even or odd pages, and L.
-    if (O.scope == "dev" || O.scope == "test") {
-        const bool dev = O.scope == "dev";
+    std::deque<string> pool_text;  // S4d: its pool files (the pages point into them)
+    if (O.scope == "dev" || O.scope == "test" || s4d) {
+        const bool dev = O.scope == "dev" || O.scope == "s4d-dev";
         // The prose words of a page: S3's prose reader, then S4c's list rule; tokens starting with an ASCII letter.
         auto words_of = [&](const Page& p, std::size_t limit) {
             vector<Sent> ss;
@@ -3887,16 +3903,69 @@ void write_signals(const SignalOpt& O, const string& data, const vector<PageRef>
                 P.push_back(&store.back());
             }
         }
-        vector<const Page*> os[5];
-        for (const Page* p : set[kC]) os[dev && p->ref.tb >= ecs::kSignalDevSplit ? kS : kC].push_back(p);
-        if (!dev) os[kS] = set[kS];
-        for (const Page* p : set[kD]) {  // "Dolly NNNNN": the record's line number
-            const long line = std::atol(p->ref.title.c_str() + std::min<std::size_t>(6, p->ref.title.size()));
-            if ((line % 2 == 0) == dev) os[kD].push_back(p);
+        vector<const Page*> os[6];
+        std::array<string, 6> names{"C", "S", "D", "L", "P", "Y"};
+        std::unordered_map<const Page*, string> origin;  // S4d: a unit's identity is the set its page comes from
+        if (!s4d) {
+            for (const Page* p : set[kC]) os[dev && p->ref.tb >= ecs::kSignalDevSplit ? kS : kC].push_back(p);
+            if (!dev) os[kS] = set[kS];
+            for (const Page* p : set[kD]) {  // "Dolly NNNNN": the record's line number
+                const long line = std::atol(p->ref.title.c_str() + std::min<std::size_t>(6, p->ref.title.size()));
+                if ((line % 2 == 0) == dev) os[kD].push_back(p);
+            }
+            os[kL] = set[kL];
+            for (std::size_t i = 0; i < P.size(); ++i)
+                if ((i % 2 == 0) == dev) os[kP].push_back(P[i]);
+        } else {
+            // S4d (docs/reports/S4_UNSEEN_AND_FRONTIER.md, "S4d"): O (oasst1, own voice), L2 (Wikipedia-namespace pages), Y
+            // (Dolly's own-voice answers) and P2 from --signals-pools DIR (scripts/s4d_pools.py). Dev: S4c's dev split and
+            // P-dev. Test: C then S calibrate, the stream is F (article pages from kSignalPlainFrom, qualifying index q with
+            // q % 4 in {1, 3}; S4c's P took q % 4 = 0 and P2 takes 2).
+            auto load = [&](const string& file, vector<const Page*>& into) {
+                pool_text.emplace_back();
+                if (!read_file(O.pools + "/" + file, pool_text.back())) { say("S4d: cannot read " + O.pools + "/" + file); return false; }
+                long tot = 0, red = 0;
+                for (const PageRef& pg : list_pages(pool_text.back(), tot, red)) {
+                    store.push_back({&pool_text.back(), pg, type_of(pg.title)});
+                    into.push_back(&store.back());
+                }
+                return true;
+            };
+            const string side = dev ? "dev" : "test";
+            if (!load("oasst_" + side + ".xml", os[kD]) || !load("ns_" + side + ".xml", os[kL]) || !load("own_" + side + ".xml", os[kY])) return;
+            for (const Page* p : set[kC]) origin.emplace(p, "C");
+            for (const Page* p : set[kS]) origin.emplace(p, "S");
+            for (const Page* p : P) origin.emplace(p, "P");
+            for (const Page* p : os[kD]) origin.emplace(p, "O");
+            for (const Page* p : os[kL]) origin.emplace(p, "L2");
+            for (const Page* p : os[kY]) origin.emplace(p, "Y");
+            if (dev) {
+                for (const Page* p : set[kC]) os[p->ref.tb >= ecs::kSignalDevSplit ? kS : kC].push_back(p);
+                for (std::size_t i = 0; i < P.size(); i += 2) os[kP].push_back(P[i]);  // P-dev: S4c's even pages
+                names = {"Cdev", "Sdev", "O", "L2", "Pdev", "Y"};
+            } else {
+                if (!load("plain2.xml", os[kP])) return;
+                for (const Page* p : os[kP]) origin.emplace(p, "P2");
+                os[kC] = set[kC];
+                os[kC].insert(os[kC].end(), set[kS].begin(), set[kS].end());
+                std::unordered_set<string> tp, tp2;
+                for (const Page* p : P) tp.insert(p->ref.title);
+                for (const Page* p : os[kP]) tp2.insert(p->ref.title);
+                std::size_t q = 0, n0 = 0, m0 = 0, n2 = 0, m2 = 0;
+                for (std::size_t i = 0; i < pages.size(); ++i) {  // store's first pages.size() entries are the dump's pages, in order
+                    const Page* p = &store[i];
+                    if (p->ref.tb < ecs::kSignalPlainFrom || ecs::signal_store_skips(p->ref.title)) continue;
+                    const ecs::SignalFreshPart part = ecs::signal_fresh_part(q++);
+                    if (part == ecs::SignalFreshPart::F) os[kS].push_back(p), origin.emplace(p, "F");
+                    else if (part == ecs::SignalFreshPart::P) ++n0, m0 += tp.count(p->ref.title);
+                    else ++n2, m2 += tp2.count(p->ref.title);
+                }
+                std::snprintf(b, sizeof b, "S4d F: qualifying pages from %zu: %zu, F %zu | q %% 4 = 0: %zu, titles in P %zu | q %% 4 = 2: %zu, titles in P2 %zu",
+                              ecs::kSignalPlainFrom, q, os[kS].size(), n0, m0, n2, m2);
+                say(b);
+                names = {"CS", "F", "O", "L2", "P2", "Y"};
+            }
         }
-        os[kL] = set[kL];
-        for (std::size_t i = 0; i < P.size(); ++i)
-            if ((i % 2 == 0) == dev) os[kP].push_back(P[i]);
         const char* own[5] = {"C", dev ? "C" : "S", "D", "L", "P"};  // a unit's identity: the set it comes from
         constexpr int NO = 5;
         Signal G[NO] = {{"O1-register", "scope", {"country", "person", "place", "other"}, {}, {}, {}},
@@ -3908,7 +3977,7 @@ void write_signals(const SignalOpt& O, const string& data, const vector<PageRef>
             return std::array<double, NO>{ecs::ood_register(w, ref), ecs::ood_rare(w, ref), ecs::ood_topic_distance(ecs::ood_page_vector(w, ref, sv.dim, vec_of), bank),
                                           ecs::ood_delta(w, prof), tfidf.novelty(w, ref)};
         };
-        for (int s = 0; s < 5; ++s) {
+        for (int s = 0; s < (s4d ? 6 : 5); ++s) {
             double sum[NO] = {0, 0, 0, 0, 0};
             std::size_t units_n = 0;
             for (const Page* p : os[s]) {
@@ -3917,13 +3986,13 @@ void write_signals(const SignalOpt& O, const string& data, const vector<PageRef>
                 const auto sc = scores(w);
                 ++units_n;
                 for (int k = 0; k < NO; ++k) {
-                    G[k].u[s].push_back({sc[static_cast<std::size_t>(k)], p->type, ecs::signal_unit_id(own[s], p->ref.tb)});
+                    G[k].u[s].push_back({sc[static_cast<std::size_t>(k)], p->type, ecs::signal_unit_id(s4d ? origin.at(p) : string(own[s]), p->ref.tb)});
                     G[k].pg[s].push_back(p);
                     G[k].detail[s].push_back(dev ? "dev" : "test");
                     sum[k] += sc[static_cast<std::size_t>(k)];
                 }
             }
-            std::snprintf(b, sizeof b, "  SIGNAL_O_SET %s %s pages %zu units %zu (share %.3f) | mean O1 %.4f O2 %.4f O3 %.4f O4 %.4f O5 %.4f", O.scope.c_str(), kSetName[s], os[s].size(),
+            std::snprintf(b, sizeof b, "  SIGNAL_O_SET %s %s pages %zu units %zu (share %.3f) | mean O1 %.4f O2 %.4f O3 %.4f O4 %.4f O5 %.4f", O.scope.c_str(), names[static_cast<std::size_t>(s)].c_str(), os[s].size(),
                           units_n, os[s].empty() ? 0.0 : static_cast<double>(units_n) / static_cast<double>(os[s].size()), units_n ? sum[0] / static_cast<double>(units_n) : 0.0,
                           units_n ? sum[1] / static_cast<double>(units_n) : 0.0, units_n ? sum[2] / static_cast<double>(units_n) : 0.0,
                           units_n ? sum[3] / static_cast<double>(units_n) : 0.0, units_n ? sum[4] / static_cast<double>(units_n) : 0.0);
@@ -3957,18 +4026,90 @@ void write_signals(const SignalOpt& O, const string& data, const vector<PageRef>
                           units_both ? dabs[3] / static_cast<double>(units_both) : 0.0, units_both ? dabs[4] / static_cast<double>(units_both) : 0.0);
             say(b);
         }
+        // S4d: each signal at A = 20,000 and at A = 100,000 (named "@A100k"), on the same replicates.
+        auto push_both = [&](Signal g) {
+            g.set_name = names;
+            g.tag = dev ? "S4d dev" : "S4d test";
+            Signal h = g;
+            h.A = ecs::kSignalAHigh, h.seed_name = g.name, h.name = g.name + "@A100k", h.tag = g.tag + " A=100000";
+            sig.push_back(std::move(g));
+            sig.push_back(std::move(h));
+        };
         for (Signal& g : G) {
+            if (s4d) {
+                g.pools = {kD, kP, kL, kY};
+                push_both(std::move(g));
+                continue;
+            }
             g.pools = {kD, kP, kL};
             g.tag = dev ? "S4c dev" : "S4c test";
             sig.push_back(std::move(g));
         }
+        if (s4d) {
+            // V, S4b's vocabulary signal: the reader, then the calibration pages, then the stream; the pools against the
+            // vocabulary at the start of the stream.
+            Signal g{"vocabulary", "lexical", {"tok50-299", "tok300-1499", "tok1500+"}, {}, {}, {}};
+            std::unordered_set<string> vocab;
+            vector<double> Np, Vp;
+            double N = 0;
+            for (std::size_t k = 0; k < reader.size(); ++k) {
+                N += read_words(*reader[k], vocab).first;
+                if ((k + 1) % 25 == 0) Np.push_back(N), Vp.push_back(static_cast<double>(vocab.size()));
+            }
+            Np.push_back(N), Vp.push_back(static_cast<double>(vocab.size()));
+            const ecs::HeapsFit f = ecs::fit_heaps(Np, Vp);
+            auto vscore = [&](int s, std::unordered_set<string>& V, double& n_read) {
+                double vs = 0, es = 0;
+                for (const Page* p : os[s]) {
+                    const auto [n, v] = read_words(*p, V);
+                    const double e = ecs::heaps_vocab(f, n_read + n) - ecs::heaps_vocab(f, n_read);
+                    n_read += n;
+                    vs += v, es += e;
+                    if (n < 50) continue;
+                    g.u[s].push_back({std::log((v + 0.5) / (e + 0.5)), n < 300 ? 0 : n < 1500 ? 1 : 2, ecs::signal_unit_id(origin.at(p), p->ref.tb)});
+                    g.pg[s].push_back(p);
+                    char d[96];
+                    std::snprintf(d, sizeof d, "tokens %.0f new %.0f expected %.2f", n, v, e);
+                    g.detail[s].push_back(d);
+                }
+                std::snprintf(b, sizeof b, "  SIGNAL_V_SET %s %s pages %zu units %zu | new words %.0f expected %.1f ratio %.4f | tokens read after %.0f", O.scope.c_str(),
+                              names[static_cast<std::size_t>(s)].c_str(), os[s].size(), g.u[s].size(), vs, es, es > 0 ? vs / es : 0.0, n_read);
+                say(b);
+            };
+            vscore(kC, vocab, N);
+            const std::unordered_set<string> at_s = vocab;
+            const double n_at_s = N;
+            vscore(kS, vocab, N);
+            for (int s : {kD, kL, kY}) {
+                std::unordered_set<string> V = at_s;
+                double n = n_at_s;
+                vscore(s, V, n);
+            }
+            g.pools = {kD, kL, kY};
+            push_both(std::move(g));
+            // U, S4b's unparsed signal with S4b-b's reader; q from the calibration pages. In its lines C is the calibration,
+            // S the stream, D the pool O and L the pool L2.
+            say("S4d U (in the SIGNAL_U lines: C = calibration, S = stream, D = O, L = L2):");
+            const vector<const Page*> us[4] = {os[kC], os[kS], os[kD], os[kL]};
+            static const char* const own_dev[4] = {"C", "C", "O", "L2"};
+            static const char* const own_test[4] = {"CS", "F", "O", "L2"};
+            Signal gu = unparsed_signal(us, dev ? own_dev : own_test, kUSkipDateLinks, say);
+            gu.pools = {kD, kL};
+            push_both(std::move(gu));
+        }
     }
+    if (!s4d && O.A != 20000.0)  // S4d: S4b's and S4c's signals at another threshold (--signals-A)
+        for (Signal& g : sig) {
+            char a[32];
+            std::snprintf(a, sizeof a, " A=%.0f", O.A);
+            g.A = O.A, g.tag += a;
+        }
     for (const Signal& g : sig)
-        for (int s = 0; s < 5; ++s)
+        for (int s = 0; s < 6; ++s)
             for (std::size_t i = 0; i < g.u[s].size(); ++i) {
                 char v[32];
                 std::snprintf(v, sizeof v, "%.6f", g.u[s][i].score);
-                units << g.name << '\t' << kSetName[s] << '\t' << g.pg[s][i]->ref.tb << '\t' << g.pg[s][i]->ref.title << '\t'
+                units << g.name << '\t' << g.set_name[static_cast<std::size_t>(s)] << '\t' << g.pg[s][i]->ref.tb << '\t' << g.pg[s][i]->ref.title << '\t'
                       << g.strata[static_cast<std::size_t>(g.u[s][i].stratum)] << '\t' << v << '\t' << g.detail[s][i] << '\n';
             }
     const string gap_path = O.gaps.empty() ? O.dir + "/signal_gaps.tsv" : O.gaps;
@@ -14443,7 +14584,8 @@ int main(int argc, char** argv) {
                              "         [--raw] [--join FACTS] [--reach PARSE] [--gaps FILE [--demand ROWS,...] [--parse PARSE] [--gap-floor F] [--demand-weight W] [--gaps-spof SPOF]]\n"
                              "         [--frontier FILE [--frontier-test] [--frontier-split B]]\n"
                              "         [--signals DIR [--signals-dolly PAGES.xml] [--surprise SCORES.tsv,...] [--signals-gaps FILE]\n"
-                             "          [--signals-scope dev|test|u-dev [--signals-plain PAGES.xml] [--signals-vec FILE]]]\n"
+                             "          [--signals-scope dev|test|u-dev|s4d-dev|s4d-test [--signals-plain PAGES.xml] [--signals-vec FILE] [--signals-pools DIR]]\n"
+                             "          [--signals-A X]]\n"
                              "         [--f2b-xa] [--f2b-wild 1|2] [--f2b-classes FILE] [--f2b-gold-split] [--f2b-read-test]\n"
                              "       pattern_learn --wilson K N\n");
         return 2;
@@ -14496,6 +14638,8 @@ int main(int argc, char** argv) {
         }
         else if (a == "--f2b-gold-split") f2b::g_gold_split = true;
         else if (a == "--f2b-read-test") f2b::g_gold_split = f2b::g_read_test = true;
+        else if (a == "--signals-pools" && i + 1 < argc) A.signals.pools = argv[++i];  // S4d
+        else if (a == "--signals-A" && i + 1 < argc) A.signals.A = std::atof(argv[++i]);  // S4d
     }
     if (g_raw && (f2b::g_xa || f2b_gen_on())) { std::fprintf(stderr, "--f2b-xa, --f2b-wild and --f2b-classes read cleaned tokens, not --raw\n"); return 2; }
     if (!A.reach.empty() && A.shard.dev.empty()) { std::fprintf(stderr, "--reach needs --dev\n"); return 2; }
