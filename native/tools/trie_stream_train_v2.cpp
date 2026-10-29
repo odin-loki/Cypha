@@ -6,7 +6,8 @@
 //   - counts never wrap: a count about to pass 2^32 - 1 halves its table (the node's followers, the order-1 row or
 //     the unigram), so ratios stay right on a 1 TB corpus (the live trainer's 32-bit counts wrap);
 //   - checkpoints are "TRI2" (the live layout plus a trailer: the cap and the number of halvings);
-//   - output goes to ROOT/trie/v2 (inside "/trie/", so neither trainer reads the other's files as text);
+//   - output goes to ROOT/trie/model2 by default, or --out DIR (keep it inside "/trie/", so no trainer reads another's
+//     files as text); scripts/train_model.sh numbers the models: model 1 is the live run, model N is <corpus>/trie/model<N>;
 //   - --once stops when every finished file is trained and writes done.txt (bytes, nodes, followers, files, time);
 //   - --snapshots 8M,64M,1G keeps a copy of the checkpoint at the first file boundary past each size (scaling curve).
 //
@@ -62,7 +63,7 @@ int main(int argc, char** argv) {
         return 2;
     }
     const fs::path root = argv[1];
-    fs::path dir = root / "trie" / "v2";
+    fs::path dir = root / "trie" / "model2";
     bool once = false;
     std::vector<std::pair<std::uint64_t, std::string>> snaps;
     std::uint32_t cap = 0xffffffffu;
