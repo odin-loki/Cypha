@@ -267,6 +267,7 @@
 
 #include <cctype>
 #include <chrono>
+#include <ctime>
 #include <cstdio>
 #include <filesystem>
 #include <functional>
@@ -335,6 +336,7 @@ struct Args {
     double dk_plain = 0;                          // DK2: share of don't-know training turns with no token
     std::string fam_ent_at = "all";               // DK2: where --fam-ent's frames go (all | answer | start)
     bool copy_frame = false;                      // DK2: copy a frame's entity, not its end; the tag may repeat the message
+    std::string gate;                             // GEN-B: sample's sentence gate, K[,wf=..][,wp=..][,wm=..][,min=..][,max=..]
 };
 
 std::string env_or(const char* name, const char* fallback) {
@@ -391,6 +393,7 @@ Args parse(int argc, char** argv, int from) {
         else if (s == "--no-sim") a.no_sim = true;
         else if (s == "--no-cls") a.no_cls = true;
         else if (s == "--no-copy") a.no_copy = true;
+        else if (s == "--gate") a.gate = next();
         else if (s == "--fam-only") a.fam_only = true;
         else if (s == "--model") a.model = next();
         else if (s == "--plan") a.plan = next();
@@ -760,6 +763,32 @@ std::vector<double> mix_bkn_into(const cypha::cyphalm::bkn::ByteKN& kn, const st
                                  std::size_t half, bool replace, std::vector<double>& cur);
 void bkn_mix(const cypha::cyphalm::bkn::ByteKN& kn, const double* lkn, bool replace, const std::uint8_t* seq,
              std::size_t len, double* P);
+// GEN-B, defined below with sample_with_class: the sentence gate.
+struct GateSpec {
+    int k = 0;                       // candidates per sentence (0: no gate)
+    double wf = 1, wp = 0, wm = 0;   // weights of fluency, pmi and markup
+    int min_len = 24, max_len = 240;  // a candidate's bytes before a sentence end may stop it; at most
+};
+bool parse_gate(const std::string& spec, GateSpec& g);
+struct GateStats {
+    double fluency = 0, pmi = 0, markup = 0, changed = 0;  // sums over chosen candidates; changed: not candidate 0
+    std::size_t sentences = 0;
+};
+std::string sample_gated(const PackedModel& model, const double w[6], std::size_t limit, const ClassContext* cc,
+                         const double* lam, const SimilarContext* sc, const double* lsm, const double* lcp,
+                         const std::string& prompt, int n, std::uint32_t seed, double temperature, const GateSpec& g,
+                         GateStats& st, const cypha::cyphalm::bkn::ByteKN* kn = nullptr, const double* lkn = nullptr,
+                         bool kn_replace = false);
+struct GateCand {
+    std::vector<std::uint8_t> bytes;
+    double f = 0, p = 0, m = 0, score = 0;  // fluency, pmi, markup, score
+};
+std::uint32_t gate_seed(std::uint32_t seed, std::uint32_t j, int k);
+GateCand gate_candidate(const PackedModel& model, const double w[6], std::size_t limit, const ClassContext* cc,
+                        const double* lam, const SimilarContext* sc, const double* lsm, const double* lcp,
+                        const std::vector<std::uint8_t>& seq, std::size_t p0, int budget, std::uint32_t rs,
+                        double temperature, const GateSpec& g, const cypha::cyphalm::bkn::ByteKN* kn = nullptr,
+                        const double* lkn = nullptr, bool kn_replace = false);
 // B4C, defined below with the copy and class experts: the class and copy experts where they are defaults.
 std::string default_cls_spec(const Args& a);
 std::unique_ptr<ClassContext> default_cls(const Args& a, const std::uint8_t* text, std::size_t n, int& rc);
@@ -1115,6 +1144,15 @@ int cmd_sample(const Args& a) {
         return 2;
     }
     const std::size_t nfiles = a.outs.size();
+    GateSpec gate;  // GEN-B
+    if (!a.gate.empty() && !parse_gate(a.gate, gate)) {
+        std::cerr << "bad --gate spec: " << a.gate << " (K[,wf=..][,wp=..][,wm=..][,min=..][,max=..])\n";
+        return 2;
+    }
+    if (gate.k > 0 && (!a.doc.empty() || !a.plan.empty())) {  // GEN-B: candidates use sample_mix's experts (BKN included)
+        std::cerr << "--gate does not take --doc or --plan\n";
+        return 2;
+    }
     std::vector<std::uint8_t> data;
     double w[6];
     PackedModel pm;
@@ -1293,16 +1331,21 @@ int cmd_sample(const Args& a) {
     if (dt) model_line += "\tdoc=" + a.doc;
     if (cps) model_line += "\tplan=" + a.plan;
     if (kn) model_line += "\tbkn=" + a.bkn + ":" + a.bkn_way;  // BKN
+    if (gate.k > 0) model_line += "\tgate=" + a.gate;  // GEN-B
     const double temps[3] = {0.6, 0.8, 1.0};
     std::vector<std::string> gens[3];  // GEN-A: the generated texts by temperature (--prompts-file)
     std::vector<int> planned(nfiles, 0);
+    GateStats gst[3];
+    const auto t_gen = std::chrono::steady_clock::now();
+    const std::clock_t c_gen = std::clock();  // GEN-B: CPU time too (wall time varies with the machine's load)
+    std::size_t gen_bytes = 0;
     for (std::size_t f = 0; f < nfiles; ++f) {
         std::ofstream out(a.outs[f]);
         if (!out) {
             std::cerr << "cannot write " << a.outs[f] << "\n";
             return 1;
         }
-        if (experts) out << model_line << "\n";
+        if (experts || gate.k > 0) out << model_line << "\n";
         for (int k = 0; k < a.prompts; ++k) {
             const std::size_t id = f * static_cast<std::size_t>(a.prompts) + static_cast<std::size_t>(k);
             const std::string& p = prompts[id];
@@ -1323,12 +1366,16 @@ int cmd_sample(const Args& a) {
                 opt.no_repeat = true;
                 const auto seed32 = static_cast<std::uint32_t>(seed ^ (seed >> 32));
                 const std::string text =
-                    experts ? sample_with_class(pm, w, cfg.train, cc.get(), lcl.empty() ? nullptr : lcl.data(), p, a.bytes,
-                                                seed32, sc.get(), lsm, temps[ti], lcp.empty() ? nullptr : lcp.data(),
-                                                dt.get(), dt ? &ldoc : nullptr, plan.facts.empty() ? nullptr : &plan,
-                                                lpl.empty() ? nullptr : lpl.data(), kn.get(), lkn.empty() ? nullptr : lkn.data(),
-                                                kn_rep)
-                            : sample_continuation(pm, w, p, cfg.train, a.bytes, seed32, opt);
+                    gate.k > 0 ? sample_gated(pm, w, cfg.train, cc.get(), lcl.empty() ? nullptr : lcl.data(), sc.get(), lsm,
+                                              lcp.empty() ? nullptr : lcp.data(), p, a.bytes, seed32, temps[ti], gate, gst[ti],
+                                              kn.get(), lkn.empty() ? nullptr : lkn.data(), kn_rep)
+                    : experts ? sample_with_class(pm, w, cfg.train, cc.get(), lcl.empty() ? nullptr : lcl.data(), p, a.bytes,
+                                                  seed32, sc.get(), lsm, temps[ti], lcp.empty() ? nullptr : lcp.data(),
+                                                  dt.get(), dt ? &ldoc : nullptr, plan.facts.empty() ? nullptr : &plan,
+                                                  lpl.empty() ? nullptr : lpl.data(), kn.get(), lkn.empty() ? nullptr : lkn.data(),
+                                                  kn_rep)
+                              : sample_continuation(pm, w, p, cfg.train, a.bytes, seed32, opt);
+                gen_bytes += text.size();
                 char kind[32];
                 std::snprintf(kind, sizeof kind, "trie_T%.1f", temps[ti]);
                 out << "GEN\t" << kind << "\t" << printable(text) << "\n";
@@ -1337,6 +1384,15 @@ int cmd_sample(const Args& a) {
             if ((k + 1) % 50 == 0) std::cerr << "file " << f << " prompt " << (k + 1) << "/" << a.prompts << "\n";
         }
         if (cps) std::cerr << "plan coverage file " << f << ": " << planned[f] << " of " << a.prompts << " prompts\n";
+    }
+    const double secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - t_gen).count();
+    const double cpu = static_cast<double>(std::clock() - c_gen) / CLOCKS_PER_SEC;
+    std::cerr << "generated " << gen_bytes << " bytes in " << secs << " s (" << 1e6 * secs / std::max<std::size_t>(gen_bytes, 1)
+              << " us per byte); cpu " << cpu << " s (" << 1e6 * cpu / std::max<std::size_t>(gen_bytes, 1) << " us per byte)\n";
+    for (int ti = 0; ti < 3 && gate.k > 0; ++ti) {  // GEN-B: what the gate kept
+        const double ns = static_cast<double>(std::max<std::size_t>(gst[ti].sentences, 1));
+        std::fprintf(stderr, "gate T%.1f sentences %zu mean fluency %.4f pmi %.4f markup %.4f not-first %.3f\n", temps[ti],
+                     gst[ti].sentences, gst[ti].fluency / ns, gst[ti].pmi / ns, gst[ti].markup / ns, gst[ti].changed / ns);
     }
     if (a.prompts_file.empty()) return 0;
 
@@ -2296,6 +2352,37 @@ void sample_mix(const PackedModel& model, const double w[6], std::size_t limit, 
     }
 }
 
+// One sampled byte from M: no 11-byte repeats (unless every byte is banned), temperature, nucleus 0.9, one draw.
+int pick_byte(const double M[256], const std::vector<std::uint8_t>& seq, double temperature, std::mt19937& rng,
+              std::uniform_real_distribution<double>& U) {
+    bool banned[256];
+    mark_banned(seq, banned);
+    double p[256], mass = 0;
+    for (int pass = 0; pass < 2 && !(mass > 0); ++pass) {
+        mass = 0;
+        for (int s = 0; s < 256; ++s) mass += p[s] = (pass == 0 && banned[s]) ? 0.0 : std::pow(M[s], 1.0 / temperature);
+    }
+    int order[256];
+    std::iota(order, order + 256, 0);
+    std::sort(order, order + 256, [&](int x, int y) { return p[x] > p[y]; });
+    double acc = 0, km = 0;
+    int keep = 1;
+    for (int k = 0; k < 256; ++k) {
+        acc += p[order[k]] / mass;
+        keep = k + 1;
+        if (acc >= 0.9) break;
+    }
+    for (int k = 0; k < keep; ++k) km += p[order[k]];
+    double r = U(rng) * km;
+    int pick = order[keep - 1];
+    for (int k = 0; k < keep; ++k)
+        if ((r -= p[order[k]]) <= 0) {
+            pick = order[k];
+            break;
+        }
+    return pick;
+}
+
 std::string sample_with_class(const PackedModel& model, const double w[6], std::size_t limit, const ClassContext* cc,
                               const double* lam, const std::string& prompt, int n, std::uint32_t seed,
                               const SimilarContext* sc = nullptr, const double* lsm = nullptr, double temperature = 0.8,
@@ -2336,36 +2423,120 @@ std::string sample_with_class(const PackedModel& model, const double w[6], std::
                 for (int s = 0; s < 256; ++s) M[s] = l * P[s] + (1 - l) * M[s];
             }
         }
-        bool banned[256];
-        mark_banned(seq, banned);
-        double p[256], mass = 0;
-        for (int pass = 0; pass < 2 && !(mass > 0); ++pass) {
-            mass = 0;
-            for (int s = 0; s < 256; ++s) mass += p[s] = (pass == 0 && banned[s]) ? 0.0 : std::pow(M[s], 1.0 / temperature);
-        }
-        int order[256];
-        std::iota(order, order + 256, 0);
-        std::sort(order, order + 256, [&](int x, int y) { return p[x] > p[y]; });
-        double acc = 0, km = 0;
-        int keep = 1;
-        for (int k = 0; k < 256; ++k) {
-            acc += p[order[k]] / mass;
-            keep = k + 1;
-            if (acc >= 0.9) break;
-        }
-        for (int k = 0; k < keep; ++k) km += p[order[k]];
-        double r = U(rng) * km;
-        int pick = order[keep - 1];
-        for (int k = 0; k < keep; ++k)
-            if ((r -= p[order[k]]) <= 0) {
-                pick = order[k];
-                break;
-            }
+        const int pick = pick_byte(M, seq, temperature, rng, U);
         seq.push_back(static_cast<std::uint8_t>(pick));
         ContentPlanStore::fold_into(gen_folded, static_cast<unsigned char>(pick));
         if (ds) ds->feed(static_cast<std::uint8_t>(pick));
     }
     return std::string(seq.begin() + static_cast<std::ptrdiff_t>(prompt.size()), seq.end());
+}
+
+// GEN-B (docs/reports/GEN_B_SENTENCE_GATE.md): the sentence gate. CyphaLM writes K candidates for the next sentence,
+// each a sample from the same mixture and sampler as sample_with_class; the gate keeps the one with the highest score
+// and writes nothing itself (PLAN rule 10: a tool may gate). Every feature is CyphaLM's own; none is SCRIBE's.
+//   fluency  mean log2 M[b] over the candidate's bytes, under the mixture that wrote it (before temperature and ban)
+//   pmi      fluency minus the same mean with the prompt replaced by a line break (what the prompt adds)
+//   markup   share of the candidate's bytes that are wiki markup: []{}|=<>&*# and the second quote of each ''
+// score = wf * fluency + wp * pmi - wm * markup. A candidate ends after a line break, after ". ", "! " or "? " once it
+// has min_len bytes, at max_len bytes, or at the byte budget, so the text is n bytes long, as without the gate.
+// Candidate k of sentence j draws from its own mt19937 (gate_seed), so no candidate depends on another; ties keep the
+// lower k.
+bool parse_gate(const std::string& spec, GateSpec& g) {
+    std::stringstream ss(spec);
+    std::string tok;
+    bool first = true;
+    while (std::getline(ss, tok, ',')) {
+        if (first) {
+            g.k = std::atoi(tok.c_str());
+            first = false;
+            continue;
+        }
+        const std::size_t eq = tok.find('=');
+        if (eq == std::string::npos) return false;
+        const std::string key = tok.substr(0, eq);
+        const double v = std::atof(tok.c_str() + eq + 1);
+        if (key == "wf") g.wf = v;
+        else if (key == "wp") g.wp = v;
+        else if (key == "wm") g.wm = v;
+        else if (key == "min") g.min_len = static_cast<int>(v);
+        else if (key == "max") g.max_len = static_cast<int>(v);
+        else return false;
+    }
+    return g.k >= 1 && g.min_len >= 1 && g.max_len >= g.min_len;
+}
+
+std::uint32_t gate_seed(std::uint32_t seed, std::uint32_t j, int k) {
+    return seed ^ (0x9E3779B9u * (j + 1)) ^ (0x85EBCA6Bu * static_cast<std::uint32_t>(k + 1));
+}
+
+// One candidate sentence after seq (whose first p0 bytes are the prompt), at most budget bytes, and its features.
+GateCand gate_candidate(const PackedModel& model, const double w[6], std::size_t limit, const ClassContext* cc,
+                        const double* lam, const SimilarContext* sc, const double* lsm, const double* lcp,
+                        const std::vector<std::uint8_t>& seq, std::size_t p0, int budget, std::uint32_t rs,
+                        double temperature, const GateSpec& g, const cypha::cyphalm::bkn::ByteKN* kn, const double* lkn,
+                        bool kn_replace) {
+    std::mt19937 rng(rs);
+    std::uniform_real_distribution<double> U(0.0, 1.0);
+    std::vector<std::uint8_t> s = seq;
+    double lp = 0;
+    int len = 0, mk = 0;
+    while (len < budget) {
+        double M[256];
+        sample_mix(model, w, limit, cc, lam, s, sc, lsm, lcp, M, kn, lkn, kn_replace);
+        const int b = pick_byte(M, s, temperature, rng, U);
+        lp += std::log2(std::max(M[b], 1e-12));
+        mk += (b != 0 && std::strchr("[]{}|=<>&*#", b) != nullptr) || (b == '\'' && !s.empty() && s.back() == '\'') ? 1 : 0;
+        s.push_back(static_cast<std::uint8_t>(b));
+        ++len;
+        if (b == '\n') break;
+        if (len >= g.min_len && b == ' ' && std::strchr(".!?", s[s.size() - 2]) != nullptr) break;
+    }
+    GateCand c;
+    c.bytes.assign(s.begin() + static_cast<std::ptrdiff_t>(seq.size()), s.end());
+    c.f = lp / len;
+    c.m = static_cast<double>(mk) / len;
+    if (g.wp != 0) {  // the same bytes after a line break and the text written so far, without the prompt
+        std::vector<std::uint8_t> c0(1, '\n');
+        c0.insert(c0.end(), seq.begin() + static_cast<std::ptrdiff_t>(p0), seq.end());
+        double lp0 = 0;
+        for (const std::uint8_t b : c.bytes) {
+            double M[256];
+            sample_mix(model, w, limit, cc, lam, c0, sc, lsm, lcp, M, kn, lkn, kn_replace);
+            lp0 += std::log2(std::max(M[b], 1e-12));
+            c0.push_back(b);
+        }
+        c.p = c.f - lp0 / len;
+    }
+    c.score = g.wf * c.f + g.wp * c.p - g.wm * c.m;
+    return c;
+}
+
+std::string sample_gated(const PackedModel& model, const double w[6], std::size_t limit, const ClassContext* cc,
+                         const double* lam, const SimilarContext* sc, const double* lsm, const double* lcp,
+                         const std::string& prompt, int n, std::uint32_t seed, double temperature, const GateSpec& g,
+                         GateStats& st, const cypha::cyphalm::bkn::ByteKN* kn, const double* lkn, bool kn_replace) {
+    std::vector<std::uint8_t> seq(prompt.begin(), prompt.end());
+    const std::size_t p0 = seq.size();
+    for (std::uint32_t j = 0; seq.size() - p0 < static_cast<std::size_t>(n); ++j) {
+        const int budget = std::min(g.max_len, n - static_cast<int>(seq.size() - p0));
+        GateCand best;
+        int best_k = -1;
+        for (int k = 0; k < g.k; ++k) {
+            GateCand c = gate_candidate(model, w, limit, cc, lam, sc, lsm, lcp, seq, p0, budget, gate_seed(seed, j, k),
+                                        temperature, g, kn, lkn, kn_replace);
+            if (best_k < 0 || c.score > best.score) {
+                best_k = k;
+                best = std::move(c);
+            }
+        }
+        seq.insert(seq.end(), best.bytes.begin(), best.bytes.end());
+        st.fluency += best.f;
+        st.pmi += best.p;
+        st.markup += best.m;
+        st.changed += best_k != 0 ? 1 : 0;
+        ++st.sentences;
+    }
+    return std::string(seq.begin() + static_cast<std::ptrdiff_t>(p0), seq.end());
 }
 
 // A4e: simpair [--margin M] REF.f64 FILE.f64 ... : cls --sim-bits files (doubles: bits per byte of trie + IG + class +
@@ -5461,6 +5632,63 @@ int cmd_selftest() {
                         copy_pred(si.data(), si.size(), n) == ' ' && std::memcmp(D, E, sizeof D) != 0;
         if (!ok) {
             std::cerr << "selftest: class / copy gate checks failed\n";
+            return 1;
+        }
+    }
+    // GEN-B: the sentence gate on the tiny model with copy lambdas. Specs parse or are refused; the text is n bytes and
+    // the same for the same seed; the first sentence kept is the best-scoring of the K candidates (ties: the lower k);
+    // after the prompt "\n" the pmi context is the real one, so every pmi is exactly 0.
+    {
+        const PackedModel pk = pack(model);
+        double lcp[kCopyBuckets];
+        std::fill(lcp, lcp + kCopyBuckets, 0.5);
+        GateSpec g4, gm, gp;
+        bool ok = parse_gate("4", g4) && g4.k == 4 && g4.wf == 1 && g4.wp == 0 && g4.wm == 0 && g4.min_len == 24 &&
+                  parse_gate("6,wf=0,wm=1,min=10,max=60", gm) && gm.k == 6 && gm.wf == 0 && gm.wm == 1 && gm.min_len == 10 &&
+                  gm.max_len == 60 && parse_gate("3,wp=1,wm=2", gp) && gp.wp == 1 && gp.wm == 2;
+        for (const char* s : {"", "0", "4,x=1", "4,wp", "4,min=50,max=10", "4,min=0"}) {
+            GateSpec bad;
+            ok = ok && !parse_gate(s, bad);
+        }
+        bool varied = false, marked = false;
+        auto run = [&](const std::string& p, int n, const GateSpec& g, GateStats& s) {
+            return sample_gated(pk, w, cfg.train, nullptr, nullptr, nullptr, nullptr, lcp, p, n, 17, 0.8, g, s);
+        };
+        for (const GateSpec* g : {&g4, &gm, &gp})
+            for (std::size_t q = 0; q < 8; ++q) {  // eight prompts from the tiny holdout
+                const std::string prompt(data.begin() + static_cast<std::ptrdiff_t>(cfg.train + 300 * q),
+                                         data.begin() + static_cast<std::ptrdiff_t>(cfg.train + 300 * q + 64));
+                GateStats st, st2;
+                const std::string a = run(prompt, 300, *g, st);
+                if (q == 0) {
+                    const std::string b = run(prompt, 300, *g, st2), c = run(prompt, 37, *g, st2);
+                    ok = ok && a.size() == 300 && a == b && c.size() == 37 && st.sentences >= 2;
+                }
+                const std::vector<std::uint8_t> seq(prompt.begin(), prompt.end());
+                std::vector<GateCand> cand;
+                for (int k = 0; k < g->k; ++k)
+                    cand.push_back(gate_candidate(pk, w, cfg.train, nullptr, nullptr, nullptr, nullptr, lcp, seq, seq.size(),
+                                                  std::min(g->max_len, 300), gate_seed(17, 0, k), 0.8, *g));
+                std::size_t best = 0;
+                double mmin = cand[0].m;
+                for (std::size_t k = 1; k < cand.size(); ++k) {
+                    if (cand[k].score > cand[best].score) best = k;
+                    mmin = std::min(mmin, cand[k].m);
+                    varied = varied || cand[k].bytes != cand[0].bytes;
+                    marked = marked || (g == &gm && cand[k].m != cand[0].m);
+                }
+                ok = ok && a.compare(0, cand[best].bytes.size(), std::string(cand[best].bytes.begin(), cand[best].bytes.end())) == 0;
+                if (g == &gm) ok = ok && cand[best].m == mmin;
+                if (g == &gp && q == 0) {
+                    const GateCand z = gate_candidate(pk, w, cfg.train, nullptr, nullptr, nullptr, nullptr, lcp,
+                                                      std::vector<std::uint8_t>(1, '\n'), 1, 120, gate_seed(17, 0, 0), 0.8, gp);
+                    bool some = false;
+                    for (const GateCand& x : cand) some = some || x.p != 0;
+                    ok = ok && z.p == 0 && z.bytes.size() > 0 && some;
+                }
+            }
+        if (!ok || !varied || !marked) {
+            std::cerr << "selftest: sentence gate (GEN-B) checks failed\n";
             return 1;
         }
     }
