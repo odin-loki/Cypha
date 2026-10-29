@@ -10798,7 +10798,7 @@ constexpr TestOutcome kPos = TestOutcome::Positive, kNeg = TestOutcome::Negative
 // Store K's facts as G9's context reads them: non-date relations, values by norm_ent; A2 adds one hop from a place
 // (r>country, r>located_in). rels: every relation each subject holds; surf: each attribute's surface strings.
 using SurfMap = std::map<std::pair<string, string>, std::map<string, int>>;
-vector<cc::Fact3> context_facts(const Facts& by, bool a2, std::map<string, std::set<string>>& rels, SurfMap* surf) {
+vector<cc::Fact3> context_facts(const Facts& by, bool a2, std::map<string, std::set<string>>& rels, SurfMap* surf, const Facts* extra = nullptr) {
     vector<cc::Fact3> out;
     static const std::set<string> hop = {"birth_place", "death_place", "location", "located_in"};
     for (const auto& [s, fs] : by)
@@ -10816,6 +10816,15 @@ vector<cc::Fact3> context_facts(const Facts& by, bool a2, std::map<string, std::
             for (const auto& [r2, c] : zt->second)
                 if ((r2 == "country" || r2 == "located_in") && !norm_ent(c).empty()) out.push_back({s, r + ">" + r2, norm_ent(c)});
         }
+    if (extra)  // S11d (A3): S15's added facts, each an attribute (r, norm_ent(value))
+        for (const auto& [s, fs] : *extra)
+            for (const auto& [r, o] : fs) {
+                rels[s].insert(r);
+                const string v = norm_ent(o);
+                if (v.empty()) continue;
+                out.push_back({s, r, v});
+                if (surf) ++(*surf)[{r, v}][o];
+            }
     return out;
 }
 
@@ -10827,9 +10836,9 @@ struct G9 {
     vector<char> kept_class;  // per concept
     bool truncated = false;
 };
-G9 run_g9(const Facts& by, bool a2, SurfMap* surf = nullptr) {
+G9 run_g9(const Facts& by, bool a2, SurfMap* surf = nullptr, const Facts* extra = nullptr) {
     std::map<string, std::set<string>> rels;
-    const auto facts = context_facts(by, a2, rels, surf);
+    const auto facts = context_facts(by, a2, rels, surf, extra);
     G9 g;
     g.C = cc::build_context(facts, 10.0, &rels);
     g.cs = cc::closed_concepts(g.C, 10.0, 500000, &g.truncated);
@@ -11059,6 +11068,183 @@ void rediscover(const Env& E, bool a2, bool read_test) {
     }
 }
 
+// ============================================================ S11d: G9 on a richer store (A3), against fresh held-out classes
+// The added facts: S15 rows with label 1, an entity value and a relation pattern_learn does not know (14 relations).
+Facts load_added(const vector<string>& files) {
+    Facts X;
+    std::set<string> seen;
+    for (const string& path : files) {
+        std::ifstream f(path);
+        string l;
+        std::getline(f, l);
+        while (std::getline(f, l)) {
+            const auto c = split(l, '\t');
+            if (c.size() < 17 || c[15] != "1" || c[8].empty() || rel_index(c[5]) >= 0) continue;
+            if (seen.insert(c[1] + '\x1f' + c[5] + '\x1f' + c[7]).second) X[c[1]].push_back({c[5], c[7]});
+        }
+    }
+    for (auto& [s, fs] : X) std::sort(fs.begin(), fs.end());
+    return X;
+}
+
+// Fresh classes: the A3 attributes with 15..500 subjects that are not S11a's held-out classes (A1 of store K in that range),
+// dev when bit 21 of FNV-1a(r + "\x1f" + v) is 0. Secondary: S11a's own classes (dev on every run, test on the test run).
+void rediscover_a3(const Env& E, const Facts& X, bool read_test) {
+    char b[1024];
+    const double t0 = now_s();
+    const G9 full = run_g9(E.kby, false, nullptr, &X);
+    std::size_t kept_rules = 0, kept_classes = 0;
+    for (const auto& R : full.rules) kept_rules += R.kept;
+    for (char c : full.kept_class) kept_classes += c;
+    std::snprintf(b, sizeof b, "G9 A3 FULL context: attributes %zu entities %zu | closed concepts %zu%s | candidate classes %zu | class rules %zu kept %zu | "
+                  "kept classes %zu | %.1f s", full.C.attr_r.size(), full.C.entities.size(), full.cs.size(), full.truncated ? " (STOPPED)" : "",
+                  full.cand.size(), full.rules.size(), kept_rules, kept_classes, now_s() - t0);
+    std::cout << b << "\n";
+    {
+        vector<const cc::ClassRule*> kr;
+        for (const auto& R : full.rules)
+            if (R.kept) kr.push_back(&R);
+        std::sort(kr.begin(), kr.end(), [](const cc::ClassRule* x, const cc::ClassRule* y) { return x->support > y->support || (x->support == y->support && x->p_value < y->p_value); });
+        for (std::size_t i = 0; i < kr.size() && i < 20; ++i) {
+            std::snprintf(b, sizeof b, "G9 A3 KEPT RULE %-70s => %-40s support %3.0f PCA %.3f baseline %.3f p %.2g", intent_text(full, kr[i]->cls).c_str(),
+                          full.C.attr_text(kr[i]->head).c_str(), kr[i]->support, kr[i]->pca_conf(), kr[i]->baseline, kr[i]->p_value);
+            std::cout << b << "\n";
+        }
+    }
+    const G9 k1 = run_g9(E.kby, false);
+    std::set<std::pair<string, string>> s11a_set;
+    for (std::size_t a = 0; a < k1.C.attr_r.size(); ++a)
+        if (const double n = static_cast<double>(k1.C.ext[a].size()); n >= 15 && n <= 500) s11a_set.insert({k1.C.attr_r[a], k1.C.attr_v[a]});
+    struct H {
+        string r, v;
+        vector<string> names;
+        int group = 0;  // 0 fresh dev, 1 fresh test, 2 S11a dev, 3 S11a test
+    };
+    vector<H> hs;
+    auto add_from = [&](const G9& g, bool fresh) {
+        for (std::size_t a = 0; a < g.C.attr_r.size(); ++a) {
+            const double n = static_cast<double>(g.C.ext[a].size());
+            if (n < 15 || n > 500) continue;
+            const bool in11a = s11a_set.count({g.C.attr_r[a], g.C.attr_v[a]}) > 0;
+            if (fresh == in11a) continue;
+            H h;
+            h.r = g.C.attr_r[a], h.v = g.C.attr_v[a];
+            for (int e : g.C.ext[a]) h.names.push_back(g.C.entities[static_cast<std::size_t>(e)]);
+            const std::uint64_t f = fnv(h.r + '\x1f' + h.v);
+            h.group = fresh ? (cc::fresh_class_is_dev(f) ? 0 : 1) : (((f >> 19) & 1) == 0 ? 2 : 3);
+            if (h.group == 1 && !read_test) continue;
+            if (h.group == 3 && !read_test) continue;
+            hs.push_back(std::move(h));
+        }
+    };
+    add_from(full, true);
+    add_from(k1, false);  // S11a's classes, their members in store K
+    std::size_t cnt[4] = {0, 0, 0, 0};
+    for (const H& h : hs) ++cnt[h.group];
+    std::snprintf(b, sizeof b, "G9 A3 HELD-OUT classes: fresh dev %zu, fresh test %zu | S11a's dev %zu, S11a's test %zu%s", cnt[0], cnt[1], cnt[2], cnt[3],
+                  read_test ? "" : " (test classes not read)");
+    std::cout << b << "\n";
+    static const char* gname[4] = {"FRESH DEV", "FRESH TEST", "S11A-DEV", "S11A-TEST"};
+    cc::RediscoveryTally tal[4];
+    std::map<string, cc::RediscoveryTally> by_rel[4];
+    vector<std::pair<double, double>> jj[4];
+    for (std::size_t i = 0; i < hs.size(); ++i) {
+        const H& h = hs[i];
+        Facts redK, redX;
+        for (const auto& [s, fs] : E.kby)
+            for (const auto& [r, o] : fs)
+                if (!(r == h.r && norm_ent(o) == h.v)) redK[s].push_back({r, o});
+        for (const auto& [s, fs] : X)
+            for (const auto& [r, o] : fs)
+                if (!(r == h.r && norm_ent(o) == h.v)) redX[s].push_back({r, o});
+        const G9 g = run_g9(redK, false, nullptr, &redX);
+        vector<int> hp;
+        for (const string& nm : h.names)
+            if (const int e = g.C.entity(nm); e >= 0) hp.push_back(e);
+        std::sort(hp.begin(), hp.end());
+        const double hn = static_cast<double>(h.names.size());
+        cc::ClassRead cr;
+        std::size_t best = 0, bestm = 0;
+        for (std::size_t k : g.cand) {
+            const double j = cc::jaccard(g.cs[k].extent, hp, hn);
+            if (j > cr.j_new) cr.j_new = j, best = k;
+            if (g.kept_class[k] && j > cr.j_kept) cr.j_kept = j;
+        }
+        for (std::size_t a = 0; a < g.C.attr_r.size(); ++a)
+            if (const double j = cc::jaccard(g.C.ext[a], hp, hn); j > cr.j_named) cr.j_named = j, bestm = a;
+        {  // the null: |H| random context entities holding a value of r in store K or the added facts
+            vector<int> pool;
+            for (std::size_t e = 0; e < g.C.entities.size(); ++e) {
+                bool has = false;
+                for (const Facts* F : {&E.kby, &X})
+                    if (const auto it = F->find(g.C.entities[e]); it != F->end())
+                        for (const auto& f : it->second) has = has || f.first == h.r;
+                if (has) pool.push_back(static_cast<int>(e));
+            }
+            if (pool.size() < h.names.size()) {
+                pool.resize(g.C.entities.size());
+                for (std::size_t e = 0; e < pool.size(); ++e) pool[e] = static_cast<int>(e);
+            }
+            std::mt19937_64 rng(20261103 + i);
+            const std::size_t m = std::min(pool.size(), h.names.size());
+            for (std::size_t k = 0; k < m; ++k) std::swap(pool[k], pool[k + rng() % (pool.size() - k)]);
+            vector<int> rn(pool.begin(), pool.begin() + static_cast<std::ptrdiff_t>(m));
+            std::sort(rn.begin(), rn.end());
+            for (std::size_t k : g.cand) cr.j_null = std::max(cr.j_null, cc::jaccard(g.cs[k].extent, rn, hn));
+        }
+        tal[h.group].add(cr);
+        by_rel[h.group][h.r].add(cr);
+        jj[h.group].push_back({cr.j_new, cr.j_null});
+        std::snprintf(b, sizeof b, "G9 A3 %s CLASS %-18s %-40s n %3.0f in context %3zu | J_new %.3f%s J_named %.3f J_kept %.3f | null %.3f | best class: %s (%zu) | best named: %s",
+                      gname[h.group], h.r.c_str(), h.v.c_str(), hn, hp.size(), cr.j_new, cr.j_new >= 0.5 ? (cr.j_named < 0.5 ? " REDISCOVERED (strict)" : " REDISCOVERED") : "",
+                      cr.j_named, cr.j_kept, cr.j_null, g.cand.empty() ? "-" : intent_text(g, best).c_str(), g.cand.empty() ? std::size_t{0} : g.cs[best].extent.size(),
+                      g.C.attr_r.empty() ? "-" : g.C.attr_text(static_cast<int>(bestm)).c_str());
+        std::cout << b << "\n";
+    }
+    for (int gi = 0; gi < 4; ++gi) {
+        if (tal[gi].n == 0) continue;
+        auto line = [&](const string& key, const cc::RediscoveryTally& a) {
+            std::snprintf(b, sizeof b,
+                          "G9 A3 %s REDISCOVERY %-26s classes %3.0f | rediscovered %3.0f rate %.3f [%.3f, %.3f] | strict %3.0f rate %.3f [%.3f, %.3f] | null %3.0f rate %.3f [%.3f, %.3f] | "
+                          "redundant %3.0f | kept classes %3.0f",
+                          gname[gi], key.c_str(), a.n, a.red, a.red / a.n, ecs::wilson_lower(a.red, a.n), ecs::wilson_upper(a.red, a.n), a.strict, a.strict / a.n,
+                          ecs::wilson_lower(a.strict, a.n), ecs::wilson_upper(a.strict, a.n), a.null, a.null / a.n, ecs::wilson_lower(a.null, a.n),
+                          ecs::wilson_upper(a.null, a.n), a.redun, a.kept);
+            std::cout << b << "\n";
+        };
+        line("all", tal[gi]);
+        for (const auto& [r, a] : by_rel[gi]) line(r, a);
+        if (gi == 1) {
+            const cc::RediscoveryTally& a = tal[1];
+            std::snprintf(b, sizeof b, "G9 A3 GATE (fresh test classes): rediscovery Wilson lower %.3f vs null Wilson upper %.3f -> %s | strict Wilson lower %.3f -> %s | "
+                          "decision: %s", ecs::wilson_lower(a.red, a.n), ecs::wilson_upper(a.null, a.n), a.gate_met() ? "MET" : "NOT MET",
+                          ecs::wilson_lower(a.strict, a.n), a.strict_met() ? "MET" : "NOT MET",
+                          a.gate_met() && a.strict_met() ? "G9 A3 ADOPTED (open to Odin's veto)" : "not adopted");
+            std::cout << b << "\n";
+        }
+        // S11a's amendment 1 measures (secondary)
+        const auto& v = jj[gi];
+        double wins = 0, losses = 0, d = 0;
+        for (const auto& [a, z] : v) wins += a > z, losses += a < z, d += a - z;
+        const double n = static_cast<double>(v.size()), m = wins + losses;
+        const double p_sign = m > 0 ? ecs::binomial_upper_tail(wins, m, 0.5) : 1.0;
+        vector<double> boot;
+        std::mt19937_64 rng(20261104);
+        for (int r = 0; r < 2000; ++r) {
+            double t = 0;
+            for (std::size_t k = 0; k < v.size(); ++k) {
+                const auto& [a, z] = v[rng() % v.size()];
+                t += a - z;
+            }
+            boot.push_back(t / n);
+        }
+        std::sort(boot.begin(), boot.end());
+        std::snprintf(b, sizeof b, "G9 A3 %s SECONDARY classes %.0f | J_new > null %.0f, < %.0f, sign test p %.2g | mean J_new - null %+.3f [%+.3f, %+.3f]", gname[gi], n,
+                      wins, losses, p_sign, d / n, boot[50], boot[1949]);
+        std::cout << b << "\n";
+    }
+}
+
 // ============================================================ G9, read 2: predictions on hidden S15 slots through S8a's loop
 s8a::Tests g9_tests(s8a::Ctx& cx, const ecs::TripleStore& st, const ecs::LinkPredictor& lp, const string& s, const string& r, const string& o,
                     const cc::ClassRule& best) {
@@ -11097,7 +11283,8 @@ SlotSet load_slots(const string& path, bool read_labels) {
     return S;
 }
 
-vector<s8a::Item> g9_hypotheses(const Env& E, const std::set<std::pair<string, string>>& slots, bool a2, const string& tag, ecs::TripleStore& st_out) {
+vector<s8a::Item> g9_hypotheses(const Env& E, const std::set<std::pair<string, string>>& slots, bool a2, const string& tag, ecs::TripleStore& st_out,
+                                const Facts* extra = nullptr) {
     char b[512];
     Facts red;
     std::size_t held = 0;
@@ -11111,7 +11298,7 @@ vector<s8a::Item> g9_hypotheses(const Env& E, const std::set<std::pair<string, s
         std::map<string, std::set<string>> rels;
         context_facts(E.kby, false, rels, &surf);  // surface strings from the full store K (display only)
     }
-    const G9 g = run_g9(red, a2);
+    const G9 g = run_g9(red, a2, nullptr, extra);
     st_out = s8a::make_store(red);
     const ecs::LinkPredictor lp(st_out, {});
     s8a::Ctx cx;
@@ -11169,28 +11356,29 @@ void write_pool(const string& path, const vector<s8a::Item>& h) {
           << ecs::test_outcome_name(x.T.t[3]) << '\t' << ecs::test_outcome_name(x.T.t[4]) << '\t' << ecs::test_outcome_name(x.T.t[5]) << '\n';
 }
 
-void promote(const Env& E, const string& s15dir, const string& out, bool a2, bool read_test) {
+void promote(const Env& E, const string& s15dir, const string& out, bool a2, bool read_test, const Facts* extra = nullptr) {
+    const string D_ = extra ? "S11D A3 DEV" : "S11A DEV", T_ = extra ? "S11D A3 TEST" : "S11A TEST";  // S11d: G9 on A3
     // dev: S15 dev's choose half; its labels set the plan (s and c) and grade the dev read
     const SlotSet D = load_slots(s15dir + "/temporal_holdout_dev.tsv", true);
     ecs::TripleStore st;
-    vector<s8a::Item> dh = g9_hypotheses(E, D.slots, a2, "S11A DEV", st);
+    vector<s8a::Item> dh = g9_hypotheses(E, D.slots, a2, D_, st, extra);
     for (s8a::Item& x : dh) x.label = s8a::s15_grade(D.rows, rel_index(x.r), x.s, x.r, x.o);
     const bool allowed[s8a::kT] = {true, true, true, true, false, true};
-    const s8a::Plan P = s8a::plan_from(dh, "S11A DEV G9", allowed, true);
-    s8a::run_loop(dh, P, "S11A DEV G9", out + ".fresh_g9_dev.prereg.tsv");
-    s8a::print_states("S11A DEV G9", dh);
-    s8a::print_precisions("S11A DEV G9", dh, false);
+    const s8a::Plan P = s8a::plan_from(dh, D_ + " G9", allowed, true);
+    s8a::run_loop(dh, P, D_ + " G9", out + ".fresh_g9_dev.prereg.tsv");
+    s8a::print_states(D_ + " G9", dh);
+    s8a::print_precisions(D_ + " G9", dh, false);
     write_pool(out + ".fresh_g9_dev.hyps.tsv", dh);
     if (!read_test) return;
     // test (once): S15 test's bit 17 = 0 half; slots first, labels only after the loop
     const SlotSet T = load_slots(s15dir + "/temporal_holdout_test.tsv", false);
-    vector<s8a::Item> th = g9_hypotheses(E, T.slots, a2, "S11A TEST", st);
-    s8a::run_loop(th, P, "S11A TEST G9", out + ".fresh_g9.prereg.tsv");
+    vector<s8a::Item> th = g9_hypotheses(E, T.slots, a2, T_, st, extra);
+    s8a::run_loop(th, P, T_ + " G9", out + ".fresh_g9.prereg.tsv");
     write_pool(out + ".fresh_g9.hyps.tsv", th);
     const SlotSet TL = load_slots(s15dir + "/temporal_holdout_test.tsv", true);
     for (s8a::Item& x : th) x.label = s8a::s15_grade(TL.rows, rel_index(x.r), x.s, x.r, x.o);
-    s8a::print_states("S11A TEST G9", th);
-    s8a::print_precisions("S11A TEST G9", th, false);
+    s8a::print_states(T_ + " G9", th);
+    s8a::print_precisions(T_ + " G9", th, false);
 }
 
 // ============================================================ G11: open relations
@@ -11207,9 +11395,10 @@ S15Props load_props(const string& path) {
     return P;
 }
 
-void open_relations(const Env& E, const string& s15dir, bool read_test) {
+void open_relations(const Env& E, const string& s15dir, bool read_test, bool skip_dates = false, const string& out = "") {
     char b[1024];
     const double t0 = now_s();
+    if (skip_dates) std::cout << "G11 READER: links inside date candidates skipped (S11d, --g11-skip-dates)\n";
     // ---- unparsed (subject, link) pairs and their core keys
     vector<std::array<string, 3>> rec;  // (core, subject, object key)
     std::size_t pairs_all = 0, parsed = 0;
@@ -11225,8 +11414,10 @@ void open_relations(const Env& E, const string& s15dir, bool read_test) {
             gen_cands(s, cands);
             std::set<std::pair<int, int>> fired;
             apply_patterns(s, spans, cands, tk, [&](int, const Cand& c, const Span&) { fired.insert({c.b, c.e}); });
+            const vector<std::pair<int, int>> ds = skip_dates ? date_spans(cands) : vector<std::pair<int, int>>{};
             for (const Cand& c : cands) {
                 if (c.kind != K_LINK || c.k1 == tk) continue;
+                if (skip_dates && ecs::span_within(c.b, c.e, ds)) continue;  // S11d: a linked year or day inside a date
                 for (const Span& S : spans) {
                     if (c.b < S.e && S.b < c.e) continue;
                     bool sf = false;
@@ -11293,6 +11484,15 @@ void open_relations(const Env& E, const string& s15dir, bool read_test) {
                       p.d.gradable, p.d.precision(), ex.c_str());
         std::cout << b << "\n";
     }
+    std::ofstream prop_tsv;  // S11d: the proposals with their proposed names (each one's dev property), as data for P10
+    if (skip_dates && !out.empty()) {
+        prop_tsv.open(out + ".g11_proposals.tsv");
+        prop_tsv << "clustering\tkey\tproposed_name\tkind\tpairs\tdev_hits\tdev_gradable\ttest_hits\ttest_gradable\tholds_on_test\n";
+        if (!read_test)
+            for (const auto& p : props[ch])
+                prop_tsv << (ch ? "C2" : "C1") << '\t' << cl[ch][p.k].key << '\t' << p.d.prop << '\t' << (rel_index(p.d.prop) >= 0 ? "pattern_learn" : "s15_added") << '\t'
+                         << cl[ch][p.k].pairs.size() << '\t' << p.d.hits << '\t' << p.d.gradable << "\t\t\t\n";
+    }
     if (!read_test) return;
     // ---- the test read (once): each proposal's dev property on its test-subject pairs
     const S15Props tst = load_props(s15dir + "/temporal_holdout_test.tsv");
@@ -11305,6 +11505,9 @@ void open_relations(const Env& E, const string& s15dir, bool read_test) {
         nprop[kind] += 1;
         const bool ok = t.gradable >= 3 && t.precision() >= 0.5;
         holds[kind] += ok;
+        if (prop_tsv.is_open())
+            prop_tsv << (ch ? "C2" : "C1") << '\t' << c.key << '\t' << p.d.prop << '\t' << (kind == 0 ? "pattern_learn" : "s15_added") << '\t' << c.pairs.size() << '\t'
+                     << p.d.hits << '\t' << p.d.gradable << '\t' << t.hits << '\t' << t.gradable << '\t' << (ok ? 1 : 0) << '\n';
         for (const auto& [s, o] : c.pairs) {
             if (!tst.subjects.count(s)) continue;
             g_all[kind].insert({s, o, p.d.prop});
@@ -11323,26 +11526,33 @@ void open_relations(const Env& E, const string& s15dir, bool read_test) {
                       kind == 0 ? "pattern_learn relations" : kind == 1 ? "S15's added relations" : "all", n, ho, g, h, g > 0 ? h / g : 0.0, ecs::wilson_lower(h, g),
                       ecs::wilson_upper(h, g));
         std::cout << b << "\n";
+        if (kind == 2 && skip_dates) {
+            const bool adopt = cc::adopt_g11_skip(ho, h, g);
+            std::snprintf(b, sizeof b, "G11 S11D RULE (>= 8 hold and pooled >= 58/107 = 0.542): hold %.0f, pooled %.3f -> %s", ho, g > 0 ? h / g : 0.0,
+                          adopt ? "the skip becomes G11's default reader" : "the skip stays opt-in");
+            std::cout << b << "\n";
+        }
     }
 }
 
 int run(int argc, char** argv) {
     if (argc < 8) {
-        std::fprintf(stderr, "usage: pattern_learn --gen-concepts ENWIK8 SEEDS.tsv WD_VALUES.tsv PATTERNS.tsv S15_DIR OUT_PREFIX [--attrs A1|A2] "
-                             "[--part all|rediscover|promote|open] [--read-test]\n");
+        std::fprintf(stderr, "usage: pattern_learn --gen-concepts ENWIK8 SEEDS.tsv WD_VALUES.tsv PATTERNS.tsv S15_DIR OUT_PREFIX [--attrs A1|A2|A3] "
+                             "[--part all|rediscover|promote|open] [--read-test] [--g11-skip-dates]\n");
         return 2;
     }
     const double t0 = now_s();
-    bool read_test = false, a2 = false;
+    bool read_test = false, a2 = false, a3 = false, skip_dates = false;
     string part = "all";
     for (int i = 8; i < argc; ++i) {
         const string a = argv[i];
         if (a == "--read-test") read_test = true;
         else if (a == "--attrs" && i + 1 < argc) {
             const string v = argv[++i];
-            if (v != "A1" && v != "A2") { std::fprintf(stderr, "--attrs A1 or A2\n"); return 2; }
-            a2 = v == "A2";
-        } else if (a == "--part" && i + 1 < argc) part = argv[++i];
+            if (v != "A1" && v != "A2" && v != "A3") { std::fprintf(stderr, "--attrs A1, A2 or A3\n"); return 2; }
+            a2 = v == "A2", a3 = v == "A3";
+        } else if (a == "--g11-skip-dates") skip_dates = true;
+        else if (a == "--part" && i + 1 < argc) part = argv[++i];
         else {
             std::fprintf(stderr, "unknown option %s\n", a.c_str());
             return 2;
@@ -11352,10 +11562,23 @@ int run(int argc, char** argv) {
     if (!load_env(E, argv[2], argv[3], argv[4], argv[5])) return 1;
     std::size_t nk = 0;
     for (const auto& [s, fs] : E.kby) nk += fs.size();
-    std::cout << "S11A store K " << nk << " triples " << E.kby.size() << " subjects | attributes " << (a2 ? "A2" : "A1") << (read_test ? " | TEST READ" : "") << "\n";
-    if (part == "all" || part == "rediscover") rediscover(E, a2, read_test);
-    if (part == "all" || part == "promote") promote(E, argv[6], argv[7], a2, read_test);
-    if (part == "all" || part == "open") open_relations(E, argv[6], read_test);
+    std::cout << "S11A store K " << nk << " triples " << E.kby.size() << " subjects | attributes " << (a3 ? "A3" : a2 ? "A2" : "A1") << (read_test ? " | TEST READ" : "") << "\n";
+    Facts X;  // S11d: S15's added facts (A3), from S15 dev, and from S15 test too on the test run
+    if (a3) {
+        const string s15 = argv[6];
+        vector<string> files = {s15 + "/temporal_holdout_dev.tsv"};
+        if (read_test) files.push_back(s15 + "/temporal_holdout_test.tsv");
+        X = load_added(files);
+        std::size_t nx = 0;
+        for (const auto& [s, fs] : X) nx += fs.size();
+        std::cout << "S11D added facts " << nx << " over " << X.size() << " subjects (from S15 " << (read_test ? "dev and test" : "dev") << ")\n";
+    }
+    if (part == "all" || part == "rediscover") {
+        if (a3) rediscover_a3(E, X, read_test);
+        else rediscover(E, a2, read_test);
+    }
+    if (part == "all" || part == "promote") promote(E, argv[6], argv[7], a2, read_test, a3 ? &X : nullptr);
+    if (part == "all" || part == "open") open_relations(E, argv[6], read_test, skip_dates, argv[7]);
     struct rusage ru{};
     getrusage(RUSAGE_SELF, &ru);
     std::printf("S11A seconds %.1f peak RAM %.0f MB\n", now_s() - t0, static_cast<double>(ru.ru_maxrss) / 1024.0);
