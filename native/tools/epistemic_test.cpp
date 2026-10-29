@@ -6,6 +6,7 @@
 #include "cypha/eval/curiosity.hpp"
 #include "cypha/eval/epistemic.hpp"
 #include "cypha/eval/gap_map.hpp"
+#include "cypha/eval/gen_concepts.hpp"
 #include "cypha/eval/gen_links.hpp"
 #include "cypha/eval/gen_rules.hpp"
 #include "cypha/eval/hypothesis.hpp"
@@ -2530,6 +2531,151 @@ static void test_curiosity_S10() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// S11a: G9 concept formation and G11 open relations (gen_concepts.hpp)
+// ---------------------------------------------------------------------------
+
+static void test_concepts_S11a() {
+  namespace cc = cypha::eval::concepts;
+  // LCM against brute force: every closed set with an extent >= minsup and a non-empty intent, each exactly once.
+  for (int seed = 0; seed < 6; ++seed) {
+    std::mt19937_64 rng(20261103 + seed);
+    std::vector<cc::Fact3> facts;
+    for (int e = 0; e < 30; ++e)
+      for (int a = 0; a < 8; ++a)
+        if (rng() % 100 < 35) facts.push_back({"e" + std::to_string(100 + e), a < 4 ? "r0" : "r1", "v" + std::to_string(a)});
+    const cc::FormalContext C = cc::build_context(facts, 1.0);
+    const double minsup = 3.0;
+    const auto cs = cc::closed_concepts(C, minsup);
+    const int m = static_cast<int>(C.attr_r.size());
+    std::vector<std::vector<int>> brute;
+    for (int mask = 1; mask < (1 << m); ++mask) {
+      std::vector<int> I, E;
+      for (int a = 0; a < m; ++a)
+        if (mask >> a & 1) I.push_back(a);
+      for (std::size_t e = 0; e < C.entities.size(); ++e) {
+        bool all = true;
+        for (int a : I) all = all && std::binary_search(C.attrs[e].begin(), C.attrs[e].end(), a);
+        if (all) E.push_back(static_cast<int>(e));
+      }
+      if (static_cast<double>(E.size()) >= minsup && cc::closure_of(C, E) == I) brute.push_back(I);
+    }
+    std::vector<std::vector<int>> got;
+    bool ext_ok = true;
+    for (const auto& c : cs) {
+      got.push_back(c.intent);
+      ext_ok = ext_ok && cc::closure_of(C, c.extent) == c.intent && static_cast<double>(c.extent.size()) >= minsup;
+    }
+    std::sort(brute.begin(), brute.end());
+    std::sort(got.begin(), got.end());
+    CHECK(got == brute);  // no closed set missed, none twice
+    CHECK(ext_ok);
+    CHECK(!brute.empty());
+  }
+  // the support guard and the stop
+  {
+    std::vector<cc::Fact3> f = {{"a", "r", "x"}, {"b", "r", "x"}, {"c", "r", "y"}};
+    const cc::FormalContext C = cc::build_context(f, 2.0);
+    CHECK(C.attr_r.size() == 1 && C.entities.size() == 2 && C.attribute("r", "x") == 0 && C.attribute("r", "y") == -1);
+    bool trunc = false;
+    std::vector<cc::Fact3> g;
+    for (int e = 0; e < 12; ++e)
+      for (int a = 0; a < 6; ++a)
+        if ((e + a) % 3 != 0) g.push_back({"e" + std::to_string(e), "r", "v" + std::to_string(a)});
+    const auto all = cc::closed_concepts(cc::build_context(g, 1.0), 1.0);
+    const auto cut = cc::closed_concepts(cc::build_context(g, 1.0), 1.0, 3, &trunc);
+    CHECK(all.size() > 3 && cut.size() == 3 && trunc);
+  }
+  // Jaccard counts members outside the context in the union only
+  CHECK_NEAR(cc::jaccard({1, 2, 3}, {2, 3}, 4.0), 2.0 / 5.0, 1e-12);
+  CHECK_NEAR(cc::jaccard({1, 2}, {1, 2}), 1.0, 1e-12);
+  CHECK_NEAR(cc::jaccard({}, {}, 0.0), 0.0, 1e-12);
+
+  // Candidate classes and class rules on a built example. AB: job x and nat y (30, 29 of them genre z, the other one
+  // genre w; 15 lang q, 15 lang p); AB2: job x and nat y with no genre at all (5, lang p); A: job x only (20, 4 genre z);
+  // B: nat y only (20, 8 genre z). Everyone in A and B holds a genre and a lang.
+  std::vector<cc::Fact3> f;
+  auto add = [&](const std::string& e, bool job, bool nat, int genre, bool q) {  // genre: 1 z, 0 w, -1 none
+    if (job) f.push_back({e, "job", "x"});
+    if (nat) f.push_back({e, "nat", "y"});
+    if (genre >= 0) f.push_back({e, "genre", genre ? "z" : "w"});
+    f.push_back({e, "lang", q ? "q" : "p"});
+  };
+  for (int i = 0; i < 30; ++i) add("ab" + std::to_string(i), true, true, i < 29 ? 1 : 0, i < 15);
+  for (int i = 0; i < 5; ++i) add("abn" + std::to_string(i), true, true, -1, false);
+  for (int i = 0; i < 20; ++i) add("a" + std::to_string(i), true, false, i < 4 ? 1 : 0, i < 10);
+  for (int i = 0; i < 20; ++i) add("b" + std::to_string(i), false, true, i < 8 ? 1 : 0, i < 10);
+  const cc::FormalContext C = cc::build_context(f, 3.0);
+  CHECK(C.entities.size() == 75 && C.attr_r.size() == 6);
+  const auto cs = cc::closed_concepts(C, 3.0);
+  const auto cand = cc::candidate_classes(C, cs, 5.0, 0.9);
+  const int job = C.attribute("job", "x"), nat = C.attribute("nat", "y"), z = C.attribute("genre", "z"), lp = C.attribute("lang", "p");
+  std::size_t jn = cs.size();
+  for (std::size_t k = 0; k < cs.size(); ++k)
+    if (cs[k].intent == std::vector<int>{std::min(job, nat), std::max(job, nat)}) jn = k;
+  CHECK(jn < cs.size() && cs[jn].extent.size() == 35);
+  CHECK(std::find(cand.begin(), cand.end(), jn) != cand.end());
+  for (std::size_t k : cand) CHECK(cs[k].intent.size() >= 2);
+  // a conjunction whose extent a single attribute already names is not a candidate
+  {
+    std::vector<cc::Fact3> h;
+    for (int i = 0; i < 12; ++i) h.push_back({"e" + std::to_string(i), "r", "u"}), h.push_back({"e" + std::to_string(i), "s", "t"});
+    h.push_back({"e12", "r", "u"}), h.push_back({"e13", "s", "t"});  // r = u and s = t 13 each, the pair 12: Jaccard 0.92
+    const cc::FormalContext H = cc::build_context(h, 1.0);
+    const auto hc = cc::closed_concepts(H, 10.0);
+    CHECK(cc::candidate_classes(H, hc, 10.0, 0.9).empty());
+    CHECK(cc::candidate_classes(H, hc, 10.0, 0.95).size() == 1);
+  }
+  cc::ClassRuleConfig cfg;
+  cfg.min_support = 5.0;
+  const auto rules = cc::class_rules(C, cs, cand, cfg, [](const std::string& e) { return e.size() >= 3 && e[0] == 'a' && e[1] == 'b' && (e.back() - '0') % 2 == 0; });
+  const cc::ClassRule* rz = nullptr;
+  const cc::ClassRule* rp = nullptr;
+  for (const auto& R : rules) {
+    if (R.cls == jn && R.head == z) rz = &R;
+    if (R.cls == jn && R.head == lp) rp = &R;
+  }
+  CHECK(rz != nullptr && rp != nullptr);
+  if (rz && rp) {
+    CHECK(rz->support == 29.0 && rz->pca_body == 30.0);   // AB2 holds no genre: outside the PCA body
+    CHECK_NEAR(rz->pca_conf(), 29.0 / 30.0, 1e-12);
+    CHECK_NEAR(rz->baseline, 37.0 / 50.0, 1e-12);         // the better single attribute (nat y), not job x's 33/50
+    CHECK_NEAR(rz->p_value, binomial_upper_tail(29.0, 30.0, 0.74), 1e-12);
+    CHECK(rz->kept);
+    CHECK_NEAR(cc::single_pca(C, job, z), 33.0 / 50.0, 1e-12);
+    CHECK(rp->support == 20.0 && rp->pca_body == 35.0 && !rp->kept);  // 0.571 against 30/55: no gain
+    CHECK(rz->hid_support == 15.0 && rz->hid_pca == 15.0);  // hidden: AB and AB2 with an even last digit; AB2 holds no genre
+    CHECK(cc::class_rule_t3(*rz) == TestOutcome::Positive);
+  }
+
+  // G11: connectors, the phrase filter, clusters and their grade
+  CHECK_STR(cc::connector_of("[S] was educated at the [O]"), "S ... educated at O");
+  CHECK_STR(cc::connector_of("[S] attended [O]"), "S ... attended O");
+  CHECK_STR(cc::connector_of("[O] , the capital of [S]"), "O , the ... S");  // the token next to [O] is ",", not an article
+  CHECK_STR(cc::connector_of("[O] the capital of [S]"), "O capital of ... S");
+  CHECK_STR(cc::connector_of("[S] the [O]"), "");
+  CHECK_STR(cc::connector_of("[S] [O]"), "");
+  CHECK(cc::has_word("[S] won the [O]") && !cc::has_word("[S] ( # , [O]") && cc::has_word("[O] ) , also known as [S]"));
+  std::vector<std::array<std::string, 3>> recs;
+  for (int i = 0; i < 6; ++i) recs.push_back({"[S] attended [O]", "p" + std::to_string(i), "school" + std::to_string(i)});
+  recs.push_back({"[S] attended [O]", "p0", "school0"});  // a repeat counts once
+  for (int i = 0; i < 4; ++i) recs.push_back({"[S] liked [O]", "p" + std::to_string(i), "x"});
+  const auto cl = cc::open_clusters(recs, 5);
+  CHECK(cl.size() == 1 && cl[0].key == "[S] attended [O]" && cl[0].pairs.size() == 6);
+  auto props = [](const std::string& s, const std::string& o) {
+    std::vector<std::string> v;
+    if (s != "p5") v.push_back(s == "p4" ? "employer" : "educated_at");
+    if (o == "school0") v.push_back("educated_at");  // a property listed twice for one pair counts once
+    return v;
+  };
+  auto gradable = [](const std::string& s) { return s != "p3"; };
+  const cc::ClusterGrade g = cc::grade_cluster(cl[0], props, gradable);
+  CHECK_STR(g.prop, "educated_at");
+  CHECK(g.gradable == 5.0 && g.hits == 3.0);
+  const cc::ClusterGrade gf = cc::grade_cluster(cl[0], props, gradable, "employer");
+  CHECK(gf.gradable == 5.0 && gf.hits == 1.0);
+}
+
 static void test_gap_map() {
   // The gap id CyphaLM writes (cyphalm_trie dktext rows and its dev tags).
   CHECK_STR(gap_id("Honduras", "capital"), "G-AEC1");
@@ -2770,6 +2916,7 @@ int main() {
   test_gap_map();
   test_scope_S4c();
   test_curiosity_S10();
+  test_concepts_S11a();
   std::printf("epistemic_test: %d checks, %d failed\n", g_checks, g_failed);
   return g_failed == 0 ? 0 : 1;
 }

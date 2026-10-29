@@ -111,6 +111,7 @@ Cypha is Odin Loch's own C++ AI. **CyphaLM** is its language model: a packed byt
 | **S4b unknown-unknown signals** | One alarm rule; the vocabulary signal alarms on new page types (95.5% within 50 pages); surprise and unparsed do not pass; nothing sees an unseen domain in plain prose | `S4_UNSEEN_AND_FRONTIER.md` |
 | **S4c out-of-scope signal** | No candidate passes: topic distance 38% within 50 pages on Dolly (gate 90%); the markup control holds; Dolly's long answers are mostly in scope by content | `S4_UNSEEN_AND_FRONTIER.md` |
 | **S10 curiosity scheduler** | Gate not met (LCI 0.000): dev +126%, gate −5% (2.105 against 2.227); the gate set's value sits in one small arm that uniform also empties, and the highest-P0-first order reversed; uniform stays | `S10_CURIOSITY_SCHEDULER.md` |
+| **S11a G9 concepts, G11 open relations** | G9's gate not met (0 of 60 classes; nearer than the null on 50); no promotions. G11: 21 of 38 proposals hold (0.861), educated_at among them | `S11A_CONCEPTS_AND_OPEN_RELATIONS.md` |
 | **M17 lowered index freed after `--save`** | C1L + defaults with `--save` 204.5 → 186.7 MB; lossless | `RAM_PROFILE.md` |
 | Tool profile P2–P4 | Tagger and word-vector class tables cut from the class expert (the tagger stays as the question parser); `cypha_gate` deleted; `pattern_learn` fails the Q/A cut, flagged for Odin | `TOOL_PROFILE_P2_GRID.md` |
 | S-1b learned contexts | Cypha's own learner reaches PPMI-SVD's level (0.683 / 0.246 / 0.669); gates failed on rare words | `S1B_LEARNED_CONTEXTS.md` |
@@ -155,7 +156,7 @@ Odin asked on 2026-10-28 to reduce CyphaLM's RAM. Every cut was measured against
 
 ### 4.4 CTests
 
-Run these on every change: `native_cyphalm_trie_selftest`, `native_fm_infinigram_test`, `native_epistemic_test`, `native_thought_test`, `native_geometry_test`, `native_ecs_lci_test`, `native_scribe_selftest`, `native_cyphalm_neural_smoke`, `native_class_context_test`. `native_fm_infinigram_test` runs 191,885 checks (locate included), `native_epistemic_test` 1,168 (S4, S4b, S4c, S6, S7, S7b, S7c, S8a, S8b, S8c, S8d, S9, S10), `native_class_context_test` 1,043 (M15). `pattern_learn` builds with `g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp`; its S3 `--gaps` run must stay byte-identical. `pattern_learn --signals DIR` (S4b) runs after S3's passes; without it the run is byte-identical. `--signals-scope dev|test` (S4c) runs after S4b's signals; without it the output is S4b's.
+Run these on every change: `native_cyphalm_trie_selftest`, `native_fm_infinigram_test`, `native_epistemic_test`, `native_thought_test`, `native_geometry_test`, `native_ecs_lci_test`, `native_scribe_selftest`, `native_cyphalm_neural_smoke`, `native_class_context_test`. `native_fm_infinigram_test` runs 191,885 checks (locate included), `native_epistemic_test` 1,237 (S4, S4b, S4c, S6, S7, S7b, S7c, S8a, S8b, S8c, S8d, S9, S10, S11a), `native_class_context_test` 1,043 (M15). `pattern_learn` builds with `g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp`; its S3 `--gaps` run must stay byte-identical. `pattern_learn --signals DIR` (S4b) runs after S3's passes; without it the run is byte-identical. `--signals-scope dev|test` (S4c) runs after S4b's signals; without it the output is S4b's.
 
 ### 4.5 CI
 
@@ -192,6 +193,9 @@ Run these on every change: `native_cyphalm_trie_selftest`, `native_fm_infinigram
     - A scheduler can only beat uniform where value is spread over large arms with different rates. Re-read S10 when the generators give larger pools (after §5.13's grader, or with S11), with a budget fixed in advance that does not empty the arms?
     - Order within an arm: highest P0 first won on dev and lost on the gate. Keep random order until the link between P0 and promotion is measured per arm?
     - S15's rule names only generators' final reads of test. S10 read test's bit-17 half (subjects and relations to build the set, the labels once; bit 17 = 0 untouched). Does a scheduler's read count, or where should such reads come from?
+19. **S11a's questions:**
+    - Name G11's 21 holding proposals, starting with educated_at, and hand them to F2 as new relations or phrasings? P10 needs Odin or the teacher for this.
+    - G9's bar (Jaccard ≥ 0.5) cannot be reached on an occupation-heavy store. Accept the miss, or re-read on a richer store (for example with S15's added relations as attributes) with fresh held-out classes?
 
 ---
 
