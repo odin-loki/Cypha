@@ -1,43 +1,13 @@
 #include "cypha/forecast/rollout_tree.hpp"
 
-#include "cypha/cyphalm/hp_backend.hpp"
 #include "cypha/infer_cpu.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <numeric>
-#include <optional>
 
 namespace cypha::forecast {
 namespace {
-
-double softmax_sample(const std::vector<double>& log_probs, double temperature, std::mt19937& rng) {
-  if (log_probs.empty()) {
-    return 0.0;
-  }
-  const int V = static_cast<int>(log_probs.size());
-  double max_lp = log_probs[0];
-  for (int i = 1; i < V; ++i) {
-    max_lp = std::max(max_lp, log_probs[static_cast<std::size_t>(i)]);
-  }
-  std::vector<double> p(static_cast<std::size_t>(V));
-  double sum = 0.0;
-  for (int i = 0; i < V; ++i) {
-    p[static_cast<std::size_t>(i)] =
-        std::exp((log_probs[static_cast<std::size_t>(i)] - max_lp) / std::max(temperature, 1e-6));
-    sum += p[static_cast<std::size_t>(i)];
-  }
-  std::uniform_real_distribution<double> u(0.0, sum);
-  double draw = u(rng);
-  double acc = 0.0;
-  for (int i = 0; i < V; ++i) {
-    acc += p[static_cast<std::size_t>(i)];
-    if (draw <= acc) {
-      return static_cast<double>(i);
-    }
-  }
-  return static_cast<double>(V - 1);
-}
 
 double active_query_from_log_probs(const std::vector<double>& log_probs) {
   if (log_probs.empty()) {
@@ -58,90 +28,72 @@ double active_query_from_log_probs(const std::vector<double>& log_probs) {
 }
 
 // Rollouts read the trained model, never a cold one (until 2026-10-29 each rollout and tree node called
-// reset_context(), which in the hp wrapper builds a new, untrained predictor: the tree sampled from an untrained
-// model, about 1,200 production-size rebuilds a run). Learning is off while rollouts run, so sampled bytes teach the
-// model nothing, and every rollout and node starts from the same state: one fresh stream on the trained model,
-// restored exactly before each (hp::StreamRewind, as beam decoding does), so nothing carries from one rollout into
-// the next. The model is left in that state, with learning as it was.
+// reset_context(), which in the hp wrapper builds a new, untrained predictor). Learning is off while rollouts run, so
+// sampled events teach the model nothing, and every rollout and node starts from the same state: one fresh stream on
+// the trained model, marked and restored before each, so nothing carries from one rollout into the next. The model is
+// left on that fresh stream, with learning as it was. Since FCAST (FORECAST_EVENT_VOCAB.md) the tree reads an
+// EventModel over all 842 event ids; a hp model sees each event as bytes behind that interface.
 class RolloutBase {
  public:
-  explicit RolloutBase(cyphalm::CyphaLMModel& model)
-      : model_(model), hp_(model.hp_backend()), prev_learning_(hp_.learning()) {
-    hp_.set_learning(false);
-    model_.reset_stream(false);
-    rewind_.emplace(hp_.all_predictors());
-    if (hp_.has_neural()) {
-      nn_saved_ = hp_.neural_states();
-    }
-    session_saved_ = hp_.session_size();
+  explicit RolloutBase(EventModel& model) : model_(model), prev_learning_(model.learning()) {
+    model_.set_learning(false);
+    model_.begin_stream();
+    model_.mark();
   }
   ~RolloutBase() {
-    restore();
-    rewind_.reset();
-    hp_.set_learning(prev_learning_);
+    model_.rewind();
+    model_.unmark();
+    model_.set_learning(prev_learning_);
   }
   RolloutBase(const RolloutBase&) = delete;
   RolloutBase& operator=(const RolloutBase&) = delete;
 
-  // The base state, then the model reads every token of context but the last; predict_next(last) then gives the
-  // distribution after the whole context.
-  void sync_all_but_last(const std::vector<std::uint32_t>& context) {
-    restore();
-    for (std::size_t i = 0; i + 1 < context.size(); ++i) {
-      (void)model_.predict_next(context[i]);
+  // The base state, then the model reads every event of ``context``.
+  void sync(const std::vector<std::uint32_t>& context) {
+    model_.rewind();
+    for (const auto id : context) {
+      (void)model_.observe(id);
     }
   }
 
  private:
-  void restore() {
-    rewind_->rewind();
-    if (hp_.has_neural()) {
-      hp_.set_neural_states(nn_saved_);
-    }
-    hp_.truncate_session(session_saved_);
-    hp_.invalidate_scoring_cache();
-  }
-
-  cyphalm::CyphaLMModel& model_;
-  cyphalm::HpSequenceBackend& hp_;
+  EventModel& model_;
   bool prev_learning_;
-  std::optional<hp::StreamRewind> rewind_;
-  std::vector<cyphalm::ByteNeuralExpert::State> nn_saved_;
-  std::size_t session_saved_ = 0;
 };
 
-std::vector<std::uint32_t> rollout_from(RolloutBase& base, cyphalm::CyphaLMModel& model,
-                                        const std::vector<std::uint32_t>& seed, int horizon, double temperature,
-                                        std::mt19937& rng) {
+std::vector<std::uint32_t> rollout_from(RolloutBase& base, EventModel& model, const std::vector<std::uint32_t>& seed,
+                                        int horizon, double temperature, std::mt19937& rng) {
   std::vector<std::uint32_t> path = seed;
   if (path.empty()) {
     return path;
   }
-  base.sync_all_but_last(seed);
+  base.sync(seed);
   for (int step = 0; step < horizon; ++step) {
-    const auto pred = model.predict_next(path.back());
-    if (pred.log_probs.empty()) {
-      break;
-    }
-    const int next = static_cast<int>(softmax_sample(pred.log_probs, temperature, rng));
-    path.push_back(static_cast<std::uint32_t>(next));
+    const std::uint32_t next = model.sample(temperature, rng);
+    (void)model.observe(next);
+    path.push_back(next);
   }
   return path;
 }
 
+std::vector<double> log_of(const std::vector<double>& p) {
+  std::vector<double> out(p.size());
+  for (std::size_t i = 0; i < p.size(); ++i) {
+    out[i] = std::log(std::max(p[i], 1e-300));
+  }
+  return out;
+}
+
 }  // namespace
 
-std::vector<std::uint32_t> ancestral_rollout(cyphalm::CyphaLMModel& model,
-                                             const std::vector<std::uint32_t>& seed, int horizon,
+std::vector<std::uint32_t> ancestral_rollout(EventModel& model, const std::vector<std::uint32_t>& seed, int horizon,
                                              double temperature, std::mt19937& rng) {
   RolloutBase base(model);
   return rollout_from(base, model, seed, horizon, temperature, rng);
 }
 
-RolloutTree generate_rollout_tree(cyphalm::CyphaLMModel& model, const EventVocabulary& vocab,
-                                  const std::vector<std::uint32_t>& seed_tokens,
+RolloutTree generate_rollout_tree(EventModel& model, const std::vector<std::uint32_t>& seed_tokens,
                                   const RolloutTreeConfig& cfg, std::mt19937& rng) {
-  (void)vocab;
   RolloutTree tree;
   tree.root_context = seed_tokens;
   if (seed_tokens.empty()) {
@@ -172,13 +124,13 @@ RolloutTree generate_rollout_tree(cyphalm::CyphaLMModel& model, const EventVocab
         child.depth = tree.nodes[static_cast<std::size_t>(parent_idx)].depth + 1;
         child.parent = parent_idx;
         child.visit_count = 1;
-        // The distribution after this node's whole context, path[0..d] (it used to read path[d - 1] twice).
-        base.sync_all_but_last(std::vector<std::uint32_t>(path.begin(), path.begin() + static_cast<std::ptrdiff_t>(d) + 1));
-        const auto pred = model.predict_next(path[d]);
-        child.active_query_score = active_query_from_log_probs(pred.log_probs);
-        child.epistemic_var = pred.epistemic_var;
-        child.leaf_value = -pred.epistemic_var;
-        child.drift_flag = pred.epistemic_var > cfg.drift_threshold;
+        // The distribution after this node's whole context, path[0..d].
+        base.sync(std::vector<std::uint32_t>(path.begin(), path.begin() + static_cast<std::ptrdiff_t>(d) + 1));
+        child.active_query_score = active_query_from_log_probs(log_of(model.distribution()));
+        // No model behind this interface reports an epistemic variance (hp's was always 0).
+        child.epistemic_var = 0.0;
+        child.leaf_value = 0.0;
+        child.drift_flag = child.epistemic_var > cfg.drift_threshold;
         child_idx = static_cast<int>(tree.nodes.size());
         tree.nodes.push_back(child);
         tree.nodes[static_cast<std::size_t>(parent_idx)].children.push_back(child_idx);

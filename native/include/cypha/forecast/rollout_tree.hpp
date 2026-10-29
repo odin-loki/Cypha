@@ -1,6 +1,6 @@
 #pragma once
 
-#include "cypha/cyphalm/cyphalm_model.hpp"
+#include "cypha/forecast/event_model.hpp"
 #include "cypha/forecast/event_vocabulary.hpp"
 
 #include <cstdint>
@@ -25,7 +25,7 @@ struct TreeNode {
   std::vector<int> children;
 };
 
-/// MCTS-style guided rollout tree over CyphaLM ``predict_next`` (Phases 5 + 3.3).
+/// MCTS-style guided rollout tree over an ``EventModel`` (Phases 5 + 3.3).
 struct RolloutTreeConfig {
   int max_depth{8};
   int n_rollouts{200};
@@ -40,14 +40,13 @@ struct RolloutTree {
   std::vector<std::uint32_t> root_context;
 };
 
-/// Build a guided scenario tree from seed context using ancestral sampling + active-query expansion.
-RolloutTree generate_rollout_tree(cyphalm::CyphaLMModel& model, const EventVocabulary& vocab,
-                                  const std::vector<std::uint32_t>& seed_tokens,
+/// Build a guided scenario tree from seed context using ancestral sampling + active-query expansion. Rollouts read
+/// the trained model with learning off, each from the same fresh stream (FORECAST_EVENT_VOCAB.md; SLOW_TEST_TRIAGE).
+RolloutTree generate_rollout_tree(EventModel& model, const std::vector<std::uint32_t>& seed_tokens,
                                   const RolloutTreeConfig& cfg, std::mt19937& rng);
 
-/// Sample one ancestral path (greedy/temperature) for quick forecasts.
-std::vector<std::uint32_t> ancestral_rollout(cyphalm::CyphaLMModel& model,
-                                             const std::vector<std::uint32_t>& seed, int horizon,
+/// Sample one ancestral path (temperature) for quick forecasts.
+std::vector<std::uint32_t> ancestral_rollout(EventModel& model, const std::vector<std::uint32_t>& seed, int horizon,
                                              double temperature, std::mt19937& rng);
 
 }  // namespace cypha::forecast

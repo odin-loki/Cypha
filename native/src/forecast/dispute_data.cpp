@@ -7,9 +7,82 @@
 #include <algorithm>
 #include <cmath>
 #include <cctype>
+#include <cstdint>
 #include <fstream>
 
 namespace cypha::forecast {
+namespace {
+
+void append_utf8(std::string& out, std::uint32_t cp) {
+  if (cp < 0x80) {
+    out.push_back(static_cast<char>(cp));
+  } else if (cp < 0x800) {
+    out.push_back(static_cast<char>(0xC0 | (cp >> 6)));
+    out.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+  } else if (cp < 0x10000) {
+    out.push_back(static_cast<char>(0xE0 | (cp >> 12)));
+    out.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
+    out.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+  } else {
+    out.push_back(static_cast<char>(0xF0 | (cp >> 18)));
+    out.push_back(static_cast<char>(0x80 | ((cp >> 12) & 0x3F)));
+    out.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
+    out.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+  }
+}
+
+}  // namespace
+
+// The CSVs under bench/data/forecast were saved as UTF-16 by a Windows editor (little-endian, and gml_mid.csv
+// big-endian, without a byte-order mark). Read as bytes, every field held NULs, so every GDELT event loaded as
+// cameo 0 in the global theater (one token) and every MID record as zeros (FORECAST_EVENT_VOCAB.md). UTF-16 in
+// either order, with or without a mark, is now decoded to UTF-8; a UTF-8 mark is dropped.
+std::string decode_text_utf8(const std::string& raw) {
+  const auto* b = reinterpret_cast<const unsigned char*>(raw.data());
+  const std::size_t n = raw.size();
+  if (n >= 3 && b[0] == 0xEF && b[1] == 0xBB && b[2] == 0xBF) {
+    return raw.substr(3);
+  }
+  int order = 0;  // 1 little-endian, 2 big-endian
+  std::size_t start = 0;
+  if (n >= 2 && b[0] == 0xFF && b[1] == 0xFE) {
+    order = 1, start = 2;
+  } else if (n >= 2 && b[0] == 0xFE && b[1] == 0xFF) {
+    order = 2, start = 2;
+  } else if (n >= 4) {
+    std::size_t zero_even = 0, zero_odd = 0;
+    const std::size_t m = std::min<std::size_t>(n & ~std::size_t{1}, 4096);
+    for (std::size_t i = 0; i < m; i += 2) {
+      zero_even += b[i] == 0;
+      zero_odd += b[i + 1] == 0;
+    }
+    const std::size_t pairs = m / 2;
+    if (zero_odd * 10 >= pairs * 4 && zero_even * 10 < pairs) order = 1;
+    if (zero_even * 10 >= pairs * 4 && zero_odd * 10 < pairs) order = 2;
+  }
+  if (order == 0) {
+    return raw;
+  }
+  std::string out;
+  out.reserve(n / 2);
+  auto unit = [&](std::size_t i) -> std::uint32_t {
+    return order == 1 ? (static_cast<std::uint32_t>(b[i]) | (static_cast<std::uint32_t>(b[i + 1]) << 8))
+                      : ((static_cast<std::uint32_t>(b[i]) << 8) | static_cast<std::uint32_t>(b[i + 1]));
+  };
+  for (std::size_t i = start; i + 1 < n; i += 2) {
+    std::uint32_t cp = unit(i);
+    if (cp >= 0xD800 && cp < 0xDC00 && i + 3 < n) {
+      const std::uint32_t lo = unit(i + 2);
+      if (lo >= 0xDC00 && lo < 0xE000) {
+        cp = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00);
+        i += 2;
+      }
+    }
+    append_utf8(out, cp);
+  }
+  return out;
+}
+
 namespace {
 
 std::string read_file_or_empty(const std::filesystem::path& p) {
@@ -17,7 +90,7 @@ std::string read_file_or_empty(const std::filesystem::path& p) {
   if (!in) {
     return {};
   }
-  return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  return decode_text_utf8(std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>()));
 }
 
 int parse_int(const std::string& s) {

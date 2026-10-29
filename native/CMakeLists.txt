@@ -97,6 +97,7 @@ add_library(cypha_core STATIC
   src/kernel_memory.cpp
   src/rff_features.cpp
   src/forecast/event_vocabulary.cpp
+  src/forecast/event_model.cpp
   src/forecast/dispute_data.cpp
   src/forecast/node_estimator.cpp
   src/forecast/rollout_tree.cpp
@@ -357,6 +358,16 @@ set_tests_properties(native_forecast_smoke PROPERTIES
   TIMEOUT 300
   WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/.."
 )
+
+add_executable(forecast_event_model_test tools/forecast_event_model_test.cpp)
+target_link_libraries(forecast_event_model_test PRIVATE cypha_core cypha_lm_native)
+cypha_mingw_apply_exe_link_options(forecast_event_model_test)
+add_test(NAME native_forecast_event_model_test COMMAND "$<TARGET_FILE:forecast_event_model_test>")
+set_tests_properties(native_forecast_event_model_test PROPERTIES TIMEOUT 300)
+
+add_executable(forecast_vocab_bench tools/forecast_vocab_bench.cpp)
+target_link_libraries(forecast_vocab_bench PRIVATE cypha_core cypha_lm_native)
+cypha_mingw_apply_exe_link_options(forecast_vocab_bench)
 
 add_executable(cypha_forecast_run tools/cypha_forecast_run.cpp)
 target_link_libraries(cypha_forecast_run PRIVATE cypha_core cypha_lm_native)

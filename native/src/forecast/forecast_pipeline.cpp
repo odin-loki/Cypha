@@ -1,7 +1,5 @@
 #include "cypha/forecast/forecast_pipeline.hpp"
 
-#include "cypha/cyphalm/cyphalm_config.hpp"
-
 #include <algorithm>
 #include <fstream>
 #include <random>
@@ -24,26 +22,27 @@ ForecastPipelineResult ForecastPipeline::run(const std::filesystem::path& data_d
   NodeEstimator estimator(cfg_.node_cfg);
   out.node_result = estimator.train_on_mid(data.mid, 0.2);
 
-  cyphalm::CyphaLMConfig scfg;
-  scfg.vocab_size = static_cast<int>(std::min(vocab_.size(), static_cast<std::size_t>(cfg_.vocab_size)));
-  scfg.seed = 42;
-  scfg.lstm_hidden = 64;
-  scfg.lstm_layers = 1;
-  apply_hybrid_production_recipe(scfg);
-  seq_ = std::make_unique<cyphalm::CyphaLMModel>(scfg);
+  // Every event id, 256 and above included (FORECAST_EVENT_VOCAB.md; before, ids of 256 or more threw in hp).
+  seq_ = make_event_model(vocab_, cfg_.model_cfg);
 
   const auto tokens = gdelt_to_token_sequence(data.gdelt, vocab_);
   if (tokens.size() >= 4) {
-    std::vector<int> train_ids(tokens.begin(), tokens.end());
-    const int n = static_cast<int>(train_ids.size()) - 1;
-    seq_->train_sequence(train_ids, n, cfg_.sequence_epochs);
-    out.sequence_eval_bpc = seq_->eval_bpc(train_ids, n);
+    seq_->train(tokens, cfg_.sequence_epochs);
+    seq_->set_learning(false);
+    seq_->begin_stream();
+    double bits = 0.0;
+    for (const auto id : tokens) {
+      bits += seq_->observe(id);
+    }
+    out.sequence_eval_bpc = bits / static_cast<double>(tokens.size());
+    seq_->set_learning(true);
+    seq_->begin_stream();
   }
 
   std::mt19937 rng(42);
   const std::vector<std::uint32_t> seed(tokens.begin(),
                                         tokens.begin() + std::min(tokens.size(), std::size_t{8}));
-  out.scenario_tree = generate_rollout_tree(*seq_, vocab_, seed, cfg_.tree_cfg, rng);
+  out.scenario_tree = generate_rollout_tree(*seq_, seed, cfg_.tree_cfg, rng);
   out.paths = extract_interpretable_paths(out.scenario_tree, vocab_);
 
   for (const auto& rec : data.mid) {

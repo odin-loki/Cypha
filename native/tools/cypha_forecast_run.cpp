@@ -37,7 +37,7 @@ int main(int argc, char** argv) {
 
   std::cout << "data_dir=" << data_dir << "\n";
   std::cout << "node_eval_acc=" << result.node_result.eval_accuracy << "\n";
-  std::cout << "sequence_eval_bpc=" << result.sequence_eval_bpc << "\n";
+  std::cout << "sequence_bits_per_event=" << result.sequence_eval_bpc << "\n";
   std::cout << "tree_nodes=" << result.scenario_tree.nodes.size() << "\n";
   std::cout << "views_crps=" << result.views_validation.mean_crps << "\n";
   std::cout << "cypha_forecast_run OK\n";

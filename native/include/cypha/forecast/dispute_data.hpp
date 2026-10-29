@@ -58,6 +58,9 @@ struct DisputeDataset {
   std::vector<GdeltEvent> gdelt;
 };
 
+/// Text as UTF-8: UTF-16 (either byte order, with or without a mark) is decoded, a UTF-8 mark dropped.
+std::string decode_text_utf8(const std::string& raw);
+
 /// Load dispute datasets from CSV under ``data_dir`` (sample_*.csv or bulk gml_mid.csv / gdelt_events.csv / views.csv).
 DisputeDataset load_dispute_data(const std::filesystem::path& data_dir);
 
