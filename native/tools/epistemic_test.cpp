@@ -1,5 +1,5 @@
 // Known-answer tests for cypha/eval/epistemic.hpp (docs/DISCOVERY.md sections 2.1-2.3, 3.1, 3.3, 10), hypothesis.hpp
-// (S5: 4, 6.3, 7.2-7.5; invariants I1, I4, I7, I8) and gap_map.hpp (S3: 3.2, 3.5).
+// (S5: 4, 6.3, 7.2-7.5; invariants I1, I4, I7, I8; S7: 7.1-7.3, I5, I6) and gap_map.hpp (S3: 3.2, 3.5).
 // Returns nonzero if any check fails.
 #include "cypha/eval/epistemic.hpp"
 #include "cypha/eval/gap_map.hpp"
@@ -1003,6 +1003,162 @@ static void test_scoring_S6() {
 // ---------------------------------------------------------------------------
 // S3 gap map (gap_map.hpp): the tag, the gap id, schema cells, demand, VOI
 // ---------------------------------------------------------------------------
+// S7 (DISCOVERY 7.1-7.3, I5, I6; docs/reports/S7_HYPOTHESIS_TESTS.md): three-way results, e-values and BH batch
+// control, measured s and c, T3's held-out rule check, T1's functional check, and the pre-registration log.
+static Hypothesis s7_hyp(const std::string& id, bool with_disconfirmation) {
+  Hypothesis h;
+  h.id = id;
+  h.key = "capital|Atlantis|" + id;
+  h.generator = "planted-store";
+  HypTest t1;
+  t1.kind = "T1 consistency", t1.source = "store", t1.predicted = "positive", t1.refuted_if = "negative";
+  t1.disconfirmation = with_disconfirmation, t1.sensitivity = 0.75, t1.specificity = 0.92;
+  HypTest t4;
+  t4.kind = "T4 corpus", t4.source = "corpus", t4.predicted = "positive", t4.refuted_if = "negative";
+  t4.independent = true, t4.sensitivity = 0.99, t4.specificity = 0.8;
+  h.tests = {t1, t4};
+  return h;
+}
+
+static void test_tests_S7() {
+  // Three-way Bayes factors and the e-value.
+  CHECK_NEAR(bayes_factor(TestOutcome::Positive, 0.9, 0.8), 4.5, 1e-12);
+  CHECK_NEAR(bayes_factor(TestOutcome::Negative, 0.9, 0.8), 0.125, 1e-12);
+  CHECK_NEAR(bayes_factor(TestOutcome::Inconclusive, 0.9, 0.8), 1.0, 1e-15);
+  CHECK_STR(test_outcome_name(TestOutcome::Inconclusive), "inconclusive");
+  {
+    Hypothesis h;
+    h.tests.resize(4);
+    h.tests[0].done = true, h.tests[0].bayes_factor = 4.5;
+    h.tests[1].done = true, h.tests[1].bayes_factor = 0.125;
+    h.tests[2].done = true, h.tests[2].inconclusive = true, h.tests[2].bayes_factor = 1.0;
+    h.tests[3].bayes_factor = 1000.0;  // not run: not counted
+    CHECK_NEAR(e_value(h), 0.5625, 1e-12);
+  }
+  // BH on p = 1/e: p {0.001, 0.05, 1, 1} at q 0.1 over m = 4 rejects the first two.
+  const auto rej = bh_reject_e({1000.0, 20.0, 1.0, 0.5}, 0.1);
+  CHECK(rej.size() == 4 && rej[0] && rej[1] && !rej[2] && !rej[3]);
+  CHECK(bh_reject_e({}, 0.1).empty());
+
+  // Measured s and c: true 8 pos / 2 neg / 10 inc, false 1 pos / 9 neg / 10 inc.
+  TestTally tt;
+  for (int i = 0; i < 8; ++i) tt.add(true, TestOutcome::Positive);
+  for (int i = 0; i < 2; ++i) tt.add(true, TestOutcome::Negative);
+  for (int i = 0; i < 10; ++i) tt.add(true, TestOutcome::Inconclusive), tt.add(false, TestOutcome::Inconclusive);
+  tt.add(false, TestOutcome::Positive);
+  for (int i = 0; i < 9; ++i) tt.add(false, TestOutcome::Negative);
+  CHECK_NEAR(tt.sensitivity(), 0.8, 1e-12);
+  CHECK_NEAR(tt.specificity(), 0.9, 1e-12);
+  CHECK_NEAR(tt.applicable(), 0.5, 1e-12);
+  CHECK_NEAR(tt.youden(), 0.7, 1e-12);
+  CHECK_NEAR(tt.s_lo(), 0.49016247153664183, 1e-12);
+  CHECK_NEAR(tt.s_hi(), 0.9433178485456247, 1e-12);
+  CHECK_NEAR(tt.youden_lo(), 0.08601244474140346, 1e-12);
+  CHECK_NEAR(tt.mutual_information_bits(), 0.19865630487474323, 1e-12);
+  CHECK_NEAR(TestTally{}.mutual_information_bits(), 0.0, 1e-15);
+  TestTally blind;  // a test that says the same whatever the truth carries no information
+  for (int i = 0; i < 5; ++i) blind.add(true, TestOutcome::Positive), blind.add(false, TestOutcome::Positive);
+  CHECK_NEAR(blind.mutual_information_bits(), 0.0, 1e-12);
+  CHECK_NEAR(blind.youden(), 0.0, 1e-12);
+
+  // T3: Wilson lower 0.596 >= 0.3 positive; upper 0.278 < 0.5 negative; 3 of 6 inconclusive; fewer than 3 inconclusive.
+  CHECK(rule_holdout_test(9, 10) == TestOutcome::Positive);
+  CHECK(rule_holdout_test(0, 10) == TestOutcome::Negative);
+  CHECK(rule_holdout_test(3, 6) == TestOutcome::Inconclusive);
+  CHECK(rule_holdout_test(2, 2) == TestOutcome::Inconclusive);
+  // T1's functional check.
+  TripleStore st;
+  st.add("Atlantis", "capital", "Poseidonia");
+  CHECK(functional_conflict(st, "Atlantis", "capital", "Basileia"));
+  CHECK(!functional_conflict(st, "Atlantis", "capital", "Poseidonia"));
+  CHECK(!functional_conflict(st, "Lemuria", "capital", "Basileia"));
+
+  // I6: a plan with no disconfirmation search is refused; so is an empty plan.
+  PreregLog log;
+  std::string why;
+  CHECK(!log.register_plan(s7_hyp("h-noneg", false), &why));
+  CHECK(why.find("I6") == 0);
+  Hypothesis empty = s7_hyp("h-empty", true);
+  empty.tests.clear();
+  CHECK(!log.register_plan(empty));
+  CHECK(log.entries().empty());
+  // I5: results only under a registered plan, once each; no plan change after a result; amendments before it stay visible.
+  CHECK(!log.record("h-a", 0, TestOutcome::Positive, &why));  // not registered
+  CHECK(why.find("I5") == 0);
+  CHECK(log.register_plan(s7_hyp("h-a", true)));
+  CHECK(log.register_plan(s7_hyp("h-a", true)));  // an amendment before any result: allowed, and kept in the log
+  CHECK(log.entries().size() == 2);
+  CHECK(log.record("h-a", 0, TestOutcome::Positive));
+  CHECK(!log.record("h-a", 0, TestOutcome::Negative));  // recorded once
+  CHECK(!log.record("h-a", 2, TestOutcome::Positive));  // not in the plan
+  CHECK(!log.register_plan(s7_hyp("h-a", true), &why));  // a plan cannot change after a result
+  CHECK(why.find("I5") == 0);
+  CHECK(log.record("h-a", 1, TestOutcome::Inconclusive));
+  CHECK(log.has_result("h-a") && !log.has_result("h-"));
+  CHECK(log.plan("h-a") && log.plan("h-a")->size() == 2 && (*log.plan("h-a"))[1].kind == "T4 corpus");
+  CHECK_NEAR((*log.plan("h-a"))[0].specificity, 0.92, 1e-15);
+  CHECK(log.entries().size() == 4);
+  CHECK(log.verify());
+  // The log as stored: it reads back intact, and an edit, a dropped line or a swap breaks the chain.
+  const std::string tsv = log.serialize();
+  PreregLog back = PreregLog::parse(tsv);
+  CHECK(back.verify() && back.entries().size() == 4);
+  CHECK(back.registered("h-a") && !back.record("h-a", 0, TestOutcome::Negative));  // its results come back too
+  CHECK(!back.register_plan(s7_hyp("h-a", true)));
+  std::string edited = tsv;
+  const std::size_t at = edited.find("0 positive");
+  CHECK(at != std::string::npos);
+  edited.replace(at, 10, "0 negative");  // the recorded outcome changed after the fact
+  CHECK(!PreregLog::parse(edited).verify());
+  std::string plan_edit = tsv;
+  plan_edit.replace(plan_edit.find("0.92"), 4, "0.99");  // the registered specificity changed
+  CHECK(!PreregLog::parse(plan_edit).verify());
+  const std::size_t nl1 = tsv.find('\n'), nl2 = tsv.find('\n', nl1 + 1);
+  CHECK(!PreregLog::parse(tsv.substr(0, nl1 + 1) + tsv.substr(nl2 + 1)).verify());  // the second line dropped
+  CHECK(!PreregLog::parse(tsv.substr(nl1 + 1, nl2 - nl1) + tsv.substr(0, nl1 + 1) + tsv.substr(nl2 + 1)).verify());  // swapped
+  {
+    Hypothesis tab = s7_hyp("h\twith\ttabs", true);  // escaping keeps an awkward id intact
+    PreregLog l2;
+    CHECK(l2.register_plan(tab) && l2.record(tab.id, 0, TestOutcome::Negative));
+    const PreregLog b2 = PreregLog::parse(l2.serialize());
+    CHECK(b2.verify() && b2.registered(tab.id) && b2.has_result(tab.id));
+  }
+
+  // The store with the log: a test runs only under its registered plan; inconclusive is BF 1 and no evidence (I4).
+  HypothesisStore hs;
+  PreregLog hl;
+  CHECK(hs.propose(s7_hyp("h-s", true)));
+  CHECK(hs.score("h-s", 0.5));
+  CHECK(hs.transition("h-s", HypState::Queued, "scored"));
+  CHECK(hs.transition("h-s", HypState::UnderTest, "test"));
+  CHECK(!hs.record_outcome("h-s", 0, TestOutcome::Positive, &hl).has_value());  // not pre-registered
+  CHECK(!hs.find("h-s")->tests[0].done);
+  CHECK(hl.register_plan(*hs.find("h-s")));
+  auto r = hs.record_outcome("h-s", 0, TestOutcome::Positive, &hl);  // T1 positive: BF 0.75 / 0.08 = 9.375
+  CHECK(r.has_value() && *r == HypState::Queued);  // posterior 0.904 but T1 is the store: not independent
+  CHECK_NEAR(hs.find("h-s")->posterior, 9.375 / 10.375, 1e-12);
+  CHECK(!hs.record_outcome("h-s", 0, TestOutcome::Positive, &hl).has_value());  // not under test, and recorded
+  CHECK(hs.transition("h-s", HypState::UnderTest, "test"));
+  r = hs.record_outcome("h-s", 1, TestOutcome::Inconclusive, &hl);
+  CHECK(r.has_value() && *r == HypState::Queued);
+  const Hypothesis* hp = hs.find("h-s");
+  CHECK(hp->tests[1].done && hp->tests[1].inconclusive);
+  CHECK_NEAR(hp->tests[1].bayes_factor, 1.0, 1e-15);
+  CHECK_NEAR(hp->posterior, 9.375 / 10.375, 1e-12);
+  CHECK(!has_independent_evidence(*hp));  // the corpus test ran but could not tell
+  CHECK_NEAR(e_value(*hp), 9.375, 1e-12);
+  // With an independent positive it is supported.
+  CHECK(hs.propose(s7_hyp("h-t", true)));
+  CHECK(hs.score("h-t", 0.7));
+  CHECK(hs.transition("h-t", HypState::Queued, "scored"));
+  CHECK(hl.register_plan(*hs.find("h-t")));
+  CHECK(hs.transition("h-t", HypState::UnderTest, "test"));
+  CHECK(hs.record_outcome("h-t", 1, TestOutcome::Positive, &hl) == HypState::Supported);  // BF 0.99 / 0.2 = 4.95
+  CHECK_NEAR(hs.find("h-t")->posterior, 0.7 * 4.95 / (0.7 * 4.95 + 0.3), 1e-12);
+  CHECK(has_independent_evidence(*hs.find("h-t")));
+  CHECK(hl.verify());
+}
+
 static void test_gap_map() {
   // The gap id CyphaLM writes (cyphalm_trie dktext rows and its dev tags).
   CHECK_STR(gap_id("Honduras", "capital"), "G-AEC1");
@@ -1098,6 +1254,7 @@ int main() {
   test_refutation_I7();
   test_labels_I8();
   test_scoring_S6();
+  test_tests_S7();
   test_gap_map();
   std::printf("epistemic_test: %d checks, %d failed\n", g_checks, g_failed);
   return g_failed == 0 ? 0 : 1;

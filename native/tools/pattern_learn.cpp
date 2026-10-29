@@ -75,6 +75,10 @@
 //   half only with --frontier-test), Chapman per relation against Wikidata (CHAPMAN), and the frontier report: FILE, one
 //   row per (type, relation) cell, with the two rankings (FRONTIER_TOP_READ, FRONTIER_TOP_SLICE). Self-assessment only.
 //
+// S7 (2026-10-28, docs/reports/S7_HYPOTHESIS_TESTS.md):
+//   --test-kinds ENWIK8 SEEDS WD_VALUES PATTERNS OUT [--read-test]: s and c of the tests T1-T6 (DISCOVERY 7.1) on known-true
+//   and known-false hypotheses, and 7.2's loop with pre-registration (I5, I6) and BH batch control. Self-assessment only.
+//
 // Build: g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp -o pattern_learn
 // Usage: pattern_learn <enwik8> <outdir> [--cv] [--folds K] [--min-train N] [--base-rate A] [--sample N] [--seed S]
 //          [--wikidata FILE [--wikidata-gold-only]] [--phi FILE] [--shard FILE --dev DEV --test TEST [--slice-end B] [--holdout-from B]]
@@ -3530,8 +3534,625 @@ int run(int argc, char** argv) {
 
 }  // namespace s6
 
+// ============================================================ S7: testing hypotheses (docs/reports/S7_HYPOTHESIS_TESTS.md)
+//
+// pattern_learn --test-kinds ENWIK8 SEEDS.tsv WD_VALUES.tsv PATTERNS.tsv OUT_PREFIX [--read-test]
+// Measures the sensitivity s and specificity c of the tests of DISCOVERY 7.1 (T1 consistency, T3 held-out prediction for
+// rules, T4 corpus, T5 Wikidata, T6 compression; T2 consequence was cut: no rule fired) on known-true and known-false hypotheses, and
+// runs 7.2's loop (pre-registration, cheapest first, Bayes factors, BH batch control) on them. The set: U, the one-fact
+// subjects S6 never used (their fact held out), and C, a second fact of each subject S6 held one out of (S6's own pairs
+// are never read); false partners by S6's rule without its Wikidata filter (wd_true marks those Wikidata lists). Dev and
+// test by bit 11 of FNV-1a(subject); test prints only with --read-test. PATTERNS.tsv is the run's patterns.tsv (its
+// kept rows are T4's patterns); T4 reads only the prose of the subject's own article. Nothing here answers a question:
+// these are Cypha's own hypotheses (PLAN rule 10).
+namespace s7 {
+
+using ecs::TestOutcome;
+constexpr TestOutcome kPos = TestOutcome::Positive, kNeg = TestOutcome::Negative, kInc = TestOutcome::Inconclusive;
+constexpr double kEps[4] = {0.0, 0.5, 1.0, 2.0};  // T6's dead band in bits, chosen on dev
+const char* const kT4Var[2] = {"pattern", "pattern_or_comention"};
+
+struct Item {
+    string s, r, o;
+    int label = 0, pair = 0;
+    char set = 'U';
+    bool dev = true, wd_true = false, t5_ok = false;
+    double p = 0, aa = 0, dl_others = 0, p0 = 0, post = 0;
+    TestOutcome t1 = kInc, t5 = kInc, t6[4] = {kInc, kInc, kInc, kInc}, t4[2] = {kInc, kInc};
+    string state;
+};
+
+bool functional_rel(const string& r) {
+    const int i = rel_index(r);
+    return i >= 0 && kRel[i].phi >= 0.9;
+}
+
+// Wikidata's values of (s, r) as objects (load_wikidata's keys: every surface, normalised).
+using WdObjs = std::unordered_map<string, vector<Obj>>;
+WdObjs load_wd_objs(const string& path) {
+    WdObjs out;
+    std::ifstream f(path);
+    string line;
+    std::getline(f, line);
+    while (std::getline(f, line)) {
+        const auto c = split(line, '\t');
+        const int r = c.size() >= 3 ? rel_index(c[1]) : -1;
+        if (r < 0) continue;
+        const auto sf = split(c[2], '|');
+        Obj o;
+        o.surf = sf[0];
+        if (is_datey(r)) {
+            o.d = parse_date_str(sf[0]);
+            if (!o.d.ok()) continue;
+            if (kRel[r].type == T_YEAR) o.d.m = o.d.d = 0;
+            o.k1 = o.k2 = fmt_date(o.d);
+        } else {
+            vector<string> keys;
+            for (const string& x : sf) {
+                const string k = norm_ent(x);
+                if (!k.empty() && std::find(keys.begin(), keys.end(), k) == keys.end()) keys.push_back(k);
+            }
+            if (keys.empty()) continue;
+            o.k1 = keys[0];
+            if (keys.size() > 1) o.k2 = keys[1];
+            if (keys.size() > 2) o.k3 = keys[2];
+            if (keys.size() > 3) o.alt.assign(keys.begin() + 3, keys.end());
+        }
+        out[c[0] + '\x1f' + c[1]].push_back(o);
+    }
+    return out;
+}
+
+// Does a stored object (a seed surface) equal one of Wikidata's values? Dates by year (year relations) or by
+// compatible date; other values by any shared normalised key.
+bool wd_match(int r, const string& o, const vector<Obj>& wv) {
+    if (is_datey(r)) {
+        Date D = parse_date_str(o);
+        if (!D.ok()) return false;
+        for (const Obj& w : wv)
+            if (kRel[r].type == T_YEAR ? w.d.y == D.y : date_compat(w.d, D)) return true;
+        return false;
+    }
+    const string k = norm_ent(o);
+    for (const Obj& w : wv) {
+        if (k == w.k1 || k == w.k2 || k == w.k3) return true;
+        for (const string& a : w.alt)
+            if (k == a) return true;
+    }
+    return false;
+}
+
+// T1: a date conflict (S6's hard constraint), a functional (phi >= 0.9, not a date) relation of s already holding
+// another value, or an object of the wrong type (a place relation's object known as a person page, a person relation's
+// as a place) is negative. Positive when a date cross-check was possible (s has another date fact) and passed.
+TestOutcome t1(const ecs::TripleStore& st, const string& s, const string& r, const string& o) {
+    const int ri = rel_index(r);
+    if (s6::hard_constraint(st, s, ri, o) == 0.0) return kNeg;
+    if (!is_datey(ri) && functional_rel(r) && ecs::functional_conflict(st, s, r, o)) return kNeg;
+    const string k = norm_ent(o);
+    const RT ty = kRel[ri].type;
+    if ((ty == T_PLACE || ty == T_PLACE_LINK) && g_person.count(k) && !g_place.count(k)) return kNeg;
+    if (ty == T_PERSON && (g_place.count(k) || g_country.count(k)) && !g_person.count(k)) return kNeg;
+    if (is_datey(ri)) {
+        for (const auto& f : st.facts_of(s)) {
+            const int fi = rel_index(f.r);
+            if (fi >= 0 && is_datey(fi) && parse_date_str(f.o).ok()) return kPos;
+        }
+    }
+    return kInc;
+}
+
+// T4's reading of one article: the pattern extractions of relation r, and the candidates of r's type in sentences
+// that mention the subject (prose only: templates, tables, lists and categories are not sentences).
+struct PageScan {
+    vector<Cand> pat, co;
+};
+PageScan scan_rel(const string& data, const PageRef& pg, int r) {
+    PageScan out;
+    PageCtx px;
+    load_page(data, pg, px);
+    vector<Cand> cands;
+    const string tk = px.forms.title_key;
+    for (const Sent& s : px.sents) {
+        const auto spans = find_subject(s, px.forms);
+        if (spans.empty()) continue;
+        gen_cands(s, cands);
+        apply_patterns(s, spans, cands, tk, [&](int pid, const Cand& c, const Span&) {
+            if (g_pats[static_cast<std::size_t>(pid)].rel == r) out.pat.push_back(c);
+        });
+        for (const Cand& c : cands) {
+            bool overlap = false;
+            for (const Span& S : spans) overlap = overlap || (c.b < S.e && S.b < c.e);
+            if (!overlap && c.k1 != tk && subject_ok(r) && type_ok(r, c)) out.co.push_back(c);
+        }
+    }
+    return out;
+}
+
+// T4 for one object: variant 0 positive on a pattern extraction of o, variant 1 also on a co-mention; negative (both)
+// when a pattern extracts another value of a functional r and nothing supports o.
+void t4(const PageScan& ps, int r, const string& o, TestOutcome out[2]) {
+    out[0] = out[1] = kInc;
+    const auto objs = make_objs(r, o);
+    if (objs.empty()) return;
+    bool pat_for = false, co_for = false, against = false;
+    for (const Cand& c : ps.pat) {
+        bool m = false;
+        for (const Obj& O : objs) m = m || obj_matches(r, c, O);
+        (m ? pat_for : against) = true;
+    }
+    for (const Cand& c : ps.co)
+        for (const Obj& O : objs) co_for = co_for || obj_matches(r, c, O);
+    against = against && functional_rel(kRel[r].name);
+    out[0] = pat_for ? kPos : against ? kNeg : kInc;
+    out[1] = pat_for || co_for ? kPos : against ? kNeg : kInc;
+}
+
+// Tallies of one test over items, with S6's labels (false members Wikidata lists are left out) unless `all_false`.
+template <class F>
+ecs::TestTally tally(const vector<Item>& it, bool dev, char set, bool all_false, F&& outcome) {
+    ecs::TestTally t;
+    for (const Item& x : it) {
+        if (x.dev != dev || (set != '*' && x.set != set) || (!x.label && x.wd_true && !all_false)) continue;
+        t.add(x.label == 1, outcome(x));
+    }
+    return t;
+}
+
+string line_of(const char* tag, const string& name, const ecs::TestTally& t) {
+    char b[512];
+    std::snprintf(b, sizeof b,
+                  "%s %-26s n %5.0f applicable %.3f s %.3f [%.3f, %.3f] c %.3f [%.3f, %.3f] J %+.3f [%+.3f, %+.3f] MI %.4f bits"
+                  " | true pos %.0f neg %.0f inc %.0f | false pos %.0f neg %.0f inc %.0f",
+                  tag, name.c_str(), t.total(), t.applicable(), t.sensitivity(), t.s_lo(), t.s_hi(), t.specificity(), t.c_lo(), t.c_hi(), t.youden(),
+                  t.youden_lo(), t.youden_hi(), t.mutual_information_bits(), t.t_pos, t.t_neg, t.t_inc, t.f_pos, t.f_neg, t.f_inc);
+    return b;
+}
+
+// T3 on planted rules inside one split: its subjects are cut in three by FNV-1a bits 13+ (0 generator, 1 hidden, 2 truth).
+// The generator third proposes pairwise rules (r2, o2) => (r, o) with support >= 5 and confidence >= 0.5; T3 predicts the
+// hidden third (rule_holdout_test); the truth third says whether the rule holds (precision >= 0.5 on >= 3 cases).
+ecs::TestTally t3_planted(const ecs::TripleStore& st, bool dev, std::size_t* proposed) {
+    struct Cnt {
+        double body = 0, both = 0;
+    };
+    std::array<std::map<string, Cnt>, 3> cnt;  // key r2 \x1f o2 \x1f r \x1f o, per third
+    std::array<std::map<string, double>, 3> body;  // key r2 \x1f o2 \x1f r: subjects with the body and slot r filled
+    for (const auto& [s, fs] : st.subjects()) {
+        if ((((fnv(s) >> 11) & 1) == 0) != dev) continue;
+        const int third = static_cast<int>((fnv(s) >> 13) % 3);
+        std::set<string> rels;
+        for (const auto& f : fs) rels.insert(f.r);
+        std::set<string> seen_body;
+        for (const auto& b : fs)
+            for (const string& r : rels) {
+                const string bk = b.r + '\x1f' + b.o + '\x1f' + r;
+                if (!seen_body.insert(bk).second) continue;
+                body[static_cast<std::size_t>(third)][bk] += 1;
+                for (const auto& h : fs)
+                    if (h.r == r && !(h.r == b.r && h.o == b.o)) cnt[static_cast<std::size_t>(third)][bk + '\x1f' + h.o].both += 1;
+            }
+    }
+    ecs::TestTally t;
+    std::size_t n = 0;
+    for (const auto& [k, c] : cnt[0]) {
+        const string bk = k.substr(0, k.rfind('\x1f'));
+        const double nb = body[0][bk];
+        if (nb < 5 || c.both / nb < 0.5) continue;
+        ++n;
+        auto get = [&](int third) {
+            const auto it = cnt[static_cast<std::size_t>(third)].find(k);
+            const auto ib = body[static_cast<std::size_t>(third)].find(bk);
+            return std::pair<double, double>{it == cnt[static_cast<std::size_t>(third)].end() ? 0.0 : it->second.both,
+                                             ib == body[static_cast<std::size_t>(third)].end() ? 0.0 : ib->second};
+        };
+        const auto [hh, hn] = get(1);
+        const auto [th, tn] = get(2);
+        if (tn < 3) continue;
+        t.add(th / tn >= 0.5, ecs::rule_holdout_test(hh, hn));
+    }
+    if (proposed) *proposed = n;
+    return t;
+}
+
+int run(int argc, char** argv) {
+    if (argc < 7) {
+        std::fprintf(stderr, "usage: pattern_learn --test-kinds ENWIK8 SEEDS.tsv WD_VALUES.tsv PATTERNS.tsv OUT_PREFIX [--read-test]\n");
+        return 2;
+    }
+    const double t0 = now_s();
+    const string out = argv[6];
+    bool read_test = false;
+    for (int i = 7; i < argc; ++i) {
+        if (string(argv[i]) == "--read-test") read_test = true;
+        else { std::fprintf(stderr, "unknown option %s\n", argv[i]); return 2; }
+    }
+    char b[1024];
+    // ---- the article text and its type lexicons (main's pass 1, with Wikidata as in the run that kept the patterns)
+    string data;
+    if (!read_file(argv[2], data)) { std::fprintf(stderr, "cannot read %s\n", argv[2]); return 1; }
+    g_dump = &data;
+    long total = 0, redirects = 0;
+    const vector<PageRef> pages = list_pages(data, total, redirects);
+    std::unordered_map<string, int> page_of;
+    for (std::size_t i = 0; i < pages.size(); ++i) page_of[pages[i].title] = static_cast<int>(i);
+    for (const PageRef& pg : pages) {
+        PageFlags fl;
+        scan_page(data, pg, fl);
+        const string nk = norm_ent(pg.title);
+        g_titles.insert(nk);
+        if (fl.place) g_place.insert(nk);
+        if (fl.person) g_person.insert(nk);
+        if (fl.country) g_country.insert(nk);
+    }
+    {
+        long ns = 0, ng = 0;
+        if (!load_wikidata(argv[4], false, page_of, ns, ng)) { std::fprintf(stderr, "cannot read %s\n", argv[4]); return 1; }
+    }
+    for (const Seed& sd : g_seeds) {
+        const RT ty = kRel[sd.rel].type;
+        if (ty == T_PLACE || ty == T_PLACE_LINK) { g_place.insert(sd.o.k1); if (!sd.o.k2.empty()) g_place.insert(sd.o.k2); }
+        if (ty == T_PERSON) g_person.insert(sd.o.k1);
+        if (ty == T_LEX && sd.o.k1.size() >= 3) g_lex[sd.o.k1] |= 1ULL << sd.rel;
+        if (string(kRel[sd.rel].name) == "located_in") g_loc[norm_ent(sd.subj)].insert(sd.o.k1);
+    }
+    // ---- T4's patterns: the kept rows of the run's patterns.tsv
+    {
+        std::ifstream f(argv[5]);
+        string l;
+        std::getline(f, l);
+        while (std::getline(f, l)) {
+            const auto c = split(l, '\t');
+            if (c.size() < 11 || c[10] != "1" || rel_index(c[0]) < 0) continue;
+            Pat p;
+            p.rel = rel_index(c[0]);
+            p.key = c[1];
+            p.family = family_of(p.key);
+            p.kept = true;
+            g_patmap[p.key].push_back(static_cast<int>(g_pats.size()));
+            g_pats.push_back(p);
+        }
+    }
+    // ---- the store (S6's), the Wikidata values, and which (s, r) slots the store took from Wikidata
+    std::map<string, vector<std::pair<string, string>>> by_subj;
+    std::set<string> seen, wd_src;
+    {
+        std::ifstream f(argv[3]);
+        string l;
+        std::getline(f, l);
+        while (std::getline(f, l)) {
+            const auto c = split(l, '\t');
+            if (c.size() != 6 || rel_index(c[1]) < 0 || c[0].empty() || c[2].empty()) continue;
+            if (c[3] == "wikidata") wd_src.insert(c[0] + '\x1f' + c[1]);
+            if (seen.insert(c[0] + '\x1f' + c[1] + '\x1f' + c[2]).second) by_subj[c[0]].push_back({c[1], c[2]});
+        }
+    }
+    ecs::TripleStore full;
+    for (auto& [s, fs] : by_subj) {
+        std::sort(fs.begin(), fs.end());
+        for (const auto& [r, o] : fs) full.add(s, r, o);
+    }
+    std::unordered_map<string, std::set<string>> wd6;  // S6's form: (s, r) -> lowered surfaces (S6's sets need it)
+    {
+        std::ifstream f(argv[4]);
+        string l;
+        std::getline(f, l);
+        while (std::getline(f, l)) {
+            const auto c = split(l, '\t');
+            if (c.size() < 3) continue;
+            for (const auto& x : split(c[2], '|')) wd6[c[0] + '\x1f' + c[1]].insert(lower(x));
+        }
+    }
+    const WdObjs wd = load_wd_objs(argv[4]);
+    // ---- S6's planted and fresh sets, rebuilt with S6's code and seed: S6's hold-out of each subject
+    std::mt19937_64 rng6(20261028);
+    vector<string> subj;
+    for (const auto& [s, fs] : by_subj)
+        if (fs.size() >= 2) subj.push_back(s);
+    for (std::size_t i = subj.size(); i > 1; --i) std::swap(subj[i - 1], subj[rng6() % i]);
+    std::map<string, std::pair<string, string>> h6;
+    {
+        s6::PlantedSet A, F;
+        const std::size_t next = s6::build_set(A, subj, 0, 2000, by_subj, full, wd6, rng6);
+        s6::build_set(F, subj, next, std::numeric_limits<std::size_t>::max(), by_subj, full, wd6, rng6);
+        for (const auto* ps : {&A, &F})
+            for (const auto& x : ps->it)
+                if (x.label) h6[x.s] = {x.r, x.o};
+        std::snprintf(b, sizeof b, "S7 S6 rebuilt: planted pairs %zu, fresh pairs %zu, subjects with an S6 hold-out %zu", A.it.size() / 2,
+                      F.it.size() / 2, h6.size());
+        std::cout << b << "\n";
+    }
+    // ---- S7's hold-outs: U (the one-fact subjects), C (a second fact of S6's subjects, in S6's order)
+    struct Held {
+        string s, r, o;
+        char set;
+    };
+    vector<Held> held;
+    std::set<string> held_keys;
+    std::size_t u_subjects = 0, u_unseen = 0, c_none = 0;
+    for (const auto& [s, fs] : by_subj) {
+        if (fs.size() != 1) continue;
+        ++u_subjects;
+        if (full.count(fs[0].first, fs[0].second) < 2) { ++u_unseen; continue; }
+        held.push_back({s, fs[0].first, fs[0].second, 'U'});
+    }
+    std::mt19937_64 rng7(20261029);
+    for (const string& s : subj) {
+        const auto it6 = h6.find(s);
+        if (it6 == h6.end()) continue;
+        auto fs = by_subj[s];
+        for (std::size_t i = fs.size(); i > 1; --i) std::swap(fs[i - 1], fs[rng7() % i]);
+        bool got = false;
+        for (const auto& [r, o] : fs)
+            if (!(r == it6->second.first && o == it6->second.second) && full.count(r, o) >= 2) {
+                held.push_back({s, r, o, 'C'});
+                got = true;
+                break;
+            }
+        if (!got) ++c_none;
+    }
+    for (const auto& h : held) held_keys.insert(h.s + '\x1f' + h.r + '\x1f' + h.o);
+    ecs::TripleStore st;  // the reduced store: every test reads it
+    std::unordered_map<string, vector<string>> objects_of_rel;
+    for (const auto& [s, fs] : by_subj)
+        for (const auto& [r, o] : fs)
+            if (!held_keys.count(s + '\x1f' + r + '\x1f' + o)) st.add(s, r, o), objects_of_rel[r].push_back(o);
+    // ---- false partners (S6's rule, no Wikidata filter)
+    std::mt19937_64 rngf(20261030);
+    vector<Item> it;
+    std::size_t gone = 0, nofalse = 0;
+    for (const auto& h : held) {
+        if (st.count(h.r, h.o) == 0) { ++gone; continue; }
+        const auto& pool = objects_of_rel[h.r];
+        const int ri = rel_index(h.r);
+        const Date hd = is_datey(ri) ? parse_date_str(h.o) : Date{};
+        string neg;
+        for (int t = 0; t < 100 && neg.empty(); ++t) {
+            const string& c = pool[rngf() % pool.size()];
+            if (c == h.o || c == h.s || full.has(h.s, h.r, c)) continue;
+            if (is_datey(ri)) {
+                const Date cd = parse_date_str(c);
+                if (cd.ok() && hd.ok() && cd.y == hd.y) continue;
+            }
+            neg = c;
+        }
+        if (neg.empty()) { ++nofalse; continue; }
+        const auto wit = wd.find(h.s + '\x1f' + h.r);
+        Item a, x;
+        a.s = x.s = h.s, a.r = x.r = h.r, a.o = h.o, x.o = neg, a.label = 1, x.label = 0;
+        a.pair = x.pair = static_cast<int>(it.size() / 2);
+        a.set = x.set = h.set;
+        a.dev = x.dev = ((fnv(h.s) >> 11) & 1) == 0;
+        a.t5_ok = x.t5_ok = !wd_src.count(h.s + '\x1f' + h.r);
+        x.wd_true = wit != wd.end() && wd_match(ri, neg, wit->second);
+        it.push_back(a), it.push_back(x);
+    }
+    std::size_t nu = 0, nc = 0, nd = 0, nwd = 0;
+    for (std::size_t i = 0; i < it.size(); i += 2) (it[i].set == 'U' ? nu : nc)++, nd += it[i].dev, nwd += it[i + 1].wd_true;
+    std::snprintf(b, sizeof b,
+                  "S7 SET U: one-fact subjects %zu (no seen object %zu) | C: subjects with an S6 hold-out %zu (no second fact %zu) | pairs U %zu C %zu "
+                  "(dropped: object gone %zu, no false partner %zu) | dev pairs %zu test %zu | false members Wikidata lists %zu | reduced store %zu of %zu",
+                  u_subjects, u_unseen, h6.size(), c_none, nu, nc, gone, nofalse, nd, it.size() / 2 - nd, nwd, st.size(), full.size());
+    std::cout << b << "\n";
+    // ---- the tests
+    const ecs::LinkPredictor lp(st, {});
+    const double t_tests = now_s();
+    for (std::size_t i = 0; i < it.size(); i += 2) {
+        const int ri = rel_index(it[i].r);
+        PageScan ps;
+        const auto pit = page_of.find(it[i].s);
+        const bool page = pit != page_of.end();
+        if (page) ps = scan_rel(data, pages[static_cast<std::size_t>(pit->second)], ri);
+        for (std::size_t j = i; j < i + 2; ++j) {
+            Item& x = it[j];
+            x.t1 = t1(st, x.s, x.r, x.o);
+            x.p = lp.prob(x.s, x.r, x.o);
+            x.aa = ecs::adamic_adar(st, x.s, x.o);
+            x.dl_others = ecs::compression_gain_bits(lp, st, x.s, x.r, x.o) - std::log2(std::max(1e-12, x.p));
+            for (int k = 0; k < 4; ++k) x.t6[k] = x.dl_others > kEps[k] ? kPos : x.dl_others < -kEps[k] ? kNeg : kInc;
+            const auto wit = wd.find(x.s + '\x1f' + x.r);
+            x.t5 = !x.t5_ok || wit == wd.end() ? kInc : wd_match(ri, x.o, wit->second) ? kPos : kNeg;
+            if (page) t4(ps, ri, x.o, x.t4);
+        }
+    }
+    std::snprintf(b, sizeof b, "S7 tests ran on %zu hypotheses in %.1f s", it.size(), now_s() - t_tests);
+    std::cout << b << "\n";
+    // ---- dev: every variant, then the choices (mutual information on dev, both sets)
+    using OF = std::function<TestOutcome(const Item&)>;
+    auto report = [&](const char* tag, bool dev) {
+        for (const char set : {'U', 'C', '*'}) {
+            const string sn = set == '*' ? "all" : string(1, set);
+            std::cout << line_of(tag, "T1_consistency_" + sn, tally(it, dev, set, false, [](const Item& x) { return x.t1; })) << "\n";
+            for (int k = 0; k < 4; ++k)
+                std::cout << line_of(tag, "T6_eps" + std::to_string(kEps[k]).substr(0, 3) + "_" + sn,
+                                     tally(it, dev, set, false, [k](const Item& x) { return x.t6[k]; })) << "\n";
+            std::cout << line_of(tag, "T5_wikidata_" + sn, tally(it, dev, set, true, [](const Item& x) { return x.t5; })) << "\n";
+            std::cout << line_of(tag, "T5_wikidata_s6labels_" + sn, tally(it, dev, set, false, [](const Item& x) { return x.t5; })) << "\n";
+            for (int k = 0; k < 2; ++k)
+                std::cout << line_of(tag, string("T4_") + kT4Var[k] + "_" + sn, tally(it, dev, set, false, [k](const Item& x) { return x.t4[k]; })) << "\n";
+        }
+    };
+    report("DEV", true);
+    auto best = [&](int n, const std::function<TestOutcome(const Item&, int)>& f) {
+        int bk = 0;
+        double bmi = -1;
+        for (int k = 0; k < n; ++k) {
+            const double mi = tally(it, true, '*', false, [&](const Item& x) { return f(x, k); }).mutual_information_bits();
+            if (mi > bmi + 1e-12) bmi = mi, bk = k;
+        }
+        return bk;
+    };
+    const int k6 = best(4, [](const Item& x, int k) { return x.t6[k]; });
+    const int k4 = best(2, [](const Item& x, int k) { return x.t4[k]; });
+    std::snprintf(b, sizeof b, "S7 CHOICE (dev, mutual information): T6 eps %.1f bits, T4 %s", kEps[k6], kT4Var[k4]);
+    std::cout << b << "\n";
+    struct Kind {
+        const char* name;
+        const char* source;
+        bool disconfirmation, independent, all_false;
+        double cost;
+        OF f;
+    };
+    const vector<Kind> kinds = {
+        {"T1 consistency", "store", true, false, false, 1, [](const Item& x) { return x.t1; }},
+        {"T6 compression", "store", false, false, false, 3, [k6](const Item& x) { return x.t6[k6]; }},
+        {"T5 Wikidata", "wikidata", true, true, true, 5, [](const Item& x) { return x.t5; }},
+        {"T4 corpus", "corpus", true, true, false, 10, [k4](const Item& x) { return x.t4[k4]; }}};
+    // The earn-its-place rule (dev, both sets): applicable to >= 5% and J's interval above 0. T3 by the same rule.
+    vector<double> s_dev, c_dev, s_add1, c_add1;  // the loop's s and c: dev point estimates (registered) and add-one (amended)
+    vector<bool> kept;
+    for (const Kind& K : kinds) {
+        const auto t = tally(it, true, '*', K.all_false, K.f);
+        const bool keep = t.applicable() >= 0.05 && t.youden_lo() > 0.0;
+        s_dev.push_back(t.sensitivity()), c_dev.push_back(t.specificity()), kept.push_back(keep);
+        s_add1.push_back((t.t_pos + 1) / (t.t_pos + t.t_neg + 2)), c_add1.push_back((t.f_neg + 1) / (t.f_pos + t.f_neg + 2));
+        std::snprintf(b, sizeof b, "S7 EARN %-15s applicable %.3f J %+.3f [%+.3f, %+.3f] -> %s", K.name, t.applicable(), t.youden(), t.youden_lo(),
+                      t.youden_hi(), keep ? "kept" : "cut");
+        std::cout << b << "\n";
+    }
+    {
+        std::size_t np = 0;
+        const auto t = t3_planted(st, true, &np);
+        const bool keep = t.applicable() >= 0.05 && t.youden_lo() > 0.0;
+        std::cout << line_of("DEV", "T3_planted_rules", t) << " | rules proposed " << np << "\n";
+        std::snprintf(b, sizeof b, "S7 EARN %-15s applicable %.3f J %+.3f [%+.3f, %+.3f] -> %s", "T3 held-out", t.applicable(), t.youden(), t.youden_lo(),
+                      t.youden_hi(), keep ? "kept" : "cut");
+        std::cout << b << "\n";
+    }
+    // ---- the prior: S6's P0 without the constraint, fitted on dev (z pools and isotonic)
+    auto logit = [](double p) { p = std::min(1 - 1e-12, std::max(1e-12, p)); return std::log(p / (1 - p)); };
+    vector<double> vl, va;
+    for (const Item& x : it)
+        if (x.dev) vl.push_back(logit(x.p)), va.push_back(std::log1p(x.aa));
+    const auto zl = ecs::pool_stats(vl), za = ecs::pool_stats(va);
+    auto raw = [&](const Item& x) { return ecs::zscore(logit(x.p), zl) + ecs::zscore(std::log1p(x.aa), za); };
+    ecs::IsotonicCalibrator cal;
+    {
+        vector<double> p;
+        vector<int> y;
+        for (const Item& x : it)
+            if (x.dev && !(x.label == 0 && x.wd_true)) p.push_back(raw(x)), y.push_back(x.label);
+        cal.fit(p, y);
+    }
+    for (Item& x : it) x.p0 = std::min(0.98, std::max(0.02, cal.predict(raw(x))));
+    // ---- the loop (7.2) on one split, one batch: pre-registration, cheapest first, Bayes factors, BH at q 0.1
+    // Amended after the dev read, before the test read: a test with no error on dev has a point estimate of 1, so its BF
+    // reaches bayes_factor's clamp (about 10^6). The add-one estimates are the loop's primary; the registered point
+    // estimates are printed beside them.
+    auto loop = [&](const string& tag, bool dev, bool add1, const string& log_path) {
+        ecs::HypothesisStore hs;
+        ecs::PreregLog log;
+        vector<std::size_t> idx;
+        for (std::size_t i = 0; i < it.size(); ++i)
+            if (it[i].dev == dev) idx.push_back(i);
+        std::size_t refused = 0;
+        for (std::size_t i : idx) {
+            Item& x = it[i];
+            ecs::Hypothesis h;
+            h.id = "S7-" + std::to_string(i);
+            h.key = x.r + '|' + x.s + '|' + x.o;
+            h.statement = x.s + " " + x.r + " " + x.o;
+            h.generator = "planted-store";
+            for (std::size_t k = 0; k < kinds.size(); ++k) {
+                if (!kept[k]) continue;
+                ecs::HypTest t;
+                t.kind = kinds[k].name, t.source = kinds[k].source;
+                t.predicted = "positive", t.refuted_if = "negative";
+                t.disconfirmation = kinds[k].disconfirmation, t.independent = kinds[k].independent;
+                t.sensitivity = add1 ? s_add1[k] : s_dev[k], t.specificity = add1 ? c_add1[k] : c_dev[k];
+                h.tests.push_back(t);
+            }
+            hs.propose(h);
+            hs.score(h.id, x.p0);
+            hs.transition(h.id, ecs::HypState::Queued, "scored");
+            if (!log.register_plan(*hs.find(h.id))) { ++refused; continue; }
+            std::size_t ti = 0;
+            for (std::size_t k = 0; k < kinds.size(); ++k) {
+                if (!kept[k]) continue;
+                if (hs.find(h.id)->state != ecs::HypState::Queued) break;
+                hs.transition(h.id, ecs::HypState::UnderTest, "next test");
+                if (!hs.record_outcome(h.id, ti++, kinds[k].f(x), &log)) ++refused;
+            }
+        }
+        // BH over the batch's e-values; a supported hypothesis whose null BH does not reject goes back to the queue.
+        vector<double> e;
+        for (std::size_t i : idx) e.push_back(ecs::e_value(*hs.find("S7-" + std::to_string(i))));
+        const auto rej = ecs::bh_reject_e(e, 0.1);
+        std::size_t n_sup = 0, n_rej = 0, n_demoted = 0;
+        for (std::size_t j = 0; j < idx.size(); ++j) n_rej += rej[j];
+        std::map<string, std::array<double, 2>> by_state;  // state -> {true, false}
+        double brier_post = 0, brier_prior = 0, n = 0;
+        for (std::size_t j = 0; j < idx.size(); ++j) {
+            Item& x = it[idx[j]];
+            const string id = "S7-" + std::to_string(idx[j]);
+            if (hs.find(id)->state == ecs::HypState::Supported) {
+                ++n_sup;
+                if (!rej[j]) ++n_demoted, hs.transition(id, ecs::HypState::Queued, "BH batch control: not rejected at q 0.1");
+            }
+            const auto* h = hs.find(id);
+            x.post = h->posterior, x.state = ecs::hyp_state_name(h->state);
+            if (x.label == 0 && x.wd_true) continue;  // S6's labels
+            by_state[x.state][x.label ? 0 : 1] += 1;
+            brier_post += (x.post - x.label) * (x.post - x.label), brier_prior += (x.p0 - x.label) * (x.p0 - x.label), n += 1;
+        }
+        std::snprintf(b, sizeof b, "%s LOOP BH q 0.1: nulls rejected %zu of %zu | supported by decide %zu, sent back to the queue %zu", tag.c_str(), n_rej,
+                      idx.size(), n_sup, n_demoted);
+        std::cout << b << "\n";
+        for (const auto& [sname, c] : by_state) {
+            std::snprintf(b, sizeof b, "%s LOOP %-12s true %.0f false %.0f", tag.c_str(), sname.c_str(), c[0], c[1]);
+            std::cout << b << "\n";
+        }
+        const auto sup = by_state["supported"], ref = by_state["refuted"];
+        std::snprintf(b, sizeof b,
+                      "%s LOOP supported precision %.3f [%.3f, %.3f] (n %.0f) | refuted precision %.3f [%.3f, %.3f] (n %.0f) | decided %.3f of %.0f | "
+                      "Brier posterior %.4f prior %.4f | plans refused %zu | log entries %zu verify %s",
+                      tag.c_str(), sup[0] + sup[1] > 0 ? sup[0] / (sup[0] + sup[1]) : 0.0, ecs::wilson_lower(sup[0], sup[0] + sup[1]),
+                      ecs::wilson_upper(sup[0], sup[0] + sup[1]), sup[0] + sup[1], ref[0] + ref[1] > 0 ? ref[1] / (ref[0] + ref[1]) : 0.0,
+                      ecs::wilson_lower(ref[1], ref[0] + ref[1]), ecs::wilson_upper(ref[1], ref[0] + ref[1]), ref[0] + ref[1],
+                      n > 0 ? (sup[0] + sup[1] + ref[0] + ref[1]) / n : 0.0, n, brier_post / std::max(1.0, n), brier_prior / std::max(1.0, n), refused,
+                      log.entries().size(), log.verify() ? "ok" : "BROKEN");
+        std::cout << b << "\n";
+        std::ofstream lf(log_path);
+        lf << log.serialize();
+    };
+    for (int k = 0; k < static_cast<int>(kinds.size()); ++k) {
+        std::snprintf(b, sizeof b, "S7 LOOP_INPUT %-15s %s s %.4f c %.4f (add-one s %.4f c %.4f)", kinds[static_cast<std::size_t>(k)].name,
+                      kept[static_cast<std::size_t>(k)] ? "in the plan" : "cut", s_dev[static_cast<std::size_t>(k)], c_dev[static_cast<std::size_t>(k)],
+                      s_add1[static_cast<std::size_t>(k)], c_add1[static_cast<std::size_t>(k)]);
+        std::cout << b << "\n";
+    }
+    loop("DEV[add1]", true, true, out + ".dev.prereg.tsv");
+    loop("DEV[point]", true, false, out + ".dev_point.prereg.tsv");
+    if (read_test) {
+        report("TEST", false);
+        std::size_t np = 0;
+        std::cout << line_of("TEST", "T3_planted_rules", t3_planted(st, false, &np)) << " | rules proposed " << np << "\n";
+        loop("TEST[point]", false, false, out + ".test_point.prereg.tsv");
+        loop("TEST[add1]", false, true, out + ".test.prereg.tsv");
+    }
+    {
+        std::ofstream f(out + ".items.tsv");
+        f << "pair\tset\tsplit\tlabel\twd_true\tt5_eligible\tsubject\trelation\tobject\tT1\tT6\tT5\tT4\tdl_others\tP0\tposterior\tstate\n";
+        for (const Item& x : it) {
+            if (!x.dev && !read_test) continue;
+            f << x.pair << '\t' << x.set << '\t' << (x.dev ? "dev" : "test") << '\t' << x.label << '\t' << x.wd_true << '\t' << x.t5_ok << '\t' << x.s << '\t'
+              << x.r << '\t' << x.o << '\t' << ecs::test_outcome_name(x.t1) << '\t'
+              << ecs::test_outcome_name(x.t6[k6]) << '\t' << ecs::test_outcome_name(x.t5) << '\t' << ecs::test_outcome_name(x.t4[k4]) << '\t'
+              << x.dl_others << '\t' << x.p0 << '\t' << x.post << '\t' << x.state << '\n';
+        }
+    }
+    struct rusage ru;
+    getrusage(RUSAGE_SELF, &ru);
+    std::snprintf(b, sizeof b, "S7 seconds %.1f max_rss_mb %.1f", now_s() - t0, static_cast<double>(ru.ru_maxrss) / 1024.0);
+    std::cout << b << "\n";
+    return 0;
+}
+
+}  // namespace s7
+
 int main(int argc, char** argv) {
     if (argc >= 2 && string(argv[1]) == "--score-planted") return s6::run(argc, argv);  // S6 (hypothesis scoring)
+    if (argc >= 2 && string(argv[1]) == "--test-kinds") return s7::run(argc, argv);  // S7 (testing hypotheses)
     if (argc >= 4 && string(argv[1]) == "--wilson") {
         double k = std::atof(argv[2]), n = std::atof(argv[3]);
         std::printf("%.0f/%.0f = %.3f  Wilson95 [%.3f, %.3f]\n", k, n, n > 0 ? k / n : 0.0, ecs::wilson_lower(k, n), ecs::wilson_upper(k, n));
