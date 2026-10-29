@@ -4,6 +4,7 @@
 #include "cypha/memory_train.hpp"
 
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace cypha {
@@ -70,6 +71,30 @@ class EwcRegularizer {
   void apply_pull(CyphaDifMemoryState& mem, CyphaInferModel& infer, double ewc_lambda, double lr) const;
 
   bool has_snapshot() const { return !anchor_D_.empty() || !anchor_world_mu_.empty(); }
+
+  /// Every field, for ``Cypha::save`` / ``Cypha::load``.
+  struct State {
+    bool protect_world_field{false};
+    std::vector<double> anchor_D;
+    std::vector<double> anchor_enc_w;
+    std::vector<double> anchor_world_mu;
+    std::vector<double> fisher_D;
+    std::vector<double> fisher_enc_w;
+    std::vector<double> fisher_world_mu;
+  };
+  State export_state() const {
+    return State{protect_world_field_, anchor_D_, anchor_enc_w_, anchor_world_mu_,
+                 fisher_D_, fisher_enc_w_, fisher_world_mu_};
+  }
+  void import_state(State s) {
+    protect_world_field_ = s.protect_world_field;
+    anchor_D_ = std::move(s.anchor_D);
+    anchor_enc_w_ = std::move(s.anchor_enc_w);
+    anchor_world_mu_ = std::move(s.anchor_world_mu);
+    fisher_D_ = std::move(s.fisher_D);
+    fisher_enc_w_ = std::move(s.fisher_enc_w);
+    fisher_world_mu_ = std::move(s.fisher_world_mu);
+  }
 
  private:
   bool protect_world_field_{false};

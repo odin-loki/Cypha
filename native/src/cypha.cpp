@@ -2,11 +2,16 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 #include <limits>
+#include <locale>
+#include <map>
 #include <sstream>
 #include <stdexcept>
+#include <unordered_map>
 #include <utility>
 
 #include <nlohmann/json.hpp>
@@ -35,6 +40,212 @@ bool cypha_has_embedded_world_f_field(const CNode& root, int d, int fd) {
   return wff != nullptr && wff->kind == CNode::Tensor && wff->shape.size() == 2 &&
          static_cast<int>(wff->shape[0]) == d && static_cast<int>(wff->shape[1]) == fd &&
          static_cast<int>(wff->tensor.size()) == expected;
+}
+
+// ---- Save format 2 -------------------------------------------------------------------------------------------
+// Format 1 (no ``cypha_save_version`` key) kept only the world, classes, encoder, field_h, temperature and a few
+// session scalars, and ``load`` ignored most of those scalars. Format 2 also writes the online state ``predict`` and
+// ``update`` read (tiered label context, OOD EMAs, LLR scale, field dynamics, GH gate session, hyperparameters,
+// replay buffer, RNG, self-correction threshold, EWC, regression head). Keys the older readers know are written
+// at the top level with their usual meaning; the rest go in the ``cypha_save_state`` map.
+constexpr std::int64_t kCyphaSaveVersion = 2;
+constexpr const char* kSaveVersionKey = "cypha_save_version";
+constexpr const char* kSaveStateKey = "cypha_save_state";
+
+CNode cn_f64(double v) {
+  CNode n;
+  n.kind = CNode::Float;
+  n.f = v;
+  return n;
+}
+
+CNode cn_i64(std::int64_t v) {
+  CNode n;
+  n.kind = CNode::Int;
+  n.i = v;
+  return n;
+}
+
+CNode cn_bool(bool v) {
+  CNode n;
+  n.kind = CNode::Bool;
+  n.b = v;
+  return n;
+}
+
+CNode cn_str(const std::string& v) {
+  CNode n;
+  n.kind = CNode::Str;
+  n.s = v;
+  return n;
+}
+
+CNode cn_map() {
+  CNode n;
+  n.kind = CNode::Map;
+  return n;
+}
+
+CNode cn_tensor(const std::vector<double>& v, std::vector<std::uint32_t> shape) {
+  CNode n;
+  n.kind = CNode::Tensor;
+  n.shape = std::move(shape);
+  n.tensor = v;
+  return n;
+}
+
+CNode cn_vec(const std::vector<double>& v) {
+  return cn_tensor(v, {static_cast<std::uint32_t>(v.size())});
+}
+
+/// Replace ``key`` in place, or append it.
+void cn_put(CNode& m, const std::string& key, CNode v) {
+  for (auto& kv : m.map) {
+    if (kv.first == key) {
+      kv.second = std::move(v);
+      return;
+    }
+  }
+  m.map.emplace_back(key, std::move(v));
+}
+
+/// Empty vectors are left out (a zero-length tensor carries nothing and a missing key reads back as empty).
+void cn_put_vec(CNode& m, const std::string& key, const std::vector<double>& v) {
+  if (!v.empty()) {
+    cn_put(m, key, cn_vec(v));
+  }
+}
+
+double cn_num(const CNode& n, const char* what) {
+  if (n.kind == CNode::Float) {
+    return n.f;
+  }
+  if (n.kind == CNode::Int) {
+    return static_cast<double>(n.i);
+  }
+  throw std::runtime_error(std::string("Cypha::load: expected a number for ") + what);
+}
+
+std::int64_t cn_int(const CNode& n, const char* what) {
+  if (n.kind == CNode::Int) {
+    return n.i;
+  }
+  if (n.kind == CNode::Float) {
+    return static_cast<std::int64_t>(n.f);
+  }
+  throw std::runtime_error(std::string("Cypha::load: expected an integer for ") + what);
+}
+
+double get_num(const CNode& m, const char* key) { return cn_num(map_get_required(m, key), key); }
+
+std::int64_t get_int(const CNode& m, const char* key) { return cn_int(map_get_required(m, key), key); }
+
+bool get_bool(const CNode& m, const char* key) {
+  const CNode& n = map_get_required(m, key);
+  if (n.kind != CNode::Bool) {
+    throw std::runtime_error(std::string("Cypha::load: expected a bool for ") + key);
+  }
+  return n.b;
+}
+
+std::string get_str(const CNode& m, const char* key) {
+  const CNode& n = map_get_required(m, key);
+  if (n.kind != CNode::Str) {
+    throw std::runtime_error(std::string("Cypha::load: expected a string for ") + key);
+  }
+  return n.s;
+}
+
+/// Missing key → empty vector (see ``cn_put_vec``).
+std::vector<double> get_vec(const CNode& m, const char* key) {
+  const CNode* n = map_get(m, key);
+  if (n == nullptr) {
+    return {};
+  }
+  if (n->kind != CNode::Tensor) {
+    throw std::runtime_error(std::string("Cypha::load: expected a tensor for ") + key);
+  }
+  return n->tensor;
+}
+
+const CNode& get_map(const CNode& m, const char* key) {
+  const CNode& n = map_get_required(m, key);
+  if (n.kind != CNode::Map) {
+    throw std::runtime_error(std::string("Cypha::load: expected a map for ") + key);
+  }
+  return n;
+}
+
+/// Sorted keys so the bytes written do not depend on hash-map iteration order.
+CNode cn_dict(const std::unordered_map<std::string, double>& m) {
+  std::map<std::string, double> sorted(m.begin(), m.end());
+  CNode n = cn_map();
+  for (const auto& kv : sorted) {
+    n.map.emplace_back(kv.first, cn_f64(kv.second));
+  }
+  return n;
+}
+
+CNode cn_dict2(const std::unordered_map<std::string, std::unordered_map<std::string, double>>& m) {
+  std::map<std::string, const std::unordered_map<std::string, double>*> sorted;
+  for (const auto& kv : m) {
+    sorted[kv.first] = &kv.second;
+  }
+  CNode n = cn_map();
+  for (const auto& kv : sorted) {
+    n.map.emplace_back(kv.first, cn_dict(*kv.second));
+  }
+  return n;
+}
+
+std::unordered_map<std::string, double> read_dict(const CNode& n, const char* what) {
+  std::unordered_map<std::string, double> out;
+  for (const auto& kv : n.map) {
+    out[kv.first] = cn_num(kv.second, what);
+  }
+  return out;
+}
+
+CNode cn_vec_dict(const std::unordered_map<std::string, std::vector<double>>& m) {
+  std::map<std::string, const std::vector<double>*> sorted;
+  for (const auto& kv : m) {
+    sorted[kv.first] = &kv.second;
+  }
+  CNode n = cn_map();
+  for (const auto& kv : sorted) {
+    n.map.emplace_back(kv.first, cn_vec(*kv.second));
+  }
+  return n;
+}
+
+std::unordered_map<std::string, std::vector<double>> read_vec_dict(const CNode& n, const char* what) {
+  std::unordered_map<std::string, std::vector<double>> out;
+  for (const auto& kv : n.map) {
+    if (kv.second.kind != CNode::Tensor) {
+      throw std::runtime_error(std::string("Cypha::load: expected tensors in ") + what);
+    }
+    out[kv.first] = kv.second.tensor;
+  }
+  return out;
+}
+
+/// ``std::mt19937`` text form (the standard fixes it), written with the classic locale.
+std::string rng_to_string(const std::mt19937& r) {
+  std::ostringstream o;
+  o.imbue(std::locale::classic());
+  o << r;
+  return o.str();
+}
+
+void rng_from_string(const std::string& s, std::mt19937& r) {
+  std::istringstream i(s);
+  i.imbue(std::locale::classic());
+  std::mt19937 t;
+  i >> t;
+  if (i.fail()) {
+    throw std::runtime_error("Cypha::load: bad RNG state in cypha_save_state");
+  }
+  r = t;
 }
 
 void snapshot_gh_clean(CyphaInferModel& model, std::vector<double>& gh_inv_v_clean, double& gh_R_base) {
@@ -191,6 +402,253 @@ bool Cypha::load_regression_json(const std::string& path) {
   return true;
 }
 
+CNode Cypha::export_save_state(const CyphaInferModel& m) const {
+  CNode st = cn_map();
+
+  // Online inference state that the format-1 keys cannot hold exactly (from_root recomputes these totals
+  // as plain sums, which differ in the last bits from the running values training keeps).
+  CNode inf = cn_map();
+  inf.map.emplace_back("mid_freq_total", cn_f64(m.mid_freq_total));
+  inf.map.emplace_back("mid_trans_tot", cn_dict(m.mid_trans_tot));
+  inf.map.emplace_back("t1_total", cn_f64(m.t1_total));
+  inf.map.emplace_back("t1_counts", cn_dict(m.t1_counts));
+  st.map.emplace_back("infer", std::move(inf));
+
+  // Training-memory scalars from_cypha_root resets (Welford M2 for the first 20 rows, cached log-norm).
+  CNode mem = cn_map();
+  cn_put_vec(mem, "world_M2", mem_->world_M2);
+  mem.map.emplace_back("world_log_norm", cn_f64(mem_->world_log_norm));
+  mem.map.emplace_back("world_log_n_ctr", cn_i64(mem_->world_log_n_ctr));
+  mem.map.emplace_back("world_v_mean", cn_f64(mem_->world_v_mean));
+  mem.map.emplace_back("task_prefix_protect", cn_str(mem_->task_prefix_protect));
+  st.map.emplace_back("memory", std::move(mem));
+
+  // Session: hyperparameters, counters, RNG and the learned self-correction threshold.
+  CNode ses = cn_map();
+  ses.map.emplace_back("world_lr", cn_f64(world_lr_));
+  ses.map.emplace_back("delta_lr", cn_f64(delta_lr_));
+  ses.map.emplace_back("enc_lr", cn_f64(tsp_.enc_lr));
+  ses.map.emplace_back("replay_ratio", cn_f64(tsp_.replay_ratio));
+  ses.map.emplace_back("replay_cap", cn_i64(tsp_.replay_cap));
+  ses.map.emplace_back("align_every", cn_i64(tsp_.align_every));
+  ses.map.emplace_back("temp_recalib_every", cn_i64(tsp_.temp_recalib_every));
+  ses.map.emplace_back("enc_updates", cn_i64(enc_updates_));
+  ses.map.emplace_back("ewc_lambda", cn_f64(ewc_lambda_));
+  ses.map.emplace_back("last_active_query_score", cn_f64(last_active_query_score_));
+  ses.map.emplace_back("rng", cn_str(rng_to_string(rng_)));
+  {
+    const intelligence::NigStatisticState::Raw r = epistemic_threshold_.state().raw();
+    CNode ep = cn_map();
+    ep.map.emplace_back("mu", cn_f64(r.mu));
+    ep.map.emplace_back("lambda", cn_f64(r.lambda));
+    ep.map.emplace_back("alpha", cn_f64(r.alpha));
+    ep.map.emplace_back("beta", cn_f64(r.beta));
+    ep.map.emplace_back("running_mean", cn_f64(r.running_mean));
+    ep.map.emplace_back("running_m2", cn_f64(r.running_m2));
+    ep.map.emplace_back("n_updates", cn_i64(r.n_updates));
+    ep.map.emplace_back("n_observations", cn_i64(r.n_observations));
+    ses.map.emplace_back("epistemic_threshold", std::move(ep));
+  }
+  st.map.emplace_back("session", std::move(ses));
+
+  if (replay_) {
+    const ReplayBuffer::State r = replay_->export_state();
+    CNode rp = cn_map();
+    rp.map.emplace_back("cap", cn_i64(r.cap));
+    rp.map.emplace_back("len", cn_i64(r.len));
+    rp.map.emplace_back("insert_n", cn_i64(r.insert_n));
+    rp.map.emplace_back("d", cn_i64(r.d));
+    if (r.len > 0 && r.d > 0) {
+      rp.map.emplace_back("h", cn_tensor(r.h, {static_cast<std::uint32_t>(r.len), static_cast<std::uint32_t>(r.d)}));
+    }
+    cn_put_vec(rp, "w", r.w);
+    // Labels as a small table plus one index per row.
+    std::map<std::string, int> index;
+    CNode table = cn_map();
+    std::vector<double> label_idx;
+    label_idx.reserve(r.labels.size());
+    for (const auto& lbl : r.labels) {
+      auto it = index.find(lbl);
+      if (it == index.end()) {
+        const int k = static_cast<int>(index.size());
+        it = index.emplace(lbl, k).first;
+        table.map.emplace_back(std::to_string(k), cn_str(lbl));
+      }
+      label_idx.push_back(static_cast<double>(it->second));
+    }
+    rp.map.emplace_back("label_table", std::move(table));
+    cn_put_vec(rp, "label_idx", label_idx);
+    st.map.emplace_back("replay", std::move(rp));
+  }
+
+  if (ewc_) {
+    const EwcRegularizer::State e = ewc_->export_state();
+    CNode ew = cn_map();
+    ew.map.emplace_back("protect_world_field", cn_bool(e.protect_world_field));
+    cn_put_vec(ew, "anchor_D", e.anchor_D);
+    cn_put_vec(ew, "anchor_enc_w", e.anchor_enc_w);
+    cn_put_vec(ew, "anchor_world_mu", e.anchor_world_mu);
+    cn_put_vec(ew, "fisher_D", e.fisher_D);
+    cn_put_vec(ew, "fisher_enc_w", e.fisher_enc_w);
+    cn_put_vec(ew, "fisher_world_mu", e.fisher_world_mu);
+    st.map.emplace_back("ewc", std::move(ew));
+  }
+
+  if (kernel_mem_ && use_kernel_llr_) {
+    // patch_kernel_into_root writes the basis and weights; these are the parts it leaves out.
+    CNode km = cn_map();
+    km.map.emplace_back("rng", cn_str(rng_to_string(kernel_mem_->rng_engine())));
+    km.map.emplace_back("gamma_scale", cn_f64(kernel_mem_->gamma_scale()));
+    km.map.emplace_back("landmark_sampling", cn_i64(static_cast<std::int64_t>(kernel_mem_->landmark_sampling())));
+    st.map.emplace_back("kernel", std::move(km));
+  }
+
+  if (!reg_mu_.empty() || !reg_var_.empty() || mke_active_) {
+    // The regression head learns in update() (mke w / P) but used to live only in regression_head.json.
+    CNode rg = cn_map();
+    cn_put_vec(rg, "reg_mu", reg_mu_);
+    cn_put_vec(rg, "reg_var", reg_var_);
+    rg.map.emplace_back("mke_active", cn_bool(mke_active_));
+    if (mke_active_) {
+      rg.map.emplace_back("mke_d_in", cn_i64(mke_d_in_));
+      cn_put_vec(rg, "mke_W", mke_W_);
+      cn_put_vec(rg, "mke_b", mke_b_);
+      rg.map.emplace_back("mke_temperature", cn_f64(mke_temperature_));
+      rg.map.emplace_back("mke_forgetting", cn_f64(mke_forgetting_));
+      rg.map.emplace_back("mke_pi_floor", cn_f64(mke_pi_floor_));
+      cn_put_vec(rg, "mke_gh_scales", mke_gh_scales_);
+      rg.map.emplace_back("mke_w", cn_vec_dict(mke_w_));
+      rg.map.emplace_back("mke_P", cn_vec_dict(mke_p_));
+    }
+    st.map.emplace_back("regression", std::move(rg));
+  }
+  return st;
+}
+
+void Cypha::import_save_hparams(const CNode& st) {
+  const CNode& ses = get_map(st, "session");
+  world_lr_ = get_num(ses, "world_lr");
+  delta_lr_ = get_num(ses, "delta_lr");
+  tsp_.enc_lr = get_num(ses, "enc_lr");
+  tsp_.replay_ratio = get_num(ses, "replay_ratio");
+  tsp_.replay_cap = static_cast<int>(get_int(ses, "replay_cap"));
+  tsp_.align_every = static_cast<int>(get_int(ses, "align_every"));
+  tsp_.temp_recalib_every = static_cast<int>(get_int(ses, "temp_recalib_every"));
+}
+
+void Cypha::import_save_state(const CNode& st) {
+  const CNode& inf = get_map(st, "infer");
+  infer_->mid_freq_total = get_num(inf, "mid_freq_total");
+  infer_->mid_trans_tot = read_dict(get_map(inf, "mid_trans_tot"), "mid_trans_tot");
+  infer_->t1_total = get_num(inf, "t1_total");
+  infer_->t1_counts = read_dict(get_map(inf, "t1_counts"), "t1_counts");
+
+  const CNode& mem = get_map(st, "memory");
+  std::vector<double> m2 = get_vec(mem, "world_M2");
+  if (static_cast<int>(m2.size()) == mem_->d_latent) {
+    mem_->world_M2 = std::move(m2);
+  }
+  mem_->world_log_norm = get_num(mem, "world_log_norm");
+  mem_->world_log_n_ctr = static_cast<int>(get_int(mem, "world_log_n_ctr"));
+  mem_->world_v_mean = get_num(mem, "world_v_mean");
+  mem_->task_prefix_protect = get_str(mem, "task_prefix_protect");
+
+  const CNode& ses = get_map(st, "session");
+  enc_updates_ = static_cast<int>(get_int(ses, "enc_updates"));
+  ewc_lambda_ = get_num(ses, "ewc_lambda");
+  last_active_query_score_ = get_num(ses, "last_active_query_score");
+  rng_from_string(get_str(ses, "rng"), rng_);
+  {
+    const CNode& ep = get_map(ses, "epistemic_threshold");
+    intelligence::NigStatisticState::Raw r;
+    r.mu = get_num(ep, "mu");
+    r.lambda = get_num(ep, "lambda");
+    r.alpha = get_num(ep, "alpha");
+    r.beta = get_num(ep, "beta");
+    r.running_mean = get_num(ep, "running_mean");
+    r.running_m2 = get_num(ep, "running_m2");
+    r.n_updates = static_cast<int>(get_int(ep, "n_updates"));
+    r.n_observations = static_cast<int>(get_int(ep, "n_observations"));
+    epistemic_threshold_.state().set_raw(r);
+  }
+
+  if (const CNode* rp = map_get(st, "replay"); rp != nullptr && rp->kind == CNode::Map) {
+    ReplayBuffer::State r;
+    r.cap = static_cast<int>(get_int(*rp, "cap"));
+    r.len = static_cast<int>(get_int(*rp, "len"));
+    r.insert_n = static_cast<int>(get_int(*rp, "insert_n"));
+    r.d = static_cast<int>(get_int(*rp, "d"));
+    r.h = get_vec(*rp, "h");
+    r.w = get_vec(*rp, "w");
+    const CNode& table = get_map(*rp, "label_table");
+    std::vector<std::string> names(table.map.size());
+    for (const auto& kv : table.map) {
+      const std::size_t k = static_cast<std::size_t>(std::stoul(kv.first));
+      if (k >= names.size() || kv.second.kind != CNode::Str) {
+        throw std::runtime_error("Cypha::load: bad replay label table");
+      }
+      names[k] = kv.second.s;
+    }
+    for (double v : get_vec(*rp, "label_idx")) {
+      const std::size_t k = static_cast<std::size_t>(v);
+      if (v < 0.0 || k >= names.size()) {
+        throw std::runtime_error("Cypha::load: bad replay label index");
+      }
+      r.labels.push_back(names[k]);
+    }
+    auto buf = std::make_unique<ReplayBuffer>(r.cap);
+    if (!buf->import_state(r)) {
+      throw std::runtime_error("Cypha::load: replay buffer sizes do not agree");
+    }
+    replay_ = std::move(buf);
+  }
+
+  ewc_.reset();
+  if (const CNode* ew = map_get(st, "ewc"); ew != nullptr && ew->kind == CNode::Map) {
+    EwcRegularizer::State e;
+    e.protect_world_field = get_bool(*ew, "protect_world_field");
+    e.anchor_D = get_vec(*ew, "anchor_D");
+    e.anchor_enc_w = get_vec(*ew, "anchor_enc_w");
+    e.anchor_world_mu = get_vec(*ew, "anchor_world_mu");
+    e.fisher_D = get_vec(*ew, "fisher_D");
+    e.fisher_enc_w = get_vec(*ew, "fisher_enc_w");
+    e.fisher_world_mu = get_vec(*ew, "fisher_world_mu");
+    ewc_ = std::make_unique<EwcRegularizer>();
+    ewc_->import_state(std::move(e));
+  }
+
+  if (const CNode* km = map_get(st, "kernel"); km != nullptr && km->kind == CNode::Map && kernel_mem_) {
+    rng_from_string(get_str(*km, "rng"), kernel_mem_->rng_engine());
+    kernel_mem_->set_gamma_scale(get_num(*km, "gamma_scale"));
+    kernel_mem_->set_landmark_sampling(
+        static_cast<KernelMemory::LandmarkSamplingKind>(get_int(*km, "landmark_sampling")));
+  }
+}
+
+void Cypha::import_regression_state(const CNode& rg) {
+  reg_mu_ = get_vec(rg, "reg_mu");
+  reg_var_ = get_vec(rg, "reg_var");
+  clear_mke();
+  if (!get_bool(rg, "mke_active")) {
+    return;
+  }
+  mke_d_in_ = static_cast<int>(get_int(rg, "mke_d_in"));
+  mke_W_ = get_vec(rg, "mke_W");
+  mke_b_ = get_vec(rg, "mke_b");
+  mke_temperature_ = get_num(rg, "mke_temperature");
+  mke_forgetting_ = get_num(rg, "mke_forgetting");
+  mke_pi_floor_ = get_num(rg, "mke_pi_floor");
+  mke_gh_scales_ = get_vec(rg, "mke_gh_scales");
+  mke_w_ = read_vec_dict(get_map(rg, "mke_w"), "mke_w");
+  mke_p_ = read_vec_dict(get_map(rg, "mke_P"), "mke_P");
+  const int d_rff = infer_->d_latent;
+  if (static_cast<int>(mke_W_.size()) != d_rff * mke_d_in_ || static_cast<int>(mke_b_.size()) != d_rff) {
+    clear_mke();
+    throw std::runtime_error("Cypha::load: regression head sizes do not agree");
+  }
+  mke_active_ = true;
+}
+
 bool Cypha::load(const std::string& cypha_path, const std::string& preprocessor_path,
                  const std::string& f_field_json_path, const std::string& regression_json_path,
                  const std::string& train_hparams_path) {
@@ -218,6 +676,19 @@ bool Cypha::load(const std::string& cypha_path, const std::string& preprocessor_
   infer_ = std::make_unique<CyphaInferModel>(CyphaInferModel::from_root(root, ff_ptr, fd));
   mem_ = std::make_unique<CyphaDifMemoryState>(CyphaDifMemoryState::from_cypha_root(root, ff_ptr, fd));
   root_ = std::move(root);
+
+  // Format 2 files carry the rest of the online state; format 1 files (no version key) load as before.
+  const CNode* ver_node = map_get(root_, kSaveVersionKey);
+  const std::int64_t save_version =
+      (ver_node != nullptr && ver_node->kind == CNode::Int) ? ver_node->i : std::int64_t{1};
+  const CNode* save_state = nullptr;
+  if (save_version >= 2) {
+    save_state = map_get(root_, kSaveStateKey);
+    if (save_state == nullptr || save_state->kind != CNode::Map) {
+      throw std::runtime_error("Cypha::load: " + cypha_path + " says save format " + std::to_string(save_version) +
+                               " but has no cypha_save_state map");
+    }
+  }
 
   kernel_mem_.reset();
   use_kernel_llr_ = false;
@@ -264,6 +735,13 @@ bool Cypha::load(const std::string& cypha_path, const std::string& preprocessor_
       tsp_.replay_cap = j["replay_cap"].get<int>();
     }
   };
+  if (save_state != nullptr) {
+    // Saved hyperparameters first; a train_hparams.json (explicit or next to the file) still overrides them.
+    import_save_hparams(*save_state);
+    if (const CNode* oods = map_get(root_, "ood_sigma"); oods != nullptr && oods->kind != CNode::Nil) {
+      ood_sigma_ = cn_num(*oods, "ood_sigma");
+    }
+  }
   if (!train_hparams_path.empty()) {
     apply_hparams_file(train_hparams_path);
   } else {
@@ -281,10 +759,38 @@ bool Cypha::load(const std::string& cypha_path, const std::string& preprocessor_
   total_steps_ = infer_->saved_total_steps;
   llr_ema_ = infer_->llr_ema;
 
+  if (save_state != nullptr) {
+    // GH gate session (format 1 wrote these keys too but load reset them).
+    gh_chi_ = get_num(root_, "gh_chi_session");
+    gh_psi_ = get_num(root_, "gh_psi_session");
+    gh_R_base_ = get_num(root_, "gh_R_base");
+    std::vector<double> inv = get_vec(root_, "gh_inv_v_clean");
+    if (static_cast<int>(inv.size()) == d) {
+      gh_inv_v_clean_ = std::move(inv);
+    }
+    // Field power-iteration vector (from_root resets it to 1/sqrt(fd)).
+    if (const CNode* sr = map_get(root_, "field_sr_vec");
+        sr != nullptr && sr->kind == CNode::Tensor && !infer_->field_w_t.empty() &&
+        sr->tensor.size() == infer_->field_sr_vec.size()) {
+      for (std::size_t i = 0; i < sr->tensor.size(); ++i) {
+        infer_->field_sr_vec[i] = static_cast<float>(sr->tensor[i]);
+      }
+    }
+    import_save_state(*save_state);
+  } else if (!infer_->labels.empty()) {
+    std::cerr << "note: " << cypha_path
+              << " uses Cypha save format 1; GH gate session, replay buffer, RNG and running totals start fresh"
+              << " (re-save to keep them)\n";
+  }
+
+  const CNode* saved_regression = save_state != nullptr ? map_get(*save_state, "regression") : nullptr;
   if (!regression_json_path.empty()) {
     if (!load_regression_json(regression_json_path)) {
       return false;
     }
+  } else if (saved_regression != nullptr && saved_regression->kind == CNode::Map) {
+    // The saved head wins over a regression_head.json next to the file, which may predate the saved training.
+    import_regression_state(*saved_regression);
   } else {
     fs::path auto_reg = fs::path(cypha_path).parent_path() / "regression_head.json";
     if (fs::exists(auto_reg)) {
@@ -343,67 +849,76 @@ void Cypha::save(const std::string& cypha_path) const {
   }
   save_root = CyphaDifMemoryState::merge_state_into_root_for_save(save_root, *mem_);
 
-  auto upsert = [&](const char* key, CNode val) {
-    for (auto& kv : save_root.map) {
-      if (kv.first == key) {
-        kv.second = std::move(val);
-        return;
-      }
-    }
-    save_root.map.emplace_back(key, std::move(val));
-  };
+  const auto d = static_cast<std::uint32_t>(synced.d_latent);
+  const auto fd = static_cast<std::uint32_t>(synced.field_dim);
+  cn_put(save_root, "enc_W", cn_tensor(synced.enc_w, {d, d}));
+  cn_put(save_root, "field_h", cn_tensor(synced.field_h, {fd}));
+  cn_put(save_root, "temperature", cn_f64(synced.temperature));
+  cn_put(save_root, "llr_ema", cn_f64(llr_ema_));
+  cn_put(save_root, "total_steps", cn_i64(static_cast<std::int64_t>(total_steps_)));
 
-  for (auto& kv : save_root.map) {
-    if (kv.first == "enc_W") {
-      kv.second.kind = CNode::Tensor;
-      kv.second.shape = {static_cast<std::uint32_t>(synced.d_latent),
-                         static_cast<std::uint32_t>(synced.d_latent)};
-      kv.second.tensor = synced.enc_w;
-    } else if (kv.first == "field_h") {
-      kv.second.kind = CNode::Tensor;
-      kv.second.shape = {static_cast<std::uint32_t>(synced.field_dim)};
-      kv.second.tensor = synced.field_h;
-    } else if (kv.first == "temperature") {
-      kv.second.kind = CNode::Float;
-      kv.second.f = synced.temperature;
-    } else if (kv.first == "llr_ema") {
-      kv.second.kind = CNode::Float;
-      kv.second.f = llr_ema_;
-    } else if (kv.first == "total_steps") {
-      kv.second.kind = CNode::Int;
-      kv.second.i = static_cast<std::int64_t>(total_steps_);
+  // Online inference state under the keys from_root (and the Python loader) already read. Format 1 left
+  // these at their values from the file it was loaded from (a fresh model: zeros).
+  cn_put(save_root, "base_temp", cn_f64(synced.base_temp));
+  cn_put(save_root, "mahal_ema", synced.has_mahal_ema ? cn_f64(synced.mahal_ema) : CNode{});
+  cn_put(save_root, "mahal_std_ema", cn_f64(synced.mahal_std_ema));
+  cn_put(save_root, "llr_scale_ema", cn_f64(synced.llr_scale_ema));
+  cn_put(save_root, "llr_scale_n", cn_i64(synced.llr_scale_n));
+  cn_put(save_root, "llr_scale_baseline", cn_f64(synced.llr_scale_baseline));
+  cn_put(save_root, "total_correct", cn_i64(synced.total_correct));
+  cn_put(save_root, "deliberation_lo", cn_f64(synced.deliberation_lo));
+  cn_put(save_root, "deliberation_hi", cn_f64(synced.deliberation_hi));
+  cn_put(save_root, "field_step", cn_i64(synced.field_step));
+  if (!synced.field_w_t.empty() && synced.field_w_t.size() == static_cast<std::size_t>(fd) * fd) {
+    cn_put(save_root, "field_W_T", cn_tensor(synced.field_w_t, {fd, fd}));
+    if (synced.field_a_eff.size() == synced.field_w_t.size()) {
+      std::vector<double> a_eff(synced.field_a_eff.begin(), synced.field_a_eff.end());
+      cn_put(save_root, "field_a_eff", cn_tensor(a_eff, {fd, fd}));
+    }
+    if (synced.field_sr_vec.size() == static_cast<std::size_t>(fd)) {
+      std::vector<double> sr(synced.field_sr_vec.begin(), synced.field_sr_vec.end());
+      cn_put(save_root, "field_sr_vec", cn_tensor(sr, {fd}));
     }
   }
 
+  // Tiered label context (Python TieredContextBuffer keys).
+  cn_put(save_root, "mid_n", cn_f64(synced.mid_n));
   {
-    CNode ood;
-    ood.kind = CNode::Float;
-    ood.f = ood_sigma_;
-    upsert("ood_sigma", std::move(ood));
-    CNode gchi;
-    gchi.kind = CNode::Float;
-    gchi.f = gh_chi_;
-    upsert("gh_chi_session", std::move(gchi));
-    CNode gpsi;
-    gpsi.kind = CNode::Float;
-    gpsi.f = gh_psi_;
-    upsert("gh_psi_session", std::move(gpsi));
-    CNode grb;
-    grb.kind = CNode::Float;
-    grb.f = gh_R_base_;
-    upsert("gh_R_base", std::move(grb));
-    if (static_cast<int>(gh_inv_v_clean_.size()) == synced.d_latent) {
-      CNode ginv;
-      ginv.kind = CNode::Tensor;
-      ginv.shape = {static_cast<std::uint32_t>(synced.d_latent)};
-      ginv.tensor = gh_inv_v_clean_;
-      upsert("gh_inv_v_clean", std::move(ginv));
+    CNode mf = cn_map();
+    for (const auto& pr : synced.mid_freq) {
+      mf.map.emplace_back(pr.first, cn_f64(pr.second));
     }
+    cn_put(save_root, "mid_freq", std::move(mf));
+  }
+  cn_put(save_root, "mid_trans", cn_dict2(synced.mid_trans));
+  {
+    CNode hist = cn_map();
+    for (std::size_t i = 0; i < synced.ctx_history.size(); ++i) {
+      CNode e = cn_map();
+      e.map.emplace_back("l", cn_str(synced.ctx_history[i].first));
+      e.map.emplace_back("c", cn_bool(synced.ctx_history[i].second));
+      hist.map.emplace_back(std::to_string(i), std::move(e));
+    }
+    cn_put(save_root, "ctx_hist_packed", std::move(hist));
+  }
+  cn_put(save_root, "ctx_cooccur", cn_dict2(synced.cooccur));
+  cn_put(save_root, "ctx_cooccur_tot", cn_dict(synced.cooccur_tot));
+  cn_put(save_root, "ctx_last_label", cn_str(synced.ctx_last_label));
+
+  // Session scalars (format 1 wrote these too; format 2 also reads them back).
+  cn_put(save_root, "ood_sigma", cn_f64(ood_sigma_));
+  cn_put(save_root, "gh_chi_session", cn_f64(gh_chi_));
+  cn_put(save_root, "gh_psi_session", cn_f64(gh_psi_));
+  cn_put(save_root, "gh_R_base", cn_f64(gh_R_base_));
+  if (static_cast<int>(gh_inv_v_clean_.size()) == synced.d_latent) {
+    cn_put(save_root, "gh_inv_v_clean", cn_vec(gh_inv_v_clean_));
   }
 
   if (kernel_mem_) {
     patch_kernel_into_root(save_root, *kernel_mem_, use_kernel_llr_, kernel_blend_);
   }
+  cn_put(save_root, kSaveVersionKey, cn_i64(kCyphaSaveVersion));
+  cn_put(save_root, kSaveStateKey, export_save_state(synced));
   save_cypha_file(cypha_path.c_str(), save_root);
 }
 

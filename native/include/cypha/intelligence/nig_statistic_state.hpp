@@ -26,6 +26,31 @@ class NigStatisticState {
 
   int n_updates() const { return n_updates_; }
 
+  /// Every field, for ``Cypha::save`` / ``Cypha::load``.
+  struct Raw {
+    double mu{};
+    double lambda{};
+    double alpha{};
+    double beta{};
+    double running_mean{};
+    double running_m2{};
+    int n_updates{0};
+    int n_observations{0};
+  };
+  Raw raw() const {
+    return Raw{mu_, lambda_, alpha_, beta_, running_mean_, running_m2_, n_updates_, n_observations_};
+  }
+  void set_raw(const Raw& r) {
+    mu_ = r.mu;
+    lambda_ = r.lambda;
+    alpha_ = r.alpha;
+    beta_ = r.beta;
+    running_mean_ = r.running_mean;
+    running_m2_ = r.running_m2;
+    n_updates_ = r.n_updates;
+    n_observations_ = r.n_observations;
+  }
+
  private:
   double mu_{};
   double lambda_{};

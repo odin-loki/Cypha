@@ -315,6 +315,15 @@ target_link_libraries(cuda_smoke PRIVATE cypha_core)
 add_executable(create_model_smoke tools/create_model_smoke.cpp)
 target_link_libraries(create_model_smoke PRIVATE cypha_core)
 
+add_executable(cypha_save_load_test tools/cypha_save_load_test.cpp)
+target_link_libraries(cypha_save_load_test PRIVATE cypha_core)
+cypha_mingw_apply_exe_link_options(cypha_save_load_test)
+add_test(
+  NAME native_cypha_save_load_test
+  COMMAND "$<TARGET_FILE:cypha_save_load_test>" "${CMAKE_CURRENT_BINARY_DIR}/cypha_save_load_test_out"
+)
+set_tests_properties(native_cypha_save_load_test PROPERTIES TIMEOUT 300)
+
 add_executable(cypha_one_smoke tools/cypha_one_smoke.cpp)
 target_link_libraries(cypha_one_smoke PRIVATE cypha_core)
 cypha_mingw_apply_exe_link_options(cypha_one_smoke)
