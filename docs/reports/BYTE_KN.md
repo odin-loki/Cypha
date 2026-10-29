@@ -386,3 +386,91 @@ $B qa $E dolly.jsonl $C1LD --no-bkn --out rows.tsv; $B sample $E dev.txt --promp
 ```
 
 Runs are in `/root/work/bkn/runs/bkn2` (traces `R0`, `R1`, `R1b`, `R2`; `T4`; `gen/`; `C8`, `C8M`, `C87`; `Q7`, `S7`, `S7F`; `H_*`; `BK2`).
+
+## BKN3: Kneser–Ney off inside answers? (registered 2026-10-29, before any run)
+
+**Odin Loch** · 2026-10-29 · decided by measurement under PLAN ledger 55, open to Odin's veto.
+
+**Question.** BKN2 made byte Kneser–Ney a default of `qa`, `sample` and `context8k`. Unlike the class, similar-context and copy experts, it is on inside answers, because it is part of the byte model. On dev the gated answers went 2 right, 0 wrong → 3 right, 2 wrong; on the frozen test, read once, 0 / 0 → 0 right, 3 wrong. Should Kneser–Ney be off inside answers, like the other experts?
+
+**The gate.** The same positions as the other experts: `in_answer` (from the end of a `qa` prompt, and after the latest "Assistant: " with no "User: " after it). No new gate.
+
+- At those positions Kneser–Ney is not mixed in (`bkn_mix` is skipped).
+- Kneser–Ney sits before InfiniGram; the other experts sit after it. So at those positions InfiniGram uses lambdas fit on the trie mixture **without** Kneser–Ney (`lam0`, fit on the same first half of the holdout, the same buckets). Without this, the answer mixture would be trie + InfiniGram with lambdas fit for trie + Kneser–Ney: a model nobody fit. With it, inside answers the mixture is exactly the model before BKN.
+- The arm that sets Kneser–Ney's weight to 0 but keeps the Kneser–Ney-fit InfiniGram lambdas is not run, for that reason.
+- `lam0` comes from one more InfiniGram pass over the holdout, before Kneser–Ney is fit. Its arrays (12 MB) are freed before Kneser–Ney's fit, so the holdout phase's peak does not rise.
+- ANS's `--copy-dk` lambdas inside don't-know answers are fit over the same answer mixture (with `lam0` when the gate is on).
+- `context8k`'s answers (`gen`) are all inside an answer and never mix class, similar-context or copy. With the gate on, `gen` leaves Kneser–Ney out and uses InfiniGram's lambdas fit without it (`lam8k0`, fit the same way as `lam8k`).
+- `sample` has no answer positions and no answer gate: it is not touched.
+- **Flag:** `--bkn-answers on|off` (`on` is BKN2's behaviour and stays the default unless the rule below picks `off`).
+
+**What cannot change, by construction.** Every holdout line (`qa`'s `holdout2_*` lines and the default stack's 1.7273, `context8k`'s chain lines) is computed from per-byte arrays, not from the answer path, so it does not change. `sample` does not read the flag. These are shown, not assumed.
+
+**Measures.**
+
+1. Dev answers as BKN2 measured them: `qa` with A4d's flags (C1LD), the line `CV chat/trie_ig all` (cross-validated gate, chat form, trie + InfiniGram), with `FULLDEV_GATE` and `RAW` beside it.
+2. `qa`'s rows (`--out`) against main's rows before BKN (`/root/work/a4e/runs/parity/QB.rows.tsv`), column by column. `question_lp` scores the question, which is outside the answer, so Kneser–Ney stays on there; it is expected to differ. Every answer-side column (`answer`, `grade`, `mean_lp`, `min_lp`, `entropy0`, `ig_n0`, `fam`) is expected to be equal.
+3. The `qa` holdout lines and the default stack's BPC, with the gate on and off.
+4. `context8k`: every chain line, and its answer tallies.
+5. `sample` with `--prompts 10`: the file, with the gate on and off.
+6. RAM: built (`--save`) and served (`--model`) `qa` peaks.
+
+**Rule (dev).** Of the two arms (`on`, BKN2; `off`, this gate), prefer the one with more right answers on `CV chat/trie_ig all`, provided its wrong rate is at most 0.02 (BKN's rule 3). On a tie in right answers, prefer the one with fewer wrong. If `off` wins it becomes the default (with `--bkn-answers on` to restore BKN2) only if: the holdout lines and `sample` are unchanged; built and served `qa` stay under 200 MB; and then the frozen test. If `qa`'s whole rows file with `off` is byte-identical to the pre-BKN rows, the frozen test's result is the pre-BKN read (0 / 0) and is not read again; otherwise it is read once with the new default. If `on` wins, the default stays BKN2's and `--bkn-answers off` stays as the switch Odin's veto would turn.
+
+**Predictions (with what would falsify them).**
+
+| # | Prediction | Falsified if |
+|---|---|---|
+| N1 | With `off`, every answer-side column of `qa`'s dev rows equals the pre-BKN rows, both language models | any answer-side cell differs |
+| N2 | With `off`, `question_lp` differs in most rows (Kneser–Ney stays on in the question) | it equals the pre-BKN column in more than half the rows |
+| N3 | With `off`, `CV chat/trie_ig all` is 2 right, 0 wrong (the pre-BKN line) | any other tally |
+| N4 | The rule keeps `on` (3 right > 2 right; 0.0154 ≤ 0.02) | `off` has 3 or more right, or `on`'s line differs from BKN2's |
+| N5 | The `qa` holdout lines and the stack's 1.7273 are identical with `off` and `on` | any digit differs |
+| N6 | `context8k`'s chain lines are identical; its answer tallies equal BKN2's (seen 3/3, first letter changed 3/3, held-out Dolly 1/30, the rest 0) | a line or a tally differs |
+| N7 | `sample --prompts 10` writes the same file with the flag at either value | the files differ |
+| N8 | Built and served `qa` peaks move by under 2 MB from BKN2's (196.8 / 197.1 and 196.4 MB) | either moves by 2 MB or more, or passes 200 MB |
+| N9 | `qa` takes at most 3% longer with `off` (one more InfiniGram pass over 1 MiB) | more |
+
+**How it is run.** `cyphalm_trie` from `wip/bkn3`, CMake Release; the commands in BKN2's "How to reproduce" with `--bkn-answers off` or `on`; outputs under `/root/work/bkn3/runs`.
+
+### Results: BKN3 (2026-10-29)
+
+Tool: `cyphalm_trie` at e7a9a9e (CMake Release, md5 `d35b17c3…`), A4d's `qa` flags (C1LD) with `--save`, each arm once. Outputs in `/root/work/bkn3/runs`.
+
+| Read | `on` (BKN2) | `off` (the gate) | Before BKN (main's rows `QB`, BKN2's `Q7`) |
+|---|---|---|---|
+| Dev `CV chat/trie_ig all` | **3 right, 2 wrong** (0.0154) | 2 right, 0 wrong | 2 right, 0 wrong |
+| Dev `FULLDEV_GATE chat/trie_ig` | min_lp, τ −1.3039, 4 right | min_lp, τ −0.8954, 3 right | min_lp, τ −0.8954, 3 right |
+| Dev `RAW chat/trie_ig all` | 6 right, 56 wrong | 7 right, 57 wrong | 7 right, 57 wrong |
+| `qa` holdout, default stack | 1.727340 | 1.727340 | 1.789464 |
+| Built `qa` peak (`--save`) | 197.2 MB | 197.1 MB | 186.7 MB |
+| Wall time (load ~8–10) | 2,788.7 s | 2,791.6 s | — |
+
+- **`on` is BKN2, byte for byte.** Its rows file equals BKN2's `R1.rows.tsv`. Moving InfiniGram's holdout pass ahead of Kneser–Ney's fit changes nothing.
+- **`off` gives the answers of the model before BKN.** Against main's pre-BKN rows, every answer-side column is equal in all 520 rows (`answer`, `grade`, `mean_lp`, `min_lp`, `entropy0`, `ig_n0`, `fam`). Only `question_lp` differs (520 of 520), because Kneser–Ney stays on in the question.
+- **The holdout lines are identical** in both arms (every `holdout2_*` line, the stack's 1.727340).
+
+**Decision (the registered rule).** `on` has more right answers (3 against 2) at a wrong rate inside the rule (0.0154 ≤ 0.02), so **Kneser–Ney stays on inside answers**; BKN2's default is unchanged. `--bkn-answers off` stays as the switch Odin's veto would turn: it restores the pre-BKN answers exactly while keeping BKN's gains outside answers. No frozen-test read was made: the default did not change. The dev difference is one right answer and two wrong ones out of 130 questions.
+
+**Not run** (stopped to finish early, at the coordinator's request; neither bears on the decision):
+- `context8k` and `sample` with each value of the flag. By construction `sample` never reads the flag (it is read only in `qa` and `context8k`), and `context8k`'s chain lines come from per-byte arrays; only its answers (`gen`) change with `off`.
+- Served `qa` with `off`. It is not needed, since `off` is not the default.
+
+**Predictions, scored.**
+
+| # | Result |
+|---|---|
+| N1 | **Hit:** every answer-side cell equal (520 rows, both language models) |
+| N2 | **Hit:** `question_lp` differs in 520 of 520 rows |
+| N3 | **Hit:** 2 right, 0 wrong |
+| N4 | **Hit:** the rule keeps `on` |
+| N5 | **Hit:** the holdout lines are identical |
+| N6 | Not scored (`context8k` not run) |
+| N7 | Not scored as a run; `sample` does not read the flag |
+| N8 | **Hit** for built `qa` (197.2 / 197.1 against 196.8 / 197.1 MB); served not run |
+| N9 | **Hit:** +0.1% |
+
+**Checks.**
+- `cyphalm_trie selftest` checks the gate: inside an answer, the gated distribution equals a model without Kneser–Ney with InfiniGram at `lam_ans`; outside an answer it equals the ungated one. Three planted bugs each fail it: `lam_ans` ignored, the gate never firing, and the gate firing everywhere.
+- The seven `cyphalm` CTests of HANDOFF §4.4 pass (`native_cyphalm_trie_selftest`, `native_fm_infinigram_test`, `native_class_context_test`, `native_cyphalm_tok_selftest`, `native_token_bridge_test`, `native_scribe_selftest`, `native_cyphalm_neural_smoke`).
+- The merged tree (main d291c29) builds and passes the selftest.

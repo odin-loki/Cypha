@@ -36,6 +36,8 @@
 // mixture by lambda per bucket, before InfiniGram) is a default in qa, sample and context8k, built on each one's
 // training bytes. Unlike the experts above it is on inside answers: it is part of the byte model. --no-bkn leaves it
 // out, and each subcommand then prints what it printed before it; --bkn SPEC and --bkn-way a|b choose another.
+// BKN3: --bkn-answers off turns it off inside answers (in_answer, the experts' gate) in qa and context8k, where
+// InfiniGram then uses lambdas fit without it, so the answers are those of the model without Kneser-Ney.
 //
 // Subcommands (stdout carries the numbers, stderr the progress):
 //   bpc [wiki] [--negative] [--no-guard]
@@ -329,6 +331,7 @@ struct Args {
     bool bkn_fresh = false, bkn_stack = false;    // BKN: also the fresh text / the defaults on top
     std::string bkn, bkn_way = "b";               // BKN: --bkn K[:m:c:d] in qa, sample, context8k; --bkn-way a (replace) | b (add)
     bool no_bkn = false;                          // BKN2: byte Kneser-Ney off where it is a default
+    std::string bkn_answers = "on";               // BKN3: Kneser-Ney inside answers (on: BKN2) or off (the experts' gate)
     std::string plan;                             // GEN-E: sample's content-plan expert, --plan STOREDIR[,RAWFRAMES]
     std::string plan_drop;                        // GEN-E: --plan-drop LO:HI, the prompts' source bytes (facts there dropped)
     std::string prompts_file;                     // GEN-A: sample's prompts and human continuations
@@ -391,6 +394,7 @@ Args parse(int argc, char** argv, int from) {
         else if (s == "--bkn-way") a.bkn_way = next();     // BKN
         else if (s == "--bkn-stack") a.bkn_stack = true;  // BKN
         else if (s == "--no-bkn") a.no_bkn = true;        // BKN2
+        else if (s == "--bkn-answers") a.bkn_answers = next();  // BKN3
         else if (s == "--sim-surface") a.sim_surface = true;
         else if (s == "--sim-stream") a.sim_stream = next();  // A4e
         else if (s == "--sim-bits") a.sim_bits = next();
@@ -882,6 +886,11 @@ int cmd_context8k(const Args& a) {
     std::cout << "trie_only_bpc " << bits_trie / static_cast<double>(H - half) << "\n";
     // BKN2: Kneser-Ney into the trie mixture, first (as qa); the lines below are over trie + Kneser-Ney.
     const bool kn_rep = a.bkn_way == "a";
+    // BKN3: with Kneser-Ney off inside answers, the answers (gen, below) use InfiniGram's lambdas fit without it (lam8k0,
+    // over this copy of the trie mixture).
+    const bool kn_off_ans = kn && a.bkn_answers == "off";
+    std::vector<double> pt0;
+    if (kn_off_ans) pt0 = pt;
     std::vector<double> lkn;
     if (kn) {
         lkn = mix_bkn_into(*kn, data.data(), kTrain, half, kn_rep, pt);
@@ -891,7 +900,7 @@ int cmd_context8k(const Args& a) {
     }
 
     const int caps[] = {4, 16, 64, 512, 8192};
-    double lam8k[kBuckets] = {0};
+    double lam8k[kBuckets] = {0}, lam8k0[kBuckets] = {0};
     std::vector<int> n8k(H), bk8k;
     std::vector<double> pinf8k;
     for (int cap : caps) {
@@ -932,6 +941,28 @@ int cmd_context8k(const Args& a) {
         double bits = 0;
         for (std::size_t k = half; k < H; ++k) bits += -std::log2(lam[bk[k]] * pinf[k] + (1 - lam[bk[k]]) * pt[k]);
         std::cout << "trie_plus_context_" << cap << "_bpc " << bits / static_cast<double>(H - half) << "\n";
+        if (cap == 8192 && kn_off_ans) {  // BKN3: the same grid fit over the trie mixture without Kneser-Ney
+            for (int b = 0; b < kBuckets; ++b) {
+                double best = -1e300;
+                lam8k0[b] = 0;
+                for (int g = 0; g < 200; ++g) {
+                    const double l = g * 0.005;
+                    double ll = 0;
+                    bool any = false;
+                    for (std::size_t k = 0; k < half; ++k)
+                        if (bk[k] == b) {
+                            ll += std::log(l * pinf[k] + (1 - l) * pt0[k]);
+                            any = true;
+                        }
+                    if (!any) break;
+                    if (ll > best) {
+                        best = ll;
+                        lam8k0[b] = l;
+                    }
+                }
+            }
+            std::vector<double>().swap(pt0);
+        }
         if (cap == 8192) {
             std::copy(lam, lam + kBuckets, lam8k);
             pinf8k = std::move(pinf);
@@ -1013,13 +1044,13 @@ int cmd_context8k(const Args& a) {
             pm.fill_experts(seq.data(), seq.size(), all, Mode::Synth, e, m, pred, false);
             double M[256];
             mix_dist(w, e, m, pred, M);
-            if (kn) bkn_mix(*kn, lkn.empty() ? nullptr : lkn.data(), kn_rep, seq.data(), seq.size(), M);  // BKN2
+            if (kn && !kn_off_ans) bkn_mix(*kn, lkn.empty() ? nullptr : lkn.data(), kn_rep, seq.data(), seq.size(), M);  // BKN2; BKN3
             const std::size_t len = std::min<std::size_t>(seq.size(), 8192);
             const auto r = ig.query(seq.data() + (seq.size() - len), len, 8192, prev < 0 ? -1 : std::min(prev + 1, 8192),
                                     1, cur);
             prev = r.n;
             if (t == 0) n0 = r.n;
-            const double l = lam8k[bucket(r.n, r.total)];
+            const double l = (kn_off_ans ? lam8k0 : lam8k)[bucket(r.n, r.total)];  // BKN3: answers without Kneser-Ney
             int best = 0;
             double bp = -1;
             for (int s = 0; s < 256; ++s) {
@@ -2312,6 +2343,8 @@ struct Lm {
     const cypha::cyphalm::bkn::ByteKN* kn = nullptr;  // BKN: byte Kneser-Ney, (a) replacing or (b) mixed into the trie
     const double* lkn = nullptr;                      // mixture by lkn per bucket (mix_bkn_into)
     bool kn_replace = false;
+    bool kn_gate = false;                 // BKN3: Kneser-Ney off inside an answer (in_answer), as the other experts
+    const double* lam_ans = nullptr;      // BKN3: InfiniGram's lambdas fit without Kneser-Ney, used where it is off
     const double* lc_dk = nullptr;        // ANS: the copy expert's lambdas inside a don't-know answer (--copy-dk)
     bool copy_frame = false;              // DK2: --copy-frame inside a don't-know answer (copy_closes_unopened; decode)
     // ANS: the next byte is inside a don't-know answer: the answer (from answer_at) begins "I don't know", the switch
@@ -2328,14 +2361,15 @@ struct Lm {
         if (packed) packed->fill_experts(seq.data(), seq.size(), follower_limit, Mode::Synth, e, m, pred, online_match);
         else model->fill_experts(seq.data(), seq.size(), follower_limit, Mode::Synth, e, m, pred, online_match);
         mix_dist(w, e, m, pred, P);
-        if (kn) bkn_mix(*kn, lkn, kn_replace, seq.data(), seq.size(), P);  // BKN
+        const bool kn_off = kn && kn_gate && in_answer(seq, answer_at);  // BKN3: the experts' gate
+        if (kn && !kn_off) bkn_mix(*kn, lkn, kn_replace, seq.data(), seq.size(), P);  // BKN
         if (ig) {
             const std::size_t len = std::min<std::size_t>(seq.size(), static_cast<std::size_t>(cap));
             const auto r =
                 ig->query(seq.data() + (seq.size() - len), len, cap, hint < 0 ? -1 : std::min(hint + 1, cap), 1, cur);
             hint = r.n;
             if (n_out) *n_out = r.n;
-            const double l = lam[bucket(r.n, r.total)];
+            const double l = (kn_off && lam_ans ? lam_ans : lam)[bucket(r.n, r.total)];  // BKN3
             for (int s = 0; s < 256; ++s) {
                 const double pc = r.total ? static_cast<double>(r.count[s]) / static_cast<double>(r.total) : 0.0;
                 P[s] = l * pc + (1 - l) * P[s];
@@ -4823,16 +4857,9 @@ int cmd_qa(const Args& a, const QaOpts& o) {
         pt[k] = M[data[i]];
         bits_all += -std::log2(pt[k]);
     }
-    std::vector<double> lkn;  // BKN: Kneser-Ney into the trie mixture, before InfiniGram and the other experts
-    if (kn) {
-        double b0 = 0, b1 = 0;
-        for (std::size_t k = half; k < H; ++k) b0 -= std::log2(pt[k]);
-        lkn = mix_bkn_into(*kn, data.data(), cfg.train, half, kn_rep, pt);
-        for (std::size_t k = half; k < H; ++k) b1 -= std::log2(pt[k]);
-        std::cout << "bkn " << a.bkn << " way " << a.bkn_way << " table_bytes " << kn->bytes() << " holdout2_trie_bpc "
-                  << b0 / static_cast<double>(H - half) << " holdout2_trie_bkn_bpc " << b1 / static_cast<double>(H - half) << "\n";
-    }
-    double lam[kBuckets] = {0}, lc_t[kCopyBuckets] = {0}, lc_i[kCopyBuckets] = {0};
+    // InfiniGram over the holdout (cap 8192). BKN3: queried before Kneser-Ney is mixed into pt (the queries do not read
+    // pt), so lam0, InfiniGram's lambdas over the trie mixture without Kneser-Ney, can be fit for the answers.
+    double lam[kBuckets] = {0}, lam0[kBuckets] = {0}, lc_t[kCopyBuckets] = {0}, lc_i[kCopyBuckets] = {0};
     FmInfiniGram::Cursor cur;
     for (std::size_t k = 0, prev = 0; k < H; ++k) {
         const std::size_t i = cfg.train + k;
@@ -4842,6 +4869,18 @@ int cmd_qa(const Args& a, const QaOpts& o) {
         prev = static_cast<std::size_t>(r.n);
         pinf[k] = r.total ? static_cast<double>(r.count[data[i]]) / static_cast<double>(r.total) : 0.0;
         bk[k] = bucket(r.n, r.total);
+    }
+    const bool kn_off_ans = kn && a.bkn_answers == "off";  // BKN3: Kneser-Ney off inside answers
+    if (kn_off_ans) fit_lambdas(pinf, pt, bk, half, kBuckets, lam0);
+    std::vector<double> lkn;  // BKN: Kneser-Ney into the trie mixture, before InfiniGram and the other experts
+    if (kn) {
+        double b0 = 0, b1 = 0;
+        for (std::size_t k = half; k < H; ++k) b0 -= std::log2(pt[k]);
+        lkn = mix_bkn_into(*kn, data.data(), cfg.train, half, kn_rep, pt);
+        for (std::size_t k = half; k < H; ++k) b1 -= std::log2(pt[k]);
+        std::cout << "bkn " << a.bkn << " way " << a.bkn_way << " table_bytes " << kn->bytes() << " holdout2_trie_bpc "
+                  << b0 / static_cast<double>(H - half) << " holdout2_trie_bkn_bpc " << b1 / static_cast<double>(H - half) << "\n";
+        if (kn_off_ans) std::cout << "bkn_answers off (Kneser-Ney off inside answers; InfiniGram's lambdas there fit without it)\n";
     }
     fit_lambdas(pinf, pt, bk, half, kBuckets, lam);
     double bits_trie2 = 0, bits_ig2 = 0;
@@ -5039,7 +5078,8 @@ int cmd_qa(const Args& a, const QaOpts& o) {
     if (o.copy_dk) {
         Lm base[2] = {{nullptr, w, all_followers, false, nullptr, nullptr, nullptr, 8192, nullptr, nullptr, nullptr,
                        nullptr, &pm},
-                      {nullptr, w, all_followers, false, &ig, lam, nullptr, 8192, nullptr, nullptr, nullptr, nullptr, &pm}};
+                      {nullptr, w, all_followers, false, &ig, kn_off_ans ? lam0 : lam, nullptr, 8192, nullptr, nullptr, nullptr,
+                       nullptr, &pm}};  // BKN3: inside answers InfiniGram's lambdas are lam0 when Kneser-Ney is off there
         std::vector<double> pe, pb[2];
         std::vector<int> bk;
         std::size_t used = 0;
@@ -5101,6 +5141,7 @@ int cmd_qa(const Args& a, const QaOpts& o) {
                  {nullptr, w, lim, false, &ig, lam, lc_i, 8192, cc.get(), lcl_i, sc.get(), lsm_i, &pm}};
     for (auto& l : lms) l.sim_gate = sc && parse_sim(o.sim).gate;  // A4: the expert off inside answers
     for (auto& l : lms) l.kn = kn.get(), l.lkn = lkn.empty() ? nullptr : lkn.data(), l.kn_replace = kn_rep;  // BKN
+    for (auto& l : lms) l.kn_gate = kn_off_ans, l.lam_ans = kn_off_ans ? lam0 : nullptr;  // BKN3
     for (int l = 0; l < 4; ++l) lms[l].cls_gate = true, lms[l].lc_out = o.copy_out ? (l % 2 ? lc_i : lc_t) : nullptr;  // B4C
     if (o.copy_dk)
         for (int l = 0; l < 4; ++l) lms[l].lc_dk = l % 2 ? ldk_i : ldk_t, lms[l].copy_frame = o.copy_frame;  // ANS; DK2
@@ -5829,6 +5870,35 @@ int cmd_selftest() {
                         copy_pred(si.data(), si.size(), n) == ' ' && std::memcmp(D, E, sizeof D) != 0;
         if (!ok) {
             std::cerr << "selftest: class / copy gate checks failed\n";
+            return 1;
+        }
+        // BKN3: Kneser-Ney off inside an answer (kn_gate) through the same gate: inside one, the trie + InfiniGram
+        // distribution with lam_ans, as a model without Kneser-Ney gives it; outside one, Kneser-Ney and lam as before.
+        const cypha::cyphalm::bkn::ByteKN tkn(data.data(), cfg.train, 4);
+        const FmInfiniGram tig(data.data(), cfg.train);
+        std::vector<double> lk(static_cast<std::size_t>(tkn.buckets()), 0.5);
+        double la[kBuckets], lb[kBuckets];
+        std::fill(la, la + kBuckets, 0.3);
+        std::fill(lb, lb + kBuckets, 0.7);
+        Lm ig_a = plain, ig_b = plain;
+        ig_a.ig = ig_b.ig = &tig;
+        ig_a.lam = la;
+        ig_b.lam = lb;
+        Lm kn_on = ig_a, kn_off = ig_a;
+        kn_on.kn = kn_off.kn = &tkn;
+        kn_on.lkn = kn_off.lkn = lk.data();
+        kn_off.kn_gate = true;
+        kn_off.lam_ans = lb;
+        double F[256], G[256], H[256], I[256], J[256], K[256];
+        dist(ig_b, inside, F);    // no Kneser-Ney, InfiniGram at lb
+        dist(kn_off, inside, G);  // gated: must be F
+        dist(kn_on, inside, H);   // BKN2: Kneser-Ney inside the answer
+        dist(kn_on, outside, I);
+        dist(kn_off, outside, J);  // outside an answer the gate changes nothing: must be I
+        dist(ig_a, outside, K);    // and Kneser-Ney is in it: not K
+        if (std::memcmp(F, G, sizeof F) != 0 || std::memcmp(G, H, sizeof G) == 0 || std::memcmp(I, J, sizeof I) != 0 ||
+            std::memcmp(J, K, sizeof J) == 0) {
+            std::cerr << "selftest: Kneser-Ney answer gate checks failed (BKN3)\n";
             return 1;
         }
     }
@@ -6637,7 +6707,8 @@ void usage() {
                  "  selftest\n"
                  "  options: --wiki P --dolly P --train N --sample N; qa, sample, context8k: --sim SPEC | --no-sim,\n"
                  "           --cls SPEC | --no-cls (sample: no class expert unless --cls), --copy-min N (default 8) | --no-copy,\n"
-                 "           --bkn K[:m:c:d] [--bkn-way a|b] (byte Kneser-Ney; default 6:4:2:1, way b) | --no-bkn\n"
+                 "           --bkn K[:m:c:d] [--bkn-way a|b] (byte Kneser-Ney; default 6:4:2:1, way b) | --no-bkn,\n"
+                 "           --bkn-answers on|off (qa, context8k: Kneser-Ney inside answers, or off there as the experts)\n"
                  "  paths default to $CYPHA_WIKI / $CYPHA_DOLLY, then %s and %s\n",
                  kSimDefault, CYPHA_SIMVEC_DEFAULT, kDefaultWiki, kDefaultDolly);
 }
@@ -6672,6 +6743,10 @@ int main(int argc, char** argv) {
     if (kn_cmd && !a.no_bkn && a.bkn.empty()) a.bkn = kBknDefault;
     if (!a.bkn.empty() && (!kn_cmd || (a.bkn_way != "a" && a.bkn_way != "b") || bkn_spec(a.bkn).empty())) {
         std::cerr << "--bkn K[:m:c:d] is for qa, sample and context8k, with --bkn-way a (replace) or b (add)\n";  // BKN
+        return 2;
+    }
+    if (a.bkn_answers != "on" && a.bkn_answers != "off") {  // BKN3
+        std::cerr << "--bkn-answers on|off (Kneser-Ney inside answers: on, BKN2; off, the experts' gate)\n";
         return 2;
     }
     if ((!a.model.empty() || !a.save.empty()) && cmd != "chat" && cmd != "sample" && cmd != "qa") {
