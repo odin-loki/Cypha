@@ -30,6 +30,7 @@ One row per read of `bench/eval/gen_prompts_test.tsv`. Dev runs are not logged h
 | Date | Change | Label | Command | SCRIBE v2 [95%] | Copy share | Decision |
 |---|---|---|---|---|---|---|
 | 2026-10-29 | Tokens T4: whole-token sampling from TOK-A's BPE-W 4,096 model at T 1.0 (chosen on dev) against the byte default at T 0.6 ([report](TOKENS_T3_T4.md), "T4") | TB; B0 | `cyphalm_tok_gen gen … t-bpe-4096.tok … --prompts-file bench/eval/gen_prompts_test.tsv --temps 1.0`; `scripts/gen_eval.sh test B0` (today's default) | TB 0.112 [0.086, 0.137]; B0 T 0.6 0.106 [0.078, 0.135] (pooled 0.072 [0.059, 0.085]) | TB 0.0746; B0 T 0.6 0.0561 (pooled 0.0386) | Not adopted: intervals overlap. Copy rule met (0.0746 ≤ 0.0761) |
+| 2026-10-29 | Tokens T4b: the token sampler with its ∞-gram capped at 16 tokens when sampling, BPE-W 4,096 at T 1.0 (chosen on dev) against the byte default at T 0.6 ([report](TOKENS_T3_T4.md), "T4b") | K16; B0 (T4's run, reused) | `cyphalm_tok_gen gen … --prompts-file bench/eval/gen_prompts_test.tsv --inf-cap 16 --temps 1.0`, then `scribe ladder` and `gen_eval_summary.py` | K16 0.115 [0.091, 0.143]; B0 at T 0.6 0.106 [0.078, 0.135] | 0.0728 (B0 0.0561) | Not adopted: intervals overlap |
 
 ## GEN-A
 
