@@ -10,8 +10,8 @@
 |---|---|---|---|
 | 1. Clean training text | GEN-A | `sample` trains on SCRIBE's markup-stripped prose of its own training slice | Done: harness and benchmark ready; clean text not adopted (dev SCRIBE 0.069 against 0.079), `--clean` stays a flag |
 | 2. Sentence gate | GEN-B | A gate at sentence level: CyphaLM writes candidate sentences; a scorer picks | Running |
-| 3. Word and topic experts | GEN-C (topic), token track (words) | Document experts (PLAN B5); the word level is the token track (`docs/TOKENS_PLAN.md`) | GEN-C done: not adopted on bytes ([report](GEN_C_TOPIC_CACHE.md)). Tokens T4 done: not adopted (test SCRIBE 0.112 against the byte model's 0.106 at its best temperature; [report](TOKENS_T3_T4.md)) |
-| 4. Content-plan expert | GEN-E | The fact store steers through a next-byte expert; CyphaLM writes every byte | Running |
+| 3. Word and topic experts | GEN-C (topic), token track (words) | Document experts (PLAN B5); the word level is the token track (`docs/TOKENS_PLAN.md`) | GEN-C done: not adopted on bytes ([report](GEN_C_TOPIC_CACHE.md)) |
+| 4. Content-plan expert | GEN-E | The fact store steers through a next-byte expert; CyphaLM writes every byte | Done: not adopted; `--plan` flag ([report](GEN_E_CONTENT_PLAN.md)) |
 
 ## Shared rules
 
@@ -31,6 +31,7 @@ One row per read of `bench/eval/gen_prompts_test.tsv`. Dev runs are not logged h
 |---|---|---|---|---|---|---|
 | 2026-10-29 | Tokens T4: whole-token sampling from TOK-A's BPE-W 4,096 model at T 1.0 (chosen on dev) against the byte default at T 0.6 ([report](TOKENS_T3_T4.md), "T4") | TB; B0 | `cyphalm_tok_gen gen … t-bpe-4096.tok … --prompts-file bench/eval/gen_prompts_test.tsv --temps 1.0`; `scripts/gen_eval.sh test B0` (today's default) | TB 0.112 [0.086, 0.137]; B0 T 0.6 0.106 [0.078, 0.135] (pooled 0.072 [0.059, 0.085]) | TB 0.0746; B0 T 0.6 0.0561 (pooled 0.0386) | Not adopted: intervals overlap. Copy rule met (0.0746 ≤ 0.0761) |
 | 2026-10-29 | Tokens T4b: the token sampler with its ∞-gram capped at 16 tokens when sampling, BPE-W 4,096 at T 1.0 (chosen on dev) against the byte default at T 0.6 ([report](TOKENS_T3_T4.md), "T4b") | K16; B0 (T4's run, reused) | `cyphalm_tok_gen gen … --prompts-file bench/eval/gen_prompts_test.tsv --inf-cap 16 --temps 1.0`, then `scribe ladder` and `gen_eval_summary.py` | K16 0.115 [0.091, 0.143]; B0 at T 0.6 0.106 [0.078, 0.135] | 0.0728 (B0 0.0561) | Not adopted: intervals overlap |
+| 2026-10-29 | GEN-E content-plan expert | E0 (baseline), E1 (`--plan`) | `gen_eval.sh test E1 OUT --plan /root/work/f2/v2/aug,/root/work/f2raw/patterns_raw.tsv --plan-drop 75497472:100000000` | E0 0.072 [0.059, 0.085]; E1 0.071 [0.059, 0.084] | D_I > 0: 0 → 0; 32-byte 0.0386 → 0.0401 | Not adopted: SCRIBE does not rise. `--plan` stays a flag |
 
 ## GEN-A
 
@@ -197,3 +198,18 @@ Prompt 3: "In lower concentrations (3%), it is used medically for cleaning wound
 | G9 | The test read agrees on direction | Not scored: no test read |
 
 **What it means for the track.** The markup is a small part of the problem. Sentence form (D_S ≈ 18 of SCRIBE's D ≈ 23) is most of it, in both arms. That is GEN-B's target (sentence gate) and the token track's (whole words). Later steps can stack on `--clean` (and must compare against D1 as well as D0 if they do).
+
+## GEN-E: the content-plan expert
+
+Full report: [GEN_E_CONTENT_PLAN.md](GEN_E_CONTENT_PLAN.md) (design, rule and predictions registered before any run).
+
+**Change.** `cyphalm_trie sample … --plan STOREDIR[,RAWFRAMES] [--plan-drop LO:HI]`. The fact store (`pattern_learn`'s v2 files) plans up to 6 facts about the entity the prompt names. A next-byte expert follows those facts' realisations (F2's learned frames, filled with the entity and the value). It is mixed last, with lambdas fit on the holdout like the other experts. CyphaLM writes every byte. `qa` and `chat` never build it.
+
+**Test read** (once, on this benchmark; facts read from the benchmark's own bytes dropped):
+- 38 of 250 prompts have a plan (0.152). The other 212 are byte-identical to the baseline.
+- SCRIBE v2: 0.072 [0.059, 0.085] → 0.071 [0.059, 0.084]. On the covered prompts, paired: −0.021 [−0.082, +0.034].
+- Continuation BPC, paired: −0.0030 [−0.0052, −0.0013] overall; −0.0199 [−0.0328, −0.0092] on the covered prompts.
+- Copy share 0 → 0; contradictions with the store 0 → 0; surface S 0.861 → 0.860.
+
+**Decision.** The rule needs SCRIBE to rise with disjoint intervals. It does not, so `--plan` stays a flag. The plan carries real knowledge (the human continuation gets cheaper), but a byte expert cannot hold a phrase. On dev it wrote the frame and drifted on the value ("was born in China" for Cheshire). The next places to use the plan are the word-level writer (token track) and GEN-B's sentence gate.
+

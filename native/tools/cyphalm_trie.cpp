@@ -67,8 +67,16 @@
 //        the training bytes, raw or cleaned (the same reference with --clean). scripts/gen_eval.sh runs it with SCRIBE v2 (docs/reports/GEN_TRACK.md). --clean trains
 //        on SCRIBE's cleaned prose of [0, train) (clean_wiki_documents, a page per line) and fits the lambdas and draws
 //        holdout prompts on the cleaned [train, sample).
+//        GEN-E: --plan STOREDIR[,RAWFRAMES] adds the content-plan expert (content_plan.hpp,
+//        docs/reports/GEN_E_CONTENT_PLAN.md), mixed last: the store (pattern_learn's v2 files) plans the facts of the
+//        prompt's entity, and the expert follows their realisations (F2's frames, filled). Facts read from the holdout
+//        are dropped, and from --plan-drop LO:HI (raw bytes; the benchmark's source range for --prompts-file). The
+//        files gain PLAN lines (the plan of each prompt; SCRIBE reads GEN lines only). Off by default.
 //        chat and sample: --save FILE stores the trained packed trie with its weights and split (RAM_PROFILE M7);
 //        --model FILE serves that file without training (chat then prints no mix_stored: it measures the training form).
+//   bkn <wiki> K[:m:c:d] [more specs] [--bkn-fresh] [--bkn-stack]
+//        BKN (docs/reports/BYTE_KN.md): packed byte Kneser-Ney (byte_kn.hpp) replacing or added to the trie, on cls's
+//        protocol (holdout2; fresh with --bkn-fresh; the defaults on top with --bkn-stack). See cmd_bkn.
 //   cls <wiki> <TABLE|shape>[:tail[:orders[:flags]]] [more specs] [--sim SPEC ...] [--sim-fresh] [--sim-surface]
 //        B4 (docs/reports/B4_CLASS_CONTEXT_EXPERT.md): the class-context expert (class_context.hpp) over the
 //        bpc model, each spec paired against the model without it: holdout second-half BPC (lambdas on the
@@ -84,12 +92,20 @@
 //        trie + sim and trie + class + sim. SPEC is vec=PREFIX (PREFIX.vectors.f32 and PREFIX.vocab.tsv, as ppmi_svd
 //        writes them) or a projected file (simvec), plus W, k, T, min, sif, dim, drop, lists, probe, tail, src, gate (see
 //        parse_sim); the token `default` is the default spec.
+//        A4e: --sim-stream FROM:LEN reads the corpus bytes [FROM, FROM + LEN) after the holdout in place of the fresh
+//        MiB (implies --sim-fresh) and adds `simstream` lines: the expert at each MiB of the stream (online keys held,
+//        their MB, search p50/p99, scoring time) and the continuation's BPC by MiB; --sim-bits PREFIX writes each
+//        spec's continuation bits for `simpair`; --sim-growth 1,4,16 reads only the expert (no trie, InfiniGram or class)
+//        and reports its online keys' memory and search time at those stream lengths in MiB.
+//   simpair [--margin M] REF.f64 FILE.f64 ...  (A4e) pairs --sim-bits files against REF: whole continuation, each MiB,
+//        last 2 MiB; with a margin also P(change < M).
 //        --out FILE writes the samples (systems trie, trie+cls:SPEC) and the human continuations (human) as JSON
 //        lines for the SCRIBE model ladder.
 //   qa [wiki] [dolly] --dev DEV.tsv [--test TEST.tsv] [--leak TEST.tsv] [--out ROWS.tsv] [--base A0_ROWS.tsv]
 //      [--dk DK.tsv --dk-ratio R] [--fam none|before|after] [--parse E1.tsv] [--fam-stat NAME]
 //      [--fam-train stat|outcome|low] [--fam-only] [--copy] [--copy-min N] [--r3 PATTERNS.tsv]
 //      [--fam-ent FRAMES] [--copy-dk] [--fam-read] [--shard F.tsv] [--shard2 F.tsv] [--cls TABLE|shape[:tail[:orders[:flags]]]] [--sim SPEC] [--cards FILE]
+//      [--dk-plain P] [--fam-ent-at all|answer|start] [--copy-frame]
 //        A0/A1 (docs/CYPHALM_ANSWERING.md §4; TOOL_PROFILE_PLAN §2): trains as chat (wiki, then
 //        two Dolly passes), optionally with don't-know turns spread at share R of all turns and a
 //        familiarity token <|fam=low|mid|high|> before (or after) "Assistant: ". CyphaLM answers
@@ -130,6 +146,13 @@
 //        in every model, with its own lambdas fit on the don't-know turns held out of training; ordinary answers and
 //        text are unchanged. --fam-read prints FAMREAD (each dev question's best span and count per statistic) and
 //        FAMDOLLY (the token each statistic gives the Dolly instructions), report only.
+//        DK2 (docs/reports/DK2_DONT_KNOW_TRAINING.md): --dk-plain P writes share P of the don't-know training turns with
+//        no token (turn j when floor((j+1)P) > floor(jP)), so CyphaLM's own "I don't know" is plain text, not an echoed
+//        token. --fam-ent-at answer|start keeps --fam-ent's frames out of all training text: only prompts it answers (dev,
+//        test, the held-out --copy-dk turns) carry them; answer puts them with the token, start before "User: " on every
+//        question (high too). --copy-frame (with --copy-dk), inside a don't-know answer: the copy expert never
+//        predicts the '|' of a source "|>" while the answer has no open "<|" (a frame's entity is copied without the
+//        frame's end), and inside the open tag the no-repeat rule looks at the tag only (the tag may repeat the message).
 //        A4: --sim SPEC adds the similar-context expert to every model, after the class expert and before the copy
 //        expert (src=all: keys over InfiniGram's bytes, wiki train + chat; src=wiki: wiki train only), lambdas on the
 //        holdout's first half; SIM_NB prints the three nearest stored contexts at each dev chat prompt, LATENCY the
@@ -225,12 +248,15 @@
 //   ./cyphalm_trie sample /root/cdata/enwik8 gen_dev.txt gen_fresh.txt
 //   ./cyphalm_trie selftest
 
+#include "cypha/cyphalm/byte_kn.hpp"
 #include "cypha/cyphalm/class_context.hpp"
+#include "cypha/cyphalm/content_plan.hpp"
 #include "cypha/cyphalm/doc_cache.hpp"
 #include "cypha/cyphalm/evidence.hpp"
 #include "cypha/cyphalm/fm_infinigram.hpp"
 #include "cypha/cyphalm/packed_trie.hpp"
 #include "cypha/cyphalm/similar_context.hpp"
+#include "cypha/cyphalm/token_model.hpp"  // BKN selftest: the reference Kneser-Ney
 #include "cypha/eval/lci.hpp"
 #include "cypha/eval/scribe.hpp"
 #include "cypha/eval/unknown_signals.hpp"
@@ -253,6 +279,7 @@
 
 using namespace cypha::cyphalm::trie;
 using cypha::cyphalm::ClassContext;
+using cypha::cyphalm::ContentPlanStore;
 using cypha::cyphalm::DocTopic;
 using cypha::cyphalm::FmInfiniGram;
 using cypha::cyphalm::SimilarContext;
@@ -286,15 +313,23 @@ struct Args {
     std::string model, save;  // M7: serve a stored packed trie (chat, sample); store the one just trained
     std::vector<std::string> sims;               // A4: similar-context expert specs (cls: each; qa: the first)
     bool sim_fresh = false, sim_surface = false;  // A4, cls: also the fresh text / surface S
+    std::string sim_stream, sim_bits, sim_growth;  // A4e, cls: a longer stream after the holdout; per-byte bits; growth
     bool no_sim = false;                          // A4: the similar-context expert off where it is a default
     std::string cards;                            // S1: qa's evidence cards and reason codes (--cards FILE)
     bool no_cls = false, no_copy = false;         // B4C: the class and copy experts off where they are defaults
     std::string plant, part;                      // S4b surprise: the planted pages (D), --part K/N
+    bool bkn_fresh = false, bkn_stack = false;    // BKN: also the fresh text / the defaults on top
+    std::string bkn, bkn_way = "b";               // BKN: --bkn K[:m:c:d] in qa and sample; --bkn-way a (replace) | b (add)
+    std::string plan;                             // GEN-E: sample's content-plan expert, --plan STOREDIR[,RAWFRAMES]
+    std::string plan_drop;                        // GEN-E: --plan-drop LO:HI, the prompts' source bytes (facts there dropped)
     std::string prompts_file;                     // GEN-A: sample's prompts and human continuations
     bool clean = false;                           // GEN-A: sample trains on SCRIBE's cleaned prose of its bytes
     std::string fam_ent;                          // ANS: the entity's frames before the token (--fam-ent)
     bool copy_dk = false, fam_read = false;       // ANS: copy inside don't-know answers; FAMREAD / FAMDOLLY
     std::string doc;                              // GEN-C: document experts in sample (--doc SPEC; off by default)
+    double dk_plain = 0;                          // DK2: share of don't-know training turns with no token
+    std::string fam_ent_at = "all";               // DK2: where --fam-ent's frames go (all | answer | start)
+    bool copy_frame = false;                      // DK2: copy a frame's entity, not its end; the tag may repeat the message
 };
 
 std::string env_or(const char* name, const char* fallback) {
@@ -339,12 +374,21 @@ Args parse(int argc, char** argv, int from) {
         else if (s == "--copy-min") a.copy_min = std::atoi(next());
         else if (s == "--sim") a.sims.push_back(next());
         else if (s == "--sim-fresh") a.sim_fresh = true;
+        else if (s == "--bkn-fresh") a.bkn_fresh = true;  // BKN
+        else if (s == "--bkn") a.bkn = next();             // BKN
+        else if (s == "--bkn-way") a.bkn_way = next();     // BKN
+        else if (s == "--bkn-stack") a.bkn_stack = true;  // BKN
         else if (s == "--sim-surface") a.sim_surface = true;
+        else if (s == "--sim-stream") a.sim_stream = next();  // A4e
+        else if (s == "--sim-bits") a.sim_bits = next();
+        else if (s == "--sim-growth") a.sim_growth = next();
         else if (s == "--no-sim") a.no_sim = true;
         else if (s == "--no-cls") a.no_cls = true;
         else if (s == "--no-copy") a.no_copy = true;
         else if (s == "--fam-only") a.fam_only = true;
         else if (s == "--model") a.model = next();
+        else if (s == "--plan") a.plan = next();
+        else if (s == "--plan-drop") a.plan_drop = next();
         else if (s == "--save") a.save = next();
         else if (s == "--mention") a.mention = true;
         else if (s == "--cards") a.cards = next();
@@ -356,6 +400,9 @@ Args parse(int argc, char** argv, int from) {
         else if (s == "--copy-dk") a.copy_dk = true;
         else if (s == "--fam-read") a.fam_read = true;
         else if (s == "--doc") a.doc = next();
+        else if (s == "--dk-plain") a.dk_plain = std::atof(next());  // DK2
+        else if (s == "--fam-ent-at") a.fam_ent_at = next();         // DK2
+        else if (s == "--copy-frame") a.copy_frame = true;           // DK2
         else if (s.rfind("--", 0) == 0) {
             std::cerr << "unknown option " << s << "\n";
             a.ok = false;
@@ -690,10 +737,22 @@ std::vector<std::vector<double>> fit_doc(const DocTopic& dt, const std::uint8_t*
 std::string sample_with_class(const PackedModel& model, const double w[6], std::size_t limit, const ClassContext* cc,
                               const double* lam, const std::string& prompt, int n, std::uint32_t seed,
                               const SimilarContext* sc, const double* lsm, double temperature, const double* lcp,
-                              const DocTopic* dt = nullptr, const std::vector<std::vector<double>>* ldoc = nullptr);
+                              const DocTopic* dt = nullptr, const std::vector<std::vector<double>>* ldoc = nullptr,
+                              const ContentPlanStore::Plan* pl = nullptr, const double* lpl = nullptr,
+                              const cypha::cyphalm::bkn::ByteKN* kn = nullptr, const double* lkn = nullptr,
+                              bool kn_replace = false);
 void sample_mix(const PackedModel& model, const double w[6], std::size_t limit, const ClassContext* cc, const double* lam,
                 const std::vector<std::uint8_t>& seq, const SimilarContext* sc, const double* lsm, const double* lcp,
-                double M[256]);
+                double M[256], const cypha::cyphalm::bkn::ByteKN* kn = nullptr, const double* lkn = nullptr,
+                bool kn_replace = false);
+// BKN (docs/reports/BYTE_KN.md), defined below: --bkn K[:m:c:d] [--bkn-way a|b], packed byte Kneser-Ney replacing (a)
+// or added to (b, the default) the trie mixture in qa and sample; off without the flag.
+std::vector<int> bkn_spec(const std::string& s);
+std::unique_ptr<cypha::cyphalm::bkn::ByteKN> make_bkn(const std::string& spec, const std::uint8_t* t, std::size_t n);
+std::vector<double> mix_bkn_into(const cypha::cyphalm::bkn::ByteKN& kn, const std::uint8_t* data, std::size_t train,
+                                 std::size_t half, bool replace, std::vector<double>& cur);
+void bkn_mix(const cypha::cyphalm::bkn::ByteKN& kn, const double* lkn, bool replace, const std::uint8_t* seq,
+             std::size_t len, double* P);
 // B4C, defined below with the copy and class experts: the class and copy experts where they are defaults.
 std::string default_cls_spec(const Args& a);
 std::unique_ptr<ClassContext> default_cls(const Args& a, const std::uint8_t* text, std::size_t n, int& rc);
@@ -701,6 +760,11 @@ std::vector<double> mix_cls_into(const ClassContext& cc, const std::uint8_t* dat
                                  std::vector<double>& cur);
 std::vector<double> mix_copy_into(const std::uint8_t* data, std::size_t train, std::size_t half, int m,
                                   std::vector<double>& cur);
+// GEN-E, defined below with the copy expert: A3's frames, and the content-plan expert mixed into cur.
+std::map<std::string, std::vector<std::string>> load_frames(const std::string& path);
+bool good_start(const std::string& l);
+std::vector<double> mix_plan_into(const ContentPlanStore& st, const std::map<std::string, std::vector<std::string>>& frames,
+                                  const std::uint8_t* data, std::size_t train, std::size_t half, std::vector<double>& cur);
 
 int cmd_context8k(const Args& a) {
     const Config& cfg = a.cfg;
@@ -1037,6 +1101,7 @@ int cmd_sample(const Args& a) {
     if (!a.model.empty() ? !load_model(a, pm, w, cfg, data) : !load_wiki(a, data)) return 1;
     std::vector<std::uint8_t> raw_train;  // GEN-A: the copy share's reference is the raw and the cleaned training bytes
     if (!a.prompts_file.empty()) raw_train.assign(data.begin(), data.begin() + static_cast<std::ptrdiff_t>(cfg.train));
+    const std::size_t plan_lo = cfg.train, plan_hi = cfg.sample;  // GEN-E: the holdout in raw bytes, before --clean
     if (a.clean) {  // GEN-A: [0, train) and [train, sample) each become SCRIBE's cleaned pages, one per line
         if (!a.model.empty()) {
             std::cerr << "--clean trains; a stored model (--model) keeps the text it was trained on\n";
@@ -1115,19 +1180,64 @@ int cmd_sample(const Args& a) {
     // bytes. Each one's lambdas are fit on the first half of the holdout over the trie with the experts before it. The
     // files then start with a MODEL line.
     int rc = 0;
+    // BKN (--bkn): byte Kneser-Ney on the train bytes, first in the order (it replaces or joins the trie mixture).
+    std::unique_ptr<cypha::cyphalm::bkn::ByteKN> kn;
+    if (!a.bkn.empty() && !(kn = make_bkn(a.bkn, data.data(), cfg.train))) return 2;
+    const bool kn_rep = a.bkn_way == "a";
+    std::vector<double> lkn;
     std::unique_ptr<ClassContext> cc;
     if (!a.cls.empty()) cc = default_cls(a, data.data(), cfg.train, rc);
     if (rc) return rc;
     const auto sc = default_sim(a, data.data(), cfg.train, rc);
     if (rc) return rc;
+    // GEN-E: --plan STOREDIR[,RAWFRAMES], the content-plan expert (docs/reports/GEN_E_CONTENT_PLAN.md). The store drops
+    // facts read from the holdout (raw bytes, so also under --clean) and from --plan-drop's range; its frames are A3's,
+    // from STOREDIR/patterns.tsv and F2R's raw frames.
+    std::unique_ptr<ContentPlanStore> cps;
+    std::map<std::string, std::vector<std::string>> frames;
+    if (!a.plan.empty()) {
+        const std::size_t comma = a.plan.find(',');
+        const std::vector<std::string> parts =
+            comma == std::string::npos ? std::vector<std::string>{a.plan}
+                                       : std::vector<std::string>{a.plan.substr(0, comma), a.plan.substr(comma + 1)};
+        cps = std::make_unique<ContentPlanStore>();
+        std::string err;
+        std::size_t lo2 = 0, hi2 = 0;  // GEN-E: --plan-drop LO:HI (raw bytes), e.g. the benchmark's source range
+        if (!a.plan_drop.empty()) {
+            const std::size_t c = a.plan_drop.find(':');
+            if (c == std::string::npos) {
+                std::cerr << "--plan-drop wants LO:HI\n";
+                return 2;
+            }
+            lo2 = std::strtoull(a.plan_drop.substr(0, c).c_str(), nullptr, 10);
+            hi2 = std::strtoull(a.plan_drop.substr(c + 1).c_str(), nullptr, 10);
+        }
+        if (!cps->load(parts[0], plan_lo, plan_hi, err, lo2, hi2)) {
+            std::cerr << err << "\n";
+            return 1;
+        }
+        frames = load_frames(parts[0] + "/patterns.tsv");
+        if (parts.size() > 1)
+            for (auto& [r, v] : load_frames(parts[1])) {
+                auto& o = frames[r];
+                for (auto& f : v)
+                    if (std::find(o.begin(), o.end(), f) == o.end()) o.insert(o.begin(), f);  // raw frames first
+            }
+        std::size_t nf = 0;
+        for (const auto& [r, v] : frames) nf += v.size();
+        std::cerr << "plan store subjects " << cps->subjects() << " relations with frames " << frames.size() << " frames " << nf
+                  << "\n";
+    }
     const auto dt = make_doc(a, data.data(), cfg.train, rc);  // GEN-C: nullptr without --doc
     if (rc) return rc;
     double lsm[SimilarContext::kBuckets] = {0};
-    std::vector<double> lcl, lcp;
+    std::vector<double> lcl, lcp, lpl;
     std::vector<std::vector<double>> ldoc;
-    if (cc || sc || !a.no_copy || dt) {
+    if (cc || sc || !a.no_copy || dt || cps || kn) {
         const std::size_t half = (cfg.sample - cfg.train) / 2;
-        const std::size_t span = dt ? cfg.sample - cfg.train : half;  // GEN-C: the second half is --doc's read
+        // GEN-C, GEN-E: with --doc or --plan every expert is read over the whole holdout (fit on the first half, as
+        // without them), so their BPC can be read on the second half.
+        const std::size_t span = dt || cps ? cfg.sample - cfg.train : half;
         std::vector<double> pt(span);
         for (std::size_t k = 0; k < span; ++k) {
             const std::size_t i = cfg.train + k;
@@ -1138,6 +1248,7 @@ int cmd_sample(const Args& a) {
             mix_dist(w, e, em, pred, M);
             pt[k] = M[data[i]];
         }
+        if (kn) lkn = mix_bkn_into(*kn, data.data(), cfg.train, half, kn_rep, pt);  // BKN
         if (cc) lcl = mix_cls_into(*cc, data.data(), cfg.train, half, pt);
         if (sc) {
             std::vector<double> ps(span);
@@ -1152,15 +1263,19 @@ int cmd_sample(const Args& a) {
         }
         if (!a.no_copy) lcp = mix_copy_into(data.data(), cfg.train, half, a.copy_min, pt);
         if (dt) ldoc = fit_doc(*dt, data.data(), cfg.train, half, pt);
+        if (cps) lpl = mix_plan_into(*cps, frames, data.data(), cfg.train, half, pt);  // GEN-E: mixed last
     }
-    const bool experts = cc || sc || !lcp.empty() || dt;
-    std::string model_line = std::string("MODEL\ttrie") + (cc ? "+cls" : "") + (sc ? "+sim" : "") + (lcp.empty() ? "" : "+copy") +
+    const bool experts = cc || sc || !lcp.empty() || dt || cps || kn;
+    std::string model_line = std::string("MODEL\ttrie") + (kn ? (kn_rep ? "=bkn" : "+bkn") : "") + (cc ? "+cls" : "") + (sc ? "+sim" : "") + (lcp.empty() ? "" : "+copy") +
                              "\t" + (sc ? (a.sims.empty() ? std::string("default") : a.sims[0]) : std::string("-"));
     if (cc) model_line += "\tcls=" + default_cls_spec(a);
     if (!lcp.empty()) model_line += "\tcopy_min=" + std::to_string(a.copy_min);
     if (dt) model_line += "\tdoc=" + a.doc;
+    if (cps) model_line += "\tplan=" + a.plan;
+    if (kn) model_line += "\tbkn=" + a.bkn + ":" + a.bkn_way;  // BKN
     const double temps[3] = {0.6, 0.8, 1.0};
     std::vector<std::string> gens[3];  // GEN-A: the generated texts by temperature (--prompts-file)
+    std::vector<int> planned(nfiles, 0);
     for (std::size_t f = 0; f < nfiles; ++f) {
         std::ofstream out(a.outs[f]);
         if (!out) {
@@ -1172,6 +1287,15 @@ int cmd_sample(const Args& a) {
             const std::size_t id = f * static_cast<std::size_t>(a.prompts) + static_cast<std::size_t>(k);
             const std::string& p = prompts[id];
             out << "PROMPT\t" << id << "\t" << printable(p) << "\n";
+            ContentPlanStore::Plan plan;
+            if (cps) {  // GEN-E: the prompt's plan, for the factual read (SCRIBE reads GEN lines only)
+                plan = cps->plan(p, frames);
+                out << "PLAN\t" << id << "\t" << printable(plan.entity) << "\t";
+                for (std::size_t q = 0; q < plan.facts.size(); ++q)
+                    out << (q ? "|" : "") << plan.facts[q].rel << "=" << printable(plan.facts[q].value);
+                out << "\n";
+                planned[f] += !plan.facts.empty();
+            }
             for (int ti = 0; ti < 3; ++ti) {
                 const std::uint64_t seed = 1000003ull * (id + 1) + static_cast<std::uint64_t>(ti) * 7919ull;
                 SampleOptions opt;
@@ -1181,7 +1305,9 @@ int cmd_sample(const Args& a) {
                 const std::string text =
                     experts ? sample_with_class(pm, w, cfg.train, cc.get(), lcl.empty() ? nullptr : lcl.data(), p, a.bytes,
                                                 seed32, sc.get(), lsm, temps[ti], lcp.empty() ? nullptr : lcp.data(),
-                                                dt.get(), dt ? &ldoc : nullptr)
+                                                dt.get(), dt ? &ldoc : nullptr, plan.facts.empty() ? nullptr : &plan,
+                                                lpl.empty() ? nullptr : lpl.data(), kn.get(), lkn.empty() ? nullptr : lkn.data(),
+                                                kn_rep)
                             : sample_continuation(pm, w, p, cfg.train, a.bytes, seed32, opt);
                 char kind[32];
                 std::snprintf(kind, sizeof kind, "trie_T%.1f", temps[ti]);
@@ -1190,6 +1316,7 @@ int cmd_sample(const Args& a) {
             }
             if ((k + 1) % 50 == 0) std::cerr << "file " << f << " prompt " << (k + 1) << "/" << a.prompts << "\n";
         }
+        if (cps) std::cerr << "plan coverage file " << f << ": " << planned[f] << " of " << a.prompts << " prompts\n";
     }
     if (a.prompts_file.empty()) return 0;
 
@@ -1206,11 +1333,15 @@ int cmd_sample(const Args& a) {
             ds->feed(seq.data(), seq.size());
             if (dt->params().frozen) ds->freeze();
         }
+        ContentPlanStore::Plan plan;  // GEN-E: the content-plan expert, as in sample_with_class
+        if (cps && !lpl.empty()) plan = cps->plan(prompts[k], frames);
+        std::string folded;
+        std::vector<int> active;
         double b = 0;
         for (const char ch : conts[k]) {
             double M[256];
             sample_mix(pm, w, cfg.train, cc.get(), lcl.empty() ? nullptr : lcl.data(), seq, sc.get(), lsm,
-                       lcp.empty() ? nullptr : lcp.data(), M);
+                       lcp.empty() ? nullptr : lcp.data(), M, kn.get(), lkn.empty() ? nullptr : lkn.data(), kn_rep);
             if (ds)
                 for (int part = 0; part < DocTopic::kParts; ++part) {
                     const auto& lp = ldoc[static_cast<std::size_t>(part)];
@@ -1219,10 +1350,22 @@ int cmd_sample(const Args& a) {
                     const double l = lp[static_cast<std::size_t>(ds->predict(part, P))];
                     for (int s = 0; s < 256; ++s) M[s] = l * P[s] + (1 - l) * M[s];
                 }
+            if (!plan.facts.empty()) {
+                active.clear();
+                for (std::size_t q = 0; q < plan.facts.size(); ++q)
+                    if (!ContentPlanStore::expressed(plan, q, folded)) active.push_back(static_cast<int>(q));
+                double P[256];
+                const int L = ContentPlanStore::predict(plan, active, seq.data(), seq.size(), P);
+                if (L > 0) {
+                    const double l = lpl[static_cast<std::size_t>(ContentPlanStore::bucket(L))];
+                    for (int s = 0; s < 256; ++s) M[s] = l * P[s] + (1 - l) * M[s];
+                }
+            }
             const auto u = static_cast<std::uint8_t>(ch);
             b -= std::log2(std::max(M[u], 1e-300));
             seq.push_back(u);
             if (ds) ds->feed(u);
+            ContentPlanStore::fold_into(folded, u);
         }
         bits[k] = b;
         nb[k] = static_cast<double>(conts[k].size());
@@ -1448,7 +1591,7 @@ std::string reference_code(int in_slice, int prose, int covered) {
 // until B4C (B4B chose 16,384; a Q/A prompt and its answer fit inside either).
 constexpr std::size_t kCopyWin = 16384;
 constexpr int kCopyBuckets = 8;
-int copy_pred(const std::uint8_t* s, std::size_t i, int& n) {
+int copy_pred(const std::uint8_t* s, std::size_t i, int& n, std::size_t* at = nullptr) {  // DK2: at = the source j
     n = 0;
     int pred = -1;
     const std::size_t lo = i > kCopyWin ? i - kCopyWin : 0;
@@ -1458,10 +1601,26 @@ int copy_pred(const std::uint8_t* s, std::size_t i, int& n) {
         if (L > n) {
             n = L;
             pred = s[j];
+            if (at) *at = j;
         }
     }
     if (n < 3) n = 0, pred = -1;
     return pred;
+}
+// DK2 (--copy-frame): the copy source j is the '|' of a "|>" and the answer s[answer_at, i) has no open "<|" (none, or
+// the last one already closed). Copy then predicts nothing: a frame's entity is copied without the frame's end, which
+// ended A1d's E1c messages ("I have nothing about character Spider-Man|>").
+// DK2: where the answer s[answer_at, i) has an open "<|" (its last "<|", not closed by a later "|>"), else npos.
+std::size_t open_token_at(const std::uint8_t* s, std::size_t i, std::size_t answer_at) {
+    std::size_t open = std::string::npos, close = std::string::npos;
+    for (std::size_t k = answer_at; k + 1 < i; ++k) {
+        if (s[k] == '<' && s[k + 1] == '|') open = k;
+        if (s[k] == '|' && s[k + 1] == '>') close = k;
+    }
+    return open != std::string::npos && (close == std::string::npos || close < open) ? open : std::string::npos;
+}
+bool copy_closes_unopened(const std::uint8_t* s, std::size_t i, std::size_t j, std::size_t answer_at) {
+    return j + 1 < i && s[j] == '|' && s[j + 1] == '>' && open_token_at(s, i, answer_at) == std::string::npos;
 }
 int copy_bucket(int n) { return n == 0 ? 0 : n < 4 ? 1 : n < 6 ? 2 : n < 8 ? 3 : n < 12 ? 4 : n < 16 ? 5 : n < 32 ? 6 : 7; }
 // --copy-min m (B4B): copy only from matches of at least m bytes; the lambdas of buckets starting below m become 0.
@@ -1531,6 +1690,97 @@ std::vector<double> mix_copy_into(const std::uint8_t* data, std::size_t train, s
         bk[k] = copy_bucket(n);
     }
     return mix_into(pe, bk, half, kCopyBuckets, cur, m);
+}
+// GEN-E: the content-plan expert's predictions over the holdout text[train, train + cur.size()): every paragraph line
+// that could be a prompt (good_start) is planned from its first 64 bytes, as cmd_sample plans a prompt, and the expert
+// reads the rest of the line; elsewhere it predicts nothing (bucket 0). Lambdas fit on k < half; cur becomes the mix.
+// Prints the plan's coverage of those lines, the lambdas, and the bits per byte on k >= half before and after.
+std::vector<double> mix_plan_into(const ContentPlanStore& st, const std::map<std::string, std::vector<std::string>>& frames,
+                                  const std::uint8_t* data, std::size_t train, std::size_t half, std::vector<double>& cur) {
+    std::vector<double> pe(cur.size(), 0.0);
+    std::vector<int> bk(cur.size(), 0);
+    const std::string hold(reinterpret_cast<const char*>(data) + train, cur.size());
+    std::size_t lines = 0, planned_lines = 0, aligned = 0, right = 0;
+    std::size_t pos = hold.find('\n');
+    pos = pos == std::string::npos ? hold.size() : pos + 1;
+    while (pos < hold.size()) {
+        const std::size_t e = hold.find('\n', pos);
+        if (e == std::string::npos) break;
+        const std::string line = hold.substr(pos, e - pos);
+        const std::size_t ls = pos;
+        pos = e + 1;
+        if (!good_start(line)) continue;
+        ++lines;
+        std::size_t cut = 64;
+        while (cut > 0 && (static_cast<unsigned char>(line[cut]) & 0xC0) == 0x80) --cut;
+        const auto pl = st.plan(line.substr(0, cut), frames);
+        if (pl.facts.empty()) continue;
+        ++planned_lines;
+        std::string folded;
+        std::vector<int> active;
+        for (std::size_t q = ls + cut; q < e; ++q) {
+            active.clear();
+            for (std::size_t f = 0; f < pl.facts.size(); ++f)
+                if (!ContentPlanStore::expressed(pl, f, folded)) active.push_back(static_cast<int>(f));
+            double P[256];
+            const int L = ContentPlanStore::predict(pl, active, data, train + q, P);
+            bk[q] = ContentPlanStore::bucket(L);
+            pe[q] = P[data[train + q]];
+            aligned += L > 0;
+            right += L > 0 && P[data[train + q]] > 0.5;
+            ContentPlanStore::fold_into(folded, data[train + q]);
+        }
+    }
+    auto bpc = [&](std::size_t from) {
+        double s = 0;
+        for (std::size_t k = from; k < cur.size(); ++k) s -= std::log2(cur[k]);
+        return cur.size() > from ? s / static_cast<double>(cur.size() - from) : 0.0;
+    };
+    const double before = bpc(half);
+    const auto lam = mix_into(pe, bk, half, ContentPlanStore::kBuckets, cur);
+    std::cerr << "plan holdout paragraph lines " << lines << " planned " << planned_lines << " aligned bytes " << aligned
+              << " right " << right << "\nplan lambdas";
+    for (double l : lam) std::cerr << " " << l;
+    std::cerr << "\nplan holdout second-half bpc without " << before << " with " << bpc(half) << "\n";
+    return lam;
+}
+
+// BKN: the packed byte Kneser-Ney from a spec (bkn_spec), built on t[0, n); nullptr (and a message) for a bad spec.
+std::unique_ptr<cypha::cyphalm::bkn::ByteKN> make_bkn(const std::string& spec, const std::uint8_t* t, std::size_t n) {
+    const std::vector<int> v = bkn_spec(spec);
+    if (v.empty()) {
+        std::cerr << "bad --bkn spec " << spec << " (K[:m:c:d])\n";
+        return nullptr;
+    }
+    cypha::cyphalm::bkn::Prune pr;
+    pr.from_order = v[1], pr.min_ctx = static_cast<std::uint32_t>(v[2]), pr.drop_singletons = v[3] != 0;
+    return std::make_unique<cypha::cyphalm::bkn::ByteKN>(t, n, v[0], pr);
+}
+// BKN into cur (the trie mixture's probability of each holdout byte): (a) cur becomes Kneser-Ney's; (b) Kneser-Ney is
+// mixed in by lambda per (deepest order found x count band), fit on k < half. Returns (b)'s lambdas (empty for (a)).
+std::vector<double> mix_bkn_into(const cypha::cyphalm::bkn::ByteKN& kn, const std::uint8_t* data, std::size_t train,
+                                 std::size_t half, bool replace, std::vector<double>& cur) {
+    std::vector<double> pe(cur.size());
+    std::vector<int> bk(cur.size());
+    for (std::size_t k = 0; k < cur.size(); ++k) pe[k] = kn.prob_bucket(data, train + k, data[train + k], bk[k]);
+    if (replace) {
+        cur.swap(pe);
+        return {};
+    }
+    return mix_into(pe, bk, half, kn.buckets(), cur);
+}
+// BKN into a next-byte distribution P (the trie mixture's), as mix_bkn_into fit it.
+void bkn_mix(const cypha::cyphalm::bkn::ByteKN& kn, const double* lkn, bool replace, const std::uint8_t* seq,
+             std::size_t len, double* P) {
+    double Pk[256];
+    int band = 0;
+    const int d = kn.dist(seq, len, Pk, &band);
+    if (replace) {
+        std::memcpy(P, Pk, sizeof Pk);
+        return;
+    }
+    const double l = lkn[d == 0 ? 0 : (d - 1) * 3 + band];
+    for (int s = 0; s < 256; ++s) P[s] = l * Pk[s] + (1 - l) * P[s];
 }
 
 // B4: the class-context expert from "TABLE[:tail[:orders[:flags]]]": TABLE a word<TAB>class file, or "shape" (shape
@@ -1611,7 +1861,8 @@ std::unique_ptr<ClassContext> default_cls(const Args& a, const std::uint8_t* tex
 // file (simvec's output). qa's src: all = wiki train + chat, wiki = wiki train only. gate=1 (default): the expert is off
 // inside an answer (in_answer). The token `default` stands for kSimDefault; with no vec= the shipped file is read
 // (sim_vectors_path). `build` names what the index depends on: specs that differ only in k, T, min, probe, tail or gate
-// share it. A4c: [,mode=knn|dedupe] (similar_context.hpp; in dedupe the tail depth is fixed at the build).
+// share it. A4c: [,mode=knn|dedupe] (similar_context.hpp; in dedupe the tail depth is fixed at the build). A4d: [,online=1]
+// (keys from the text being read; a query setting).
 #ifndef CYPHA_SIMVEC_DEFAULT
 #define CYPHA_SIMVEC_DEFAULT "data/cyphalm/simvec_ppmi32.bin"
 #endif
@@ -1901,7 +2152,11 @@ struct Lm {
     std::size_t answer_at = std::string::npos;  // A4: where the answer starts (decode sets it to the prompt's end)
     bool cls_gate = false;                // B4C: the class expert off inside an answer
     const double* lc_out = nullptr;       // B4C: the copy expert's lambdas, outside answers only (when lc is null)
+    const cypha::cyphalm::bkn::ByteKN* kn = nullptr;  // BKN: byte Kneser-Ney, (a) replacing or (b) mixed into the trie
+    const double* lkn = nullptr;                      // mixture by lkn per bucket (mix_bkn_into)
+    bool kn_replace = false;
     const double* lc_dk = nullptr;        // ANS: the copy expert's lambdas inside a don't-know answer (--copy-dk)
+    bool copy_frame = false;              // DK2: --copy-frame inside a don't-know answer (copy_closes_unopened; decode)
     // ANS: the next byte is inside a don't-know answer: the answer (from answer_at) begins "I don't know", the switch
     // decode already makes to its longer limit. Only with lc_dk; never outside an answer.
     bool in_dont_know(const std::vector<std::uint8_t>& seq) const {
@@ -1916,6 +2171,7 @@ struct Lm {
         if (packed) packed->fill_experts(seq.data(), seq.size(), follower_limit, Mode::Synth, e, m, pred, online_match);
         else model->fill_experts(seq.data(), seq.size(), follower_limit, Mode::Synth, e, m, pred, online_match);
         mix_dist(w, e, m, pred, P);
+        if (kn) bkn_mix(*kn, lkn, kn_replace, seq.data(), seq.size(), P);  // BKN
         if (ig) {
             const std::size_t len = std::min<std::size_t>(seq.size(), static_cast<std::size_t>(cap));
             const auto r =
@@ -1939,9 +2195,12 @@ struct Lm {
             const double l = lsim[SimilarContext::bucket(sc->predict(seq.data(), seq.size(), Ps))];
             for (int s = 0; s < 256; ++s) P[s] = l * Ps[s] + (1 - l) * P[s];
         }
-        const double* lcp = in_dont_know(seq) ? lc_dk : lc ? lc : ans ? nullptr : lc_out;
+        const bool idk = in_dont_know(seq);
+        const double* lcp = idk ? lc_dk : lc ? lc : ans ? nullptr : lc_out;
         int n = 0;
-        const int c = lcp ? copy_pred(seq.data(), seq.size(), n) : -1;
+        std::size_t cj = 0;
+        int c = lcp ? copy_pred(seq.data(), seq.size(), n, &cj) : -1;
+        if (c >= 0 && idk && copy_frame && copy_closes_unopened(seq.data(), seq.size(), cj, answer_at)) c = -1;  // DK2
         if (c < 0) return;
         const double l = lcp[copy_bucket(n)];
         for (int s = 0; s < 256; ++s) P[s] *= 1 - l;
@@ -1987,16 +2246,17 @@ void print_boot(const std::string& name, const Boot& b) {
     std::printf("%s mean %.6f ci95 %.6f %.6f p_lt0 %.4f p_gt0 %.4f\n", name.c_str(), b.mean, b.lo, b.hi, b.p_neg, b.p_pos);
 }
 
-// The next-byte distribution of sampling's mixture after seq: trie, then class, similar-context and copy where given
-// (GEN-A: shared by sample_with_class and the scoring of human continuations).
+// The next-byte distribution of sampling's mixture after seq: trie, then byte Kneser-Ney (BKN), class, similar-context
+// and copy where given (GEN-A: shared by sample_with_class and the scoring of human continuations).
 void sample_mix(const PackedModel& model, const double w[6], std::size_t limit, const ClassContext* cc, const double* lam,
                 const std::vector<std::uint8_t>& seq, const SimilarContext* sc, const double* lsm, const double* lcp,
-                double M[256]) {
+                double M[256], const cypha::cyphalm::bkn::ByteKN* kn, const double* lkn, bool kn_replace) {
     double e[5][256];
     bool matched = false;
     unsigned pred = 0;
     model.fill_experts(seq.data(), seq.size(), limit, Mode::Synth, e, matched, pred, false);
     mix_dist(w, e, matched, pred, M);
+    if (kn) bkn_mix(*kn, lkn, kn_replace, seq.data(), seq.size(), M);  // BKN: first after the trie, as qa and the fit
     if (cc) {
         double P[256];
         const double l = lam[ClassContext::bucket(cc->predict(seq.data(), seq.size(), P))];
@@ -2020,8 +2280,12 @@ std::string sample_with_class(const PackedModel& model, const double w[6], std::
                               const double* lam, const std::string& prompt, int n, std::uint32_t seed,
                               const SimilarContext* sc = nullptr, const double* lsm = nullptr, double temperature = 0.8,
                               const double* lcp = nullptr, const DocTopic* dt,
-                              const std::vector<std::vector<double>>* ldoc) {
+                              const std::vector<std::vector<double>>* ldoc, const ContentPlanStore::Plan* pl,
+                              const double* lpl, const cypha::cyphalm::bkn::ByteKN* kn, const double* lkn,
+                              bool kn_replace) {
     std::vector<std::uint8_t> seq(prompt.begin(), prompt.end());
+    std::string gen_folded;  // GEN-E: the generated text, folded, for the plan's "expressed" test
+    std::vector<int> active;
     std::mt19937 rng(seed);
     std::uniform_real_distribution<double> U(0.0, 1.0);
     std::unique_ptr<DocTopic::Stream> ds;  // GEN-C: the document experts read the prompt and what is written
@@ -2032,7 +2296,7 @@ std::string sample_with_class(const PackedModel& model, const double w[6], std::
     }
     for (int t = 0; t < n; ++t) {
         double M[256];
-        sample_mix(model, w, limit, cc, lam, seq, sc, lsm, lcp, M);
+        sample_mix(model, w, limit, cc, lam, seq, sc, lsm, lcp, M, kn, lkn, kn_replace);  // BKN: Kneser-Ney inside
         if (ds)  // GEN-C: the document experts, mixed after the copy expert, in DocTopic's part order
             for (int part = 0; part < DocTopic::kParts; ++part) {
                 const auto& lp = (*ldoc)[static_cast<std::size_t>(part)];
@@ -2041,6 +2305,17 @@ std::string sample_with_class(const PackedModel& model, const double w[6], std::
                 const double l = lp[static_cast<std::size_t>(ds->predict(part, P))];
                 for (int s = 0; s < 256; ++s) M[s] = l * P[s] + (1 - l) * M[s];
             }
+        if (pl && lpl) {  // GEN-E: the content-plan expert, mixed last (after the document experts)
+            active.clear();
+            for (std::size_t q = 0; q < pl->facts.size(); ++q)
+                if (!ContentPlanStore::expressed(*pl, q, gen_folded)) active.push_back(static_cast<int>(q));
+            double P[256];
+            const int L = ContentPlanStore::predict(*pl, active, seq.data(), seq.size(), P);
+            if (L > 0) {
+                const double l = lpl[ContentPlanStore::bucket(L)];
+                for (int s = 0; s < 256; ++s) M[s] = l * P[s] + (1 - l) * M[s];
+            }
+        }
         bool banned[256];
         mark_banned(seq, banned);
         double p[256], mass = 0;
@@ -2067,9 +2342,121 @@ std::string sample_with_class(const PackedModel& model, const double w[6], std::
                 break;
             }
         seq.push_back(static_cast<std::uint8_t>(pick));
+        ContentPlanStore::fold_into(gen_folded, static_cast<unsigned char>(pick));
         if (ds) ds->feed(static_cast<std::uint8_t>(pick));
     }
     return std::string(seq.begin() + static_cast<std::ptrdiff_t>(prompt.size()), seq.end());
+}
+
+// A4e: simpair [--margin M] REF.f64 FILE.f64 ... : cls --sim-bits files (doubles: bits per byte of trie + IG + class +
+// sim over a --sim-stream continuation), each paired against REF over the whole continuation (4 KiB blocks, 4,000
+// resamples), each MiB and the last 2 MiB (2,000), as cls pairs specs in one run. With a margin, also the whole
+// continuation's change minus M (its p_lt0 is P(change < M)).
+int cmd_simpair(std::vector<std::string> files) {
+    double margin = 0;
+    const bool has_margin = files.size() >= 2 && files[0] == "--margin";
+    if (has_margin) margin = std::atof(files[1].c_str()), files.erase(files.begin(), files.begin() + 2);
+    auto load = [](const std::string& f, std::vector<double>& v) {
+        std::ifstream in(f, std::ios::binary | std::ios::ate);
+        if (!in) return false;
+        v.resize(static_cast<std::size_t>(in.tellg()) / sizeof(double));
+        in.seekg(0);
+        return static_cast<bool>(in.read(reinterpret_cast<char*>(v.data()), static_cast<std::streamsize>(v.size() * sizeof(double))));
+    };
+    std::vector<double> ref;
+    if (files.size() < 2 || !load(files[0], ref) || ref.empty()) {
+        std::fprintf(stderr, "usage: cyphalm_trie simpair REF.f64 FILE.f64 ...\n");
+        return 2;
+    }
+    constexpr std::size_t kMiB = std::size_t{1} << 20;
+    const std::size_t C = ref.size();
+    auto part = [](const std::vector<double>& v, std::size_t from, std::size_t to) {
+        return std::vector<double>(v.begin() + static_cast<std::ptrdiff_t>(from), v.begin() + static_cast<std::ptrdiff_t>(to));
+    };
+    auto diff = [](const std::vector<double>& x, const std::vector<double>& y) {
+        std::vector<double> d(x.size());
+        for (std::size_t k = 0; k < d.size(); ++k) d[k] = x[k] - y[k];
+        return d;
+    };
+    auto mean = [](const std::vector<double>& v) { return std::accumulate(v.begin(), v.end(), 0.0) / static_cast<double>(v.size()); };
+    for (std::size_t f = 1; f < files.size(); ++f) {
+        std::vector<double> x;
+        if (!load(files[f], x) || x.size() != C) {
+            std::fprintf(stderr, "%s: not %zu doubles\n", files[f].c_str(), C);
+            return 1;
+        }
+        std::printf("simpair %s bits %.6f ref %.6f\n", files[f].c_str(), mean(x), mean(ref));
+        print_boot("simpair " + files[f] + " all vs_ref", block_boot(diff(x, ref), 4096, 4000, 11));
+        if (has_margin) {
+            std::vector<double> d = diff(x, ref);
+            for (double& v : d) v -= margin;
+            print_boot("simpair " + files[f] + " all vs_ref_minus_" + std::to_string(margin), block_boot(d, 4096, 4000, 11));
+        }
+        for (std::size_t g0 = 0; g0 < C; g0 += kMiB) {
+            const std::size_t g1 = std::min(C, g0 + kMiB);
+            print_boot("simpair " + files[f] + " cont_mib " + std::to_string(g0 / kMiB + 1) + " vs_ref",
+                       block_boot(diff(part(x, g0, g1), part(ref, g0, g1)), 4096, 2000, 11));
+        }
+        if (C >= 2 * kMiB)
+            print_boot("simpair " + files[f] + " last_2mib vs_ref", block_boot(diff(part(x, C - 2 * kMiB, C), part(ref, C - 2 * kMiB, C)), 4096, 2000, 11));
+    }
+    return 0;
+}
+
+// A4e: --sim-growth LIST (cls, with --sim-stream): for each --sim spec, keys over the train bytes; at each stream length L
+// in LIST (MiB from the holdout's start), the expert reads the 64 KiB just before L, after one untimed read that takes in
+// every word end before them, and prints the online keys held, their bytes (counted and allocated), the
+// process's resident MB, the searches' p50 and p99, the time per byte, and how many held keys equal a stored key or an
+// earlier held one (what merging them would save). No trie, InfiniGram or class expert is built.
+int sim_growth(const Args& a, const std::vector<std::uint8_t>& data, std::size_t train) {
+    auto rss_mb = [] {
+        std::ifstream st("/proc/self/status");
+        std::string line;
+        while (std::getline(st, line))
+            if (line.rfind("VmRSS:", 0) == 0) return std::atof(line.c_str() + 6) / 1000.0;
+        return 0.0;
+    };
+    std::unique_ptr<SimilarContext> sc;
+    std::string built;
+    for (const auto& spec : a.sims) {
+        const SimSpec ss = parse_sim(spec);
+        if (!ss.ok) {
+            std::cerr << "bad --sim spec " << spec << "\n";
+            return 2;
+        }
+        if (ss.build != built) {
+            sc.reset();
+            if (!(sc = make_similar_context(ss))) return 1;
+            sc->build(data.data(), train);
+            built = ss.build;
+        } else
+            sc->set_query(ss.p);
+        const std::size_t index = sc->bytes();
+        std::printf("simgrowth %s index_mb %.3f rss_mb %.1f\n", spec.c_str(), static_cast<double>(index) / 1e6, rss_mb());
+        for (const auto& x : split(a.sim_growth, ',')) {
+            const double L = std::atof(x.c_str());
+            const std::size_t end = train + static_cast<std::size_t>(L * 1048576.0), from = end - 65536;
+            if (end > data.size() || from <= train) {
+                std::cerr << "--sim-growth " << x << ": outside the stream\n";
+                return 2;
+            }
+            double P[256];
+            sc->predict(data.data(), from - 1, P);  // takes in the word ends before the timed bytes
+            const std::size_t q0 = sc->queries();
+            const auto t0 = std::chrono::steady_clock::now();
+            for (std::size_t n = from; n < end; ++n) sc->predict(data.data(), n, P);
+            const double t = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+            const auto dup = sc->online_duplicates();
+            std::printf("simgrowth %s mib %s held %zu online_mb %.3f alloc_mb %.3f rss_mb %.1f searches %zu p50_us %.1f "
+                        "p99_us %.1f us_per_byte %.2f dup_stored %zu dup_online %zu\n",
+                        spec.c_str(), x.c_str(), sc->online_keys(), static_cast<double>(sc->bytes() - index) / 1e6,
+                        static_cast<double>(sc->online_alloc_bytes()) / 1e6, rss_mb(), sc->queries() - q0,
+                        sc->latency_us(0.5, q0, sc->queries()), sc->latency_us(0.99, q0, sc->queries()), t * 1e6 / 65536.0,
+                        dup.first, dup.second);
+            std::fflush(stdout);
+        }
+    }
+    return 0;
 }
 
 int cmd_cls(const Args& a) {
@@ -2078,12 +2465,32 @@ int cmd_cls(const Args& a) {
         std::fprintf(stderr, "usage: cyphalm_trie cls <wiki> <TABLE|shape>[:tail[:orders[:flags]]] [more specs]\n");
         return 2;
     }
-    const std::size_t H = cfg.sample - cfg.train, half = H / 2, N = H + (std::size_t{1} << 20);
+    // A4e: --sim-stream FROM:LEN puts the corpus bytes [FROM, FROM + LEN) after the holdout in place of the fresh MiB
+    // [sample, sample + 1 MiB) (sizes in bytes, or with K or M); it implies --sim-fresh.
+    constexpr std::size_t kMiB = std::size_t{1} << 20;
+    std::size_t sfrom = cfg.sample, slen = kMiB;
+    if (!a.sim_stream.empty()) {
+        auto size_of = [](const std::string& x) {
+            const char u = x.empty() ? 0 : x.back();
+            const double v = std::atof(x.c_str());
+            return static_cast<std::size_t>(v * (u == 'M' ? 1048576.0 : u == 'K' ? 1024.0 : 1.0));
+        };
+        const std::size_t c = a.sim_stream.find(':');
+        if (c != std::string::npos) sfrom = size_of(a.sim_stream.substr(0, c)), slen = size_of(a.sim_stream.substr(c + 1));
+        if (c == std::string::npos || sfrom < cfg.sample || slen < kMiB) {
+            std::fprintf(stderr, "--sim-stream FROM:LEN needs FROM >= %zu and LEN >= 1M\n", cfg.sample);
+            return 2;
+        }
+    }
+    const std::size_t H = cfg.sample - cfg.train, half = H / 2, N = H + slen;
     std::vector<std::uint8_t> data;
-    if (const std::string e = read_prefix(a.wiki, cfg.sample + (std::size_t{1} << 20), data); !e.empty()) {
+    if (const std::string e = read_prefix(a.wiki, sfrom + slen, data); !e.empty()) {
         std::cerr << e << "\n";
         return 1;
     }
+    if (sfrom > cfg.sample)
+        data.erase(data.begin() + static_cast<std::ptrdiff_t>(cfg.sample), data.begin() + static_cast<std::ptrdiff_t>(sfrom));
+    if (!a.sim_growth.empty()) return sim_growth(a, data, cfg.train);  // A4e: the online keys' memory and search time only
     Model model;
     model.data = data.data();
     model.init(cfg);
@@ -2256,6 +2663,10 @@ int cmd_cls(const Args& a) {
         std::unique_ptr<SimilarContext> sc;
         std::string built;
         std::vector<double> first_hc, first_fc, first_sv, first_svt;  // the first spec's reads, for paired comparisons
+        const bool stream = !a.sim_stream.empty(), fresh = a.sim_fresh || stream;  // A4e
+        if (!a.sim_bits.empty()) std::ofstream(a.sim_bits + ".base.f64", std::ios::binary)
+                                     .write(reinterpret_cast<const char*>(f_c.data()), static_cast<std::streamsize>(f_c.size() * sizeof(double)));
+        std::size_t spec_no = 0;
         for (const auto& spec : a.sims) {
             const SimSpec ss = parse_sim(spec);
             if (!ss.ok) {
@@ -2272,18 +2683,27 @@ int cmd_cls(const Args& a) {
                 built = ss.build;
             } else
                 sc->set_query(ss.p);
-            const std::size_t M = a.sim_fresh ? N : H;
+            const std::size_t M = fresh ? N : H;
             std::vector<double> ps(N, 0.0);
             std::vector<int> sb(N, 0);
             std::size_t live = 0;
             const auto t1 = std::chrono::steady_clock::now();
+            struct Seg { std::size_t held, bytes, alloc, q; double s; };
+            std::vector<Seg> segs;  // A4e (--sim-stream): the expert at the end of each MiB of the stream
+            const std::size_t index_bytes = sc->bytes();
+            auto seg_now = [&] {
+                segs.push_back({sc->online_keys(), sc->bytes(), sc->online_alloc_bytes(), sc->queries(),
+                                std::chrono::duration<double>(std::chrono::steady_clock::now() - t1).count()});
+            };
             for (std::size_t k = 0; k < M; ++k) {
+                if (stream && k > 0 && k % kMiB == 0) seg_now();
                 double P[256];
                 const auto hit = sc->predict(data.data(), cfg.train + k, P);
                 sb[k] = SimilarContext::bucket(hit);
                 ps[k] = P[data[cfg.train + k]];
                 live += hit.live > 0;
             }
+            if (stream) seg_now();
             const double score_s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t1).count();
             double ls_i[kS], ls_c[kS];
             fit_lambdas(ps, pih, sb, half, kS, ls_i);
@@ -2329,7 +2749,7 @@ int cmd_cls(const Args& a) {
                             spec.c_str(), n3[0], g3[0] / static_cast<double>(H - half), n3[1], g3[1] / static_cast<double>(H - half),
                             n3[2], g3[2] / static_cast<double>(H - half));
             }
-            if (a.sim_fresh) {
+            if (fresh) {
                 double fs_i[kS], fs_c[kS];
                 fit_lambdas(ps, pif, sb, H, kS, fs_i);
                 fit_lambdas(ps, pcf, sb, H, kS, fs_c);
@@ -2337,9 +2757,39 @@ int cmd_cls(const Args& a) {
                 std::printf("sim %s fresh trie+ig+sim %.6f trie+ig+cls+sim %.6f\n", spec.c_str(), mean(fi), mean(fc));
                 print_boot("sim " + spec + " fresh_gain_over_trie_ig", block_boot(gain(fi, f_i), 4096, 4000, 11));
                 print_boot("sim " + spec + " fresh_gain_over_trie_ig_cls", block_boot(gain(fc, f_c), 4096, 4000, 11));
-                if (first_fc.empty()) first_fc = fc;
+                const bool first = first_fc.empty();
+                if (first) first_fc = fc;
                 else print_boot("sim " + spec + " fresh_trie_ig_cls_vs_first_sim", block_boot(gain(fc, first_fc), 4096, 4000, 11));
+                if (stream) {  // A4e: the expert at each MiB of the stream (MiB 1 is the holdout), and the continuation by MiB
+                    for (std::size_t g = 0; g < segs.size(); ++g) {
+                        const std::size_t q0 = g ? segs[g - 1].q : 0;
+                        std::printf("simstream %s mib %zu held %zu online_mb %.3f alloc_mb %.3f searches %zu p50_us %.1f p99_us %.1f "
+                                    "score_s %.1f\n", spec.c_str(), g + 1, segs[g].held,
+                                    static_cast<double>(segs[g].bytes - index_bytes) / 1e6, static_cast<double>(segs[g].alloc) / 1e6,
+                                    segs[g].q - q0, sc->latency_us(0.5, q0, segs[g].q), sc->latency_us(0.99, q0, segs[g].q),
+                                    segs[g].s - (g ? segs[g - 1].s : 0.0));
+                    }
+                    const std::size_t C = N - H;
+                    auto part = [](const std::vector<double>& v, std::size_t from, std::size_t to) {
+                        return std::vector<double>(v.begin() + static_cast<std::ptrdiff_t>(from), v.begin() + static_cast<std::ptrdiff_t>(to));
+                    };
+                    for (std::size_t g0 = 0; g0 < C; g0 += kMiB) {
+                        const std::size_t g1 = std::min(C, g0 + kMiB), no = g0 / kMiB + 1;
+                        std::printf("simstream %s cont_mib %zu trie+ig+cls %.6f trie+ig+cls+sim %.6f\n", spec.c_str(), no,
+                                    mean(part(f_c, g0, g1)), mean(part(fc, g0, g1)));
+                        if (!first)
+                            print_boot("simstream " + spec + " cont_mib " + std::to_string(no) + " vs_first_sim",
+                                       block_boot(gain(part(fc, g0, g1), part(first_fc, g0, g1)), 4096, 2000, 11));
+                    }
+                    if (C >= 2 * kMiB && !first)
+                        print_boot("simstream " + spec + " last_2mib vs_first_sim",
+                                   block_boot(gain(part(fc, C - 2 * kMiB, C), part(first_fc, C - 2 * kMiB, C)), 4096, 2000, 11));
+                }
+                if (!a.sim_bits.empty())  // A4e: this spec's continuation bits, for simpair
+                    std::ofstream(a.sim_bits + "." + std::to_string(spec_no) + ".f64", std::ios::binary)
+                        .write(reinterpret_cast<const char*>(fc.data()), static_cast<std::streamsize>(fc.size() * sizeof(double)));
             }
+            ++spec_no;
             if (a.sim_surface) {
                 double ls_t[kS], ls_tc[kS];
                 fit_lambdas(ps, pt, sb, half, kS, ls_t);
@@ -2487,7 +2937,11 @@ Answer decode(const Lm& lm_in, const std::string& prompt, int max_bytes = 80, st
         }
         bool banned[256];
         // ANS: inside a don't-know answer with --copy-dk, as for the copy models: copying from the prompt is allowed.
-        ban_repeats(seq, lm.lc || lm.in_dont_know(seq) ? prompt.size() : 0, banned);
+        // DK2 (--copy-frame): inside the tag of a don't-know answer the rule looks at the tag only, so the tag may
+        // repeat the message's entity (an entity longer than 11 bytes would otherwise be cut in the tag).
+        const std::size_t tag_at = lm.copy_frame && lm.in_dont_know(seq) ? open_token_at(seq.data(), seq.size(), prompt.size())
+                                                                          : std::string::npos;
+        ban_repeats(seq, tag_at != std::string::npos ? tag_at : lm.lc || lm.in_dont_know(seq) ? prompt.size() : 0, banned);
         bool all = true;
         for (int s = 0; s < 256; ++s)
             if (!banned[s]) all = false;
@@ -2770,6 +3224,9 @@ struct QaOpts {
     bool copy_out = false;  // B4C: the default copy expert, off inside answers
     std::string fam_ent;    // ANS: frames before the token, e.g. entity="{E}"
     bool copy_dk = false, fam_read = false;  // ANS
+    double dk_plain = 0;                     // DK2: --dk-plain
+    std::string fam_ent_at = "all";          // DK2: --fam-ent-at
+    bool copy_frame = false;                 // DK2: --copy-frame
 };
 
 constexpr int kFeat = 5;
@@ -2927,6 +3384,15 @@ std::string fam_token(const std::string& level, const std::string& frames, const
     for (std::string f : split(frames, ';'))
         if (!e.empty() && f.find("{E}") != std::string::npos) t += "<|" + f.replace(f.find("{E}"), 3, e) + "|>";
     return t + "<|fam=" + level + "|>";
+}
+// DK2: the frames alone (--fam-ent-at start writes them before "User: ").
+std::string fam_frames(const std::string& frames, const std::string& entity) {
+    const std::string t = fam_token("x", frames, entity);
+    return t.substr(0, t.size() - 9);  // "<|fam=x|>"
+}
+// DK2 (--dk-plain P): don't-know training turn j carries no token; floor(nP) of the first n turns, spread evenly.
+bool dk_plain_turn(std::size_t j, double p) {
+    return std::floor(static_cast<double>(j + 1) * p) > std::floor(static_cast<double>(j) * p);
 }
 
 // A1d (grading only): the entity of the message "... nothing about X in what I've read.", and whether a name is a
@@ -3144,6 +3610,7 @@ struct QaStore {
     std::array<double, kFam> fam_cut{};
     std::unique_ptr<FmInfiniGram> ig, low;
     std::unique_ptr<ClassContext> cc;
+    std::unique_ptr<cypha::cyphalm::bkn::ByteKN> kn;  // BKN
 };
 
 std::uint64_t fnv64(std::string_view s) {
@@ -3160,18 +3627,20 @@ std::string qa_record(const Args& a, const QaOpts& o, const std::vector<std::uin
       << fnv64(std::string_view(reinterpret_cast<const char*>(data.data()), std::min(data.size(), a.cfg.sample))) << std::dec
       << " dolly=" << a.dolly << " dk=" << o.dk << " dk_ratio=" << o.dk_ratio << " fam=" << o.fam << " fam_stat=" << o.fam_stat
       << " fam_train=" << o.fam_train << " parse=" << o.parse << " shard=" << o.shard << " shard2=" << o.shard2 << " cls=" << o.cls;
+    if (!a.bkn.empty()) s << " bkn=" << a.bkn;  // BKN (the way is chosen at serving, its lambdas fit on the holdout)
     return s.str();
 }
 
 bool save_qa(const std::string& dir, const std::string& record, const PackedModel& pm, const double w[6], const Config& cfg,
              const double wf[6], std::size_t all_followers, const std::array<double, kFam>& fam_cut, const FmInfiniGram& ig,
-             const FmInfiniGram* low, const ClassContext* cc) {
+             const FmInfiniGram* low, const ClassContext* cc, const cypha::cyphalm::bkn::ByteKN* kn = nullptr) {
     try {
         std::filesystem::create_directories(dir);
         pm.save(dir + "/model.pk", w, cfg);
         ig.save(dir + "/ig.fm");
         if (low) low->save(dir + "/low.fm");
         if (cc) cc->save(dir + "/cls.cc");
+        if (kn) kn->save(dir + "/kn.bkn");  // BKN
         std::ostringstream m;
         auto reals = [&m](const double* x, std::size_t n) {
             for (std::size_t i = 0; i < n; ++i) {
@@ -3184,7 +3653,7 @@ bool save_qa(const std::string& dir, const std::string& record, const PackedMode
         reals(wf, 6);
         m << "\nfollower_limit " << all_followers << "\nfam_cut";
         reals(fam_cut.data(), fam_cut.size());
-        m << "\nparts model.pk ig.fm" << (low ? " low.fm" : "") << (cc ? " cls.cc" : "") << "\n";
+        m << "\nparts model.pk ig.fm" << (low ? " low.fm" : "") << (cc ? " cls.cc" : "") << (kn ? " kn.bkn" : "") << "\n";
         const std::string body = m.str();
         std::ofstream f(dir + "/qa.meta", std::ios::binary);
         f << body << "fnv " << std::hex << fnv64(body) << "\n";
@@ -3199,7 +3668,7 @@ bool save_qa(const std::string& dir, const std::string& record, const PackedMode
 }
 
 bool load_qa(const std::string& dir, const std::string& record, const QaOpts& o, const Config& cfg, PackedModel& pm,
-             double w[6], QaStore& st) {
+             double w[6], QaStore& st, bool want_kn = false) {
     try {
         std::ifstream f(dir + "/qa.meta", std::ios::binary);
         if (!f) throw std::runtime_error("cannot open " + dir + "/qa.meta");
@@ -3230,6 +3699,7 @@ bool load_qa(const std::string& dir, const std::string& record, const QaOpts& o,
         st.ig = std::make_unique<FmInfiniGram>(FmInfiniGram::load(dir + "/ig.fm"));
         if (!o.parse.empty()) st.low = std::make_unique<FmInfiniGram>(FmInfiniGram::load(dir + "/low.fm"));
         if (!o.cls.empty()) st.cc = std::make_unique<ClassContext>(ClassContext::load(dir + "/cls.cc"));
+        if (want_kn) st.kn = std::make_unique<cypha::cyphalm::bkn::ByteKN>(cypha::cyphalm::bkn::ByteKN::load(dir + "/kn.bkn"));  // BKN
     } catch (const std::exception& e) {
         std::cerr << "qa --model: " << e.what() << "\n";
         return false;
@@ -3580,7 +4050,7 @@ int cmd_qa(const Args& a, const QaOpts& o) {
     QaStore st;
     PackedModel pm;
     double w[6];
-    if (serve && !load_qa(a.model, record, o, cfg, pm, w, st)) return 1;
+    if (serve && !load_qa(a.model, record, o, cfg, pm, w, st, !a.bkn.empty())) return 1;
     Model model;
     if (!serve) {
         model.data = data.data();
@@ -3767,6 +4237,7 @@ int cmd_qa(const Args& a, const QaOpts& o) {
     }
     std::vector<std::string> tok_dolly(turns.size()), tok_dk(dk.size()), tok_dev(dev.size()), tok_test(test.size()),
         tok_sh1(sh1.size()), tok_sh2(sh2.size());
+    std::vector<std::string> pre_dk(dk.size()), pre_dev(dev.size()), pre_test(test.size());  // DK2: start frames
     std::function<std::string(const std::string&)> tokq;
     if (fam_on && fam_k == 0) {
         std::vector<double> fd(turns.size()), fk(dk.size());
@@ -3815,33 +4286,59 @@ int cmd_qa(const Args& a, const QaOpts& o) {
         const bool lo = o.fam_train == "low", oc = o.fam_train == "outcome" || lo;
         // ANS: --fam-ent writes the entity's frames before the level, in every token that is written (A1d's form):
         // a don't-know or shard row's own entity, else the chosen span of the question (computed only when needed).
-        auto tok = [&](const std::string& l, const std::function<std::string()>& ent) {
+        // DK2: --fam-ent-at answer|start: no frame in any training turn (fr_train); answer keeps them in the token of
+        // the prompts the model answers, start writes them before "User: " instead (pre_*). framed: a prompt it answers.
+        const bool fr_train = o.fam_ent_at == "all", fr_tok = o.fam_ent_at != "start";
+        auto tok = [&](const std::string& l, const std::function<std::string()>& ent, bool framed) {
             if (lo && l == "high") return std::string();
-            return fam_token(l, o.fam_ent, o.fam_ent.empty() ? std::string() : ent());
+            const bool f = framed && fr_tok && !o.fam_ent.empty();
+            return fam_token(l, f ? o.fam_ent : std::string(), f ? ent() : std::string());
         };
         std::map<std::string, int> cd, ck;
         std::map<std::string, std::pair<int, int>> cv;
         for (std::size_t i = 0; i < turns.size(); ++i) {
             const std::string l = oc ? "high" : tokq(instruction(i));
             ++cd["<|fam=" + l + "|>"];
-            tok_dolly[i] = tok(l, [&] { return entity_of(instruction(i)); });
+            tok_dolly[i] = tok(l, [&] { return entity_of(instruction(i)); }, fr_train);
         }
         for (std::size_t i = 0; i < dk.size(); ++i) {
             const std::string l = oc ? "low" : tokq(dk[i].q);
             ++ck["<|fam=" + l + "|>"];
-            tok_dk[i] = tok(l, [&] { return dk[i].entity; });
+            // DK2: rows below n_dk are training turns (--dk-plain drops their token); the rest are the held-out turns
+            // --copy-dk fits on, prompts the model answers.
+            const bool train = i < n_dk;
+            tok_dk[i] = train && o.dk_plain > 0 && dk_plain_turn(i, o.dk_plain) ? std::string()
+                                                                                 : tok(l, [&] { return dk[i].entity; }, !train || fr_train);
+            if (!train && !fr_tok && !o.fam_ent.empty()) pre_dk[i] = fam_frames(o.fam_ent, dk[i].entity);
         }
         for (std::size_t i = 0; i < dev.size(); ++i) {
             const std::string l = tokq(dev[i].q);
             (dev[i].in_slice ? cv["<|fam=" + l + "|>"].first : cv["<|fam=" + l + "|>"].second)++;
-            tok_dev[i] = tok(l, [&] { return entity_of(dev[i].q); });
+            tok_dev[i] = tok(l, [&] { return entity_of(dev[i].q); }, true);
+            if (!fr_tok && !o.fam_ent.empty()) pre_dev[i] = fam_frames(o.fam_ent, entity_of(dev[i].q));  // DK2
         }
-        for (std::size_t i = 0; i < test.size(); ++i) tok_test[i] = tok(tokq(test[i].q), [&] { return entity_of(test[i].q); });
-        for (std::size_t i = 0; i < sh1.size(); ++i) tok_sh1[i] = tok(oc ? "high" : tokq(sh1[i].q), [&] { return sh1[i].entity; });
-        for (std::size_t i = 0; i < sh2.size(); ++i) tok_sh2[i] = tok(oc ? "high" : tokq(sh2[i].q), [&] { return sh2[i].entity; });
+        for (std::size_t i = 0; i < test.size(); ++i) {
+            tok_test[i] = tok(tokq(test[i].q), [&] { return entity_of(test[i].q); }, true);
+            if (!fr_tok && !o.fam_ent.empty()) pre_test[i] = fam_frames(o.fam_ent, entity_of(test[i].q));  // DK2
+        }
+        for (std::size_t i = 0; i < sh1.size(); ++i)
+            tok_sh1[i] = tok(oc ? "high" : tokq(sh1[i].q), [&] { return sh1[i].entity; }, fr_train);
+        for (std::size_t i = 0; i < sh2.size(); ++i)
+            tok_sh2[i] = tok(oc ? "high" : tokq(sh2[i].q), [&] { return sh2[i].entity; }, fr_train);
         for (auto& [k, v] : cd) std::cout << "fam_dolly " << k << " " << v << "\n";
         for (auto& [k, v] : ck) std::cout << "fam_dk " << k << " " << v << "\n";
         for (auto& [k, v] : cv) std::cout << "fam_dev " << k << " in_slice " << v.first << " not_in_slice " << v.second << "\n";
+        if (o.dk_plain > 0 || o.fam_ent_at != "all") {  // DK2
+            std::size_t plain = 0, framed_train = 0, framed_ans = 0;
+            for (std::size_t i = 0; i < dk.size(); ++i) {
+                plain += i < n_dk && tok_dk[i].empty();
+                const bool fr = tok_dk[i].find("<|fam=") != 0 && !tok_dk[i].empty();
+                (i < n_dk ? framed_train : framed_ans) += fr || !pre_dk[i].empty();
+            }
+            std::cout << "dk2_text dk_plain " << o.dk_plain << " plain_turns " << plain << " of " << n_dk << " fam_ent_at "
+                      << o.fam_ent_at << " framed_training_turns " << framed_train << " framed_heldout_turns " << framed_ans
+                      << " copy_frame " << o.copy_frame << "\n";
+        }
     }
     // M14: with an entity statistic in the token, every dev and test entity was chosen above and is kept (`chosen`), and
     // nothing below reads the lowered index: free it (a store writes it later, so --save keeps it).
@@ -3910,7 +4407,20 @@ int cmd_qa(const Args& a, const QaOpts& o) {
         if (!sim_reads_t) std::vector<std::uint8_t>().swap(T);
         std::cerr << "class table built\n";
     }
-    if (!a.save.empty() && !save_qa(a.save, record, pm, w, cfg, wf, all_followers, fam_cut, ig, low.get(), cc.get())) return 1;
+    // BKN (--bkn): byte Kneser-Ney on T (wiki train + chat), after the index and the class table, from the text the index
+    // gives back (M16's order; T itself when the similar-context expert keeps it); a served model loads it.
+    std::unique_ptr<cypha::cyphalm::bkn::ByteKN> kn = std::move(st.kn);
+    const bool kn_rep = a.bkn_way == "a";
+    if (!serve && !a.bkn.empty()) {
+        if (sim_reads_t) kn = make_bkn(a.bkn, T.data(), T.size());
+        else {
+            const std::vector<std::uint8_t> TK = ig.text();
+            kn = make_bkn(a.bkn, TK.data(), TK.size());
+        }
+        if (!kn) return 2;
+        std::cerr << "byte Kneser-Ney built: " << kn->bytes() << " bytes\n";
+    }
+    if (!a.save.empty() && !save_qa(a.save, record, pm, w, cfg, wf, all_followers, fam_cut, ig, low.get(), cc.get(), kn.get())) return 1;
     if (!a.save.empty() && fam_on && fam_k > 0 && a.cards.empty()) low.reset();  // M17: written; nothing below reads it (M14)
     // A4: the similar-context expert, keys over wiki train + chat (src=all: InfiniGram's bytes) or wiki train only
     // (src=wiki). M13: built here, before the per-byte holdout arrays, so its build does not sit on them; its lambdas
@@ -3949,6 +4459,15 @@ int cmd_qa(const Args& a, const QaOpts& o) {
         mix_dist(w, e, em, pred, M);
         pt[k] = M[data[i]];
         bits_all += -std::log2(pt[k]);
+    }
+    std::vector<double> lkn;  // BKN: Kneser-Ney into the trie mixture, before InfiniGram and the other experts
+    if (kn) {
+        double b0 = 0, b1 = 0;
+        for (std::size_t k = half; k < H; ++k) b0 -= std::log2(pt[k]);
+        lkn = mix_bkn_into(*kn, data.data(), cfg.train, half, kn_rep, pt);
+        for (std::size_t k = half; k < H; ++k) b1 -= std::log2(pt[k]);
+        std::cout << "bkn " << a.bkn << " way " << a.bkn_way << " table_bytes " << kn->bytes() << " holdout2_trie_bpc "
+                  << b0 / static_cast<double>(H - half) << " holdout2_trie_bkn_bpc " << b1 / static_cast<double>(H - half) << "\n";
     }
     double lam[kBuckets] = {0}, lc_t[kCopyBuckets] = {0}, lc_i[kCopyBuckets] = {0};
     FmInfiniGram::Cursor cur;
@@ -4119,7 +4638,7 @@ int cmd_qa(const Args& a, const QaOpts& o) {
         std::vector<int> bk;
         std::size_t used = 0;
         for (std::size_t j = n_dk; j < dk.size() && used < 1000; ++j, ++used) {
-            const std::string prompt = with_tok("User: " + dk[j].q + "\nAssistant: ", tok_dk[j]);
+            const std::string prompt = pre_dk[j] + with_tok("User: " + dk[j].q + "\nAssistant: ", tok_dk[j]);  // DK2: pre
             const std::string& resp = dk[j].response;
             for (int m = 0; m < 2; ++m) {
                 Lm lm = base[m];
@@ -4133,7 +4652,11 @@ int cmd_qa(const Args& a, const QaOpts& o) {
                     pb[m].push_back(P[y]);
                     if (m == 0) {
                         int n = 0;
-                        pe.push_back(copy_pred(seq.data(), seq.size(), n) == y ? 1.0 : 0.0);
+                        std::size_t cj = 0;
+                        int c = copy_pred(seq.data(), seq.size(), n, &cj);
+                        if (c >= 0 && o.copy_frame && copy_closes_unopened(seq.data(), seq.size(), cj, prompt.size()))
+                            c = -1, n = 0;  // DK2: as decode will see it
+                        pe.push_back(c == y ? 1.0 : 0.0);
                         bk.push_back(copy_bucket(n));
                     }
                     seq.push_back(y);
@@ -4171,9 +4694,10 @@ int cmd_qa(const Args& a, const QaOpts& o) {
                  {nullptr, w, lim, false, nullptr, nullptr, lc_t, 8192, cc.get(), lcl_t, sc.get(), lsm_t, &pm},
                  {nullptr, w, lim, false, &ig, lam, lc_i, 8192, cc.get(), lcl_i, sc.get(), lsm_i, &pm}};
     for (auto& l : lms) l.sim_gate = sc && parse_sim(o.sim).gate;  // A4: the expert off inside answers
+    for (auto& l : lms) l.kn = kn.get(), l.lkn = lkn.empty() ? nullptr : lkn.data(), l.kn_replace = kn_rep;  // BKN
     for (int l = 0; l < 4; ++l) lms[l].cls_gate = true, lms[l].lc_out = o.copy_out ? (l % 2 ? lc_i : lc_t) : nullptr;  // B4C
     if (o.copy_dk)
-        for (int l = 0; l < 4; ++l) lms[l].lc_dk = l % 2 ? ldk_i : ldk_t;  // ANS: copy inside don't-know answers
+        for (int l = 0; l < 4; ++l) lms[l].lc_dk = l % 2 ? ldk_i : ldk_t, lms[l].copy_frame = o.copy_frame;  // ANS; DK2
 
     // Grading only: is a gold answer in the source article's text (wiki train)? Splits A3's results.
     const std::string_view wiki(reinterpret_cast<const char*>(data.data()), cfg.train);
@@ -4200,7 +4724,8 @@ int cmd_qa(const Args& a, const QaOpts& o) {
         return cov_e.empty() || e.empty() ? -1 : cov_er.count(k + "|" + question_relation(r.q, e)) ? 2 : cov_e.count(k) ? 1 : 0;
     };
 
-    auto run_set = [&](const std::vector<QaRow>& rows, const std::vector<std::string>& toks) {
+    auto run_set = [&](const std::vector<QaRow>& rows, const std::vector<std::string>& toks,
+                       const std::vector<std::string>& pres) {  // DK2: pres, the start frames (empty unless start)
         std::vector<Graded> out;
         for (std::size_t r = 0; r < rows.size(); ++r)
             for (int form = 0; form < 2; ++form)
@@ -4213,7 +4738,7 @@ int cmd_qa(const Args& a, const QaOpts& o) {
                     g.lm = l;
                     g.fam_tok = fam_on ? toks[r] : "";
                     const std::string prompt =
-                        form == 0 ? with_tok("User: " + rows[r].q + "\nAssistant: ", g.fam_tok) : rows[r].q + " ";
+                        form == 0 ? pres[r] + with_tok("User: " + rows[r].q + "\nAssistant: ", g.fam_tok) : rows[r].q + " ";
                     const auto t0 = std::chrono::steady_clock::now();
                     g.ans = decode(lm, prompt);
                     g.ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
@@ -4316,7 +4841,7 @@ int cmd_qa(const Args& a, const QaOpts& o) {
         return out;
     };
 
-    const std::vector<Graded> gd = run_set(dev, tok_dev);
+    const std::vector<Graded> gd = run_set(dev, tok_dev, pre_dev);
     std::map<std::string, int> why_dev;
     const std::vector<Graded> gr3 = o.r3.empty() ? std::vector<Graded>{} : r3_set(dev, why_dev);
     const char* const form_name[2] = {"chat", "wiki"};
@@ -4545,7 +5070,7 @@ int cmd_qa(const Args& a, const QaOpts& o) {
     }
     // The frozen test, once: gates chosen on all of dev, applied unchanged.
     if (!test.empty()) {
-        const std::vector<Graded> gt = run_set(test, tok_test);
+        const std::vector<Graded> gt = run_set(test, tok_test, pre_test);
         std::map<std::string, int> why_test;
         const std::vector<Graded> gt3 = o.r3.empty() ? std::vector<Graded>{} : r3_set(test, why_test);
         write_rows("test", gt, true);
@@ -4620,6 +5145,206 @@ std::vector<std::uint8_t> tiny_corpus(std::size_t n) {
 constexpr double kGoldenBackoff = 1.222293339;
 constexpr double kGoldenMix = 1.130916116;
 constexpr double kGoldenTol = 1e-6;
+
+// ---------------------------------------------------------------- bkn (BKN: packed byte Kneser-Ney)
+//
+// docs/reports/BYTE_KN.md (HANDOFF 5.22). cls's protocol: the bpc model (train bytes only), InfiniGram over the train
+// bytes; then, for each SPEC, byte_kn.hpp's packed Kneser-Ney built on the train bytes, read two ways:
+//   (a) replace: Kneser-Ney in place of the trie mixture, InfiniGram mixed over it by lambda per (match length x count);
+//   (b) add: Kneser-Ney mixed over the trie mixture by lambda per (deepest order found x count band), then InfiniGram.
+// holdout2: lambdas on the holdout's first half, bits per byte on its second half (every choice is made here);
+// --bkn-fresh: also the fresh text [sample, sample + 1 MiB), lambdas refit on the whole holdout (the read that decides);
+// --bkn-stack: also with the defaults on top (class shape, then similar-context default, then copy, as qa mixes them).
+// SPEC is K[:m:c:d]: order K; from order m on, contexts seen fewer than c times dropped and, with d = 1, children
+// seen once dropped (their value into gamma). Intervals: 4 KiB block bootstraps of the paired gain.
+std::vector<int> bkn_spec(const std::string& s) {  // {K, m, c, d}; empty on a bad spec
+    std::vector<int> v;
+    std::stringstream ss(s);
+    std::string f;
+    while (std::getline(ss, f, ':')) {
+        if (f.empty() || f.find_first_not_of("0123456789") != std::string::npos) return {};
+        v.push_back(std::atoi(f.c_str()));
+    }
+    if (v.size() == 1) v = {v[0], 1 << 30, 1, 0};
+    if (v.size() != 4 || v[0] < 1 || v[0] > 32) return {};
+    return v;
+}
+
+int cmd_bkn(const Args& a) {
+    const Config& cfg = a.cfg;
+    if (a.pos.size() < 2) {
+        std::fprintf(stderr, "usage: cyphalm_trie bkn <wiki> K[:m:c:d] [more specs] [--bkn-fresh] [--bkn-stack]\n");
+        return 2;
+    }
+    for (std::size_t s = 1; s < a.pos.size(); ++s)
+        if (bkn_spec(a.pos[s]).empty()) {
+            std::cerr << "bad bkn spec " << a.pos[s] << "\n";
+            return 2;
+        }
+    const std::size_t H = cfg.sample - cfg.train, half = H / 2, N = H + (std::size_t{1} << 20);
+    std::vector<std::uint8_t> data;
+    if (const std::string e = read_prefix(a.wiki, cfg.sample + (std::size_t{1} << 20), data); !e.empty()) {
+        std::cerr << e << "\n";
+        return 1;
+    }
+    Model model;
+    model.data = data.data();
+    model.init(cfg);
+    double w[6];
+    init_weights(w, cfg);
+    train_span(model, data, w, 0, cfg.train, cfg);
+    model.compact_match();
+    const PackedModel pm = pack(model);
+    model.release();
+    const FmInfiniGram ig(data.data(), cfg.train);
+    std::vector<double> pt(N), pi(N);
+    std::vector<int> bi(N);
+    FmInfiniGram::Cursor cur;
+    for (std::size_t k = 0, prev = 0; k < N; ++k) {
+        const std::size_t i = cfg.train + k;
+        double e[5][256], M[256];
+        bool em = false;
+        unsigned pred = 0;
+        pm.fill_experts(data.data(), i, cfg.train, Mode::Synth, e, em, pred, false);
+        mix_dist(w, e, em, pred, M);
+        pt[k] = M[data[i]];
+        const std::size_t len = std::min<std::size_t>(i, 8192);
+        const auto r = ig.query(data.data() + (i - len), len, 8192, k == 0 ? -1 : std::min<int>(static_cast<int>(prev) + 1, 8192),
+                                1, cur);
+        prev = static_cast<std::size_t>(r.n);
+        pi[k] = r.total ? static_cast<double>(r.count[data[i]]) / static_cast<double>(r.total) : 0.0;
+        bi[k] = bucket(r.n, r.total);
+    }
+    auto bits = [](const std::vector<double>& p, std::size_t from, std::size_t to) {
+        std::vector<double> b;
+        b.reserve(to - from);
+        for (std::size_t k = from; k < to; ++k) b.push_back(-std::log2(p[k]));
+        return b;
+    };
+    auto mean = [](const std::vector<double>& v) { return std::accumulate(v.begin(), v.end(), 0.0) / static_cast<double>(v.size()); };
+    auto gain = [](const std::vector<double>& with, const std::vector<double>& without) {
+        std::vector<double> d(with.size());
+        for (std::size_t k = 0; k < d.size(); ++k) d[k] = with[k] - without[k];
+        return d;
+    };
+    // cur = lam pe + (1 - lam) base, lam per bucket fit on k < upto (half: the holdout read; H: the fresh read).
+    auto mixed = [&](const std::vector<double>& pe, const std::vector<int>& bk, int nb, const std::vector<double>& base,
+                     std::size_t upto) {
+        std::vector<double> lam(static_cast<std::size_t>(nb), 0.0), out(base.size());
+        fit_lambdas(pe, base, bk, upto, nb, lam.data());
+        for (std::size_t k = 0; k < base.size(); ++k) out[k] = lam[static_cast<std::size_t>(bk[k])] * pe[k] + (1 - lam[static_cast<std::size_t>(bk[k])]) * base[k];
+        return out;
+    };
+    const std::vector<double> pih = mixed(pi, bi, kBuckets, pt, half), pif = mixed(pi, bi, kBuckets, pt, H);
+    std::printf("bkn base holdout2 trie %.6f trie+ig %.6f", mean(bits(pt, half, H)), mean(bits(pih, half, H)));
+    if (a.bkn_fresh) std::printf(" | fresh trie %.6f trie+ig %.6f", mean(bits(pt, H, N)), mean(bits(pif, H, N)));
+    std::printf("\n");
+
+    // The defaults on top (--bkn-stack): class shape, similar-context default, copy (min 8), each mixed by lambda per its
+    // bucket over what came before, as qa mixes them.
+    std::vector<double> pc, ps, pcp;
+    std::vector<int> bc, sb, cb;
+    if (a.bkn_stack) {
+        auto cc = make_class_context("shape");
+        if (!cc) return 1;
+        cc->build(data.data(), cfg.train);
+        pc.resize(N), bc.resize(N);
+        for (std::size_t k = 0; k < N; ++k) {
+            double P[256];
+            bc[k] = ClassContext::bucket(cc->predict(data.data(), cfg.train + k, P));
+            pc[k] = P[data[cfg.train + k]];
+        }
+        cc.reset();
+        const SimSpec ss = parse_sim("default");
+        auto sc = make_similar_context(ss);
+        if (!ss.ok || !sc) return 1;
+        sc->build(data.data(), cfg.train);
+        ps.resize(N), sb.resize(N);
+        for (std::size_t k = 0; k < N; ++k) {
+            double P[256];
+            sb[k] = SimilarContext::bucket(sc->predict(data.data(), cfg.train + k, P));
+            ps[k] = P[data[cfg.train + k]];
+        }
+        sc.reset();
+        pcp.resize(N), cb.resize(N);
+        for (std::size_t k = 0; k < N; ++k) {
+            int n = 0;
+            pcp[k] = copy_pred(data.data(), cfg.train + k, n) == data[cfg.train + k] ? 1.0 : 0.0;
+            cb[k] = copy_bucket(n);
+        }
+        std::cerr << "bkn: class, similar-context and copy predictions done\n";
+    }
+    auto stack = [&](const std::vector<double>& base, std::size_t upto) {
+        std::vector<double> x = mixed(pc, bc, ClassContext::kBuckets, base, upto);
+        x = mixed(ps, sb, SimilarContext::kBuckets, x, upto);
+        std::vector<double> lam(kCopyBuckets, 0.0);
+        fit_lambdas(pcp, x, cb, upto, kCopyBuckets, lam.data());
+        copy_clip(lam.data(), a.copy_min);
+        for (std::size_t k = 0; k < x.size(); ++k) x[k] = lam[static_cast<std::size_t>(cb[k])] * pcp[k] + (1 - lam[static_cast<std::size_t>(cb[k])]) * x[k];
+        return x;
+    };
+    std::vector<double> sth, stf;
+    if (a.bkn_stack) {
+        sth = stack(pih, half);
+        if (a.bkn_fresh) stf = stack(pif, H);
+        std::printf("bkn base_stack holdout2 trie+ig+cls+sim+copy %.6f", mean(bits(sth, half, H)));
+        if (a.bkn_fresh) std::printf(" | fresh %.6f", mean(bits(stf, H, N)));
+        std::printf("\n");
+    }
+
+    for (std::size_t s = 1; s < a.pos.size(); ++s) {
+        const std::vector<int> v = bkn_spec(a.pos[s]);
+        cypha::cyphalm::bkn::Prune pr;
+        pr.from_order = v[1], pr.min_ctx = static_cast<std::uint32_t>(v[2]), pr.drop_singletons = v[3] != 0;
+        const auto t0 = std::chrono::steady_clock::now();
+        const cypha::cyphalm::bkn::ByteKN kn(data.data(), cfg.train, v[0], pr);
+        const double build_s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+        std::vector<double> pk(N);
+        std::vector<int> kb(N);
+        const auto t1 = std::chrono::steady_clock::now();
+        for (std::size_t k = 0; k < N; ++k) pk[k] = kn.prob_bucket(data.data(), cfg.train + k, data[cfg.train + k], kb[k]);
+        const double score_us = std::chrono::duration<double>(std::chrono::steady_clock::now() - t1).count() * 1e6 / static_cast<double>(N);
+        const std::string sp = a.pos[s];
+        std::printf("bkn spec %s table_bytes %zu contexts %zu children %zu build_s %.1f score_us_per_byte %.3f\n", sp.c_str(), kn.bytes(),
+                    kn.contexts(), kn.children(), build_s, score_us);
+        for (int k = 1; k <= v[0]; ++k) {
+            const auto& o = kn.table(k);
+            std::printf("bkn spec %s order %d D %.4f %.4f %.4f contexts %llu->%zu children %llu->%zu\n", sp.c_str(), k, o.D[1], o.D[2], o.D[3],
+                        static_cast<unsigned long long>(o.ctx_before), o.key.size(), static_cast<unsigned long long>(o.child_before), o.sym.size());
+        }
+        // (a) replace; (b) add.
+        const std::vector<double> ah = mixed(pi, bi, kBuckets, pk, half);
+        const std::vector<double> bh0 = mixed(pk, kb, kn.buckets(), pt, half);
+        const std::vector<double> bh = mixed(pi, bi, kBuckets, bh0, half);
+        const auto h_ti = bits(pih, half, H), h_a = bits(ah, half, H), h_b = bits(bh, half, H);
+        std::printf("bkn spec %s holdout2 kn %.6f kn+ig(a) %.6f trie+kn(b) %.6f trie+kn+ig(b) %.6f\n", sp.c_str(), mean(bits(pk, half, H)),
+                    mean(h_a), mean(bits(bh0, half, H)), mean(h_b));
+        print_boot("bkn spec " + sp + " holdout2 gain_a_over_trie_ig", block_boot(gain(h_a, h_ti), 4096, 2000, 11));
+        print_boot("bkn spec " + sp + " holdout2 gain_b_over_trie_ig", block_boot(gain(h_b, h_ti), 4096, 2000, 11));
+        if (a.bkn_stack) {
+            const auto s_base = bits(sth, half, H), s_a = bits(stack(ah, half), half, H), s_b = bits(stack(bh, half), half, H);
+            std::printf("bkn spec %s holdout2 stack(a) %.6f stack(b) %.6f\n", sp.c_str(), mean(s_a), mean(s_b));
+            print_boot("bkn spec " + sp + " holdout2 stack_gain_a", block_boot(gain(s_a, s_base), 4096, 2000, 11));
+            print_boot("bkn spec " + sp + " holdout2 stack_gain_b", block_boot(gain(s_b, s_base), 4096, 2000, 11));
+        }
+        if (a.bkn_fresh) {
+            const std::vector<double> af = mixed(pi, bi, kBuckets, pk, H);
+            const std::vector<double> bf = mixed(pi, bi, kBuckets, mixed(pk, kb, kn.buckets(), pt, H), H);
+            const auto f_ti = bits(pif, H, N), f_a = bits(af, H, N), f_b = bits(bf, H, N);
+            std::printf("bkn spec %s fresh kn %.6f kn+ig(a) %.6f trie+kn+ig(b) %.6f\n", sp.c_str(), mean(bits(pk, H, N)), mean(f_a), mean(f_b));
+            print_boot("bkn spec " + sp + " fresh gain_a_over_trie_ig", block_boot(gain(f_a, f_ti), 4096, 4000, 11));
+            print_boot("bkn spec " + sp + " fresh gain_b_over_trie_ig", block_boot(gain(f_b, f_ti), 4096, 4000, 11));
+            if (a.bkn_stack) {
+                const auto s_base = bits(stf, H, N), s_a = bits(stack(af, H), H, N), s_b = bits(stack(bf, H), H, N);
+                std::printf("bkn spec %s fresh stack(a) %.6f stack(b) %.6f\n", sp.c_str(), mean(s_a), mean(s_b));
+                print_boot("bkn spec " + sp + " fresh stack_gain_a", block_boot(gain(s_a, s_base), 4096, 4000, 11));
+                print_boot("bkn spec " + sp + " fresh stack_gain_b", block_boot(gain(s_b, s_base), 4096, 4000, 11));
+            }
+        }
+        std::fflush(stdout);
+    }
+    return 0;
+}
 
 int cmd_selftest() {
     if (!self_test()) {
@@ -4857,6 +5582,34 @@ int cmd_selftest() {
         }
     }
     {
+        // DK2: the frames alone; the plain-turn spread of --dk-plain; --copy-frame: a frame's end is not copied into the
+        // message (no "<|" open in the answer), but a tag the answer opened may be closed.
+        auto b = [](const std::string& x) { return std::vector<std::uint8_t>(x.begin(), x.end()); };
+        int p50 = 0, p75 = 0, p0 = 0;
+        for (std::size_t j = 0; j < 8; ++j) p50 += dk_plain_turn(j, 0.5), p75 += dk_plain_turn(j, 0.75), p0 += dk_plain_turn(j, 0);
+        const std::string pr = "<|about Zorbia|><|entity=\"Zorbia\"|>User: Who? x\nAssistant: ";
+        const auto m = b(pr + "I don't know. I have nothing about Zorbia");
+        const auto t = b(pr + "I don't know. I have nothing about Zorbia in it. <|unknown entity=\"Zorbia\"");
+        const auto u = b(pr + "I don't know. <|unknown|> about Zorbia");
+        int n1 = 0, n2 = 0, n3 = 0;
+        std::size_t j1 = 0, j2 = 0, j3 = 0;
+        const int c1 = copy_pred(m.data(), m.size(), n1, &j1), c2 = copy_pred(t.data(), t.size(), n2, &j2),
+                  c3 = copy_pred(u.data(), u.size(), n3, &j3);
+        const bool ok = fam_frames("about {E};entity=\"{E}\"", "the Zorbia") == "<|about Zorbia|><|entity=\"Zorbia\"|>" &&
+                        fam_frames("entity=\"{E}\"", "").empty() && p50 == 4 && p75 == 6 && p0 == 0 && !dk_plain_turn(0, 0.5) &&
+                        dk_plain_turn(1, 0.5) && c1 == '|' && n1 >= 12 && copy_closes_unopened(m.data(), m.size(), j1, pr.size()) &&
+                        c2 == '|' && !copy_closes_unopened(t.data(), t.size(), j2, pr.size()) && c3 == '|' &&
+                        copy_closes_unopened(u.data(), u.size(), j3, pr.size()) &&
+                        !copy_closes_unopened(m.data(), m.size(), 1, pr.size()) &&  // "<|" opens, it does not close
+                        open_token_at(m.data(), m.size(), pr.size()) == std::string::npos &&
+                        open_token_at(t.data(), t.size(), pr.size()) == t.size() - 25 &&  // at `<|unknown entity="Zorbia"`
+                        open_token_at(u.data(), u.size(), pr.size()) == std::string::npos;
+        if (!ok) {
+            std::cerr << "selftest: DK2 frames / plain turns / copy-frame checks failed\n";
+            return 1;
+        }
+    }
+    {
         // B4: the class-context expert on a tiny corpus. A verb of the same class reuses what "wrote" learned; an
         // unknown word falls to the uniform floor; P sums to 1; the bucket packs order and count.
         ClassContext cc({{"wrote", 10}, {"composed", 10}, {"who", 11}, {"the", 12}}, ClassContext::Options{6, 2, false, 1});
@@ -5020,6 +5773,100 @@ int cmd_selftest() {
         }
         if (!causal || differs < 10) {
             std::cerr << "selftest: similar-context online keys (A4d) read a byte not yet scored, or are never used\n";
+            return 1;
+        }
+    }
+    {  // BKN (docs/reports/BYTE_KN.md): byte_kn.hpp equals token_model.hpp's Kneser-Ney over byte ids (to float
+       // storage); prob() equals dist(); every distribution sums to one, pruned or not.
+        namespace bk = cypha::cyphalm::bkn;
+        const std::vector<std::uint8_t> t = tiny_corpus(40'000);
+        const std::size_t T = 36'000;
+        const std::vector<std::uint32_t> ids(t.begin(), t.end());
+        bool same = true, norm = true;
+        for (int K : {1, 3, 6}) {
+            const bk::ByteKN kn(t.data(), T, K);
+            const cypha::cyphalm::tok::KneserNey ref(ids.data(), T, 256, K);
+            for (std::size_t i = T; i < t.size(); i += 13) {
+                const double x = kn.prob(t.data(), i, t[i]), y = ref.prob(ids.data(), i, ids[i]);
+                if (std::fabs(x - y) > 1e-5 * y) same = false;
+            }
+        }
+        bk::Prune p0, p1, p2, p3;
+        p1.from_order = 3, p1.min_ctx = 2;
+        p2.from_order = 3, p2.min_ctx = 2, p2.drop_singletons = true;
+        p3.from_order = 2, p3.min_ctx = 3, p3.drop_singletons = true;
+        for (const bk::Prune& pr : {p0, p1, p2, p3}) {
+            const bk::ByteKN kn(t.data(), T, 6, pr);
+            for (std::size_t i = T; i < t.size(); i += 101) {
+                double P[256], z = 0;
+                kn.dist(t.data(), i, P);
+                for (double x : P) z += x;
+                if (std::fabs(z - 1.0) > 1e-5 || std::fabs(P[t[i]] - kn.prob(t.data(), i, t[i])) > 1e-9) norm = false;
+            }
+        }
+        if (!same || !norm) {
+            std::cerr << "selftest: byte Kneser-Ney (BKN) differs from token_model.hpp's, or does not sum to one\n";
+            return 1;
+        }
+    }
+    // GEN-E: the content-plan expert (content_plan.hpp). The entity rule's order, dates to years, the holdout and
+    // list exclusions, the relation order, alignment and its tie rule, and the "expressed" test.
+    {
+        namespace fs = std::filesystem;
+        const fs::path dir = fs::temp_directory_path() / ("cyphalm_plan_selftest_" + std::to_string(std::random_device{}()));
+        fs::create_directories(dir);
+        {
+            std::ofstream(dir / "pages.tsv") << "Agamemnon\t1000\nMycenae\t5000\n";
+            std::ofstream(dir / "facts_f2.tsv")
+                << "subject\trelation\tobject\tP\tgrade\tn_evidence\tbest_pattern\tsource_page\tbyte_offset\n"
+                << "Agamemnon\tbirth_place\tMycenae\t0.9\tLow\t1\tp\tAgamemnon\t1010\n"
+                << "Agamemnon\tdeath_date\t1150-03-02\t0.9\tLow\t1\tp\tAgamemnon\t1005\n";
+            std::ofstream(dir / "seeds.tsv") << "subject\trelation\tobject\tsource\ttemplate\tbyte_offset\n"
+                                             << "Agamemnon\tspouse\tClytemnestra\twikidata\twikidata\t0\n"
+                                             << "Agamemnon\tspouse\tOther\twikidata\twikidata\t0\n"
+                                             << "Agamemnon\tspouse\tThird\twikidata\twikidata\t0\n"
+                                             << "Agamemnon\tcountry\tGreece\tinfobox\tx\t20500\n"
+                                             << "Agamemnon\tfounded\t0944\twikidata\twikidata\t0\n";
+        }
+        ContentPlanStore st;
+        std::string err;
+        bool ok = st.load(dir.string(), 20000, 30000, err) && err.empty();
+        fs::remove_all(dir);
+        const std::map<std::string, std::vector<std::string>> fr = {
+            {"birth_place", {"\x01 was born in [[\x02]],"}}, {"death_year", {"\x01 (died \x02)"}},
+            {"spouse", {"\x01 married \x02"}}, {"country", {"\x01 is in \x02"}}, {"founded", {"founded in \x02"}}};
+        const auto cand = ContentPlanStore::candidates("'''Ahmed III''' (in [[Arabic language|Arabic]]) ruled the Ottoman Empire.");
+        ok = ok && cand.size() >= 4 && cand[0] == "Ahmed III" && cand[1] == "Arabic language" &&
+             std::find(cand.begin(), cand.end(), "Ottoman Empire") != cand.end();
+        ok = ok && ContentPlanStore::canon("birth_date", "1673-12-30") == std::make_pair(std::string("birth_year"), std::string("1673")) &&
+             ContentPlanStore::canon("founded", "0944").second == "944";
+        const auto pl = st.plan("Agamemnon gathered together the Greek forces to sail for Troy.", fr);
+        // country (offset 20500) is in the holdout [20000, 30000); spouse has 3 values; birth_place and death_year come
+        // from the text (F2), by their position in the page: death_year (5 bytes in) before birth_place (10 bytes in)
+        ok = ok && pl.entity == "Agamemnon" && pl.facts.size() == 3 && pl.facts[0].rel == "death_year" &&
+             pl.facts[0].value == "1150" && pl.facts[1].rel == "birth_place" && pl.facts[2].rel == "founded" &&
+             pl.facts[2].value == "944" && pl.real[1].size() == 1 && pl.real[1][0] == "Agamemnon was born in [[Mycenae]],";
+        auto pred = [&](const std::string& text, const std::vector<int>& act, double* P) {
+            return ContentPlanStore::predict(pl, act, reinterpret_cast<const std::uint8_t*>(text.data()), text.size(), P);
+        };
+        double P[256];
+        const int L = pred("And then he was born in [[", {0, 1, 2}, P);
+        ok = ok && L == 15 && P['M'] == 1.0;
+        ok = ok && pred("nothing like it xyz", {0, 1, 2}, P) == 0 && *std::max_element(P, P + 256) == 0.0;
+        ok = ok && pred("he was born in [[", {0, 2}, P) == 0;  // birth_place expressed: not active
+        // tie: both facts align " in " (4 bytes); the earlier fact in the plan predicts
+        ContentPlanStore::Plan tp;
+        tp.facts = {{"a", "x", true}, {"b", "y", true}};
+        tp.real = {{"go in Q"}, {"be in R"}};
+        const std::string t = "xx in ";
+        ok = ok && ContentPlanStore::predict(tp, {0, 1}, reinterpret_cast<const std::uint8_t*>(t.data()), t.size(), P) == 4 &&
+             P['Q'] == 1.0 && P['R'] == 0.0;
+        ok = ok && ContentPlanStore::predict(tp, {1, 0}, reinterpret_cast<const std::uint8_t*>(t.data()), t.size(), P) == 4 &&
+             P['R'] == 1.0;
+        ok = ok && ContentPlanStore::expressed(pl, 1, ContentPlanStore::fold("he was born in [[Mycenae]] and")) &&
+             !ContentPlanStore::expressed(pl, 1, ContentPlanStore::fold("he was born in [[Myc"));
+        if (!ok) {
+            std::cerr << "selftest: content-plan expert (GEN-E) checks failed " << err << "\n";
             return 1;
         }
     }
@@ -5280,12 +6127,15 @@ void usage() {
                  "  context8k [wiki] [dolly]\n"
                  "  sample <wiki> <out_dev> [out_fresh] [--prompts 250] [--bytes 600] [--save FILE | --model FILE]\n"
                  "  cls <wiki> <TABLE|shape>[:tail[:orders[:flags]]] [more specs] [--sim SPEC ...] [--sim-fresh] [--sim-surface]\n"
+                 "  bkn <wiki> K[:m:c:d] [more specs] [--bkn-fresh] [--bkn-stack]   (BKN: packed byte Kneser-Ney)\n"
+                 "      [--sim-stream FROM:LEN] [--sim-bits PREFIX] [--sim-growth MIB,MIB,...]   (A4e)\n"
+                 "  simpair [--margin M] REF.f64 FILE.f64 ...   (A4e: cls --sim-bits files paired against REF)\n"
                  "  SPEC: [default,][vec=PREFIX|FILE][,W=8][,k=32][,T=0.05][,min=-1][,sif=1][,dim=64][,drop=1][,lists=512][,probe=8][,tail=32]\n"
                  "        [,src=all|wiki][,gate=1][,mode=knn|dedupe][,online=0]   (default = %s; vectors from $CYPHA_SIMVEC, else %s)\n"
                  "  qa [wiki] [dolly] --dev DEV.tsv [--test TEST.tsv] [--leak TEST.tsv] [--out ROWS.tsv] [--base A0_ROWS.tsv]\n"
                  "     [--dk DK.tsv --dk-ratio R] [--fam none|before|after] [--parse E1.tsv] [--fam-stat NAME]\n"
                  "     [--fam-train stat|outcome|low] [--fam-only] [--copy] [--copy-min N] [--r3 PATTERNS.tsv]\n"
-                 "     [--fam-ent FRAMES] [--copy-dk] [--fam-read]\n"
+                 "     [--fam-ent FRAMES] [--copy-dk] [--fam-read] [--dk-plain P] [--fam-ent-at all|answer|start] [--copy-frame]\n"
                  "     [--shard F.tsv] [--shard2 F.tsv] [--cls TABLE|shape[:tail[:orders[:flags]]]] [--sim SPEC] [--cards FILE]\n"
                  "     [--save DIR | --model DIR]\n"
                  "     (class, similar-context and copy experts are defaults, off inside answers: --no-cls --no-sim --no-copy)\n"
@@ -5309,14 +6159,19 @@ int main(int argc, char** argv) {
     }
     const std::string cmd = argv[1];
     if (cmd == "selftest") return cmd_selftest();
+    if (cmd == "simpair") return cmd_simpair(std::vector<std::string>(argv + 2, argv + argc));  // A4e
     const Args a = parse(argc, argv, 2);
     if (!a.ok) {
         usage();
         return 2;
     }
     if (cmd != "bpc" && cmd != "chat" && cmd != "probe" && cmd != "context8k" && cmd != "sample" && cmd != "qa" &&
-        cmd != "dktext" && cmd != "cls" && cmd != "simvec" && cmd != "surprise") {
+        cmd != "dktext" && cmd != "cls" && cmd != "simvec" && cmd != "surprise" && cmd != "bkn") {
         usage();
+        return 2;
+    }
+    if (!a.bkn.empty() && ((cmd != "qa" && cmd != "sample") || (a.bkn_way != "a" && a.bkn_way != "b") || bkn_spec(a.bkn).empty())) {
+        std::cerr << "--bkn K[:m:c:d] is for qa and sample, with --bkn-way a (replace) or b (add)\n";  // BKN
         return 2;
     }
     if ((!a.model.empty() || !a.save.empty()) && cmd != "chat" && cmd != "sample" && cmd != "qa") {
@@ -5347,6 +6202,7 @@ int main(int argc, char** argv) {
     else if (cmd == "context8k") rc = cmd_context8k(a);
     else if (cmd == "sample") rc = cmd_sample(a);
     else if (cmd == "cls") rc = cmd_cls(a);
+    else if (cmd == "bkn") rc = cmd_bkn(a);  // BKN
     else if (cmd == "simvec") rc = cmd_simvec(a);
     else if (cmd == "surprise") rc = cmd_surprise(a);  // S4b
     else if (cmd == "qa") {
@@ -5356,10 +6212,17 @@ int main(int argc, char** argv) {
             usage();
             return 2;
         }
+        if (a.dk_plain < 0 || a.dk_plain >= 1 || (a.fam_ent_at != "all" && a.fam_ent_at != "answer" && a.fam_ent_at != "start") ||
+            (a.fam_ent_at != "all" && a.fam_ent.empty()) || (a.copy_frame && !a.copy_dk) || (a.dk_plain > 0 && a.fam == "none") ||
+            ((a.dk_plain > 0 || a.fam_ent_at != "all" || a.copy_frame) && (!a.model.empty() || !a.save.empty())) ||
+            (a.fam_ent_at == "start" && !a.cards.empty())) {  // DK2: training text, not stored; start frames not in cards
+            usage();
+            return 2;
+        }
         rc = cmd_qa(a, QaOpts{a.dev, a.test, a.out, a.base, a.dk, a.dk_ratio, a.fam, a.parse, a.fam_stat, a.fam_train,
                               a.r3, a.shard, a.shard2, a.leak, a.copy, a.fam_only, default_cls_spec(a), a.copy_min,
                               a.no_sim ? std::string() : a.sims.empty() ? std::string("default") : a.sims[0], !a.no_copy,
-                              a.fam_ent, a.copy_dk, a.fam_read});
+                              a.fam_ent, a.copy_dk, a.fam_read, a.dk_plain, a.fam_ent_at, a.copy_frame});
     } else if (cmd == "dktext") {
         if (a.dev.empty() || a.test.empty() || a.out.empty()) {
             usage();

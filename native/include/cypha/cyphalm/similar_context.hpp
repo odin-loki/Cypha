@@ -34,6 +34,10 @@
 ///   it proposes the byte at j + t. As j < anchor and t = n - anchor, j + t < n: it reads only bytes already scored.
 ///   The stream is the stored text's own buffer from its end on (h == the stored text), or the query text from its
 ///   start; the online keys start again when the stream is not the one read so far.
+/// - A4e: each online key costs (dim rounded up to 16) + 4 bytes, 5.3 to 5.5 MB a MiB of text read, with no end, and
+///   every search scans the probed lists' share of them. Every bound tried (2^15 to 2^19 keys; the oldest dropped, or
+///   the least recently found) lost more than 0.0005 bits per byte over 8 MiB, so none was kept
+///   (docs/reports/A4_SIMILAR_CONTEXT_EXPERT.md, "A4e"; the bound's code is at commit a854346).
 
 #include <algorithm>
 #include <cctype>
@@ -639,13 +643,46 @@ class SimilarContext {
     int dim() const { return dim_; }
     int lists() const { return lists_; }
     std::size_t queries() const { return lat_us_.size(); }
-    /// Search latency quantile q in [0, 1], microseconds (every search of this expert so far).
-    double latency_us(double q) const {
-        if (lat_us_.empty()) return 0;
-        std::vector<float> v = lat_us_;
+    /// Search latency quantile q in [0, 1], microseconds (every search of this expert so far, or searches [from, to)).
+    double latency_us(double q) const { return latency_us(q, 0, lat_us_.size()); }
+    double latency_us(double q, std::size_t from, std::size_t to) const {
+        to = std::min(to, lat_us_.size());
+        if (from >= to) return 0;
+        std::vector<float> v(lat_us_.begin() + static_cast<std::ptrdiff_t>(from), lat_us_.begin() + static_cast<std::ptrdiff_t>(to));
         const std::size_t i = std::min(v.size() - 1, static_cast<std::size_t>(q * static_cast<double>(v.size())));
         std::nth_element(v.begin(), v.begin() + static_cast<std::ptrdiff_t>(i), v.end());
         return v[i];
+    }
+    /// A4e diagnostics: the online keys held now (every word end of the stream so far) and the bytes their arrays hold
+    /// (capacity, as allocated).
+    std::size_t online_keys() const { return on_count_; }
+    std::size_t online_alloc_bytes() const {
+        std::size_t b = 0;
+        for (const auto& v : on_keys_) b += v.capacity();
+        for (const auto& v : on_pos_) b += v.capacity() * 4;
+        return b;
+    }
+    /// A4e diagnostics, for merging: of the online keys held, how many equal a stored key (dedupe: a distinct key) and
+    /// how many equal an earlier held online key but no stored one.
+    std::pair<std::size_t, std::size_t> online_duplicates() const {
+        const std::size_t S = static_cast<std::size_t>(stride_);
+        const auto hash = [S](const std::int8_t* x) {
+            std::uint64_t h = 0xcbf29ce484222325ull;
+            for (std::size_t d = 0; d < S; ++d) h = (h ^ static_cast<std::uint8_t>(x[d])) * 0x100000001b3ull;
+            return h;
+        };
+        std::unordered_map<std::uint64_t, char> seen;  // 1 stored, 2 online
+        for (std::size_t r = 0; r * S < keys_.size(); ++r) seen.emplace(hash(&keys_[r * S]), 1);
+        std::vector<std::pair<std::uint32_t, const std::int8_t*>> held;  // in stream order
+        for (std::size_t c = 0; c < on_pos_.size(); ++c)
+            for (std::size_t i = 0; i < on_pos_[c].size(); ++i) held.push_back({on_pos_[c][i], &on_keys_[c][i * S]});
+        std::sort(held.begin(), held.end(), [](const auto& x, const auto& y) { return x.first < y.first; });
+        std::size_t stored = 0, online = 0;
+        for (const auto& [p, x] : held) {
+            const auto [it, fresh] = seen.emplace(hash(x), 2);
+            if (!fresh) ++(it->second == 1 ? stored : online);
+        }
+        return {stored, online};
     }
 
     /// Eigenvectors of the symmetric D x D matrix A (cyclic Jacobi), as the columns of V, by falling eigenvalue.
