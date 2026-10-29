@@ -108,7 +108,7 @@ Tool: `cyphalm_trie qa` (dev 130 questions, frozen test 200; coverage at a 2% wr
 
 ## Word vectors
 
-PPMI-SVD (`native/tools/ppmi_svd.cpp`) stays the source: WordSim-353 0.672, SimLex-999 0.255, MEN 0.637 on all of enwik8 (C1 pairs). Cypha's own learner, `cypha_word_classes train --method sgns --epochs 5 --var0 0.3` ([S-1b](reports/S1B_LEARNED_CONTEXTS.md)): 0.683 / 0.246 / 0.669 on the same pairs, 0.750 / 0.270 / 0.756 on the top-10,000 pairs; no worse on common words, worse on rare ones.
+PPMI-SVD (`native/tools/ppmi_svd.cpp`) stays the source: WordSim-353 0.672, SimLex-999 0.255, MEN 0.637 on all of enwik8 (C1 pairs). Cypha's own learner, `cypha_word_classes train --method sgns --epochs 5 --var0 0.3` ([S-1b](reports/S1B_LEARNED_CONTEXTS.md)): 0.683 / 0.246 / 0.669 on the same pairs, 0.750 / 0.270 / 0.756 on the top-10,000 pairs; no worse on common words, worse on rare ones. S-1c (2026-10-29): a context prior lifts Cypha's own vectors on rare words (Card-660 +0.098 over (b)), and on common nouns they are above PPMI-SVD (MTurk-287 +0.066), but verbs fail the margin (VERB-143), so PPMI-SVD stays the source; the §4.2 step is 1.42× faster, bit-identical.
 
 ## Embedding teacher (weights only in the container)
 

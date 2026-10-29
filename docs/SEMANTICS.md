@@ -139,7 +139,7 @@ If S-1 matches PPMI-SVD, the C1 tool becomes a baseline, not a dependency, and t
 
 S-1's tool stays as the home for that work.
 
-**S-1b (2026-10-28,** [report](reports/S1B_LEARNED_CONTEXTS.md)**).** Learned contexts with a logistic objective, in Cypha's natural-gradient Gaussians, reach PPMI-SVD's level on the same pairs (0.750 / 0.270 against 0.723 / 0.265). PMI-weighted inputs stay at count level; the §4.2 pull–push rule works only from a warm start. The gate (superiority) failed narrowly, and a non-inferiority read on fresh sets failed on rare words, so PPMI-SVD stays the vector source.
+**S-1b (2026-10-28,** [report](reports/S1B_LEARNED_CONTEXTS.md)**).** Learned contexts with a logistic objective, in Cypha's natural-gradient Gaussians, reach PPMI-SVD's level on the same pairs (0.750 / 0.270 against 0.723 / 0.265). PMI-weighted inputs stay at count level; the §4.2 pull–push rule works only from a warm start. The gate (superiority) failed narrowly, and a non-inferiority read on fresh sets failed on rare words, so PPMI-SVD stays the vector source. **S-1c (2026-10-29):** a count-dependent prior from each word's own contexts closes most of the rare-word gap on dev and helps fresh rare words (+0.098); the fresh read fails on verbs, so PPMI-SVD stays the source ([report](reports/S1B_LEARNED_CONTEXTS.md)).
 
 ---
 
