@@ -369,6 +369,40 @@ struct Tagger {
             t1 = out[i];
         }
     }
+    // As tag(), and also each token's scores (E1 Cypha comparison, docs/reports/E1_CYPHA_TAGGER.md). A token tagged by
+    // the tag dictionary has from_dict = 1 and no scores (all zero).
+    void tag_scores(const Ctx& c, std::vector<u16>& out, std::vector<std::vector<float>>& scores, std::vector<char>& from_dict) const {
+        const int n = c.n;
+        out.assign(static_cast<std::size_t>(n), 0);
+        scores.assign(static_cast<std::size_t>(n), std::vector<float>(T(), 0.0f));
+        from_dict.assign(static_cast<std::size_t>(n), 0);
+        const u16 START = static_cast<u16>(T());
+        u16 t1 = START, t2 = START;
+        std::vector<u64> f;
+        float sc[kMaxTags];
+        const int nt = static_cast<int>(T());
+        for (int i = 0; i < n; ++i) {
+            u32 dv;
+            if (use_dict && dict.get(c.w[static_cast<std::size_t>(i) + 2], dv)) {
+                out[i] = static_cast<u16>(dv);
+                from_dict[static_cast<std::size_t>(i)] = 1;
+            } else {
+                for (int t = 0; t < nt; ++t) sc[t] = 0;
+                static_feats(c, i, f);
+                u64 d[kDyn];
+                dyn_feats(c, i, t1, t2, d);
+                for (u64 h : f) add_feat(h, sc);
+                for (int j = 0; j < kDyn; ++j) add_feat(d[j], sc);
+                int best = 0;
+                for (int t = 1; t < nt; ++t)
+                    if (sc[t] > sc[best]) best = t;
+                out[i] = static_cast<u16>(best);
+                for (int t = 0; t < nt; ++t) scores[static_cast<std::size_t>(i)][static_cast<std::size_t>(t)] = sc[t];
+            }
+            t2 = t1;
+            t1 = out[i];
+        }
+    }
     void add_feat(u64 h, float* sc) const {
         u32 r;
         if (!feat.get(h, r)) return;
@@ -1303,6 +1337,27 @@ int cmd_eval(int argc, char** argv) {
     pl("nominal NPs, gold UPOS (ceiling)", gold_tags);
     pl("nominal NPs, predicted UPOS", pred_tags);
     pl("nominal + pronoun NPs, predicted", pred_pron);
+    // Optional: per-token UPOS scores for calibration (E1 Cypha comparison). Without --scores nothing changes.
+    if (argc >= 6 && std::string(argv[4]) == "--scores") {
+        std::FILE* f = std::fopen(argv[5], "w");
+        if (!f) return std::fprintf(stderr, "cannot write %s\n", argv[5]), 1;
+        std::fprintf(f, "gold\tpred\tdict\tsent");
+        for (const auto& t : M.up.tags) std::fprintf(f, "\t%s", t.c_str());
+        std::fprintf(f, "\n");
+        std::vector<u16> po;
+        std::vector<std::vector<float>> sc;
+        std::vector<char> fd;
+        for (std::size_t s = 0; s < S.size(); ++s) {
+            M.up.tag_scores(ctx[s], po, sc, fd);
+            for (std::size_t i = 0; i < po.size(); ++i) {
+                if (po[i] != pu[s][i]) return std::fprintf(stderr, "score dump disagrees with tag()\n"), 1;
+                std::fprintf(f, "%s\t%s\t%d\t%zu", S[s].upos[i].c_str(), M.up.tags[po[i]].c_str(), fd[i] ? 1 : 0, s);
+                for (float v : sc[i]) std::fprintf(f, "\t%.5g", static_cast<double>(v));
+                std::fprintf(f, "\n");
+            }
+        }
+        std::fclose(f);
+    }
     return 0;
 }
 

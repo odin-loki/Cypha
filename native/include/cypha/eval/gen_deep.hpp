@@ -1,4 +1,4 @@
-// Generators G1 (deep deduction), G19 (refinement) and G20 (the wild tier) for Cypha's discovery track
+// Generators G1 (deep deduction) and G20 (the wild tier) for Cypha's discovery track
 // (docs/DISCOVERY.md section 5; docs/reports/S12A_DEDUCTION_LAWS_REFINEMENT.md).
 //
 // Header-only. Reads a TripleStore (hypothesis.hpp), G2's rules (gen_rules.hpp) and S9's worlds (worlds.hpp).
@@ -6,19 +6,22 @@
 //   deep_chain     G1: forward chaining of the kept G2 rules inside a world, from every fact of the store, up to a depth.
 //                  A fact first derived at depth d keeps its premises and its chain confidence (the product of the
 //                  rules' PCA confidences). Depth 1 is G2's own prediction; G1's hypotheses are depth >= 2.
-//   refine_rules   G19: one condition atom c(X, v) added to a const, same or inverse rule's subject, chosen among the
-//                  constant facts of the rule's supporting subjects (a beam of 3 by refined PCA). Kept at support >= 10,
-//                  PCA >= 0.5, PCA at least 0.1 above the parent's, and Benjamini-Hochberg over the refinements.
+//   g1_prior       G1's prior by depth (S12c): the chain confidence, a cap at depth 3, or calibrated by depth from graded
+//                  counts ((true + 1) / (graded + 2)); clamped to [0.02, 0.98].
+//   G19 (refinement) was removed by S12c's registered rule (it failed its earn-its-place read and no richer store is
+//   scheduled); its code is in git at main's 0ce072f.
 //   wild_tier      G20: for a slot (s, r), a value drawn from r's objects in another cluster (type and country), kept
 //                  when the link predictor scores it at least twice the base rate; a fixed budget.
 //
-// Nothing here answers a question. Derived facts, refined rules and wild pairs are hypotheses (PLAN rule 10).
+// Nothing here answers a question. Derived facts and wild pairs are hypotheses (PLAN rule 10).
 //
 // Author: Odin Loch
 #pragma once
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
+#include <limits>
 #include <map>
 #include <random>
 #include <set>
@@ -60,37 +63,32 @@ inline std::vector<Derived> deep_chain(const TripleStore& st, const RuleBook& bo
   return std::move(res.derived);
 }
 
-// ---------------------------------------------------------------------------
-// G19: refinement (specialisation by one condition atom)
-// ---------------------------------------------------------------------------
+/// G1's prior by depth (S12c item 3). Chain: the chain confidence. Cap3: the chain confidence up to depth 3; deeper facts
+/// are not hypotheses (NaN). Depth: calibrated from graded counts at the fact's depth, (true + 1) / (graded + 2).
+enum class G1Prior { Chain, Cap3, Depth };
 
-struct RefineConfig {
-  double min_support = 10.0, min_pca = 0.5, min_gain = 0.1, q = 0.1;
-  std::size_t beam = 3;
-};
-
-struct Refinement {
-  std::size_t parent = 0;  // index into the candidate rules given
-  std::string cr, cc;      // the condition atom cr(X, cc) on the rule's subject
-  double support = 0, pca_body = 0, hid_support = 0, hid_pca = 0, p_value = 1.0;
-  bool kept = false;
-  double pca_conf() const { return pca_body > 0 ? support / pca_body : 0.0; }
-};
-
-/// The body pairs (x, y) of a const, same or inverse rule; empty for a path rule (not refined).
-inline std::vector<std::pair<std::string, std::string>> body_pairs(const TripleStore& st, const Rule& R,
-                                                                   const std::unordered_map<std::string, std::vector<std::pair<std::string, std::string>>>& by_rel) {
-  std::vector<std::pair<std::string, std::string>> out;
-  if (R.kind == RuleKind::Const) {
-    for (const auto& x : st.subjects_with(R.r1, R.c1)) out.push_back({x, R.head_o});
-  } else if (R.kind == RuleKind::Same || R.kind == RuleKind::Inverse) {
-    const auto it = by_rel.find(R.r1);
-    if (it != by_rel.end())
-      for (const auto& [a, b] : it->second) out.push_back(R.kind == RuleKind::Same ? std::make_pair(a, b) : std::make_pair(b, a));
+struct DepthCalib {
+  std::map<int, std::pair<double, double>> tg;  // depth -> (true, graded)
+  void add(int depth, bool truth) {
+    auto& x = tg[depth];
+    x.first += truth, x.second += 1;
   }
-  std::sort(out.begin(), out.end());
-  out.erase(std::unique(out.begin(), out.end()), out.end());
-  return out;
+  double prior(int depth) const {
+    const auto it = tg.find(depth);
+    const double t = it == tg.end() ? 0.0 : it->second.first, g = it == tg.end() ? 0.0 : it->second.second;
+    return (t + 1.0) / (g + 2.0);
+  }
+};
+
+inline double clamp_prior(double p) { return std::min(0.98, std::max(0.02, p)); }
+
+inline double g1_prior(G1Prior mode, int depth, double conf, const DepthCalib& cal) {
+  switch (mode) {
+    case G1Prior::Chain: return clamp_prior(conf);
+    case G1Prior::Cap3: return depth <= 3 ? clamp_prior(conf) : std::numeric_limits<double>::quiet_NaN();
+    case G1Prior::Depth: return clamp_prior(cal.prior(depth));
+  }
+  return clamp_prior(conf);
 }
 
 /// Facts by relation: r -> (s, o) pairs.
@@ -100,68 +98,6 @@ inline std::unordered_map<std::string, std::vector<std::pair<std::string, std::s
     for (const auto& f : fs) m[f.r].push_back({s, f.o});
   for (auto& [r, v] : m) std::sort(v.begin(), v.end());
   return m;
-}
-
-/// G19: refinements of every const, same or inverse candidate rule with support >= min_support (kept or not).
-inline std::vector<Refinement> refine_rules(const TripleStore& st, const std::vector<Rule>& rules, const RefineConfig& cfg = {}) {
-  std::vector<Refinement> out;
-  const auto by_rel = facts_by_relation(st);
-  for (std::size_t ri = 0; ri < rules.size(); ++ri) {
-    const Rule& R = rules[ri];
-    if (R.kind == RuleKind::Path || R.support < cfg.min_support) continue;
-    const auto pairs = body_pairs(st, R, by_rel);
-    // condition atoms among the supporting subjects (each subject once), never the head's relation or the body atom
-    std::map<std::pair<std::string, std::string>, double> atom_n;
-    std::set<std::string> support_x;
-    for (const auto& [x, y] : pairs)
-      if (st.has(x, R.head, y)) support_x.insert(x);
-    for (const auto& x : support_x)
-      for (const auto& f : st.facts_of(x)) {
-        if (f.r == R.head) continue;
-        if (R.kind == RuleKind::Const && f.r == R.r1 && f.o == R.c1) continue;
-        atom_n[{f.r, f.o}] += 1;
-      }
-    std::vector<Refinement> cand;
-    for (const auto& [atom, n] : atom_n) {
-      if (n < cfg.min_support) continue;
-      Refinement F;
-      F.parent = ri, F.cr = atom.first, F.cc = atom.second;
-      for (const auto& [x, y] : pairs) {
-        if (!st.has(x, atom.first, atom.second) || !st.has_relation(x, R.head)) continue;
-        const bool hid = gen_hidden_third(x);
-        F.pca_body += 1, F.hid_pca += hid;
-        if (st.has(x, R.head, y)) F.support += 1, F.hid_support += hid;
-      }
-      if (F.support < cfg.min_support) continue;
-      F.p_value = binomial_upper_tail(F.support, F.pca_body, R.p0);
-      cand.push_back(F);
-    }
-    std::stable_sort(cand.begin(), cand.end(), [](const Refinement& a, const Refinement& b) {
-      if (a.pca_conf() != b.pca_conf()) return a.pca_conf() > b.pca_conf();
-      if (a.support != b.support) return a.support > b.support;
-      return a.cr + a.cc < b.cr + b.cc;
-    });
-    if (cand.size() > cfg.beam) cand.resize(cfg.beam);
-    out.insert(out.end(), cand.begin(), cand.end());
-  }
-  std::vector<double> p;
-  for (const auto& F : out) p.push_back(F.p_value);
-  const auto bh = benjamini_hochberg(p, cfg.q);
-  for (std::size_t i = 0; i < out.size(); ++i) {
-    const Rule& R = rules[out[i].parent];
-    out[i].kept = bh.reject[i] && out[i].support >= cfg.min_support && out[i].pca_conf() >= cfg.min_pca &&
-                  out[i].pca_conf() >= R.pca_conf() + cfg.min_gain;
-  }
-  return out;
-}
-
-/// What a refinement derives: (x, head, y) for its body pairs whose x holds the condition, not already in the store.
-inline std::vector<Triple> refinement_predictions(const TripleStore& st, const Rule& parent, const Refinement& F,
-                                                  const std::unordered_map<std::string, std::vector<std::pair<std::string, std::string>>>& by_rel) {
-  std::vector<Triple> out;
-  for (const auto& [x, y] : body_pairs(st, parent, by_rel))
-    if (x != y && st.has(x, F.cr, F.cc) && !st.has(x, parent.head, y)) out.push_back({x, parent.head, y});
-  return out;
 }
 
 // ---------------------------------------------------------------------------

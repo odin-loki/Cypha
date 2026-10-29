@@ -141,8 +141,10 @@
 // S12a (2026-10-29, docs/reports/S12A_DEDUCTION_LAWS_REFINEMENT.md; gen_laws.hpp, gen_deep.hpp):
 //   --gen-laws ENWIK8 SEEDS FACTS_F2 OUT [--read-test]: G15's planted-law gate and its real read (the 2006 country and
 //   place infoboxes; persons' years). --gen-deep ENWIK8 SEEDS FACTS_F2 WD_VALUES PATTERNS S15_DIR OUT [--read-test]
-//   [--fresh-dev | --fresh-test]: G1 by depth, G19's precision at equal N, and the pools of G1, G19 and G20 with the
-//   prospective log. Hypotheses and laws for Cypha's own store only: it answers nothing.
+//   [--fresh-dev | --fresh-test]: G1 by depth, and the pools of G1 and G20 with the prospective log. Hypotheses and laws
+//   for Cypha's own store only: it answers nothing. S12c (the same report, "S12c"): --gen-laws … [--power-min-exp]
+//   [--order-relaxed MARGIN] [--s12c-dev] [--s12c-fresh write|read]; --gen-deep … [--s12c] [--g1-prior chain|cap3|depth].
+//   G19 (refinement) was removed by S12c's registered rule; its code is in git at main's 0ce072f.
 //
 // Build: g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp -o pattern_learn
 // Usage: pattern_learn <enwik8> <outdir> [--cv] [--folds K] [--min-train N] [--base-rate A] [--sample N] [--seed S]
@@ -12816,15 +12818,20 @@ int run_grade(int argc, char** argv) {
 
 }  // namespace s11c
 
-// ============================================================ S12a: G1 deep deduction, G15 numeric laws, G19 refinement, G20 the wild tier
+// ============================================================ S12a: G1 deep deduction, G15 numeric laws, G20 the wild tier
 // (docs/reports/S12A_DEDUCTION_LAWS_REFINEMENT.md; native/include/cypha/eval/gen_laws.hpp, gen_deep.hpp)
-// pattern_learn --gen-laws ENWIK8 SEEDS.tsv FACTS_F2.tsv OUT_PREFIX [--read-test]
+// pattern_learn --gen-laws ENWIK8 SEEDS.tsv FACTS_F2.tsv OUT_PREFIX [--read-test] [--power-min-exp] [--order-relaxed M]
+//                [--s12c-dev] [--s12c-fresh write|read]
 //   the planted-law gate (dev replicates; the test replicates once, with --read-test) and G15's real read (the country
-//   and place infoboxes of the 2006 text; persons' birth and death years in stores K and T).
+//   and place infoboxes of the 2006 text; persons' birth and death years in stores K and T). S12c: --power-min-exp and
+//   --order-relaxed M change G15's checks (items 1, 2); --s12c-dev runs the dev grid and its registered choice;
+//   --s12c-fresh write writes the fresh planted tables (seeds S12C|test|…) unsearched, read searches them once.
 // pattern_learn --gen-deep ENWIK8 SEEDS.tsv FACTS_F2.tsv WD_VALUES.tsv PATTERNS.tsv S15_DIR OUT_PREFIX [--read-test]
-//                [--fresh-dev | --fresh-test]
-//   G1 by depth (S8a's R1 random hide of store K; store T on S15), G19's precision at equal N (R1), and the pools of G1,
-//   G19 and G20 with the prospective log. Hypotheses for Cypha's own store only: it answers nothing.
+//                [--fresh-dev | --fresh-test] [--s12c] [--g1-prior chain|cap3|depth]
+//   G1 by depth (S8a's R1 random hide of store K; store T on S15), and the pools of G1 and G20 with the prospective log.
+//   S12c: --s12c compares G1's priors by depth on R1's dev facts (cross-fitted); --g1-prior sets the pool's prior.
+//   G19 (refinement) was removed by S12c's registered rule (code in git at main's 0ce072f). Hypotheses for Cypha's own
+//   store only: it answers nothing.
 namespace s12a {
 namespace lw = cypha::eval::laws;
 namespace dp = cypha::eval::deep;
@@ -13005,23 +13012,188 @@ bool matches(const lw::NumTable& t, const lw::Law& L, const Expected& e) {
     return same || neg;
 }
 
+// ============================================================ S12c: the dev grid (items 1 and 2) and the fresh gate read
+const lw::PlantKind kAllKinds[] = {lw::PlantKind::Ratio, lw::PlantKind::Product, lw::PlantKind::Power, lw::PlantKind::Scale, lw::PlantKind::Offset, lw::PlantKind::Order};
+const double kLevels[] = {0.0, 0.02, 0.05, 0.10, 0.20};
+
+struct GridRes {
+    std::map<string, std::array<double, 3>> found;  // kind -> found at sigma <= 0.05 (of 60), at 0.10 (of 20), at 0.20 (of 20)
+    std::set<string> false_tables;                  // "kind|sigma|rep|planted" or "|null" with a false law
+    double gf = 0, gn = 0, nf = 0, nn = 0;          // sigma <= 0.05: found / tables; null tables with a false law / null tables
+};
+
+GridRes s12c_run(const vector<lw::PersonYears>& persons, const string& tag, const lw::LawConfig& cfg) {
+    GridRes R;
+    for (const auto kind : kAllKinds)
+        for (const double sig : kLevels)
+            for (int rep = 0; rep < 20; ++rep) {
+                const std::uint64_t seed = fnv(tag + "|" + lw::plant_kind_name(kind) + "|" + std::to_string(sig) + "|" + std::to_string(rep));
+                const lw::Planted P = lw::plant(kind, sig, seed, persons);
+                const auto L = lw::search_laws(P.table, cfg), Ln = lw::search_laws(P.null_table, cfg);
+                const bool found = lw::planted_found(P, L);
+                const string key = string(lw::plant_kind_name(kind)) + "|" + std::to_string(sig) + "|" + std::to_string(rep);
+                if (lw::false_laws(P, L, false) > 0) R.false_tables.insert(key + "|planted");
+                const bool nfl = lw::false_laws(P, Ln, true) > 0;
+                if (nfl) R.false_tables.insert(key + "|null");
+                auto& f = R.found[lw::plant_kind_name(kind)];
+                if (sig <= 0.05 + 1e-12) f[0] += found, R.gf += found, R.gn += 1, R.nf += nfl, R.nn += 1;
+                else if (sig < 0.15) f[1] += found;
+                else f[2] += found;
+            }
+    return R;
+}
+
+int s12c_dev_grid(const s11c::Stores& S, const string& out) {
+    char b[768];
+    const auto persons = person_years(S.kby, 0);
+    struct C {
+        string name;
+        lw::LawConfig cfg;
+    };
+    auto mk = [](bool power, double margin) {
+        lw::LawConfig c;
+        c.power_min_exp = power;
+        if (margin >= 0) c.order_share = 0.90, c.order_heldout_viol = 0.20, c.order_margin = margin;
+        return c;
+    };
+    const vector<C> grid = {{"A", mk(false, -1)}, {"P", mk(true, -1)}, {"O1", mk(false, 0.20)}, {"O2", mk(false, 0.30)}, {"P+O1", mk(true, 0.20)}, {"P+O2", mk(true, 0.30)}};
+    std::map<string, GridRes> res;
+    std::ofstream tsv(out + ".s12c_dev.tsv");
+    tsv << "config\tkind\tfound_le_005\tfound_010\tfound_020\n";
+    for (const auto& c : grid) {
+        res[c.name] = s12c_run(persons, "S12A|dev", c.cfg);
+        const auto& R = res[c.name];
+        for (const auto kind : kAllKinds) {
+            const auto& f = R.found.at(lw::plant_kind_name(kind));
+            std::size_t fp = 0, fn = 0;
+            for (const auto& k : R.false_tables)
+                if (k.rfind(string(lw::plant_kind_name(kind)) + "|", 0) == 0) (k.size() >= 5 && k.compare(k.size() - 5, 5, "|null") == 0 ? fn : fp) += 1;
+            std::snprintf(b, sizeof b, "S12C DEV %-5s %-7s: sigma <= 0.05 found %s | sigma 0.10 %2.0f/20 | sigma 0.20 %2.0f/20 | tables with a false law: planted %zu, null %zu", c.name.c_str(),
+                          lw::plant_kind_name(kind), wilson(f[0], 60).c_str(), f[1], f[2], fp, fn);
+            std::cout << b << "\n";
+            tsv << c.name << '\t' << lw::plant_kind_name(kind) << '\t' << f[0] << '\t' << f[1] << '\t' << f[2] << '\n';
+        }
+        std::snprintf(b, sizeof b, "S12C DEV %-5s pooled (sigma <= 0.05): recall %s | null tables with a false law %s | tables with a false law (all levels, planted and null) %zu", c.name.c_str(),
+                      wilson(R.gf, R.gn).c_str(), wilson(R.nf, R.nn).c_str(), R.false_tables.size());
+        std::cout << b << "\n";
+    }
+    // the registered choice
+    const auto& A = res["A"];
+    const auto& P = res["P"];
+    bool subset = true;
+    for (const auto& k : P.false_tables) subset = subset && A.false_tables.count(k);
+    const bool item1 = P.found.at("POWER")[0] > A.found.at("POWER")[0] && subset;
+    std::snprintf(b, sizeof b, "S12C DEV CHOICE item 1 (power spread on the predicted attribute): POWER sigma <= 0.05 %.0f/60 -> %.0f/60, no new false law %s -> %s",
+                  A.found.at("POWER")[0], P.found.at("POWER")[0], subset ? "yes" : "no", item1 ? "ADOPTED" : "not adopted");
+    std::cout << b << "\n";
+    string pick = "none";
+    double best = -1;
+    for (const string o : {"O1", "O2"}) {
+        const auto& R = res[item1 ? "P+" + o : o];
+        if (!R.false_tables.empty()) continue;
+        const double rec = R.found.at("ORDER")[0];
+        if (rec > best || (rec == best && o == "O2")) best = rec, pick = o;
+    }
+    std::snprintf(b, sizeof b, "S12C DEV CHOICE item 2 (orders at 90%% with a margin over independence): O0 ORDER sigma <= 0.05 %.0f/60, O1 %.0f/60 (false tables %zu), O2 %.0f/60 (false tables %zu) -> %s",
+                  res[item1 ? "P" : "A"].found.at("ORDER")[0], res[item1 ? "P+O1" : "O1"].found.at("ORDER")[0], res[item1 ? "P+O1" : "O1"].false_tables.size(),
+                  res[item1 ? "P+O2" : "O2"].found.at("ORDER")[0], res[item1 ? "P+O2" : "O2"].false_tables.size(), pick == "none" ? "orders stay as now" : pick.c_str());
+    std::cout << b << "\n";
+    return 0;
+}
+
+int s12c_fresh(const s11c::Stores& S, const string& out, const lw::LawConfig& cfg, bool do_read) {
+    char b[768];
+    const auto persons = person_years(S.kby, 1);
+    std::ofstream tab(out + ".s12c_fresh_tables.tsv");
+    tab << "kind\tsigma\trep\tseed\tc\ttable\tentity\tvalues\n";
+    std::ofstream res;
+    if (do_read) res.open(out + ".s12c_fresh.tsv"), res << "kind\tsigma\trep\tseed\tfound\tfalse_laws\tnull_false_laws\n";
+    std::map<string, std::array<double, 5>> found;  // kind -> found per level
+    double gf = 0, gn = 0, nf = 0, nn = 0, pf = 0;
+    std::size_t tables = 0;
+    for (const auto kind : kAllKinds)
+        for (std::size_t li = 0; li < 5; ++li)
+            for (int rep = 0; rep < 20; ++rep) {
+                const double sig = kLevels[li];
+                const std::uint64_t seed = fnv(string("S12C|test|") + lw::plant_kind_name(kind) + "|" + std::to_string(sig) + "|" + std::to_string(rep));
+                const lw::Planted P = lw::plant(kind, sig, seed, persons);
+                for (int w = 0; w < 2; ++w) {
+                    const lw::NumTable& T = w == 0 ? P.table : P.null_table;
+                    ++tables;
+                    for (std::size_t e = 0; e < T.entities.size(); ++e) {
+                        tab << lw::plant_kind_name(kind) << '\t' << sig << '\t' << rep << '\t' << seed << '\t';
+                        char cb[40];
+                        std::snprintf(cb, sizeof cb, "%.17g", P.c);
+                        tab << cb << '\t' << (w == 0 ? "planted" : "null") << '\t' << T.entities[e] << '\t';
+                        for (std::size_t a = 0; a < T.attrs.size(); ++a) {
+                            std::snprintf(cb, sizeof cb, "%.17g", T.v[a][e]);
+                            tab << (a ? "," : "") << T.attrs[a] << '=' << cb;
+                        }
+                        tab << '\n';
+                    }
+                }
+                if (!do_read) continue;
+                const auto L = lw::search_laws(P.table, cfg), Ln = lw::search_laws(P.null_table, cfg);
+                const bool f = lw::planted_found(P, L);
+                const std::size_t fl = lw::false_laws(P, L, false), nfl = lw::false_laws(P, Ln, true);
+                found[lw::plant_kind_name(kind)][li] += f;
+                if (sig <= 0.05 + 1e-12) gf += f, gn += 1, nf += nfl > 0, nn += 1, pf += fl > 0;
+                res << lw::plant_kind_name(kind) << '\t' << sig << '\t' << rep << '\t' << seed << '\t' << f << '\t' << fl << '\t' << nfl << '\n';
+            }
+    tab.close();
+    std::snprintf(b, sizeof b, "S12C FRESH tables written to %s: %zu tables (planted and null), seeds S12C|test|kind|sigma|rep, store K's test persons %zu", (out + ".s12c_fresh_tables.tsv").c_str(),
+                  tables, persons.size());
+    std::cout << b << "\n";
+    if (!do_read) return 0;
+    std::snprintf(b, sizeof b, "S12C FRESH configuration: power_min_exp %d, order share %.2f, held-out violations %.2f, margin %.2f", cfg.power_min_exp ? 1 : 0, cfg.order_share,
+                  cfg.order_heldout_viol, cfg.order_margin);
+    std::cout << b << "\n";
+    for (const auto kind : kAllKinds) {
+        const auto& f = found[lw::plant_kind_name(kind)];
+        std::snprintf(b, sizeof b, "S12C FRESH %-7s: sigma 0 %2.0f/20 | 0.02 %2.0f/20 | 0.05 %2.0f/20 | 0.10 %2.0f/20 | 0.20 %2.0f/20 | sigma <= 0.05 %s", lw::plant_kind_name(kind), f[0], f[1], f[2],
+                      f[3], f[4], wilson(f[0] + f[1] + f[2], 60).c_str());
+        std::cout << b << "\n";
+    }
+    std::snprintf(b, sizeof b, "S12C FRESH pooled (sigma <= 0.05): recall %s | null tables with a false law %s | planted tables with a false law %s", wilson(gf, gn).c_str(),
+                  wilson(nf, nn).c_str(), wilson(pf, gn).c_str());
+    std::cout << b << "\n";
+    const bool pass = gn > 0 && gf / gn >= 0.90 && nn > 0 && nf / nn <= 0.05;
+    std::snprintf(b, sizeof b, "S12C GATE (fresh test tables, read once: recall >= 0.90 and false-law rate <= 0.05, point estimates): recall %.3f, false-law rate %.3f -> %s", gf / gn, nf / nn,
+                  pass ? "MET" : "NOT MET");
+    std::cout << b << "\n";
+    return 0;
+}
+
 int run_laws(int argc, char** argv) {
     if (argc < 6) {
-        std::fprintf(stderr, "usage: pattern_learn --gen-laws ENWIK8 SEEDS.tsv FACTS_F2.tsv OUT_PREFIX [--read-test]\n");
+        std::fprintf(stderr, "usage: pattern_learn --gen-laws ENWIK8 SEEDS.tsv FACTS_F2.tsv OUT_PREFIX [--read-test] [--power-min-exp] [--order-relaxed M] [--s12c-dev] [--s12c-fresh write|read]\n");
         return 2;
     }
     const double t0 = now_s();
     const string out = argv[5];
-    bool read_test = false;
+    bool read_test = false, s12c_dev = false;
+    string fresh;
+    lw::LawConfig cfg;
     for (int i = 6; i < argc; ++i) {
-        if (string(argv[i]) == "--read-test") read_test = true;
+        const string a = argv[i];
+        if (a == "--read-test") read_test = true;
+        else if (a == "--power-min-exp") cfg.power_min_exp = true;
+        else if (a == "--order-relaxed" && i + 1 < argc) cfg.order_share = 0.90, cfg.order_heldout_viol = 0.20, cfg.order_margin = std::atof(argv[++i]);
+        else if (a == "--s12c-dev") s12c_dev = true;
+        else if (a == "--s12c-fresh" && i + 1 < argc) fresh = argv[++i];
         else {
             std::fprintf(stderr, "unknown option %s\n", argv[i]);
             return 2;
         }
     }
+    if (!fresh.empty() && fresh != "write" && fresh != "read") {
+        std::fprintf(stderr, "--s12c-fresh takes write or read\n");
+        return 2;
+    }
     s11c::Stores S;
     if (!s11c::load_stores(argv[3], argv[4], S)) return 1;
+    if (s12c_dev) return s12c_dev_grid(S, out);
+    if (!fresh.empty()) return s12c_fresh(S, out, cfg, fresh == "read");
     char b[768];
     // ============================================================ the planted-law gate
     const lw::PlantKind kinds[] = {lw::PlantKind::Ratio, lw::PlantKind::Product, lw::PlantKind::Power, lw::PlantKind::Scale, lw::PlantKind::Offset, lw::PlantKind::Order};
@@ -13041,7 +13213,7 @@ int run_laws(int argc, char** argv) {
                 for (int rep = 0; rep < reps; ++rep) {
                     const std::uint64_t seed = fnv("S12A|" + sp + "|" + lw::plant_kind_name(kind) + "|" + std::to_string(sig) + "|" + std::to_string(rep));
                     const lw::Planted P = lw::plant(kind, sig, seed, persons);
-                    const auto L = lw::search_laws(P.table), Ln = lw::search_laws(P.null_table);
+                    const auto L = lw::search_laws(P.table, cfg), Ln = lw::search_laws(P.null_table, cfg);
                     const bool found = lw::planted_found(P, L);
                     const std::size_t fls = lw::false_laws(P, L, false), nfls = lw::false_laws(P, Ln, true);
                     std::size_t k1 = 0, k2 = 0;
@@ -13104,7 +13276,7 @@ int run_laws(int argc, char** argv) {
     const vector<Expected> exp_person = {{lw::LawKind::Order, {{"birth", -1}, {"death", 1}}, "birth <= death"},
                                          {lw::LawKind::Diff, {{"birth", -1}, {"death", 1}}, "death - birth bounded (lifespan)"}};
     auto read_table = [&](const lw::NumTable& t, const vector<Expected>& ex) {
-        const auto laws = lw::search_laws(t);
+        const auto laws = lw::search_laws(t, cfg);
         std::size_t outside = 0, kept = 0;
         vector<bool> got(ex.size(), false);
         auto tag = [&](const lw::Law& L) {
@@ -13137,87 +13309,32 @@ int run_laws(int argc, char** argv) {
     return 0;
 }
 
-// ============================================================ G1, G19, G20
-// Every kept rule deriving each value of (s, r) (indices into rules), as RuleSet::candidates finds them.
-struct RuleIdx {
-    std::unordered_map<string, vector<std::size_t>> by_body, by_head;
-    explicit RuleIdx(const vector<ecs::Rule>& rules) {
-        for (std::size_t i = 0; i < rules.size(); ++i) {
-            if (!rules[i].kept) continue;
-            if (rules[i].kind == ecs::RuleKind::Const) by_body[rules[i].r1 + '\x1f' + rules[i].c1].push_back(i);
-            else by_head[rules[i].head].push_back(i);
-        }
-    }
-};
-std::map<string, vector<std::size_t>> derive_slot(const ecs::RuleIndex& ix, const vector<ecs::Rule>& rules, const RuleIdx& I, const string& s, const string& r) {
-    std::map<string, vector<std::size_t>> got;
-    const ecs::TripleStore& st = ix.store();
-    for (const auto& f : st.facts_of(s)) {
-        const auto it = I.by_body.find(f.r + '\x1f' + f.o);
-        if (it == I.by_body.end()) continue;
-        for (std::size_t i : it->second)
-            if (rules[i].head == r) got[rules[i].head_o].push_back(i);
-    }
-    const auto hit = I.by_head.find(r);
-    if (hit != I.by_head.end())
-        for (std::size_t i : hit->second) {
-            const ecs::Rule& R = rules[i];
-            if (R.kind == ecs::RuleKind::Same) {
-                for (const auto& y : ix.values(s, R.r1)) got[y].push_back(i);
-            } else if (R.kind == ecs::RuleKind::Inverse) {
-                for (const auto& [y, ry] : ix.incoming(s))
-                    if (ry == R.r1) got[y].push_back(i);
-            } else {
-                vector<string> zs;
-                if (!R.inv1) zs = ix.values(s, R.r1);
-                else
-                    for (const auto& [z, rz] : ix.incoming(s))
-                        if (rz == R.r1) zs.push_back(z);
-                for (const auto& z : zs) {
-                    vector<string> ys;
-                    if (!R.inv2) ys = ix.values(z, R.r2);
-                    else
-                        for (const auto& [y, ry] : ix.incoming(z))
-                            if (ry == R.r2) ys.push_back(y);
-                    for (const auto& y : ys)
-                        if (y != s && y != z) got[y].push_back(i);
-                }
-            }
-        }
-    for (auto& [o, v] : got) {
-        std::sort(v.begin(), v.end());
-        v.erase(std::unique(v.begin(), v.end()), v.end());
-    }
-    return got;
-}
-// Whether a const, same or inverse rule's body derives (s, head, o) in the store.
-bool body_derives(const ecs::TripleStore& st, const ecs::Rule& R, const string& s, const string& o) {
-    if (R.kind == ecs::RuleKind::Const) return o == R.head_o && st.has(s, R.r1, R.c1);
-    if (R.kind == ecs::RuleKind::Same) return st.has(s, R.r1, o);
-    if (R.kind == ecs::RuleKind::Inverse) return st.has(o, R.r1, s);
-    return false;
-}
-
-struct Pred {
-    string s, r, o;
-    double g2 = 0, g19 = 0;  // scores: G2 alone; G2 with G19's kept refinements
-    int grade = -1;
-};
-
+// ============================================================ G1, G20 (G19 removed by S12c's registered rule)
 int run_deep(int argc, char** argv) {
     if (argc < 9) {
-        std::fprintf(stderr, "usage: pattern_learn --gen-deep ENWIK8 SEEDS.tsv FACTS_F2.tsv WD_VALUES.tsv PATTERNS.tsv S15_DIR OUT_PREFIX [--read-test] [--fresh-dev | --fresh-test]\n");
+        std::fprintf(stderr, "usage: pattern_learn --gen-deep ENWIK8 SEEDS.tsv FACTS_F2.tsv WD_VALUES.tsv PATTERNS.tsv S15_DIR OUT_PREFIX [--read-test] [--fresh-dev | --fresh-test] [--s12c] [--g1-prior chain|cap3|depth]\n");
         return 2;
     }
     const double t0 = now_s();
     const string s15dir = argv[7], out = argv[8];
-    bool read_test = false, fresh_dev = false, fresh_test = false;
+    bool read_test = false, fresh_dev = false, fresh_test = false, s12c = false;
+    dp::G1Prior g1mode = dp::G1Prior::Chain;
     for (int i = 9; i < argc; ++i) {
         const string a = argv[i];
         if (a == "--read-test") read_test = true;
         else if (a == "--fresh-dev") fresh_dev = true;
         else if (a == "--fresh-test") fresh_test = true;
-        else {
+        else if (a == "--s12c") s12c = true;
+        else if (a == "--g1-prior" && i + 1 < argc) {
+            const string m = argv[++i];
+            if (m == "chain") g1mode = dp::G1Prior::Chain;
+            else if (m == "cap3") g1mode = dp::G1Prior::Cap3;
+            else if (m == "depth") g1mode = dp::G1Prior::Depth;
+            else {
+                std::fprintf(stderr, "--g1-prior takes chain, cap3 or depth\n");
+                return 2;
+            }
+        } else {
             std::fprintf(stderr, "unknown option %s\n", argv[i]);
             return 2;
         }
@@ -13271,6 +13388,14 @@ int run_deep(int argc, char** argv) {
     std::snprintf(b, sizeof b, "S12A R1 random hide: hidden %zu, reduced store %zu, candidate rules %zu, kept %zu", hidden.size(), st.size(), rules.size(), nkept);
     std::cout << b << "\n";
     // ---- G1 by depth
+    dp::DepthCalib g1cal;  // S12c item 3: graded counts by depth on R1's dev facts
+    struct G1Fact {
+        int depth;
+        double conf;
+        int grade;
+        string s;
+    };
+    vector<G1Fact> g1dev;
     {
         const double tc = now_s();
         const auto derived = dp::deep_chain(st, book, 6);
@@ -13286,6 +13411,10 @@ int run_deep(int argc, char** argv) {
             const int g = grade_r1(d.t.s, d.t.r, d.t.o, dev);
             Acc& a = by[dev ? 0 : 1][d.depth];
             a.n += 1, a.conf += d.conf;
+            if (dev && g >= 0) {
+                g1cal.add(d.depth, g == 1);
+                if (d.depth >= 2) g1dev.push_back({d.depth, d.conf, g, d.t.s});
+            }
             if (g >= 0) {
                 a.g += 1, a.t += g == 1;
                 if (s8c::group_of(d.t.r) != "lexical") a.nl_g += 1, a.nl_t += g == 1;
@@ -13311,137 +13440,66 @@ int run_deep(int argc, char** argv) {
         std::snprintf(b, sizeof b, "S12A G1 R1 chained in %.1f s", now_s() - tc);
         std::cout << b << "\n";
     }
-    // ---- G19: refinements and the precision at equal N
-    {
-        const auto refs = dp::refine_rules(st, rules);
-        std::size_t kept = 0, rescued = 0;
-        std::map<std::size_t, vector<std::size_t>> by_parent;  // kept refinements by parent
-        for (std::size_t i = 0; i < refs.size(); ++i)
-            if (refs[i].kept) {
-                ++kept;
-                rescued += !rules[refs[i].parent].kept;
-                by_parent[refs[i].parent].push_back(i);
-            }
-        std::snprintf(b, sizeof b, "S12A G19 refinements: candidates %zu, kept %zu (of a rejected parent %zu, of a kept parent %zu)", refs.size(), kept, rescued, kept - rescued);
-        std::cout << b << "\n";
-        {
-            std::ofstream rf(out + ".g19_refinements.tsv");
-            rf << "kept\tparent_kept\tparent\tcondition\tsupport\tpca_body\tpca_conf\tparent_pca\tp_value\thidden_support\thidden_pca\n";
-            for (const auto& F : refs) {
-                const auto& R = rules[F.parent];
-                rf << F.kept << '\t' << R.kept << '\t' << R.text() << '\t' << F.cr << "(X, " << F.cc << ")\t" << F.support << '\t' << F.pca_body << '\t' << F.pca_conf() << '\t'
-                   << R.pca_conf() << '\t' << F.p_value << '\t' << F.hid_support << '\t' << F.hid_pca << '\n';
-            }
-            int shown = 0;
-            for (const auto& F : refs) {
-                if (!F.kept || shown >= 12) continue;
-                ++shown;
-                const auto& R = rules[F.parent];
-                std::snprintf(b, sizeof b, "  G19 kept: %s  &  %s(X, %s)  | support %.0f PCA %.3f (parent %.3f, %s)", R.text().c_str(), F.cr.c_str(), F.cc.c_str(),
-                              F.support, F.pca_conf(), R.pca_conf(), R.kept ? "kept" : "rejected");
-                std::cout << b << "\n";
+    // ---- S12c item 3: G1's prior by depth, compared on R1's dev facts (cross-fitted)
+    if (s12c) {
+        auto half = [&](const string& subj) { return static_cast<int>((fnv(subj) >> 3) & 1); };
+        dp::DepthCalib cal[2];
+        for (const auto& f : g1dev) cal[half(f.s)].add(f.depth, f.grade == 1);
+        const char* names[3] = {"C0 chain confidence", "C1 cap at depth 3", "C2 calibrated by depth (cross-fitted)"};
+        double brier[3] = {0, 0, 0}, logl[3] = {0, 0, 0};
+        vector<std::pair<double, int>> pg[3];
+        for (const auto& f : g1dev) {
+            const double p[3] = {dp::clamp_prior(f.conf), f.depth <= 3 ? dp::clamp_prior(f.conf) : 0.02, dp::clamp_prior(cal[1 - half(f.s)].prior(f.depth))};
+            for (int k = 0; k < 3; ++k) {
+                brier[k] += (p[k] - f.grade) * (p[k] - f.grade);
+                logl[k] += -std::log2(f.grade == 1 ? p[k] : 1.0 - p[k]);
+                pg[k].push_back({p[k], f.grade});
             }
         }
-        // predictions: every slot (s, r) a kept rule or a kept refinement derives, for the split's subjects
-        const RuleIdx I(rules);
-        const auto by_rel = dp::facts_by_relation(st);
-        std::set<std::pair<string, string>> slots;
-        for (const auto& d : dp::deep_chain(st, book, 1)) slots.insert({d.t.s, d.t.r});
-        for (const auto& [pi, ris] : by_parent) {
-            if (rules[pi].kept) continue;
-            for (std::size_t ri : ris)
-                for (const auto& t : dp::refinement_predictions(st, rules[pi], refs[ri], by_rel)) slots.insert({t.s, t.r});
-        }
-        vector<Pred> P[2];
-        for (const auto& [s, r] : slots) {
-            const bool dev = s11c::dev_subject(s);
-            if (!dev && !read_test) continue;
-            auto got = derive_slot(ix, rules, I, s, r);
-            // rescued refinements' values for this slot
-            std::map<string, vector<std::size_t>> fam;  // value -> parents (kept or rescued) deriving it
-            for (const auto& [o, v] : got) fam[o] = v;
-            for (const auto& [pi, ris] : by_parent) {
-                if (rules[pi].kept || rules[pi].head != r) continue;
-                for (std::size_t ri : ris)
-                    if (st.has(s, refs[ri].cr, refs[ri].cc)) {
-                        // the parent's body values for s
-                        vector<string> ys;
-                        const auto& R = rules[pi];
-                        if (R.kind == ecs::RuleKind::Const) ys = {R.head_o};
-                        else if (R.kind == ecs::RuleKind::Same) ys = ix.values(s, R.r1);
-                        else
-                            for (const auto& [y, ry] : ix.incoming(s))
-                                if (ry == R.r1) ys.push_back(y);
-                        for (const auto& y : ys)
-                            if (y != s && body_derives(st, R, s, y)) fam[y].push_back(pi);
-                        break;
-                    }
+        const double n = static_cast<double>(g1dev.size());
+        int best = 0;
+        for (int k = 0; k < 3; ++k) {
+            double ece = 0;  // 10 equal-width bins
+            for (int bin = 0; bin < 10; ++bin) {
+                double c = 0, sp = 0, sy = 0;
+                for (const auto& [p, y] : pg[k])
+                    if (std::min(9, static_cast<int>(p * 10)) == bin) c += 1, sp += p, sy += y;
+                if (c > 0) ece += c / n * std::fabs(sp / c - sy / c);
             }
-            for (auto& [o, v] : fam) {
-                if (st.has(s, r, o)) continue;
-                std::sort(v.begin(), v.end());
-                v.erase(std::unique(v.begin(), v.end()), v.end());
-                Pred x;
-                x.s = s, x.r = r, x.o = o;
-                double k2 = 1.0, k19 = 1.0;
-                bool any_g2 = false;
-                for (std::size_t pi : v) {
-                    double c = rules[pi].kept ? rules[pi].pca_conf() : 0.0;
-                    if (rules[pi].kept) k2 *= 1.0 - c, any_g2 = true;
-                    const auto it = by_parent.find(pi);
-                    if (it != by_parent.end())
-                        for (std::size_t ri : it->second)
-                            if (st.has(s, refs[ri].cr, refs[ri].cc)) c = std::max(c, refs[ri].pca_conf());
-                    if (c > 0) k19 *= 1.0 - c;
-                }
-                x.g2 = any_g2 ? 1.0 - k2 : 0.0;
-                x.g19 = 1.0 - k19;
-                if (x.g19 <= 0) continue;
-                x.grade = grade_r1(s, r, o, dev);
-                P[dev ? 0 : 1].push_back(x);
-            }
-        }
-        for (int sp = 0; sp < (read_test ? 2 : 1); ++sp) {
-            vector<const Pred*> g2, all;
-            for (const auto& x : P[sp]) {
-                if (x.grade < 0) continue;
-                all.push_back(&x);
-                if (x.g2 > 0) g2.push_back(&x);
-            }
-            const std::size_t N = g2.size();
-            auto prec_at = [&](vector<const Pred*> v, bool use19, std::size_t n) {
-                std::stable_sort(v.begin(), v.end(), [&](const Pred* a, const Pred* c) {
-                    const double sa = use19 ? a->g19 : a->g2, sc = use19 ? c->g19 : c->g2;
-                    if (sa != sc) return sa > sc;
-                    return std::tie(a->s, a->r, a->o) < std::tie(c->s, c->r, c->o);
-                });
-                double t = 0;
-                const std::size_t m = std::min(n, v.size());
-                for (std::size_t i = 0; i < m; ++i) t += v[i]->grade == 1;
-                return m ? t / static_cast<double>(m) : 0.0;
-            };
-            const double p2 = prec_at(g2, false, N), p19 = prec_at(all, true, N);
-            // bootstrap over the graded predictions
-            vector<double> diffs;
-            std::mt19937_64 rng(20261029);
-            for (int it = 0; it < 2000 && !all.empty(); ++it) {
-                vector<const Pred*> rs, r2;
-                for (std::size_t i = 0; i < all.size(); ++i) {
-                    const Pred* x = all[rng() % all.size()];
-                    rs.push_back(x);
-                    if (x->g2 > 0) r2.push_back(x);
-                }
-                diffs.push_back(prec_at(rs, true, r2.size()) - prec_at(r2, false, r2.size()));
-            }
-            std::sort(diffs.begin(), diffs.end());
-            const double lo = diffs.empty() ? 0 : diffs[49], hi = diffs.empty() ? 0 : diffs[1949];
-            std::size_t new19 = 0;
-            for (const auto* x : all) new19 += x->g2 <= 0;
-            std::snprintf(b, sizeof b, "S12A G19 R1 %s: graded predictions G2 %zu, with G19 %zu (new %zu) | precision@N (N = %zu): G2 %.4f, G2+G19 %.4f, gain %+.4f [%+.4f, %+.4f]%s",
-                          sp == 0 ? "dev" : "TEST", N, all.size(), new19, N, p2, p19, p19 - p2, lo, hi,
-                          sp == 1 ? (lo > 0 ? " -> G19 EARNS ITS PLACE" : " -> G19 does not earn its place") : "");
+            std::snprintf(b, sizeof b, "S12C G1 PRIOR %s: R1 dev graded facts at depth >= 2 %.0f | Brier %.4f | log loss %.4f bits | ECE %.4f", names[k], n, brier[k] / n, logl[k] / n, ece);
             std::cout << b << "\n";
         }
+        // the registered rule: the lowest Brier; within 0.002 of the best, the simpler (C0, C1, C2)
+        double bmin = std::min({brier[0], brier[1], brier[2]}) / n;
+        for (int k = 0; k < 3; ++k)
+            if (brier[k] / n <= bmin + 0.002) {
+                best = k;
+                break;
+            }
+        for (const auto& [d, tg] : g1cal.tg) {
+            std::snprintf(b, sizeof b, "S12C G1 PRIOR depth %d (all R1 dev graded): true %.0f of %.0f -> calibrated prior %.4f", d, tg.first, tg.second, g1cal.prior(d));
+            std::cout << b << "\n";
+        }
+        // paired Brier differences, 95% interval clustered by subject (facts of one subject are not independent)
+        for (const auto& [k1, k0] : {std::pair<int, int>{2, 0}, {2, 1}, {1, 0}}) {
+            std::map<string, double> by_s;
+            double sum = 0;
+            for (std::size_t i = 0; i < g1dev.size(); ++i) {
+                const double d = (pg[k1][i].first - pg[k1][i].second) * (pg[k1][i].first - pg[k1][i].second) - (pg[k0][i].first - pg[k0][i].second) * (pg[k0][i].first - pg[k0][i].second);
+                by_s[g1dev[i].s] += d, sum += d;
+            }
+            const double mean = sum / n;
+            double v = 0;
+            std::map<string, double> cnt;
+            for (const auto& f : g1dev) cnt[f.s] += 1;
+            for (const auto& [s, d] : by_s) v += (d - cnt[s] * mean) * (d - cnt[s] * mean);
+            const double se = std::sqrt(v) / n;
+            std::snprintf(b, sizeof b, "S12C G1 PRIOR Brier %s minus %s: %+.4f [%+.4f, %+.4f] (paired, 95%%, clustered by subject: %zu subjects)", names[k1], names[k0], mean, mean - 1.96 * se,
+                          mean + 1.96 * se, by_s.size());
+            std::cout << b << "\n";
+        }
+        std::snprintf(b, sizeof b, "S12C G1 PRIOR CHOICE (lowest Brier, ties within 0.002 to the simpler): %s -> --g1-prior %s", names[best], best == 0 ? "chain" : best == 1 ? "cap3" : "depth");
+        std::cout << b << "\n";
     }
     // ============================================================ read 2: store T on S15 (G1 by depth)
     {
@@ -13502,54 +13560,37 @@ int run_deep(int argc, char** argv) {
         const vector<ecs::Rule> frules = ecs::mine_rules(fix);
         const ecs::RuleBook fbook(frules);
         const string ptag = fresh_test ? "S12A POOL test (S15 test, bit 17 = 0)" : "S12A POOL dev (S15 dev, bit 17 = 1)";
-        vector<s11c::PoolItem> pool[3];  // G1, G19, G20
-        // G1: facts first derived at depth >= 2 in a pool slot; the best chain per slot
+        vector<s11c::PoolItem> pool[2];  // G1, G20 (G19 removed by S12c)
+        // G1: facts first derived at depth >= 2 in a pool slot; the best chain per slot (S12c: by the chosen prior)
         {
             std::map<std::pair<string, string>, const cypha::eval::Derived*> best;
             const auto derived = dp::deep_chain(fst, fbook, 6);
             for (const auto& d : derived) {
                 if (d.depth < 2 || !slots.count({d.t.s, d.t.r})) continue;
+                if (g1mode == dp::G1Prior::Cap3 && d.depth > 3) continue;
                 auto& bp = best[{d.t.s, d.t.r}];
-                if (!bp || d.conf > bp->conf || (d.conf == bp->conf && d.t.o < bp->t.o)) bp = &d;
+                if (g1mode == dp::G1Prior::Depth) {
+                    const double pd = dp::g1_prior(g1mode, d.depth, d.conf, g1cal), pb = bp ? dp::g1_prior(g1mode, bp->depth, bp->conf, g1cal) : -1.0;
+                    if (!bp || pd > pb || (pd == pb && (d.conf > bp->conf || (d.conf == bp->conf && d.t.o < bp->t.o)))) bp = &d;
+                } else if (!bp || d.conf > bp->conf || (d.conf == bp->conf && d.t.o < bp->t.o)) {
+                    bp = &d;
+                }
             }
             for (const auto& [k, d] : best) {
                 s11c::PoolItem x;
                 x.s = d->t.s, x.r = d->t.r, x.o = d->t.o, x.gen = "G1", x.score = d->conf;
-                x.prior = std::min(0.98, std::max(0.02, d->conf));
+                x.prior = dp::g1_prior(g1mode, d->depth, d->conf, g1cal);
                 string prem;
                 for (const auto& p : d->premises) prem += (prem.empty() ? "" : " ; ") + p.text();
                 x.explain = "depth " + std::to_string(d->depth) + ": " + prem;
                 pool[0].push_back(x);
             }
         }
-        // G19: new facts from kept refinements (rejected parents), not derived by the kept rules; the best per slot
-        {
-            const auto refs = dp::refine_rules(fst, frules);
-            const auto by_rel = dp::facts_by_relation(fst);
-            std::set<string> g2facts;
-            for (const auto& d : dp::deep_chain(fst, fbook, 1)) g2facts.insert(d.t.key());
-            std::map<std::pair<string, string>, std::pair<double, s11c::PoolItem>> best;
-            for (const auto& F : refs) {
-                if (!F.kept || frules[F.parent].kept) continue;
-                for (const auto& t : dp::refinement_predictions(fst, frules[F.parent], F, by_rel)) {
-                    if (!slots.count({t.s, t.r}) || g2facts.count(t.key())) continue;
-                    auto& bp = best[{t.s, t.r}];
-                    if (bp.second.s.empty() || F.pca_conf() > bp.first || (F.pca_conf() == bp.first && t.o < bp.second.o)) {
-                        s11c::PoolItem x;
-                        x.s = t.s, x.r = t.r, x.o = t.o, x.gen = "G19", x.score = F.pca_conf();
-                        x.prior = std::min(0.98, std::max(0.02, F.pca_conf()));
-                        x.explain = frules[F.parent].text() + " & " + F.cr + "(X, " + F.cc + ")";
-                        bp = {F.pca_conf(), x};
-                    }
-                }
-            }
-            for (auto& [k, v] : best) pool[1].push_back(v.second);
-        }
         // G20: the wild tier, 5% of the main pool, at least 20
         {
             const ecs::LinkPredictor lp(fst, ecs::LinkPredictor::Config{});
             vector<std::pair<string, string>> sv(slots.begin(), slots.end());
-            const std::size_t budget = std::max<std::size_t>(20, (pool[0].size() + pool[1].size()) / 20);
+            const std::size_t budget = std::max<std::size_t>(20, pool[0].size() / 20);
             for (const auto& w : dp::wild_tier(fst, lp, sv, budget, 20261029)) {
                 s11c::PoolItem x;
                 x.s = w.t.s, x.r = w.t.r, x.o = w.t.o, x.gen = "G20", x.score = w.lp;
@@ -13557,15 +13598,15 @@ int run_deep(int argc, char** argv) {
                 char e[96];
                 std::snprintf(e, sizeof e, "wild: P %.4f, base rate %.4f", w.lp, w.base);
                 x.explain = e;
-                pool[2].push_back(x);
+                pool[1].push_back(x);
             }
         }
-        std::snprintf(b, sizeof b, "%s slots %zu | store facts hidden %zu | kept rules %zu | G1 %zu, G19 %zu, G20 %zu hypotheses", ptag.c_str(), slots.size(), held,
+        std::snprintf(b, sizeof b, "%s slots %zu | store facts hidden %zu | kept rules %zu | G1 %zu, G20 %zu hypotheses", ptag.c_str(), slots.size(), held,
                       static_cast<std::size_t>(std::count_if(frules.begin(), frules.end(), [](const ecs::Rule& R) { return R.kept; })), pool[0].size(),
-                      pool[1].size(), pool[2].size());
+                      pool[1].size());
         std::cout << b << "\n";
-        const char* gn[3] = {"g1", "g19", "g20"};
-        for (int g = 0; g < 3; ++g) {
+        const char* gn[2] = {"g1", "g20"};
+        for (int g = 0; g < 2; ++g) {
             s11c::pool_loop(pool[g], fst, C, out + ".fresh_" + gn[g] + ".prereg.tsv");
             s11c::pool_states(ptag + " " + gn[g], pool[g]);
             s11c::write_pool(out + ".fresh_" + gn[g] + ".hyps.tsv", pool[g]);
@@ -13578,9 +13619,9 @@ int run_deep(int argc, char** argv) {
             std::ofstream pf(out + ".prospective.tsv");
             pf << "logged_utc\tid\tgenerator\ttier\tsubject\trelation\tobject\tprior\tstate_after_loop\tcheck\n";
             std::size_t id = 0;
-            for (int g = 0; g < 3; ++g)
+            for (int g = 0; g < 2; ++g)
                 for (const auto& x : pool[g])
-                    pf << ts << '\t' << "S12A-" << (fresh_test ? "T" : "D") << '-' << id++ << '\t' << x.gen << '\t' << (g == 2 ? "wild" : "main") << '\t' << x.s << '\t' << x.r
+                    pf << ts << '\t' << "S12A-" << (fresh_test ? "T" : "D") << '-' << id++ << '\t' << x.gen << '\t' << (g == 1 ? "wild" : "main") << '\t' << x.s << '\t' << x.r
                        << '\t' << x.o << '\t' << x.prior << '\t' << x.state << '\t'
                        << "graded when a later source (a later Wikidata, S8e's slots or Odin) lists the slot; not before" << '\n';
             std::snprintf(b, sizeof b, "S12A PROSPECTIVE log %s: %zu hypotheses logged at %s", (out + ".prospective.tsv").c_str(), id, ts);
@@ -13626,7 +13667,7 @@ int main(int argc, char** argv) {
     if (argc >= 2 && string(argv[1]) == "--pool-grade") return s11c::run_grade(argc, argv);  // S11c (a pool after the source stage)
     if (argc >= 2 && string(argv[1]) == "--f2b-selftest") return f2b::selftest();  // F2b (key rules)
     if (argc >= 2 && string(argv[1]) == "--gen-laws") return s12a::run_laws(argc, argv);  // S12a (G15 numeric laws, the planted-law gate)
-    if (argc >= 2 && string(argv[1]) == "--gen-deep") return s12a::run_deep(argc, argv);  // S12a (G1 deep deduction, G19 refinement, G20 wild tier)
+    if (argc >= 2 && string(argv[1]) == "--gen-deep") return s12a::run_deep(argc, argv);  // S12a (G1 deep deduction, G20 wild tier; G19 removed by S12c)
     if (argc >= 4 && string(argv[1]) == "--wilson") {
         double k = std::atof(argv[2]), n = std::atof(argv[3]);
         std::printf("%.0f/%.0f = %.3f  Wilson95 [%.3f, %.3f]\n", k, n, n > 0 ? k / n : 0.0, ecs::wilson_lower(k, n), ecs::wilson_upper(k, n));

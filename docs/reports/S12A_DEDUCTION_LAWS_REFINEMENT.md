@@ -330,3 +330,210 @@ F=/root/work/f2
 ```
 
 `TABLES` is S8c's; the `S8D_*` files are S8d's dev hypotheses (see the S8d report). A full `--gen-laws` run takes about 15 s; `--gen-deep` with pools about 40 s.
+
+## S12c: S12a's questions, settled by measurement (registered 2026-10-29, before any run)
+
+**Odin Loch** · 2026-10-29 · answers HANDOFF §5.26 under PLAN ledger 55 (decided by measurement, open to Odin's veto) · Odin: "Do all"
+
+(The definitions, rules, predictions and the fresh read's design below were written and committed before any S12c code ran. Results are added under them.)
+
+**Question.** S12a left four questions. Can G15 keep power laws and orders that its registered checks lose to noise and typing errors, without keeping false laws? Is G1's prior right by depth? Does G19 stay?
+
+**Rule 10.** Laws, derived facts and priors are hypotheses about Cypha's own store. Nothing here answers a question.
+
+### Item 1: a power law's spread on the attribute it predicts
+
+- **Now:** a power product's spread is the robust CV of its term T = Π xₖ^eₖ. The term carries each attribute's noise times its exponent, so Z²X⁻³ has twice Z's noise, and POWER fails at σ = 0.05 (0 of 20, dev and test).
+- **Change (`--power-min-exp`):** the law must predict each attribute it names within the bar. Solved for attribute k, the law predicts xₖ = (K / Π_{j≠k} xⱼ^eⱼ)^(1/eₖ), whose relative spread is the term's spread over |eₖ|. The least precisely predicted attribute is the one with the smallest |eₖ|, so the spread checked is that of T^(1/m), m = min |eₖ|:
+  - spread = robust CV of T^(1/m) (1.4826 · MAD / median);
+  - inliers: the share with |(T / median)^(1/m) − 1| ≤ 0.1, at least 80%;
+  - held out: the share with |(T / K)^(1/m) − 1| ≤ 0.1, at least 80%.
+- Nothing else changes: the χ² test against independence (scale-free), BH at q = 0.1, the redundancy check, the constant.
+- **Which laws it touches:** only exponent vectors whose every |e| ≥ 2. Among G15's search (pairs |e| ≤ 3, triples |e| ≤ 2, gcd 1) that is the four pairs (2, ±3) and (3, ±2). Every other law is unchanged.
+
+### Item 2: orders with bad rows
+
+- **Now (amendments 0 and 1):** an order X ≤ Y is kept at a share of at least 95%, a binomial p-value against the independence share p₀ passing BH, at least 30 entities, and held-out violations at most 10%. With 5% typing errors, Bin(40, 0.05) gives 3 or more bad rows about a third of the time, and the held-out third (about 13 entities) often holds 2. ORDER: 38 of 60 on test.
+- **Change (`--order-relaxed MARGIN`):** kept at a share of at least 90%, **and** a share at least MARGIN above p₀ (the order must beat independence by a margin, not only by a p-value), with held-out violations at most 20%. BH, the 30 entities and p₀ are as before.
+- **Candidates for the dev choice:** O0 (as now), O1 (margin 0.20), O2 (margin 0.30).
+
+### The dev choice for items 1 and 2
+
+On the dev replicates of S12a's planted design (the same seeds, `S12A|dev|…`; store K's dev persons), four configurations: A (as S12a), P (item 1), P + O1, P + O2.
+- **Item 1 is adopted** if, under P, POWER's recall at σ ≤ 0.05 rises over A and no false law appears that A does not have (null tables and planted tables, all six kinds).
+- **Item 2:** among O1 and O2 (each with item 1 if adopted), the candidate with the highest ORDER recall at σ ≤ 0.05 whose dev false-law count is zero (null and planted tables, all six kinds). Ties go to the larger margin. If neither has zero false laws, orders stay as now.
+- **The real read** (countries, places, persons in stores K and T) is reported under the adopted configuration. It is not a gate, but an adopted change that keeps a law outside S12a's expected list is reported as a warning.
+
+### The fresh gate read (once, after the hashes are committed)
+
+- **Fresh planted tables:** S12a's design (six kinds, σ ∈ {0, 0.02, 0.05, 0.10, 0.20}, 20 replicates, 40 entities, 5% contamination, the null by shuffling Z), with **new seeds** `S12C|test|kind|σ|rep` and store K's test persons for the interval kinds.
+- They are written to a file by `--s12c-fresh write` without searching; its sha256 is committed before `--s12c-fresh read` regenerates them (the same hash, checked) and searches them once with the adopted configuration.
+- **S12's gate, as registered in S12a:** recall ≥ 0.90 pooled over the six kinds at σ ≤ 0.05, and false-law rate ≤ 0.05 (null tables with a false law). Point estimates, Wilson intervals printed.
+
+### Item 3: G1's prior by depth
+
+- **Now:** a G1 hypothesis enters the loop with its chain confidence (the product of its rules' PCA confidences) as the prior, clamped to [0.02, 0.98]. On R1 test, precision fell from 0.371 at depth 1 to 0.146 at depth 3 and 0 at depths 4–6, while the confidence stayed at 0.43–0.53.
+- **Candidates** (for depth ≥ 2, G1's hypotheses):
+  - C0: the chain confidence (as now);
+  - C1: cap at depth 3: facts first derived at depth 4–6 are not hypotheses (scored as the floor, 0.02, for the comparison);
+  - C2: calibrated by depth: prior(d) = (true_d + 1) / (graded_d + 2), clamped to [0.02, 0.98], counts from R1's graded dev facts at that depth.
+- **The comparison, dev only, cross-fitted:** R1's graded dev facts at depth ≥ 2 are split in halves by FNV-1a(subject) bit 3. C2 is fitted on one half and scored on the other, both ways. The Brier score of each candidate's prior against the grade, over all graded dev facts at depth ≥ 2; ECE (10 bins) and log loss printed.
+- **Rule:** the lowest Brier wins. Within 0.002 of the best, the simpler wins, in the order C0, C1, C2. The winner is the pool's prior (`--g1-prior chain|cap3|depth`; C2 fits its counts on all of R1's dev facts).
+- **No fresh read of G1:** S8e's fresh set is not frozen (its branch has its registration only), R1's test subjects were read once by S12a, and both halves of S15 test carry a pool read. So G1's choice is read on dev only, cross-fitted, and said so.
+
+### Item 4: G19
+
+- **Registered rule (written now, because S12a's registration did not say):** a generator that fails its earn-its-place read goes, as S8b's and S11b's did, unless a read on a richer store is registered and scheduled. A richer store means at least twice store K's facts on the relations G19 refines.
+- **Applied:** none is scheduled. S8e builds a grading set, not a store; LEXFIX fixes a lexicon; the 1 TB text is on Odin's PC with no store build registered. So G19's code goes: `refine_rules`, `refinement_predictions` and their helpers, the G19 read in `--gen-deep` and G19's pool. Its numbers stay in this report, and its code stays in git at main's 0ce072f (S12a's merge).
+
+### Predictions (registered before any run)
+
+| # | Prediction |
+|---|---|
+| C1 | Item 1 on dev: POWER's recall at σ = 0.05 rises from 0 to at least 15 of 20; at σ = 0.10 at most 5 of 20; no new false law |
+| C2 | Item 2 on dev: O1 (margin 0.20) is chosen; ORDER's recall at σ ≤ 0.05 at least 0.85 under it; no false law |
+| C3 | The fresh gate read: recall at σ ≤ 0.05 at least 0.90 (about 0.95), false-law rate at most 0.02: S12's gate is met |
+| C4 | Item 3: C2 (calibrated by depth) has the lowest cross-fitted Brier, at least 0.05 below C0's |
+| C5 | Item 4: G19 is removed by the rule |
+| C6 | The real read under the adopted configuration: the three country laws and birth ≤ death kept as before; the lifespan still not kept; nothing outside the expected list |
+
+### The fresh tables, frozen (2026-10-29, before the read)
+
+- Written by `pattern_learn --gen-laws … OUT --s12c-fresh write` at commit ed12b4e: 1,200 tables (6 kinds × 5 levels × 20 replicates, planted and null), 48,000 entity rows, store K's test persons (482).
+- `OUT.s12c_fresh_tables.tsv`: 7,443,370 bytes, sha256 `a058d68302c5f622af9338b66503237758b8f20950099555a3ed803c9f9d64e9`.
+- The read (`--s12c-fresh read --power-min-exp --order-relaxed 0.30`, the dev choice below) regenerates the file; it must give the same hash. It runs once.
+
+### S12c results (2026-10-29)
+
+#### Items 1 and 2 on dev (S12a's dev seeds; store K's dev persons, 480)
+
+| Configuration | POWER, σ ≤ 0.05 | ORDER, σ ≤ 0.05 | Pooled recall, σ ≤ 0.05 | Null tables with a false law | Tables with a false law (all levels) |
+|---|---|---|---|---|---:|
+| A (as S12a) | 40/60 = 0.667 [0.541, 0.773] | 40/60 = 0.667 [0.541, 0.773] | 309/360 = 0.858 [0.819, 0.891] | 0/360 | 1 |
+| P (item 1) | 56/60 = 0.933 [0.841, 0.974] | 40/60 | 325/360 = 0.903 [0.868, 0.929] | 0/360 | 1 |
+| O1 (margin 0.20) | 40/60 | 58/60 = 0.967 [0.886, 0.991] | 327/360 = 0.908 [0.874, 0.934] | 0/360 | 0 |
+| O2 (margin 0.30) | 40/60 | 58/60 = 0.967 [0.886, 0.991] | 327/360 = 0.908 [0.874, 0.934] | 0/360 | 0 |
+| P + O1 | 56/60 | 58/60 | 343/360 = 0.953 [0.926, 0.970] | 0/360 | 0 |
+| P + O2 | 56/60 | 58/60 | 343/360 = 0.953 [0.926, 0.970] | 0/360 | 0 |
+
+- A reproduces S12a's dev read exactly.
+- POWER under P: σ 0 20/20, σ 0.02 20/20, σ 0.05 16/20 (was 0/20), σ 0.10 2/20, σ 0.20 0/20.
+- ORDER under O1 or O2: σ 0.10 17/20 (was 8/20), σ 0.20 5/20 (was 0/20).
+- A's one false law sits in an OFFSET planted table at σ > 0.05. The order margin removes it.
+- **Item 1 is adopted** (POWER 40 → 56 of 60, no new false law).
+- **Item 2: O2** (margin 0.30). O1 and O2 tie at 58/60 with no false law; the rule gives ties to the larger margin.
+- The adopted configuration is `--power-min-exp --order-relaxed 0.30`. The flags stay off by default, so S12a's reads reproduce.
+
+#### The real read under the adopted configuration
+
+The same laws as S12a's. Countries keep 3 (density = population / area; the km² and mi² conversions of area and density). GDP per capita is not kept. Places keep none. Persons keep birth ≤ death in stores K and T; the lifespan is not kept. Nothing outside the expected list.
+
+#### The fresh gate read (once, after c72aef4 froze the tables)
+
+The read regenerated the tables with the same sha256 (`a058d683…`, checked with `cmp` against the frozen copy). Configuration: `--power-min-exp --order-relaxed 0.30`.
+
+| Kind | σ 0 | σ 0.02 | σ 0.05 | σ 0.10 | σ 0.20 | At σ ≤ 0.05 |
+|---|---|---|---|---|---|---|
+| RATIO | 20/20 | 19/20 | 20/20 | 0/20 | 0/20 | 59/60 = 0.983 [0.911, 0.997] |
+| PRODUCT | 20/20 | 19/20 | 20/20 | 1/20 | 0/20 | 59/60 = 0.983 [0.911, 0.997] |
+| POWER | 20/20 | 18/20 | 19/20 | 0/20 | 0/20 | 57/60 = 0.950 [0.863, 0.983] |
+| SCALE | 18/20 | 19/20 | 20/20 | 1/20 | 0/20 | 57/60 = 0.950 [0.863, 0.983] |
+| OFFSET | 20/20 | 18/20 | 20/20 | 8/20 | 0/20 | 58/60 = 0.967 [0.886, 0.991] |
+| ORDER | 19/20 | 19/20 | 20/20 | 17/20 | 1/20 | 58/60 = 0.967 [0.886, 0.991] |
+
+- **Recall at σ ≤ 0.05: 348 / 360 = 0.967 [0.943, 0.981].** S12a's test read under its own configuration: 307 / 360 = 0.853.
+- **False-law rate: 0 / 360 null tables = 0.000 [0.000, 0.011]**; 0 of 360 planted tables hold a false law.
+- **S12's gate is met** on fresh tables, by the rule S12a registered.
+- Every kind is at 0.95 or above. POWER at σ 0.05 is 19/20 (S12a's test: 0/20). ORDER at σ ≤ 0.05 is 58/60 (S12a's test: 38/60).
+- This is a new read with a configuration chosen on dev. It does not re-score S12a's test read, which stays "not met".
+
+#### Item 3: G1's prior by depth (dev only, cross-fitted)
+
+R1's graded dev facts at depth ≥ 2: 363 facts, 105 subjects.
+
+| Candidate | Brier | Log loss (bits) | ECE |
+|---|---:|---:|---:|
+| C0: chain confidence | 0.3164 | 1.220 | 0.406 |
+| C1: cap at depth 3 | 0.1995 | 0.787 | 0.192 |
+| C2: calibrated by depth (cross-fitted) | **0.1169** | **0.536** | **0.053** |
+
+Paired Brier differences (95% intervals, clustered by subject):
+- C2 − C0: −0.200 [−0.245, −0.154];
+- C2 − C1: −0.083 [−0.119, −0.047];
+- C1 − C0: −0.117 [−0.150, −0.084].
+
+- **Choice: C2** (`--g1-prior depth`). It wins by far more than the 0.002 tie band.
+- Calibrated priors from all R1 dev facts: depth 2 0.236 (32/138), depth 3 0.396 (20/51), depth 4 0.033 (2/89), depth 5 0.029 (0/32), depth 6 0.036 (1/53). Depth 1 (G2's own, not G1's): 0.503.
+- **No fresh read of G1.** S8e's set is not frozen: its worktree has its registration commit (2d17454) and uncommitted work. So the choice is read on dev only, as registered.
+
+**What C2 does to the dev pool** (S15 dev, bit 17 = 1; 38 G1 hypotheses each way; graded with S15 dev's labels, without the source stage; reported, not a gate):
+
+| G1 prior | Depth 2 / 3 / 4–6 in the pool | Graded true share | Loop-supported (graded true) | Loop-refuted (graded, false) |
+|---|---|---|---|---|
+| Chain (C0) | 24 / 1 / 13 | 12/27 = 0.444 | 6 (6 of 6) | 3 (2 of 2) |
+| Depth (C2) | 10 / 15 / 13 | 11/27 = 0.407 | 0 | 13 (5 of 7) |
+
+- Under C2 the loop supports nothing. The 6 supports it drops were all true, but all lexical, which S8d's calibration never lets a source promote.
+- Under C2 the loop refutes 13. Of the 7 graded, 2 were true.
+- The pool's picks move from depth 2 to depth 3. Depth 3's dev prior (0.396) is above depth 2's (0.236). On R1 test, depth 3 was 0.146. With only 51 graded facts at depth 3 the prior is noisy.
+- A fit that cannot rise with depth would avoid this. It was not registered, so it is not chosen here. It is a question for Odin.
+
+#### Item 4: G19
+
+Applied as registered: no richer-store read is scheduled, so G19's code is gone. That covers `refine_rules`, `refinement_predictions` and their helpers in `gen_deep.hpp`, G19's read and pool in `--gen-deep`, and G19's checks in `epistemic_test`. G19's numbers stay in this report. Its code is in git at 0ce072f.
+
+#### Predictions, scored
+
+| # | Prediction | Result |
+|---|---|---|
+| C1 | POWER at σ 0.05: 0 → at least 15/20; at σ 0.10 at most 5/20; no new false law | **Hit:** 16/20; 2/20; none |
+| C2 | O1 chosen; ORDER ≥ 0.85; no false law | **Partial:** O2 chosen (a tie with O1 at 58/60, broken to the larger margin); ORDER 0.967; no false law |
+| C3 | Fresh gate: recall ≥ 0.90 (about 0.95), false-law rate ≤ 0.02, gate met | **Hit:** 0.967 [0.943, 0.981]; 0.000; met |
+| C4 | C2 lowest Brier, at least 0.05 below C0 | **Hit:** 0.200 below [0.154, 0.245] |
+| C5 | G19 removed | **Hit** |
+| C6 | The real read unchanged | **Hit** |
+
+5 hits, 1 partial, 0 misses.
+
+#### Decisions (by the registered rules; open to Odin's veto under ledger 55)
+
+1. **Item 1 adopted.** G15 checks a power law's spread on the attribute it predicts (`--power-min-exp`).
+2. **Item 2: O2.** An order is kept at 90% when its share beats independence by 0.30, with at most 20% held-out violations (`--order-relaxed 0.30`).
+3. **S12's gate is met on fresh tables** under 1 and 2: recall 0.967, no false law.
+4. **G1's prior is calibrated by depth** (`--g1-prior depth`). On the dev pool it trades 6 true (unpromotable) loop supports and 2 wrong refutations for honest priors. Flagged for Odin.
+5. **G19 removed** by the rule registered here.
+
+#### For Odin
+
+1. **G1's prior:** C2 wins on Brier by 0.2, but on the dev pool it supports nothing and wrongly refutes 2 true facts. Keep C2, or register a fit that cannot rise with depth and read it on S8e's fresh set when it is frozen?
+2. **Defaults:** make `--power-min-exp` and `--order-relaxed 0.30` G15's defaults at the merge? (S12a's reads would then need explicit flags to reproduce.)
+3. **G1's depth precision on a fresh part** waits for S8e's frozen set.
+
+#### Checks
+
+- `native_epistemic_test`: 1,374 checks, 0 failed. `test_laws_deep_S12a` has 21 new S12c checks (item 1: 4, item 2: 7, item 3: 10). G19's 6 checks are gone.
+- Four planted bugs each make it fail:
+  - dividing by the largest exponent instead of the smallest (1 check fails);
+  - dropping the margin (1);
+  - capping at depth 4 instead of 3 (1);
+  - a wrong calibration formula, t / g instead of (t + 1) / (g + 2) (3).
+- The first run of the planted bugs showed that dropping the margin failed no check: the binomial test also held out the one order the checks used. So a case was added, an order at share 0.95 against p₀ about 0.8, kept on its p-value without the margin and held out with it. Then all four failed.
+- With the new flags off, S12a's reads reproduce:
+  - `--gen-laws`: stdout is identical to S12a's `laws_dev2.out` apart from the timing line, and the planted tables are identical;
+  - `--gen-deep --fresh-dev`: G1's reads, pools and prospective log are identical to S12a's dev run, apart from timings, timestamps, G19's removed lines and the pool count line.
+- S3's `--gaps` run is byte-identical: 10 of 10 files. The gap map's sha256 starts `a77678d8ef7dfdef`.
+- The nine CTests pass (9 of 9).
+- `pattern_learn` builds with `-Wall` and no warnings.
+- No change outside S12a's code: `gen_laws.hpp`, `gen_deep.hpp`, the `s12a` block of `pattern_learn.cpp` and `test_laws_deep_S12a`.
+
+#### How to reproduce (S12c)
+
+```
+F=/root/work/f2
+./pattern_learn --gen-laws enwik8 $F/v2/aug/seeds.tsv $F/v2/aug/facts_f2.tsv OUT/g --s12c-dev                               # the dev grid and the choices
+./pattern_learn --gen-laws enwik8 … OUT/a --power-min-exp --order-relaxed 0.30                                                  # dev and the real read, adopted
+./pattern_learn --gen-laws enwik8 … OUT/fresh --s12c-fresh write                                                               # freeze; sha256 a058d683…
+./pattern_learn --gen-laws enwik8 … OUT/fresh --s12c-fresh read --power-min-exp --order-relaxed 0.30                            # the gate (once)
+./pattern_learn --gen-deep enwik8 $F/v2/aug/seeds.tsv $F/v2/aug/facts_f2.tsv $F/wikidata/wd_values.tsv $F/v2/aug/patterns.tsv bench/eval OUT/c --s12c   # G1's priors
+./pattern_learn --gen-deep … OUT/p --fresh-dev --g1-prior depth                                                                # the dev pool under C2
+```

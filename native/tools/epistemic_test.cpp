@@ -3048,7 +3048,7 @@ static void test_fragile_S9b() {
 }
 
 // ---------------------------------------------------------------------------
-// S12a: G15 numeric laws (gen_laws.hpp); G1 deep deduction, G19 refinement, G20 the wild tier (gen_deep.hpp)
+// S12a: G15 numeric laws (gen_laws.hpp); G1 deep deduction, G20 the wild tier (gen_deep.hpp); S12c: items 1-3 (G19 removed)
 // ---------------------------------------------------------------------------
 
 static void test_laws_deep_S12a() {
@@ -3184,37 +3184,110 @@ static void test_laws_deep_S12a() {
     CHECK_NEAR(got["x1|author"].second, 0.8 * 0.5, 1e-12);  // the product of the rules' PCA confidences
     CHECK(dp::deep_chain(st, book, 1).size() == 2);         // depth 1 is G2's own prediction
   }
-  // ---- G19: a rejected rule rescued by a condition on its subject
+  // ---- S12c item 1: a power law's spread on the attribute it predicts least precisely, T^(1/min|e|)
   {
-    TripleStore st;
-    for (int i = 0; i < 30; ++i) {
-      const std::string x = "painter" + std::to_string(i);
-      st.add(x, "occupation", "Painter");
-      const bool paris = i < 12;
-      st.add(x, "birth_place", paris ? "Paris" : "Rome");
-      st.add(x, "nationality", paris ? "French" : "Italian");
+    lw::NumTable t;
+    const std::size_t X = t.add_attr("x", lw::Scale::Ratio), Z = t.add_attr("z", lw::Scale::Ratio), Y = t.add_attr("y", lw::Scale::Ratio);
+    std::mt19937_64 rng(17);
+    for (int i = 0; i < 400; ++i) {
+      const std::size_t e = t.add_entity("w" + std::to_string(i));
+      const double x = std::exp(std::normal_distribution<double>(4, 1)(rng));
+      t.v[X][e] = x;
+      t.v[Z][e] = 3.0 * std::pow(x, 1.5) * std::exp(std::normal_distribution<double>(0, 0.06)(rng));  // Kepler-like, 6% noise on z
+      t.v[Y][e] = 2.0 * x * std::exp(std::normal_distribution<double>(0, 0.02)(rng));
     }
-    st.add("newcomer", "occupation", "Painter");
-    st.add("newcomer", "birth_place", "Paris");
-    st.add("roman", "occupation", "Painter");
-    st.add("roman", "birth_place", "Rome");
-    Rule R;
-    R.kind = RuleKind::Const, R.r1 = "occupation", R.c1 = "Painter", R.head = "nationality", R.head_o = "French";
-    R.support = 12, R.pca_body = 30, R.p0 = 0.4, R.kept = false;
-    const auto refs = dp::refine_rules(st, {R});
-    const dp::Refinement* best = nullptr;
-    for (const auto& F : refs)
-      if (F.kept && F.cr == "birth_place" && F.cc == "Paris") best = &F;
-    CHECK(best != nullptr);
-    if (best) {
-      CHECK_NEAR(best->pca_conf(), 1.0, 1e-12);
-      CHECK(best->support == 12);
-      const auto by_rel = dp::facts_by_relation(st);
-      const auto pred = dp::refinement_predictions(st, R, *best, by_rel);
-      CHECK(pred.size() == 1 && pred[0].s == "newcomer" && pred[0].o == "French");
+    lw::LawConfig on;
+    on.power_min_exp = true;
+    const auto off = lw::search_laws(t), onl = lw::search_laws(t, on);
+    double s_off = -1, s_on = -1, y_off = -1, y_on = -1;
+    bool kept_off = false, kept_on = false;
+    for (const auto& L : off) {
+      if (L.attr == std::vector<std::size_t>{X, Z} && L.exp == std::vector<int>{3, -2}) s_off = L.spread, kept_off = L.kept;
+      if (L.attr == std::vector<std::size_t>{X, Y} && L.exp == std::vector<int>{1, -1}) y_off = L.spread;
     }
-    for (const auto& F : refs) CHECK(!(F.kept && F.cr == "birth_place" && F.cc == "Rome"));  // never better than its parent
-    for (const auto& F : refs) CHECK(F.cr != "nationality");                                  // never the head's own relation
+    for (const auto& L : onl) {
+      if (L.attr == std::vector<std::size_t>{X, Z} && L.exp == std::vector<int>{3, -2}) s_on = L.spread, kept_on = L.kept;
+      if (L.attr == std::vector<std::size_t>{X, Y} && L.exp == std::vector<int>{1, -1}) y_on = L.spread;
+    }
+    CHECK(s_off > 0.1 && !kept_off);             // the term carries z's noise twice
+    CHECK(s_on < 0.1 && kept_on);                // z, the least precisely predicted attribute, is within the bar
+    CHECK(std::fabs(s_on / s_off - 0.5) < 0.05);  // divided by min |e| = 2, not by max |e| = 3
+    CHECK(y_off > 0 && y_on == y_off);            // a law with an exponent of 1 is unchanged
+  }
+  // ---- S12c item 2: orders at 90% with a margin over independence
+  {
+    lw::NumTable t;
+    const std::size_t B = t.add_attr("birth", lw::Scale::Interval), Z = t.add_attr("z", lw::Scale::Interval), S = t.add_attr("shifted", lw::Scale::Interval);
+    std::mt19937_64 rng(19);
+    int bad = 0;
+    for (int i = 0; i < 80; ++i) {
+      const std::string name = "q" + std::to_string(i);
+      const std::size_t e = t.add_entity(name);
+      const double b = std::floor(std::uniform_real_distribution<double>(-500, 1950)(rng));
+      t.v[B][e] = b;
+      t.v[Z][e] = b + 20 + std::floor(std::uniform_real_distribution<double>(0, 40)(rng));
+      if (bad < 6 && !lw::heldout_entity(name)) t.v[Z][e] = b - 100, ++bad;  // 6 typing errors (7.5%), none held out
+      t.v[S][e] = std::floor(std::uniform_real_distribution<double>(1800, 2600)(rng));
+    }
+    CHECK(bad == 6);
+    lw::LawConfig rel;
+    rel.order_share = 0.90, rel.order_heldout_viol = 0.20, rel.order_margin = 0.20;
+    auto kept_order = [&](const std::vector<lw::Law>& laws, std::size_t x, std::size_t y) {
+      for (const auto& L : laws)
+        if (L.kind == lw::LawKind::Order && L.attr == std::vector<std::size_t>{x, y}) return L.kept;
+      return false;
+    };
+    const auto d = lw::search_laws(t), r = lw::search_laws(t, rel);
+    CHECK(!kept_order(d, B, Z) && kept_order(r, B, Z));  // 74 of 80 (0.925): below 95%, above 90% and far above independence
+    CHECK(!kept_order(r, B, S));                         // high share, but no more than for unrelated pairs: the margin holds it out
+  }
+  {
+    // an order whose share (0.95) passes the binomial test against independence (p0 about 0.8) but not the margin
+    lw::NumTable t;
+    const std::size_t B = t.add_attr("birth", lw::Scale::Interval), W = t.add_attr("w", lw::Scale::Interval);
+    std::mt19937_64 rng(23);
+    int bad = 0;
+    for (int i = 0; i < 80; ++i) {
+      const std::string name = "m" + std::to_string(i);
+      const std::size_t e = t.add_entity(name);
+      const double b = std::floor(std::uniform_real_distribution<double>(-500, 1950)(rng));
+      t.v[B][e] = b;
+      t.v[W][e] = b + std::floor(std::uniform_real_distribution<double>(600, 1200)(rng));
+      if (bad < 4 && !lw::heldout_entity(name)) t.v[W][e] = b - 100, ++bad;  // 4 of 80 below: share 0.95
+    }
+    lw::LawConfig no_margin, margin;
+    no_margin.order_share = margin.order_share = 0.90, no_margin.order_heldout_viol = margin.order_heldout_viol = 0.20;
+    margin.order_margin = 0.30;
+    const lw::Law* o = nullptr;
+    const auto a = lw::search_laws(t, no_margin), m = lw::search_laws(t, margin);
+    for (const auto& L : a)
+      if (L.kind == lw::LawKind::Order && L.attr == std::vector<std::size_t>{B, W}) o = &L;
+    CHECK(bad == 4 && o != nullptr);
+    if (o) {
+      CHECK(o->p0 > 0.7 && o->p0 < 0.9 && o->inlier - o->p0 < 0.30);  // beats independence, but by less than the margin
+      CHECK(o->kept);                                                  // without the margin: kept on its p-value
+    }
+    bool kept_m = false;
+    for (const auto& L : m)
+      if (L.kind == lw::LawKind::Order && L.attr == std::vector<std::size_t>{B, W}) kept_m = L.kept;
+    CHECK(!kept_m);  // the margin holds it out
+  }
+  // ---- S12c item 3: G1's prior by depth
+  {
+    dp::DepthCalib cal;
+    for (int i = 0; i < 8; ++i) cal.add(2, i < 2);
+    for (int i = 0; i < 10; ++i) cal.add(4, false);
+    for (int i = 0; i < 200; ++i) cal.add(6, false);
+    CHECK_NEAR(cal.prior(2), 3.0 / 10.0, 1e-12);
+    CHECK_NEAR(cal.prior(4), 1.0 / 12.0, 1e-12);
+    CHECK_NEAR(cal.prior(5), 0.5, 1e-12);  // no counts at depth 5
+    CHECK_NEAR(dp::g1_prior(dp::G1Prior::Chain, 5, 0.45, cal), 0.45, 1e-12);
+    CHECK_NEAR(dp::g1_prior(dp::G1Prior::Chain, 1, 0.999, cal), 0.98, 1e-12);  // clamped
+    CHECK(std::isnan(dp::g1_prior(dp::G1Prior::Cap3, 4, 0.45, cal)));
+    CHECK_NEAR(dp::g1_prior(dp::G1Prior::Cap3, 3, 0.45, cal), 0.45, 1e-12);
+    CHECK_NEAR(dp::g1_prior(dp::G1Prior::Depth, 4, 0.45, cal), 1.0 / 12.0, 1e-12);
+    CHECK_NEAR(dp::g1_prior(dp::G1Prior::Depth, 2, 0.999, cal), 0.3, 1e-12);
+    CHECK_NEAR(dp::g1_prior(dp::G1Prior::Depth, 6, 0.6, cal), 0.02, 1e-12);  // 1/202, clamped to the floor
   }
   // ---- G20: the wild tier's clusters, budget and support rule
   {
