@@ -1,10 +1,11 @@
 // Known-answer tests for cypha/eval/epistemic.hpp (docs/DISCOVERY.md sections 2.1-2.3, 3.1, 3.3, 10), hypothesis.hpp
 // (S5: 4, 6.3, 7.2-7.5; invariants I1, I4, I7, I8; S7: 7.1-7.3, I5, I6; S7b: three-way likelihoods, the batch step
-// among the supported), gap_map.hpp (S3: 3.2, 3.5) and gen_links.hpp (S8b: G6, G7).
+// among the supported), gap_map.hpp (S3: 3.2, 3.5), gen_links.hpp (S8b: G6, G7) and gen_rules.hpp (S8a: G2, G14).
 // Returns nonzero if any check fails.
 #include "cypha/eval/epistemic.hpp"
 #include "cypha/eval/gap_map.hpp"
 #include "cypha/eval/gen_links.hpp"
+#include "cypha/eval/gen_rules.hpp"
 #include "cypha/eval/hypothesis.hpp"
 
 #include <cmath>
@@ -1402,6 +1403,133 @@ static void test_links_S8b() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// S8a: G2 rule induction and G14 contradiction resolution (gen_rules.hpp)
+// ---------------------------------------------------------------------------
+
+static void test_gen_rules_S8a() {
+  // The binomial tail.
+  CHECK_NEAR(binomial_upper_tail(8, 10, 0.5), 56.0 / 1024.0, 1e-12);
+  CHECK_NEAR(binomial_upper_tail(0, 5, 0.2), 1.0, 1e-15);
+  CHECK_NEAR(binomial_upper_tail(6, 5, 0.2), 0.0, 1e-15);
+  CHECK_NEAR(binomial_upper_tail(5, 5, 0.2), std::pow(0.2, 5), 1e-15);
+
+  TripleStore st;
+  // A planted const rule: 30 painters, all artists. Another 20 people have occupation(lawyer) and a random other value.
+  for (int i = 0; i < 30; ++i) {
+    const std::string x = "P" + std::to_string(i);
+    st.add(x, "occupation", "Painter");
+    if (i < 27) st.add(x, "occupation", "Artist");  // 27 of 30: PCA 0.9
+  }
+  for (int i = 0; i < 20; ++i) st.add("L" + std::to_string(i), "occupation", "Lawyer"), st.add("L" + std::to_string(i), "occupation", "V" + std::to_string(i));
+  // A spurious rule: 100 subjects; 80% are "common"; the first 50 also have tag z. tag(z) => kind(common) has support 40 and
+  // PCA 0.8, but common's base rate is 0.8, so it is no better than chance and BH keeps it out.
+  for (int i = 0; i < 100; ++i) {
+    const std::string x = "C" + std::to_string(i);
+    st.add(x, "kind", i % 5 ? "common" : "rare" + std::to_string(i));
+    if (i < 50) st.add(x, "tag", "z");
+  }
+  // An inverse rule: 15 offices, successor and predecessor both stated.
+  for (int i = 0; i < 15; ++i) {
+    st.add("A" + std::to_string(i), "successor", "B" + std::to_string(i));
+    st.add("B" + std::to_string(i), "predecessor", "A" + std::to_string(i));
+  }
+  // A path rule: 12 people born in a town whose country is their nationality. One more is born there, nationality unknown.
+  for (int i = 0; i < 12; ++i) {
+    const std::string town = "Town" + std::to_string(i % 4), land = "Land" + std::to_string(i % 4);
+    st.add("H" + std::to_string(i), "birth_place", town);
+    st.add("H" + std::to_string(i), "nationality", land);
+    if (i < 4) st.add(town, "country", land);
+  }
+  st.add("H99", "birth_place", "Town1");
+  st.add("H99", "occupation", "Painter");  // G2 should propose Artist for H99
+
+  const RuleIndex ix(st);
+  const std::vector<Rule> rules = mine_rules(ix);
+  auto find = [&](const std::string& text) -> const Rule* {
+    for (const auto& R : rules)
+      if (R.text() == text) return &R;
+    return nullptr;
+  };
+  const Rule* planted = find("occupation(X, Painter) => occupation(X, Artist)");
+  CHECK(planted != nullptr);
+  if (planted) {
+    CHECK(planted->kept);
+    CHECK_NEAR(planted->support, 27, 0);
+    CHECK_NEAR(planted->pca_body, 31, 0);  // the 30 painters and H99
+    CHECK_NEAR(planted->body, 31, 0);
+    CHECK_NEAR(planted->pca_conf(), 27.0 / 31.0, 1e-12);
+    CHECK_NEAR(planted->head_coverage(), 1.0, 1e-12);  // every Artist fact
+    CHECK_NEAR(planted->p0, 27.0 / 98.0, 1e-12);        // Artist's share of the 98 occupation facts
+    CHECK(planted->p_value < 1e-10);
+    CHECK(rule_t3(*planted) != TestOutcome::Negative);
+  }
+  const Rule* spurious = find("tag(X, z) => kind(X, common)");
+  CHECK(spurious != nullptr);
+  if (spurious) {
+    CHECK_NEAR(spurious->support, 40, 0);
+    CHECK_NEAR(spurious->pca_conf(), 0.8, 1e-12);
+    CHECK_NEAR(spurious->p0, 0.8, 1e-12);  // common's share of kind
+    CHECK(spurious->p_value > 0.3);
+    CHECK(!spurious->kept);  // PCA >= 0.5 and support >= 10, but no better than its base rate
+  }
+  const Rule* inv = find("predecessor(Y, X) => successor(X, Y)");
+  CHECK(inv != nullptr && inv->kept && inv->support == 15 && inv->pca_conf() == 1.0);
+  const Rule* path = find("birth_place(X, Z) & country(Z, Y) => nationality(X, Y)");
+  CHECK(path != nullptr && path->kept && path->support == 12 && path->kind == RuleKind::Path);
+  if (path) {  // H99 is born in Town1 but has no nationality: in the body, outside the PCA body
+    CHECK_NEAR(path->body, 13, 0);
+    CHECK_NEAR(path->pca_body, 12, 0);
+    CHECK_NEAR(path->pca_conf(), 1.0, 1e-12);
+    CHECK_NEAR(path->std_conf(), 12.0 / 13.0, 1e-12);
+  }
+  for (const auto& R : rules) CHECK(!R.kept || (R.support >= 10 && R.pca_conf() >= 0.5));
+
+  const RuleSet rs(ix, rules);
+  const auto c = rs.candidates("H99", "occupation");
+  CHECK(!c.empty() && c[0].o == "Artist");
+  if (!c.empty()) CHECK_NEAR(c[0].score, 27.0 / 31.0, 1e-12);
+  const auto n = rs.candidates("H99", "nationality");
+  CHECK(n.size() == 1 && n[0].o == "Land1");
+  const auto succ = rs.candidates("B3", "successor");  // no successor stated for B3; the inverse needs a predecessor of someone
+  CHECK(succ.empty());
+  // Consequences (T2): if H99 is a painter, the planted rule makes it an artist.
+  bool has_artist = false;
+  for (const auto& q : rs.consequences("H99", "occupation", "Painter")) has_artist = has_artist || (q.s == "H99" && q.r == "occupation" && q.o == "Artist");
+  CHECK(has_artist);
+  bool has_succ = false;  // predecessor(Q, P) => successor(P, Q)
+  for (const auto& q : rs.consequences("Q", "predecessor", "P")) has_succ = has_succ || (q.s == "P" && q.r == "successor" && q.o == "Q");
+  CHECK(has_succ);
+  // Noisy-or and the maximum.
+  const RuleSet rs_max(ix, rules, false);
+  CHECK(!rs_max.candidates("H99", "occupation").empty());
+
+  // G14.
+  ContestedSlot slot{"Al Gore", "birth_place", "Washington, D.C.", "Carthage", 1, 2};
+  ContestFacts f;
+  f.a_contains_b = true;
+  CHECK(explain_contest(slot, f).kind == HiddenVar::Granularity);
+  ContestFacts d;
+  d.is_date = true, d.day_gap = 10;
+  CHECK(explain_contest(slot, d).kind == HiddenVar::Calendar);
+  d.day_gap = 400;
+  CHECK(explain_contest(slot, d).kind == HiddenVar::SourceError);
+  ContestFacts tv;
+  tv.time_varying = true;
+  const auto et = explain_contest(slot, tv);
+  CHECK(et.kind == HiddenVar::Time && et.bits == 3.0);
+  ContestFacts er;
+  er.t4_a = 1, er.t4_b = 0;
+  const auto e1 = explain_contest(slot, er);
+  CHECK(e1.kind == HiddenVar::SourceError && e1.wrong == 1 && e1.bits == 4.0);
+  er.t4_a = 0;
+  CHECK(explain_contest(slot, er).wrong == 0);  // no page evidence: b has more sources, so a is wrong
+  slot.sources_a = slot.sources_b = 1;
+  CHECK(explain_contest(slot, er).wrong == 1);  // a tie: the later value
+  CHECK_STR(hidden_var_name(HiddenVar::Granularity), "granularity");
+  CHECK_STR(rule_kind_name(RuleKind::Inverse), "inverse");
+}
+
 static void test_gap_map() {
   // The gap id CyphaLM writes (cyphalm_trie dktext rows and its dev tags).
   CHECK_STR(gap_id("Honduras", "capital"), "G-AEC1");
@@ -1500,6 +1628,7 @@ int main() {
   test_tests_S7();
   test_s7b();
   test_links_S8b();
+  test_gen_rules_S8a();
   test_gap_map();
   std::printf("epistemic_test: %d checks, %d failed\n", g_checks, g_failed);
   return g_failed == 0 ? 0 : 1;
