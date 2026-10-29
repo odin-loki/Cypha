@@ -733,6 +733,161 @@ Rule 1 picks **`online=1,probe=128`**: on the holdout's second half it reads 1.8
 3. **Nothing is removed** (rule 4): `probe`, `lists` and `k` were already spec settings, and `online` is the default; `online=0` gives A4c's expert exactly.
 4. **Next.** A cap or a window on the online keys before a stream grows past a few MiB (they cost 5.3 MB a MiB read).
 
+## A4e: a bound on the online keys (2026-10-29)
+
+**Odin Loch** · 2026-10-29 · follows A4d's "Next"
+
+A4d's online keys cost 36 bytes per word read (a 32-byte key and a 4-byte position): about 5.3 MB per MiB of text, with no end. Every search also scans the probed lists' share of them, so search time grows with the stream too. A4e looks for a bound that stops both without losing the gain. The design, the rules and the predictions below were written before any A4e run.
+
+**The bound (`oncap=N`, 0 = none).** The store holds at most N online keys. Below N nothing changes.
+- **`onevict=old`** (the default): the oldest key is dropped, so the store is a window over the last N word ends. A ring of N list numbers (4 bytes each) says which list holds the oldest key. A list frees its dropped front once that front is half the list.
+- **`onevict=lru`**: the key found least recently is dropped. A key's stamp is the last search that put it among the k nearest, or its arrival. When the store passes N, it drops to 7N/8 at once (4 bytes of stamp per key).
+- **Merging** identical keys (one key, many positions) is measured, not built. It saves the 32 key bytes of a repeated context but keeps 4 bytes per word, so it cannot bound memory by itself.
+- **Leak check.** The A4d check (an expert that read a text up to m and one that read the same text with every byte from m on replaced give the same distribution at m, bit for bit) also runs with a bound of 40 keys, for both kinds of drop and both search modes. The selftest also checks that the bound binds, that the store never holds more than the bound, that the window holds exactly the last 40 keys, and that a bound above the stream's keys equals no bound at every position.
+
+**Streams.** `cls` reads the holdout [7, 8) MiB and then a continuation of the corpus (`--sim-stream FROM:LEN`, in place of the fresh MiB). Lambdas are fit on the whole holdout, as for A4d's fresh read. The read is trie + InfiniGram + class + sim over the continuation.
+- **Dev:** the continuation is enwik8 [8, 16) MiB (8 MiB; the stream is 9 MiB). [8, 9) MiB is A4d's fresh text, read once there and dev now.
+- **Fresh, read once:** the continuation is enwik8 [40, 48) MiB. No CyphaLM expert choice has read it.
+- The shipped vectors were built on enwik8 without [7, 9) MiB, so they have seen [9, 16) and [40, 48). That is the same for every candidate, and the comparisons are paired.
+- **Growth** (`--sim-growth`): the expert alone reads the stream holdout + [8, 23) MiB. At 1, 2, 4, 8 and 16 MiB of stream it reports keys held, bytes (counted and allocated), resident memory, search p50 and p99, time per byte over the next 64 KiB, and how many held keys repeat a stored or earlier key.
+
+**Candidates** (all `default,` + …): `oncap=0` (A4d's default, the reference); `online=0` (no online keys: the size of the gain); windows `oncap=32768`, `oncap=131072`, `oncap=524288` (about 0.22, 0.9 and 3.6 MiB of text; 1.3, 5.2 and 21 MB); `oncap=131072,onevict=lru`. Each is paired against the reference per byte (`--sim-bits` writes the reference's bits; `--sim-ref` reads them), 4 KiB blocks.
+
+**Rules (fixed before the runs).**
+1. **Choice, on dev.** A candidate is eligible if its mean paired change against the reference is at most +0.0005 over the whole continuation and over its last 2 MiB ([14, 16) MiB). Rule 1 picks the eligible candidate with the smallest bound; on a tie, the window. If none is eligible, no bound becomes the default.
+2. **Default, on fresh text read once**, the chosen bound paired against the reference in the same run. It becomes the default only if all of these hold:
+   - the mean paired change is at most +0.0005, and P(change < +0.001) ≥ 0.95 over 4 KiB blocks (LCI);
+   - answers: `qa` in B4c's rule-3 configuration gives byte-identical rows;
+   - text: `sample`'s text is byte-identical (the bound cannot bind there), or else SCRIBE v2 of `sample` text is not below the current default's interval (0.063 [0.051, 0.078]);
+   - cost: scoring time per byte over the fresh continuation at most the reference's (+5% for a shared machine).
+3. **Parity.** With `oncap=0`, every printed number is unchanged: the selftest's earlier lines, `cls`'s `default` lines, `qa` rows and `sample` text, against `main` 7f77615.
+4. **Code debt** (A4d's rule 4). An option that does not become the default and is not needed for a report's numbers is removed; its numbers reproduce at the commit that measured them.
+
+**Predictions.**
+
+| # | Prediction |
+|---|---|
+| E1 | Without a bound the online keys grow 5.0–5.6 MB per MiB of stream, in a straight line (about 85 MB at 16 MiB, counted); search p50 at 16 MiB is at least 2× its value at 1 MiB |
+| E2 | At 16 MiB, 30–60% of the held keys repeat a stored key or an earlier online key; merging them would save 25–55% of the bytes and still grow without end |
+| E3 | The 2^19 window (3.6 MiB of text) is eligible under rule 1 |
+| E4 | The 2^15 window (0.22 MiB) is not eligible, but keeps at least 80% of the online keys' gain over `online=0` on the dev continuation |
+| E5 | Least-recently-found at 2^17 is within ±0.0005 of the window at 2^17 |
+| E6 | Rule 1 picks a bound of 2^17 or 2^19 keys (5–21 MB) |
+| E7 | The chosen bound's fresh change is within ±0.0005 of its dev change |
+| E8 | Over the last 2 MiB of the dev continuation, scoring time per byte with the chosen bound is at least 1.3× lower than without |
+| E9 | The leak check passes under both kinds of bound; planted bugs (a leak; a window that drops the newest key) fail the selftest |
+| E10 | `qa` rows and `sample` text are byte-identical with the chosen bound (it cannot bind in either) |
+
+### Results (A4e)
+
+**Answer: no bound.** Every bound tried loses more than rule 1 allows, and the loss grows with the stream. The online keys stay unbounded, and the bound's code is removed (rule 4). The fresh text [40, 48) MiB was not read, since rule 2 applies only to a chosen bound; it stays unread.
+
+- **Answers: unchanged.** With no bound, `qa` rows are byte-identical to `main`'s (step 3).
+- **Text: unchanged.** `sample` text is byte-identical to `main`'s (step 3), so SCRIBE v2 stays 0.063 [0.051, 0.078] and surface S of trie + class + sim stays 0.9308 (A4d).
+- **BPC: every bound is worse.** On the 8 MiB dev continuation the best bound (2^19 keys) is +0.0033 [+0.0027, +0.0039] worse over the whole stream and +0.0072 [+0.0055, +0.0091] over the last 2 MiB. Rule 1's limit is +0.0005.
+- **Memory: the cost stays.** Without a bound the online keys grow 5.3–5.5 MB per MiB read, in a straight line: 87.6 MB counted (125.8 MB allocated) at 16 MiB.
+
+### Step 1: growth without a bound, and with each bound
+
+The expert alone (no trie, InfiniGram or class) reads the holdout and then enwik8 [8, 23) MiB. At each stream length it reads 64 KiB timed. The index alone is 19.3 MB (69.3 MB resident before the read).
+
+| Stream | Keys held | Online MB (allocated) | Resident MB | Search p50 / p99 µs | µs per byte | Repeat a stored key / an earlier online key |
+|---|---|---|---|---|---|---|
+| 1 MiB | 147,829 | 5.32 (7.57) | 83.6 | 1,801 / 5,099 | 414 | 71.4% / 3.9% |
+| 2 MiB | 298,051 | 10.73 (15.42) | 97.9 | 2,011 / 3,782 | 407 | 71.2% / 4.9% |
+| 4 MiB | 604,009 | 21.74 (31.27) | 126.3 | 2,378 / 4,436 | 471 | 69.3% / 6.1% |
+| 8 MiB | 1,210,215 | 43.57 (62.58) | 164.0 | 2,778 / 7,022 | 532 | 68.2% / 7.7% |
+| 16 MiB | 2,432,200 | 87.56 (125.85) | 218.3 | 3,960 / 9,138 | 716 | 67.5% / 9.8% |
+
+The run's peak is 283.5 MB. An identical earlier run read p50 5,224 µs and 1,036 µs per byte at 16 MiB: on this shared machine the times move by a third, while the counts are exact.
+
+The same read at 16 MiB with each bound:
+
+| Bound | Keys held | Online MB (allocated) | Resident MB | Search p50 / p99 µs | µs per byte | Peak MB |
+|---|---|---|---|---|---|---|
+| none | 2,432,200 | 87.56 (125.85) | 218.3 | 3,960 / 9,138 | 716 | 283.5 |
+| window 2^15 | 32,768 | 1.75 (5.01) | 77.7 | 1,636 / 2,941 | 382 | 80.7 |
+| window 2^17 | 131,072 | 7.39 (14.73) | 88.7 | 1,844 / 3,402 | 407 | 88.7 |
+| window 2^19 | 524,288 | 30.83 (54.79) | 140.6 | 2,342 / 5,670 | 469 | 140.6 |
+| least recently found 2^17 | 121,915 | 4.88 (10.47) | 85.1 | 2,831 / 12,086 | 835 | 85.1 |
+
+- A window holds memory and search time flat from the point it binds.
+- Least recently found is slower than the window at every length: it stamps the keys each search finds, and sorts all stamps once per 2^14 keys.
+- **Merging repeats** (measured, not built): 77.3% of the held keys repeat a stored key or an earlier online key. Pointing each repeat at the first copy would keep 4 bytes for it instead of 36: 27.4 MB at 16 MiB instead of 87.6 MB (−68.7%). It still grows, about 1.7 MB per MiB.
+
+### Step 2: the choice, on dev (rule 1)
+
+The stream is the holdout and then enwik8 [8, 16) MiB; lambdas are fit on the holdout. Trie + InfiniGram + class + sim over the 8 MiB continuation, each candidate paired with the reference per byte (4 KiB blocks, 4,000 resamples; 2,000 for the last 2 MiB). "Gain kept" is the share of the online keys' gain over `online=0` that the candidate keeps.
+
+| Candidate | BPC | Change, whole | Change, last 2 MiB | Gain kept | Eligible |
+|---|---|---|---|---|---|
+| `oncap=0` (reference, the default) | 1.942285 | — | — | 100% | — |
+| `online=0` | 2.067322 | +0.1250 [+0.1176, +0.1328] | +0.1210 [+0.1094, +0.1346] | 0% | — |
+| window 2^15 | 1.956113 | +0.0138 [+0.0127, +0.0150] | +0.0189 [+0.0161, +0.0221] | 88.9% [87.7, 90.2] | no |
+| window 2^17 | 1.952505 | +0.0102 [+0.0092, +0.0113] | +0.0170 [+0.0142, +0.0200] | 91.8% [90.7, 92.9] | no |
+| window 2^19 | 1.945557 | +0.0033 [+0.0027, +0.0039] | +0.0072 [+0.0055, +0.0091] | 97.4% [96.8, 97.9] | no |
+| least recently found 2^17 | 1.958176 | +0.0159 [+0.0149, +0.0169] | +0.0245 [+0.0220, +0.0274] | 87.3% [86.0, 88.5] | no |
+
+Every interval lies above zero (P(change > 0) = 1.00 in every row). No candidate is eligible, so rule 1 picks no bound.
+
+**The loss grows with the stream.** The 2^19 window, by MiB of the continuation: 0, 0, −0.0001, +0.0030, +0.0028, +0.0059, +0.0053, +0.0092. It changes nothing until it binds (in the third MiB), then loses more each MiB. The 2^15 window: +0.0119 in the first MiB, +0.0195 in the last. Keys several MiB back still find the right neighbours: enwik8 repeats link lists, templates and names across articles.
+
+Least recently found against the window at the same size, paired: +0.0057 [+0.0053, +0.0061] worse (last 2 MiB +0.0075). Keeping the keys a search used is worse than keeping the newest.
+
+Scoring time per MiB in these runs is too noisy to read (the reference's last two MiB took 878 s and 899 s; `online=0`'s took 972 s and 423 s). Step 1 gives the times.
+
+### Step 3: the leak check, planted bugs, and parity
+
+- **At a854346 the selftest passes** with the bound's checks: under a bound of 40 keys (both kinds of drop, both search modes) the leak check holds, the bound binds, the store never holds more than 40 keys, the window holds exactly the last 40, and a bound above the stream's keys equals no bound at every position.
+- **Planted bugs fail it** at the A4e check: a leak (under a bound, the key at the current word end, which proposes the byte being predicted) and a window that drops the newest key instead of the oldest.
+- **The half-list free (a854346) changes no bit.** On a small stream the window's and least recently found's bits are identical before and after it.
+- **Parity at a854346, `oncap=0`, against `main` 7f77615** (the same commands, `main`'s binary): `qa` rows byte-identical (B4c's rule-3 configuration) and every stdout line identical except 4 latency maxima and the build time; `sample` text byte-identical (dev 492,257 and fresh 493,903 bytes, the `MODEL` line included); the selftest's lines identical; `cls`'s `default` lines reprint A4d's (holdout 1.856939, the fresh MiB 1.878268).
+- **Parity at the final commit (bound removed).** Against `main` 7f77615 the code differs only in comments, three new `cls` flags, the new `simpair` command, `cls` lines printed only with those flags, a range form of `latency_us` (the old call returns the same value) and three read-only diagnostics. `qa` and `sample` run none of it, and `cls` without the new flags runs `main`'s code. Checked by running:
+  - the selftest's lines are identical to `main`'s;
+  - `sample`'s first 67,881 bytes (the `MODEL` line and the first 104 `GEN` lines) are byte-identical to `main`'s;
+  - the growth read's counts at 1 and 2 MiB (keys held, MB counted and allocated, repeats) equal a854346's exactly.
+- **The full `qa`, `sample` and `cls` runs at the final commit were stopped.** The shared machine gave each about 6% of a core: 7 minutes of CPU in 2 hours. Their peaks so far were `qa` 184.4 MB, `sample` 69.3 MB and `cls` 305.0 MB (`main`: 184.7 and 69.1 MB). A full `qa` and `sample` parity run belongs in the merge check.
+- **The selftest and the 9 CTests of HANDOFF §4.4 pass** at the final commit.
+
+### Predictions, scored (A4e)
+
+| Prediction | Result | Score |
+|---|---|---|
+| E1. 5.0–5.6 MB per MiB, straight; about 85 MB at 16 MiB; p50 at 16 MiB ≥ 2× at 1 MiB | 5.32, 10.73, 21.74, 43.57, 87.56 MB at 1–16 MiB; p50 3,960 / 1,801 = 2.2× (the earlier run 2.8×) | **Hit** |
+| E2. 30–60% of held keys repeat; merging saves 25–55% and still grows | 77.3% repeat; merging saves 68.7%; it still grows (about 1.7 MB per MiB) | **Miss** (more repeats than predicted) |
+| E3. The 2^19 window is eligible | +0.0033 whole, +0.0072 last 2 MiB | **Miss** |
+| E4. 2^15 not eligible, keeps ≥ 80% of the gain | +0.0138; keeps 88.9% [87.7, 90.2] | **Hit** |
+| E5. Least recently found within ±0.0005 of the window at 2^17 | +0.0057 [+0.0053, +0.0061] worse | **Miss** |
+| E6. Rule 1 picks 2^17 or 2^19 | No bound eligible | **Miss** |
+| E7. Fresh change within ±0.0005 of dev | No bound chosen; fresh text not read | Not scored |
+| E8. Time per byte over the last 2 MiB ≥ 1.3× lower with the chosen bound | No bound chosen. In step 1, at 16 MiB: 1.5× lower with 2^19, 1.8× with 2^17 | Not scored |
+| E9. Leak check passes under both bounds; planted bugs fail | Both | **Hit** |
+| E10. `qa` rows and `sample` text byte-identical with the chosen bound | No bound chosen; with no bound both are byte-identical to `main` | Not scored |
+
+### Decisions (A4e)
+
+1. **No bound becomes the default** (rule 1). The similar-context expert keeps every online key: 5.3–5.5 MB per MiB read, and search time grows with them (p50 2.2× at 16 MiB).
+2. **`oncap` and `onevict` are removed** (rule 4), with the bound's selftest checks. Their numbers reproduce at commit a854346 (the dev reads ran on builds before it; a854346 changes memory only, not bits). The measuring tools stay, because they measure the default: `cls --sim-stream FROM:LEN`, `--sim-bits PREFIX`, `--sim-growth MIB,…` and `simpair [--margin M]`.
+3. **The fresh text [40, 48) MiB stays unread.**
+4. **Where it matters.** `qa` reads a 1 MiB holdout (5.3 MB of keys) and `sample` reads short prompts, so neither grows. Only a long stream does: 100 MiB read would hold about 550 MB of keys.
+5. **Next.** Merge repeated online keys (one key, several positions): 68.7% less memory at 16 MiB, keeping every key. It changes which keys fill the k nearest, so it needs its own dev read. A bound for long streams only would cost at least +0.003 BPC (2^19) and is Odin's call.
+
+### Reproduce (A4e)
+
+```bash
+# dev (rule 1): the reference and online=0, the windows, then 2^19 and least recently found (bits for simpair)
+./cyphalm_trie cls enwik8 shape --sim default --sim default,online=0 --sim-stream 8M:8M --sim-bits A
+./cyphalm_trie cls enwik8 shape --sim default,oncap=32768 --sim default,oncap=131072 --sim-stream 8M:8M --sim-bits B
+./cyphalm_trie cls enwik8 shape --sim default,oncap=524288 --sim default,oncap=131072,onevict=lru --sim-stream 8M:8M --sim-bits C
+./cyphalm_trie simpair A.0.f64 B.0.f64 B.1.f64 C.0.f64 C.1.f64 A.1.f64    # each against the reference
+./cyphalm_trie simpair B.1.f64 C.1.f64                                     # least recently found against the window
+# growth (step 1), one spec a run
+./cyphalm_trie cls enwik8 shape --sim default --sim-stream 8M:15M --sim-growth 1,2,4,8,16
+./cyphalm_trie cls enwik8 shape --sim default,oncap=131072 --sim-stream 8M:15M --sim-growth 1,2,4,8,16
+```
+
+The bound's specs need commit a854346; the reference, `online=0` and growth without a bound also run at the final commit. Runs and bit files are in `/root/work/a4e/runs/` (`dev/`, `growth/`, `parity/`, `parity2/`).
+
 ---
 
 ## Reproduce

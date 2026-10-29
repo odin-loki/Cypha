@@ -84,6 +84,13 @@
 //        trie + sim and trie + class + sim. SPEC is vec=PREFIX (PREFIX.vectors.f32 and PREFIX.vocab.tsv, as ppmi_svd
 //        writes them) or a projected file (simvec), plus W, k, T, min, sif, dim, drop, lists, probe, tail, src, gate (see
 //        parse_sim); the token `default` is the default spec.
+//        A4e: --sim-stream FROM:LEN reads the corpus bytes [FROM, FROM + LEN) after the holdout in place of the fresh
+//        MiB (implies --sim-fresh) and adds `simstream` lines: the expert at each MiB of the stream (online keys held,
+//        their MB, search p50/p99, scoring time) and the continuation's BPC by MiB; --sim-bits PREFIX writes each
+//        spec's continuation bits for `simpair`; --sim-growth 1,4,16 reads only the expert (no trie, InfiniGram or class)
+//        and reports its online keys' memory and search time at those stream lengths in MiB.
+//   simpair [--margin M] REF.f64 FILE.f64 ...  (A4e) pairs --sim-bits files against REF: whole continuation, each MiB,
+//        last 2 MiB; with a margin also P(change < M).
 //        --out FILE writes the samples (systems trie, trie+cls:SPEC) and the human continuations (human) as JSON
 //        lines for the SCRIBE model ladder.
 //   qa [wiki] [dolly] --dev DEV.tsv [--test TEST.tsv] [--leak TEST.tsv] [--out ROWS.tsv] [--base A0_ROWS.tsv]
@@ -294,6 +301,7 @@ struct Args {
     std::string model, save;  // M7: serve a stored packed trie (chat, sample); store the one just trained
     std::vector<std::string> sims;               // A4: similar-context expert specs (cls: each; qa: the first)
     bool sim_fresh = false, sim_surface = false;  // A4, cls: also the fresh text / surface S
+    std::string sim_stream, sim_bits, sim_growth;  // A4e, cls: a longer stream after the holdout; per-byte bits; growth
     bool no_sim = false;                          // A4: the similar-context expert off where it is a default
     std::string cards;                            // S1: qa's evidence cards and reason codes (--cards FILE)
     bool no_cls = false, no_copy = false;         // B4C: the class and copy experts off where they are defaults
@@ -351,6 +359,9 @@ Args parse(int argc, char** argv, int from) {
         else if (s == "--sim") a.sims.push_back(next());
         else if (s == "--sim-fresh") a.sim_fresh = true;
         else if (s == "--sim-surface") a.sim_surface = true;
+        else if (s == "--sim-stream") a.sim_stream = next();  // A4e
+        else if (s == "--sim-bits") a.sim_bits = next();
+        else if (s == "--sim-growth") a.sim_growth = next();
         else if (s == "--no-sim") a.no_sim = true;
         else if (s == "--no-cls") a.no_cls = true;
         else if (s == "--no-copy") a.no_copy = true;
@@ -1641,7 +1652,8 @@ std::unique_ptr<ClassContext> default_cls(const Args& a, const std::uint8_t* tex
 // file (simvec's output). qa's src: all = wiki train + chat, wiki = wiki train only. gate=1 (default): the expert is off
 // inside an answer (in_answer). The token `default` stands for kSimDefault; with no vec= the shipped file is read
 // (sim_vectors_path). `build` names what the index depends on: specs that differ only in k, T, min, probe, tail or gate
-// share it. A4c: [,mode=knn|dedupe] (similar_context.hpp; in dedupe the tail depth is fixed at the build).
+// share it. A4c: [,mode=knn|dedupe] (similar_context.hpp; in dedupe the tail depth is fixed at the build). A4d: [,online=1]
+// (keys from the text being read; a query setting).
 #ifndef CYPHA_SIMVEC_DEFAULT
 #define CYPHA_SIMVEC_DEFAULT "data/cyphalm/simvec_ppmi32.bin"
 #endif
@@ -2106,18 +2118,149 @@ std::string sample_with_class(const PackedModel& model, const double w[6], std::
     return std::string(seq.begin() + static_cast<std::ptrdiff_t>(prompt.size()), seq.end());
 }
 
+// A4e: simpair [--margin M] REF.f64 FILE.f64 ... : cls --sim-bits files (doubles: bits per byte of trie + IG + class +
+// sim over a --sim-stream continuation), each paired against REF over the whole continuation (4 KiB blocks, 4,000
+// resamples), each MiB and the last 2 MiB (2,000), as cls pairs specs in one run. With a margin, also the whole
+// continuation's change minus M (its p_lt0 is P(change < M)).
+int cmd_simpair(std::vector<std::string> files) {
+    double margin = 0;
+    const bool has_margin = files.size() >= 2 && files[0] == "--margin";
+    if (has_margin) margin = std::atof(files[1].c_str()), files.erase(files.begin(), files.begin() + 2);
+    auto load = [](const std::string& f, std::vector<double>& v) {
+        std::ifstream in(f, std::ios::binary | std::ios::ate);
+        if (!in) return false;
+        v.resize(static_cast<std::size_t>(in.tellg()) / sizeof(double));
+        in.seekg(0);
+        return static_cast<bool>(in.read(reinterpret_cast<char*>(v.data()), static_cast<std::streamsize>(v.size() * sizeof(double))));
+    };
+    std::vector<double> ref;
+    if (files.size() < 2 || !load(files[0], ref) || ref.empty()) {
+        std::fprintf(stderr, "usage: cyphalm_trie simpair REF.f64 FILE.f64 ...\n");
+        return 2;
+    }
+    constexpr std::size_t kMiB = std::size_t{1} << 20;
+    const std::size_t C = ref.size();
+    auto part = [](const std::vector<double>& v, std::size_t from, std::size_t to) {
+        return std::vector<double>(v.begin() + static_cast<std::ptrdiff_t>(from), v.begin() + static_cast<std::ptrdiff_t>(to));
+    };
+    auto diff = [](const std::vector<double>& x, const std::vector<double>& y) {
+        std::vector<double> d(x.size());
+        for (std::size_t k = 0; k < d.size(); ++k) d[k] = x[k] - y[k];
+        return d;
+    };
+    auto mean = [](const std::vector<double>& v) { return std::accumulate(v.begin(), v.end(), 0.0) / static_cast<double>(v.size()); };
+    for (std::size_t f = 1; f < files.size(); ++f) {
+        std::vector<double> x;
+        if (!load(files[f], x) || x.size() != C) {
+            std::fprintf(stderr, "%s: not %zu doubles\n", files[f].c_str(), C);
+            return 1;
+        }
+        std::printf("simpair %s bits %.6f ref %.6f\n", files[f].c_str(), mean(x), mean(ref));
+        print_boot("simpair " + files[f] + " all vs_ref", block_boot(diff(x, ref), 4096, 4000, 11));
+        if (has_margin) {
+            std::vector<double> d = diff(x, ref);
+            for (double& v : d) v -= margin;
+            print_boot("simpair " + files[f] + " all vs_ref_minus_" + std::to_string(margin), block_boot(d, 4096, 4000, 11));
+        }
+        for (std::size_t g0 = 0; g0 < C; g0 += kMiB) {
+            const std::size_t g1 = std::min(C, g0 + kMiB);
+            print_boot("simpair " + files[f] + " cont_mib " + std::to_string(g0 / kMiB + 1) + " vs_ref",
+                       block_boot(diff(part(x, g0, g1), part(ref, g0, g1)), 4096, 2000, 11));
+        }
+        if (C >= 2 * kMiB)
+            print_boot("simpair " + files[f] + " last_2mib vs_ref", block_boot(diff(part(x, C - 2 * kMiB, C), part(ref, C - 2 * kMiB, C)), 4096, 2000, 11));
+    }
+    return 0;
+}
+
+// A4e: --sim-growth LIST (cls, with --sim-stream): for each --sim spec, keys over the train bytes; at each stream length L
+// in LIST (MiB from the holdout's start), the expert reads the 64 KiB just before L, after one untimed read that takes in
+// every word end before them, and prints the online keys held, their bytes (counted and allocated), the
+// process's resident MB, the searches' p50 and p99, the time per byte, and how many held keys equal a stored key or an
+// earlier held one (what merging them would save). No trie, InfiniGram or class expert is built.
+int sim_growth(const Args& a, const std::vector<std::uint8_t>& data, std::size_t train) {
+    auto rss_mb = [] {
+        std::ifstream st("/proc/self/status");
+        std::string line;
+        while (std::getline(st, line))
+            if (line.rfind("VmRSS:", 0) == 0) return std::atof(line.c_str() + 6) / 1000.0;
+        return 0.0;
+    };
+    std::unique_ptr<SimilarContext> sc;
+    std::string built;
+    for (const auto& spec : a.sims) {
+        const SimSpec ss = parse_sim(spec);
+        if (!ss.ok) {
+            std::cerr << "bad --sim spec " << spec << "\n";
+            return 2;
+        }
+        if (ss.build != built) {
+            sc.reset();
+            if (!(sc = make_similar_context(ss))) return 1;
+            sc->build(data.data(), train);
+            built = ss.build;
+        } else
+            sc->set_query(ss.p);
+        const std::size_t index = sc->bytes();
+        std::printf("simgrowth %s index_mb %.3f rss_mb %.1f\n", spec.c_str(), static_cast<double>(index) / 1e6, rss_mb());
+        for (const auto& x : split(a.sim_growth, ',')) {
+            const double L = std::atof(x.c_str());
+            const std::size_t end = train + static_cast<std::size_t>(L * 1048576.0), from = end - 65536;
+            if (end > data.size() || from <= train) {
+                std::cerr << "--sim-growth " << x << ": outside the stream\n";
+                return 2;
+            }
+            double P[256];
+            sc->predict(data.data(), from - 1, P);  // takes in the word ends before the timed bytes
+            const std::size_t q0 = sc->queries();
+            const auto t0 = std::chrono::steady_clock::now();
+            for (std::size_t n = from; n < end; ++n) sc->predict(data.data(), n, P);
+            const double t = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+            const auto dup = sc->online_duplicates();
+            std::printf("simgrowth %s mib %s held %zu online_mb %.3f alloc_mb %.3f rss_mb %.1f searches %zu p50_us %.1f "
+                        "p99_us %.1f us_per_byte %.2f dup_stored %zu dup_online %zu\n",
+                        spec.c_str(), x.c_str(), sc->online_keys(), static_cast<double>(sc->bytes() - index) / 1e6,
+                        static_cast<double>(sc->online_alloc_bytes()) / 1e6, rss_mb(), sc->queries() - q0,
+                        sc->latency_us(0.5, q0, sc->queries()), sc->latency_us(0.99, q0, sc->queries()), t * 1e6 / 65536.0,
+                        dup.first, dup.second);
+            std::fflush(stdout);
+        }
+    }
+    return 0;
+}
+
 int cmd_cls(const Args& a) {
     const Config& cfg = a.cfg;
     if (a.pos.size() < 2) {
         std::fprintf(stderr, "usage: cyphalm_trie cls <wiki> <TABLE|shape>[:tail[:orders[:flags]]] [more specs]\n");
         return 2;
     }
-    const std::size_t H = cfg.sample - cfg.train, half = H / 2, N = H + (std::size_t{1} << 20);
+    // A4e: --sim-stream FROM:LEN puts the corpus bytes [FROM, FROM + LEN) after the holdout in place of the fresh MiB
+    // [sample, sample + 1 MiB) (sizes in bytes, or with K or M); it implies --sim-fresh.
+    constexpr std::size_t kMiB = std::size_t{1} << 20;
+    std::size_t sfrom = cfg.sample, slen = kMiB;
+    if (!a.sim_stream.empty()) {
+        auto size_of = [](const std::string& x) {
+            const char u = x.empty() ? 0 : x.back();
+            const double v = std::atof(x.c_str());
+            return static_cast<std::size_t>(v * (u == 'M' ? 1048576.0 : u == 'K' ? 1024.0 : 1.0));
+        };
+        const std::size_t c = a.sim_stream.find(':');
+        if (c != std::string::npos) sfrom = size_of(a.sim_stream.substr(0, c)), slen = size_of(a.sim_stream.substr(c + 1));
+        if (c == std::string::npos || sfrom < cfg.sample || slen < kMiB) {
+            std::fprintf(stderr, "--sim-stream FROM:LEN needs FROM >= %zu and LEN >= 1M\n", cfg.sample);
+            return 2;
+        }
+    }
+    const std::size_t H = cfg.sample - cfg.train, half = H / 2, N = H + slen;
     std::vector<std::uint8_t> data;
-    if (const std::string e = read_prefix(a.wiki, cfg.sample + (std::size_t{1} << 20), data); !e.empty()) {
+    if (const std::string e = read_prefix(a.wiki, sfrom + slen, data); !e.empty()) {
         std::cerr << e << "\n";
         return 1;
     }
+    if (sfrom > cfg.sample)
+        data.erase(data.begin() + static_cast<std::ptrdiff_t>(cfg.sample), data.begin() + static_cast<std::ptrdiff_t>(sfrom));
+    if (!a.sim_growth.empty()) return sim_growth(a, data, cfg.train);  // A4e: the online keys' memory and search time only
     Model model;
     model.data = data.data();
     model.init(cfg);
@@ -2290,6 +2433,10 @@ int cmd_cls(const Args& a) {
         std::unique_ptr<SimilarContext> sc;
         std::string built;
         std::vector<double> first_hc, first_fc, first_sv, first_svt;  // the first spec's reads, for paired comparisons
+        const bool stream = !a.sim_stream.empty(), fresh = a.sim_fresh || stream;  // A4e
+        if (!a.sim_bits.empty()) std::ofstream(a.sim_bits + ".base.f64", std::ios::binary)
+                                     .write(reinterpret_cast<const char*>(f_c.data()), static_cast<std::streamsize>(f_c.size() * sizeof(double)));
+        std::size_t spec_no = 0;
         for (const auto& spec : a.sims) {
             const SimSpec ss = parse_sim(spec);
             if (!ss.ok) {
@@ -2306,18 +2453,27 @@ int cmd_cls(const Args& a) {
                 built = ss.build;
             } else
                 sc->set_query(ss.p);
-            const std::size_t M = a.sim_fresh ? N : H;
+            const std::size_t M = fresh ? N : H;
             std::vector<double> ps(N, 0.0);
             std::vector<int> sb(N, 0);
             std::size_t live = 0;
             const auto t1 = std::chrono::steady_clock::now();
+            struct Seg { std::size_t held, bytes, alloc, q; double s; };
+            std::vector<Seg> segs;  // A4e (--sim-stream): the expert at the end of each MiB of the stream
+            const std::size_t index_bytes = sc->bytes();
+            auto seg_now = [&] {
+                segs.push_back({sc->online_keys(), sc->bytes(), sc->online_alloc_bytes(), sc->queries(),
+                                std::chrono::duration<double>(std::chrono::steady_clock::now() - t1).count()});
+            };
             for (std::size_t k = 0; k < M; ++k) {
+                if (stream && k > 0 && k % kMiB == 0) seg_now();
                 double P[256];
                 const auto hit = sc->predict(data.data(), cfg.train + k, P);
                 sb[k] = SimilarContext::bucket(hit);
                 ps[k] = P[data[cfg.train + k]];
                 live += hit.live > 0;
             }
+            if (stream) seg_now();
             const double score_s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t1).count();
             double ls_i[kS], ls_c[kS];
             fit_lambdas(ps, pih, sb, half, kS, ls_i);
@@ -2363,7 +2519,7 @@ int cmd_cls(const Args& a) {
                             spec.c_str(), n3[0], g3[0] / static_cast<double>(H - half), n3[1], g3[1] / static_cast<double>(H - half),
                             n3[2], g3[2] / static_cast<double>(H - half));
             }
-            if (a.sim_fresh) {
+            if (fresh) {
                 double fs_i[kS], fs_c[kS];
                 fit_lambdas(ps, pif, sb, H, kS, fs_i);
                 fit_lambdas(ps, pcf, sb, H, kS, fs_c);
@@ -2371,9 +2527,39 @@ int cmd_cls(const Args& a) {
                 std::printf("sim %s fresh trie+ig+sim %.6f trie+ig+cls+sim %.6f\n", spec.c_str(), mean(fi), mean(fc));
                 print_boot("sim " + spec + " fresh_gain_over_trie_ig", block_boot(gain(fi, f_i), 4096, 4000, 11));
                 print_boot("sim " + spec + " fresh_gain_over_trie_ig_cls", block_boot(gain(fc, f_c), 4096, 4000, 11));
-                if (first_fc.empty()) first_fc = fc;
+                const bool first = first_fc.empty();
+                if (first) first_fc = fc;
                 else print_boot("sim " + spec + " fresh_trie_ig_cls_vs_first_sim", block_boot(gain(fc, first_fc), 4096, 4000, 11));
+                if (stream) {  // A4e: the expert at each MiB of the stream (MiB 1 is the holdout), and the continuation by MiB
+                    for (std::size_t g = 0; g < segs.size(); ++g) {
+                        const std::size_t q0 = g ? segs[g - 1].q : 0;
+                        std::printf("simstream %s mib %zu held %zu online_mb %.3f alloc_mb %.3f searches %zu p50_us %.1f p99_us %.1f "
+                                    "score_s %.1f\n", spec.c_str(), g + 1, segs[g].held,
+                                    static_cast<double>(segs[g].bytes - index_bytes) / 1e6, static_cast<double>(segs[g].alloc) / 1e6,
+                                    segs[g].q - q0, sc->latency_us(0.5, q0, segs[g].q), sc->latency_us(0.99, q0, segs[g].q),
+                                    segs[g].s - (g ? segs[g - 1].s : 0.0));
+                    }
+                    const std::size_t C = N - H;
+                    auto part = [](const std::vector<double>& v, std::size_t from, std::size_t to) {
+                        return std::vector<double>(v.begin() + static_cast<std::ptrdiff_t>(from), v.begin() + static_cast<std::ptrdiff_t>(to));
+                    };
+                    for (std::size_t g0 = 0; g0 < C; g0 += kMiB) {
+                        const std::size_t g1 = std::min(C, g0 + kMiB), no = g0 / kMiB + 1;
+                        std::printf("simstream %s cont_mib %zu trie+ig+cls %.6f trie+ig+cls+sim %.6f\n", spec.c_str(), no,
+                                    mean(part(f_c, g0, g1)), mean(part(fc, g0, g1)));
+                        if (!first)
+                            print_boot("simstream " + spec + " cont_mib " + std::to_string(no) + " vs_first_sim",
+                                       block_boot(gain(part(fc, g0, g1), part(first_fc, g0, g1)), 4096, 2000, 11));
+                    }
+                    if (C >= 2 * kMiB && !first)
+                        print_boot("simstream " + spec + " last_2mib vs_first_sim",
+                                   block_boot(gain(part(fc, C - 2 * kMiB, C), part(first_fc, C - 2 * kMiB, C)), 4096, 2000, 11));
+                }
+                if (!a.sim_bits.empty())  // A4e: this spec's continuation bits, for simpair
+                    std::ofstream(a.sim_bits + "." + std::to_string(spec_no) + ".f64", std::ios::binary)
+                        .write(reinterpret_cast<const char*>(fc.data()), static_cast<std::streamsize>(fc.size() * sizeof(double)));
             }
+            ++spec_no;
             if (a.sim_surface) {
                 double ls_t[kS], ls_tc[kS];
                 fit_lambdas(ps, pt, sb, half, kS, ls_t);
@@ -5390,6 +5576,8 @@ void usage() {
                  "  context8k [wiki] [dolly]\n"
                  "  sample <wiki> <out_dev> [out_fresh] [--prompts 250] [--bytes 600] [--save FILE | --model FILE]\n"
                  "  cls <wiki> <TABLE|shape>[:tail[:orders[:flags]]] [more specs] [--sim SPEC ...] [--sim-fresh] [--sim-surface]\n"
+                 "      [--sim-stream FROM:LEN] [--sim-bits PREFIX] [--sim-growth MIB,MIB,...]   (A4e)\n"
+                 "  simpair [--margin M] REF.f64 FILE.f64 ...   (A4e: cls --sim-bits files paired against REF)\n"
                  "  SPEC: [default,][vec=PREFIX|FILE][,W=8][,k=32][,T=0.05][,min=-1][,sif=1][,dim=64][,drop=1][,lists=512][,probe=8][,tail=32]\n"
                  "        [,src=all|wiki][,gate=1][,mode=knn|dedupe][,online=0]   (default = %s; vectors from $CYPHA_SIMVEC, else %s)\n"
                  "  qa [wiki] [dolly] --dev DEV.tsv [--test TEST.tsv] [--leak TEST.tsv] [--out ROWS.tsv] [--base A0_ROWS.tsv]\n"
@@ -5419,6 +5607,7 @@ int main(int argc, char** argv) {
     }
     const std::string cmd = argv[1];
     if (cmd == "selftest") return cmd_selftest();
+    if (cmd == "simpair") return cmd_simpair(std::vector<std::string>(argv + 2, argv + argc));  // A4e
     const Args a = parse(argc, argv, 2);
     if (!a.ok) {
         usage();
