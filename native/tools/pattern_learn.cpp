@@ -3974,6 +3974,259 @@ string loop_line(const string& tag, const string& cfg, const LoopStats& L) {
     return b;
 }
 
+// ---- S7c (the S7 report's "S7c"): batch rules that state their guarantee, read on each hypothesis's loop result.
+struct LoopRes {
+    double post = 0, e = 1, pnull = 1, p0 = 0;
+    bool sup = false, ref = false, counted = true;
+    int label = 0, fold = 0;
+    string subj;
+};
+enum S7cRule { K1, K2, K3, K4, KREF, N_K };
+const char* const kKName[N_K] = {"K1_e-BH", "K2_prior-weighted_e-BH", "K3_conformal_selection", "K4_null-model_BH", "ref_S7b_among_supported"};
+
+vector<ecs::HypTest> s7c_plan(const vector<LoopKind>& kinds) {
+    vector<ecs::HypTest> plan;
+    for (const LoopKind& K : kinds) {
+        ecs::HypTest t;
+        t.kind = K.name, t.source = K.source;
+        t.predicted = "positive", t.refuted_if = "negative";
+        t.disconfirmation = K.disconfirmation, t.independent = K.independent;
+        t.sensitivity = K.s, t.specificity = K.c;
+        t.likelihoods = K.lik;
+        plan.push_back(t);
+    }
+    return plan;
+}
+
+using PnullMemo = std::map<std::pair<double, double>, double>;
+double pnull_of(PnullMemo& memo, const vector<ecs::HypTest>& plan, double p0, double e) {
+    const auto key = std::make_pair(p0, e);
+    auto it = memo.find(key);
+    if (it == memo.end()) it = memo.emplace(key, ecs::null_model_pvalue(plan, p0, e)).first;
+    return it->second;
+}
+
+// loop2's loop with three-way likelihoods and no batch step, keeping each hypothesis's posterior, e-value, decide's state
+// and the null-model p-value of its e-value. Folds: bit 13 of FNV-1a(subject).
+vector<LoopRes> loop_res(const vector<Item>& it, const vector<std::size_t>& idx, const vector<LoopKind>& kinds, const string& log_path = "") {
+    ecs::HypothesisStore hs;
+    ecs::PreregLog log;
+    const vector<ecs::HypTest> plan = s7c_plan(kinds);
+    PnullMemo memo;
+    vector<LoopRes> out;
+    out.reserve(idx.size());
+    for (std::size_t i : idx) {
+        const Item& x = it[i];
+        ecs::Hypothesis h;
+        h.id = "S7C-" + std::to_string(i);
+        h.key = x.r + '|' + x.s + '|' + x.o;
+        h.statement = x.s + " " + x.r + " " + x.o;
+        h.generator = "planted-store";
+        h.tests = plan;
+        hs.propose(h);
+        hs.score(h.id, x.p0);
+        hs.transition(h.id, ecs::HypState::Queued, "scored");
+        if (log.register_plan(*hs.find(h.id)))
+            for (std::size_t k = 0; k < kinds.size(); ++k) {
+                if (hs.find(h.id)->state != ecs::HypState::Queued) break;
+                hs.transition(h.id, ecs::HypState::UnderTest, "next test");
+                hs.record_outcome(h.id, k, kinds[k].f(x), &log);
+            }
+        const ecs::Hypothesis* hh = hs.find(h.id);
+        LoopRes r;
+        r.post = hh->posterior, r.e = ecs::e_value(*hh), r.p0 = x.p0;
+        r.sup = hh->state == ecs::HypState::Supported, r.ref = hh->state == ecs::HypState::Refuted;
+        r.label = x.label, r.counted = !(x.label == 0 && x.wd_true), r.fold = static_cast<int>((fnv(x.s) >> 13) & 1), r.subj = x.s;
+        r.pnull = pnull_of(memo, plan, x.p0, r.e);
+        out.push_back(r);
+    }
+    if (!log_path.empty()) {
+        std::ofstream lf(log_path);
+        lf << log.serialize();
+    }
+    return out;
+}
+
+// A rule's promotions over batch b (indices into res). K3 calibrates on cal (indices into cres). gated (the amendment):
+// K1, K2 and K4 see e = 0 or p = 1 where decide does not support; ungated is the registered R-and-S form.
+vector<bool> s7c_apply(int rule, const vector<LoopRes>& res, const vector<std::size_t>& b, const vector<LoopRes>& cres,
+                       const vector<std::size_t>& cal, bool gated = true) {
+    const std::size_t m = b.size();
+    vector<bool> sup(m), out(m, false), rej;
+    for (std::size_t j = 0; j < m; ++j) sup[j] = res[b[j]].sup;
+    if (rule == K1 || rule == K2) {
+        vector<double> e(m), w(m);
+        for (std::size_t j = 0; j < m; ++j) {
+            const LoopRes& r = res[b[j]];
+            e[j] = gated && !r.sup ? 0.0 : r.e;
+            w[j] = r.p0 / std::max(1e-9, 1.0 - r.p0);
+        }
+        rej = rule == K1 ? ecs::bh_reject_e(e, 0.1) : ecs::weighted_e_bh(e, w, 0.1);
+    } else if (rule == K4) {
+        vector<double> p(m);
+        for (std::size_t j = 0; j < m; ++j) p[j] = gated && !res[b[j]].sup ? 1.0 : res[b[j]].pnull;
+        rej = ecs::benjamini_hochberg(p, 0.1).reject;
+    } else if (rule == K3) {
+        vector<double> cs, bs;
+        vector<bool> ct;
+        for (std::size_t i : cal) cs.push_back(cres[i].sup ? cres[i].post : -1.0), ct.push_back(cres[i].label == 1);
+        for (std::size_t j = 0; j < m; ++j) bs.push_back(sup[j] ? res[b[j]].post : -1.0);
+        rej = ecs::conformal_select(cs, ct, bs, 0.1);
+    } else {
+        vector<double> e(m);
+        for (std::size_t j = 0; j < m; ++j) e[j] = res[b[j]].e;
+        rej = ecs::bh_reject_e_among(e, sup, 0.1);
+    }
+    for (std::size_t j = 0; j < m; ++j) out[j] = rej[j] && sup[j];
+    return out;
+}
+
+// A rule over a set S: K1, K2, K4 and the reference on S as one batch; K3 on S's two bit-13 folds, each calibrated on the other.
+vector<bool> s7c_run(int rule, const vector<LoopRes>& res, const vector<std::size_t>& S, bool gated = true) {
+    if (rule != K3) return s7c_apply(rule, res, S, res, {}, gated);
+    vector<bool> out(S.size(), false);
+    for (int f = 0; f < 2; ++f) {
+        vector<std::size_t> b, c, pos;
+        for (std::size_t j = 0; j < S.size(); ++j)
+            if (res[S[j]].fold == f) b.push_back(S[j]), pos.push_back(j);
+            else c.push_back(S[j]);
+        const auto sel = s7c_apply(K3, res, b, res, c);
+        for (std::size_t q = 0; q < b.size(); ++q) out[pos[q]] = sel[q];
+    }
+    return out;
+}
+
+struct KStats {
+    double pt = 0, pf = 0, rt = 0, rf = 0, bt = 0, bf = 0, n = 0;  // promoted (Known), refuted, Believed (supported, not promoted)
+    double prom() const { return pt + pf; }
+    double prec() const { return prom() > 0 ? pt / prom() : 0.0; }
+    double fdp() const { return prom() > 0 ? pf / prom() : 0.0; }
+    double decided() const { return n > 0 ? (prom() + rt + rf) / n : 0.0; }
+};
+KStats s7c_stats(const vector<LoopRes>& res, const vector<std::size_t>& S, const vector<bool>& prom) {
+    KStats k;
+    for (std::size_t j = 0; j < S.size(); ++j) {
+        const LoopRes& r = res[S[j]];
+        if (!r.counted) continue;
+        k.n += 1;
+        if (prom[j]) (r.label ? k.pt : k.pf) += 1;
+        else if (r.sup) (r.label ? k.bt : k.bf) += 1;
+        if (r.ref) (r.label ? k.rt : k.rf) += 1;
+    }
+    return k;
+}
+string s7c_line(const string& tag, const string& name, const KStats& k) {
+    char b[768];
+    const double bn = k.bt + k.bf;
+    std::snprintf(b, sizeof b,
+                  "S7C %s %-30s promoted %.0f precision %.3f [%.3f, %.3f] | refuted %.0f precision %.3f | Known-decided %.3f of %.0f | "
+                  "Believed %.0f precision %.3f",
+                  tag.c_str(), name.c_str(), k.prom(), k.prec(), ecs::wilson_lower(k.pt, k.prom()), ecs::wilson_upper(k.pt, k.prom()), k.rt + k.rf,
+                  k.rt + k.rf > 0 ? k.rf / (k.rt + k.rf) : 0.0, k.decided(), k.n, bn, bn > 0 ? k.bt / bn : 0.0);
+    return b;
+}
+
+// Realised FDR (mean false share among promotions, 0 when none) with its standard error over reps.
+struct FdrAcc {
+    double s[N_K] = {}, s2[N_K] = {}, prom[N_K] = {};
+    int reps = 0;
+    void add(int k, double fdp, double np) { s[k] += fdp, s2[k] += fdp * fdp, prom[k] += np; }
+    double fdr(int k) const { return reps ? s[k] / reps : 0.0; }
+    double se(int k) const {
+        if (reps < 2) return 0.0;
+        const double m = fdr(k);
+        return std::sqrt(std::max(0.0, (s2[k] / reps - m * m) / (reps - 1)));
+    }
+};
+
+// Model simulation: priors drawn from pool, truths drawn with the prior (mixed) or all false (planted nulls), outcomes
+// from the three-way likelihoods; the loop as decide runs it. Batch and calibration sets drawn the same way.
+LoopRes s7c_sim_one(std::mt19937_64& g, double p0, bool truth, const vector<ecs::HypTest>& plan, PnullMemo& memo) {
+    const ecs::HypothesisConfig cfg;
+    std::uniform_real_distribution<double> U(0.0, 1.0);
+    LoopRes r;
+    r.p0 = p0, r.label = truth;
+    double post = p0, e = 1.0, moved = 0.0, last = p0;
+    bool indep = false;
+    int done = 0;
+    for (const ecs::HypTest& t : plan) {
+        const double* pr = truth ? t.likelihoods.t : t.likelihoods.f;
+        const double u = U(g) * (pr[0] + pr[1] + pr[2]);
+        const int o = u < pr[0] ? 0 : u < pr[0] + pr[1] ? 1 : 2;
+        const ecs::TestOutcome out = o == 0 ? kPos : o == 1 ? kNeg : kInc;
+        const double bf = ecs::bayes_factor(out, t);
+        post = ecs::update_posterior(post, bf), e *= bf, indep = indep || (t.independent && o != 2), ++done;
+        moved += std::fabs(post - last), last = post;
+        if (post > cfg.supported_p && indep) { r.sup = true; break; }
+        if (post < cfg.refuted_p) { r.ref = true; break; }
+        if (done >= cfg.irreducible_k && moved < cfg.irreducible_move) break;
+    }
+    r.post = post, r.e = e, r.pnull = pnull_of(memo, plan, p0, e);
+    return r;
+}
+FdrAcc s7c_simulate(const vector<double>& pool, const vector<LoopKind>& kinds, std::size_t m, int reps, bool planted_nulls, std::uint64_t seed) {
+    const vector<ecs::HypTest> plan = s7c_plan(kinds);
+    PnullMemo memo;
+    std::mt19937_64 g(seed);
+    std::uniform_real_distribution<double> U(0.0, 1.0);
+    FdrAcc acc;
+    vector<std::size_t> b(m), c(m);
+    std::iota(b.begin(), b.end(), 0);
+    std::iota(c.begin(), c.end(), m);
+    for (int rep = 0; rep < reps; ++rep) {
+        vector<LoopRes> res(2 * m);
+        for (std::size_t i = 0; i < 2 * m; ++i) {
+            const double p0 = pool[g() % pool.size()];
+            const bool truth = planted_nulls ? false : U(g) < p0;
+            res[i] = s7c_sim_one(g, p0, truth, plan, memo);
+        }
+        for (int k = 0; k < N_K; ++k) {
+            const auto pr = s7c_apply(k, res, b, res, c);
+            const KStats st = s7c_stats(res, b, pr);
+            acc.add(k, st.fdp(), st.prom());
+        }
+        ++acc.reps;
+    }
+    return acc;
+}
+
+// Real-data resampling: the set's subjects split at random into a calibration half and a batch half, reps times.
+FdrAcc s7c_resample(const vector<LoopRes>& res, int reps, std::uint64_t seed) {
+    std::map<string, vector<std::size_t>> by_s;
+    for (std::size_t i = 0; i < res.size(); ++i) by_s[res[i].subj].push_back(i);
+    vector<const vector<std::size_t>*> groups;
+    for (const auto& kv : by_s) groups.push_back(&kv.second);
+    std::mt19937_64 g(seed);
+    FdrAcc acc;
+    for (int rep = 0; rep < reps; ++rep) {
+        for (std::size_t i = groups.size(); i > 1; --i) std::swap(groups[i - 1], groups[g() % i]);
+        vector<std::size_t> c, b;
+        for (std::size_t q = 0; q < groups.size(); ++q)
+            for (std::size_t i : *groups[q]) (q < groups.size() / 2 ? c : b).push_back(i);
+        for (int k = 0; k < N_K; ++k) {
+            const auto pr = s7c_apply(k, res, b, res, c);
+            const KStats st = s7c_stats(res, b, pr);
+            acc.add(k, st.fdp(), st.prom());
+        }
+        ++acc.reps;
+    }
+    return acc;
+}
+string fdr_line(const string& tag, const FdrAcc& a) {
+    string s = "S7C " + tag + " realised FDR (reps " + std::to_string(a.reps) + "):";
+    char b[200];
+    for (int k = 0; k < N_K; ++k) {
+        std::snprintf(b, sizeof b, " %s %.4f (se %.4f, promoted %.1f)", kKName[k], a.fdr(k), a.se(k), a.reps ? a.prom[k] / a.reps : 0.0);
+        s += b;
+    }
+    return s;
+}
+struct S7cS15 {
+    bool have = false;
+    KStats st[N_K];
+    FdrAcc rs;
+};
+
 // Does a store object equal an S15 value? Years for year relations, compatible dates for date relations, the normalised
 // key otherwise.
 bool same_value(int r, const string& store_o, const string& v) {
@@ -4018,18 +4271,22 @@ vector<S15Pair> load_s15(const string& path, const std::unordered_map<string, in
 int run(int argc, char** argv) {
     if (argc < 7) {
         std::fprintf(stderr, "usage: pattern_learn --test-kinds ENWIK8 SEEDS.tsv WD_VALUES.tsv PATTERNS.tsv OUT_PREFIX [--read-test]\n"
-                     "       [--phi-wd PHI.tsv] [--s15 TEMPORAL_HOLDOUT_DEV.tsv [--read-confirm]]   (S7b)\n");
+                     "       [--phi-wd PHI.tsv] [--s15 TEMPORAL_HOLDOUT_DEV.tsv [--read-confirm]]   (S7b)\n"
+                     "       [--s7c [--read-c2]]   (S7c: batch rules with a guarantee; C2 read once)\n");
         return 2;
     }
     const double t0 = now_s();
     const string out = argv[6];
     bool read_test = false, read_confirm = false;
     string phi_wd_path, s15_path;  // S7b
+    bool s7c = false, read_c2 = false;  // S7c
     for (int i = 7; i < argc; ++i) {
         if (string(argv[i]) == "--read-test") read_test = true;
         else if (string(argv[i]) == "--read-confirm") read_confirm = true;
         else if (string(argv[i]) == "--phi-wd" && i + 1 < argc) phi_wd_path = argv[++i];
         else if (string(argv[i]) == "--s15" && i + 1 < argc) s15_path = argv[++i];
+        else if (string(argv[i]) == "--s7c") s7c = true;
+        else if (string(argv[i]) == "--read-c2") read_c2 = true;
         else { std::fprintf(stderr, "unknown option %s\n", argv[i]); return 2; }
     }
     char b[1024];
@@ -4463,6 +4720,7 @@ int run(int argc, char** argv) {
         std::snprintf(b, sizeof b, "S7B CHOICE loop %s%s", cfg_name(chosen).c_str(), best >= 0 ? "" : " (none qualifies: S7's configuration stays)");
         std::cout << b << "\n";
         if (best >= 0) loop2(it, dev_idx, lk, chosen.three, chosen.batch, out + ".s7b_dev.prereg.tsv");
+        S7cS15 s7c15;  // S7c: the S15 choose half's reads, for the choice below
         // ---- S15's dev half (T5 left out: S15's labels are current Wikidata)
         if (!s15_path.empty()) {
             const vector<S15Pair> sp = load_s15(s15_path, page_of);
@@ -4581,6 +4839,208 @@ int run(int argc, char** argv) {
                         for (const auto& [k, v] : L.sup_cat) cats += string(" ") + k + " " + std::to_string(static_cast<int>(v));
                         std::cout << loop_line(tag, sn + " " + cfg_name(R.c) + ", " + R.what, L) << " | supported by category:" << cats << "\n";
                     }
+                }
+            }
+            // ---- S7c on S15's choose half (reachable primary, all beside it): every rule, and the resampling check
+            if (s7c) {
+                for (const bool all : {false, true}) {
+                    vector<std::size_t> idx;
+                    for (std::size_t i = 0; i < it15.size(); ++i)
+                        if (it15[i].dev && (all || it15[i].reach)) idx.push_back(i);
+                    const vector<LoopRes> res = loop_res(it15, idx, lk15);
+                    vector<std::size_t> S(res.size());
+                    std::iota(S.begin(), S.end(), 0);
+                    const string tag = string("S15_CHOOSE ") + (all ? "all" : "reachable");
+                    for (int k = 0; k < N_K; ++k) {
+                        const KStats st = s7c_stats(res, S, s7c_run(k, res, S));
+                        std::cout << s7c_line(tag, kKName[k], st) << "\n";
+                        if (k == K1 || k == K2 || k == K4)
+                            std::cout << s7c_line(tag, string(kKName[k]) + "_R-and-S", s7c_stats(res, S, s7c_run(k, res, S, false))) << "\n";
+                        if (!all) s7c15.st[k] = st;
+                    }
+                    if (!all) {
+                        s7c15.rs = s7c_resample(res, 400, 20261103);
+                        s7c15.have = true;
+                        std::cout << fdr_line("S15_CHOOSE resampling", s7c15.rs) << "\n";
+                    }
+                }
+            }
+        }
+        // ---- S7c: dev reads, the guarantee checks and the choice; then C2, read once with --read-c2
+        if (s7c) {
+            const vector<LoopRes> rd = loop_res(it, dev_idx, lk);
+            vector<std::size_t> S(rd.size());
+            std::iota(S.begin(), S.end(), 0);
+            KStats dst[N_K];
+            for (int k = 0; k < N_K; ++k) {
+                dst[k] = s7c_stats(rd, S, s7c_run(k, rd, S));
+                std::cout << s7c_line("DEV", kKName[k], dst[k]) << "\n";
+                if (k == K1 || k == K2 || k == K4)
+                    std::cout << s7c_line("DEV", string(kKName[k]) + "_R-and-S", s7c_stats(rd, S, s7c_run(k, rd, S, false))) << "\n";
+            }
+            {  // K2's condition, roughly: the mean e-value of false dev hypotheses in each prior quartile
+                vector<std::pair<double, double>> fe;
+                for (const LoopRes& r : rd)
+                    if (r.counted && r.label == 0) fe.push_back({r.p0, r.e});
+                std::sort(fe.begin(), fe.end());
+                string l = "S7C DEV mean e of false hypotheses by prior quartile:";
+                for (int q = 0; q < 4; ++q) {
+                    const std::size_t a = fe.size() * static_cast<std::size_t>(q) / 4, z = fe.size() * static_cast<std::size_t>(q + 1) / 4;
+                    double se = 0;
+                    for (std::size_t i = a; i < z; ++i) se += fe[i].second;
+                    char bb[128];
+                    std::snprintf(bb, sizeof bb, " Q%d (p0 %.3f-%.3f) %.3f (n %zu)", q + 1, z > a ? fe[a].first : 0.0, z > a ? fe[z - 1].first : 0.0,
+                                  z > a ? se / static_cast<double>(z - a) : 0.0, z - a);
+                    l += bb;
+                }
+                std::cout << l << "\n";
+            }
+            vector<double> pool;
+            for (const LoopRes& r : rd) pool.push_back(r.p0);
+            const FdrAcc sim_mixed = s7c_simulate(pool, lk, rd.size(), 400, false, 20261104);
+            const FdrAcc sim_null = s7c_simulate(pool, lk, rd.size(), 400, true, 20261105);
+            const FdrAcc rs_dev = s7c_resample(rd, 400, 20261106);
+            std::cout << fdr_line("SIM mixed", sim_mixed) << "\n" << fdr_line("SIM planted-nulls", sim_null) << "\n"
+                      << fdr_line("DEV resampling", rs_dev) << "\n";
+            // The decision rule: qualifiers, then the largest Known-decided share on dev; ties within 0.5 points to the simpler.
+            int win = -1;
+            double wshare = -1;
+            for (const int k : {static_cast<int>(K1), static_cast<int>(K2), static_cast<int>(K4), static_cast<int>(K3)}) {
+                const KStats& d = dst[k];
+                const bool q_dev = d.prom() >= 10 && ecs::wilson_lower(d.pt, d.prom()) >= 0.90;
+                const bool q_s15 = s7c15.have && (s7c15.st[k].prom() < 10 || s7c15.st[k].prec() >= 0.90);
+                auto ok = [k](const FdrAcc& a) { return a.fdr(k) <= 0.10 + 2 * a.se(k); };
+                const bool q_fdr = ok(sim_mixed) && ok(sim_null) && ok(rs_dev) && s7c15.have && ok(s7c15.rs);
+                const bool qual = q_dev && q_s15 && q_fdr;
+                std::snprintf(b, sizeof b, "S7C QUALIFY %-26s dev %d s15 %d fdr-checks %d -> %s | Known-decided on dev %.4f", kKName[k], q_dev, q_s15,
+                              q_fdr, qual ? "qualifies" : "does not qualify", d.decided());
+                std::cout << b << "\n";
+                if (qual && d.decided() > wshare + 0.005) wshare = d.decided(), win = k;
+            }
+            std::cout << "S7C CHOICE "
+                      << (win >= 0 ? string("hybrid: Known = ") + kKName[win] + ", Believed = decide's other supported"
+                                   : string("none qualifies: S7b's step stays, relabelled Believed-only"))
+                      << "\n";
+            // ---- C2: a third fact of S6's subjects (never judged), built as S7's C was
+            std::mt19937_64 rngc(20261029);
+            vector<Held> held2;
+            std::size_t c2_short = 0;
+            for (const string& s2 : subj) {
+                const auto it6 = h6.find(s2);
+                if (it6 == h6.end()) continue;
+                auto fs = by_subj[s2];
+                for (std::size_t i = fs.size(); i > 1; --i) std::swap(fs[i - 1], fs[rngc() % i]);
+                int got = 0;
+                for (const auto& [r, o] : fs)
+                    if (!(r == it6->second.first && o == it6->second.second) && full.count(r, o) >= 2 && ++got == 2) {
+                        held2.push_back({s2, r, o, 'D'});
+                        break;
+                    }
+                if (got < 2) ++c2_short;
+            }
+            std::set<string> keys2 = held_keys;
+            for (const auto& h : held2) keys2.insert(h.s + '\x1f' + h.r + '\x1f' + h.o);
+            ecs::TripleStore st2;
+            std::unordered_map<string, vector<string>> obj2;
+            for (const auto& [s2, fs] : by_subj)
+                for (const auto& [r, o] : fs)
+                    if (!keys2.count(s2 + '\x1f' + r + '\x1f' + o)) st2.add(s2, r, o), obj2[r].push_back(o);
+            std::mt19937_64 rngf2(20261101);
+            vector<Item> it2;
+            std::size_t gone2 = 0, nof2 = 0;
+            for (const auto& h : held2) {
+                if (st2.count(h.r, h.o) == 0) { ++gone2; continue; }
+                const auto& pool2 = obj2[h.r];
+                const int ri = rel_index(h.r);
+                const Date hd = is_datey(ri) ? parse_date_str(h.o) : Date{};
+                string neg;
+                for (int t = 0; t < 100 && neg.empty(); ++t) {
+                    const string& c = pool2[rngf2() % pool2.size()];
+                    if (c == h.o || c == h.s || full.has(h.s, h.r, c)) continue;
+                    if (is_datey(ri)) {
+                        const Date cd = parse_date_str(c);
+                        if (cd.ok() && hd.ok() && cd.y == hd.y) continue;
+                    }
+                    neg = c;
+                }
+                if (neg.empty()) { ++nof2; continue; }
+                const auto wit = wd.find(h.s + '\x1f' + h.r);
+                Item a, x;
+                a.s = x.s = h.s, a.r = x.r = h.r, a.o = h.o, x.o = neg, a.label = 1, x.label = 0;
+                a.pair = x.pair = static_cast<int>(it2.size() / 2);
+                a.set = x.set = 'D';
+                a.t5_ok = x.t5_ok = !wd_src.count(h.s + '\x1f' + h.r);
+                x.wd_true = wit != wd.end() && wd_match(ri, neg, wit->second);
+                it2.push_back(a), it2.push_back(x);
+            }
+            std::size_t f0 = 0;
+            for (std::size_t i = 0; i < it2.size(); i += 2) f0 += ((fnv(it2[i].s) >> 13) & 1) == 0;
+            std::snprintf(b, sizeof b,
+                          "S7C C2 subjects with an S6 hold-out %zu (no second qualifying fact after C's %zu) | pairs %zu (dropped: object gone %zu, "
+                          "no false partner %zu) | fold 0 pairs %zu, fold 1 %zu | reduced store %zu of %zu",
+                          h6.size(), c2_short, it2.size() / 2, gone2, nof2, f0, it2.size() / 2 - f0, st2.size(), full.size());
+            std::cout << b << "\n";
+            if (read_c2) {
+                const ecs::LinkPredictor lp2(st2, {});
+                for (std::size_t i = 0; i < it2.size(); i += 2) {
+                    const int ri = rel_index(it2[i].r);
+                    PageScan ps;
+                    const auto pit = page_of.find(it2[i].s);
+                    const bool page = pit != page_of.end();
+                    if (page) ps = scan_rel(data, pages[static_cast<std::size_t>(pit->second)], ri);
+                    for (std::size_t j = i; j < i + 2; ++j) {
+                        Item& x = it2[j];
+                        x.t1v[kphi] = t1_phi(st2, x.s, x.r, x.o, ph[kphi]);
+                        x.p = lp2.prob(x.s, x.r, x.o);
+                        x.aa = ecs::adamic_adar(st2, x.s, x.o);
+                        x.dl_others = ecs::compression_gain_bits(lp2, st2, x.s, x.r, x.o) - std::log2(std::max(1e-12, x.p));
+                        for (int k = 0; k < 4; ++k) x.t6[k] = x.dl_others > kEps[k] ? kPos : x.dl_others < -kEps[k] ? kNeg : kInc;
+                        const auto wit = wd.find(x.s + '\x1f' + x.r);
+                        x.t5 = !x.t5_ok || wit == wd.end() ? kInc : wd_match(ri, x.o, wit->second) ? kPos : kNeg;
+                        if (page) t4(ps, ri, x.o, x.t4);
+                        x.p0 = std::min(0.98, std::max(0.02, cal.predict(raw(x))));
+                    }
+                }
+                vector<std::size_t> idx2(it2.size());
+                std::iota(idx2.begin(), idx2.end(), 0);
+                const vector<LoopRes> rc = loop_res(it2, idx2, lk, out + ".c2.prereg.tsv");
+                vector<std::size_t> S2(rc.size());
+                std::iota(S2.begin(), S2.end(), 0);
+                vector<bool> prw;
+                for (int k = 0; k < N_K; ++k) {
+                    const auto pr = s7c_run(k, rc, S2);
+                    if (k == win) prw = pr;
+                    std::cout << s7c_line("C2", kKName[k], s7c_stats(rc, S2, pr)) << "\n";
+                    if (k == K1 || k == K2 || k == K4)
+                        std::cout << s7c_line("C2", string(kKName[k]) + "_R-and-S", s7c_stats(rc, S2, s7c_run(k, rc, S2, false))) << "\n";
+                }
+                for (int f = 0; f < 2 && win == K3; ++f) {  // K3's two folds, each with its own guarantee
+                    vector<std::size_t> Sf;
+                    vector<bool> pf;
+                    for (std::size_t j = 0; j < S2.size(); ++j)
+                        if (rc[j].fold == f) Sf.push_back(j), pf.push_back(prw[j]);
+                    std::cout << s7c_line("C2 fold " + std::to_string(f), kKName[K3], s7c_stats(rc, Sf, pf)) << "\n";
+                }
+                if (win >= 0) {
+                    const KStats w = s7c_stats(rc, S2, prw);
+                    std::snprintf(b, sizeof b,
+                                  "S7C C2 CONFIRM %s: Known precision %.3f [%.3f, %.3f] on %.0f -> %s | Known-decided %.3f (S7b's whole-batch e-BH on dev: "
+                                  "0.111) | Believed %.0f precision %.3f",
+                                  kKName[win], w.prec(), ecs::wilson_lower(w.pt, w.prom()), ecs::wilson_upper(w.pt, w.prom()), w.prom(),
+                                  ecs::wilson_lower(w.pt, w.prom()) >= 0.90 ? "confirmed" : "not confirmed", w.decided(), w.bt + w.bf,
+                                  w.bt + w.bf > 0 ? w.bt / (w.bt + w.bf) : 0.0);
+                    std::cout << b << "\n";
+                }
+                std::ofstream f(out + ".c2_items.tsv");
+                f << "pair\tfold\tlabel\twd_true\tt5_eligible\tsubject\trelation\tobject\tT1\tT6\tT5\tT4\tP0\tposterior\te\tp_null\tsupported\trefuted\ttier\n";
+                for (std::size_t j = 0; j < it2.size(); ++j) {
+                    const Item& x = it2[j];
+                    const LoopRes& r = rc[j];
+                    const int tier = r.sup ? (win >= 0 && prw[j] ? 2 : 1) : 0;
+                    f << x.pair << '\t' << r.fold << '\t' << x.label << '\t' << x.wd_true << '\t' << x.t5_ok << '\t' << x.s << '\t' << x.r << '\t' << x.o
+                      << '\t' << ecs::test_outcome_name(x.t1v[kphi]) << '\t' << ecs::test_outcome_name(x.t6[k6]) << '\t' << ecs::test_outcome_name(x.t5)
+                      << '\t' << ecs::test_outcome_name(x.t4[k4]) << '\t' << x.p0 << '\t' << r.post << '\t' << r.e << '\t' << r.pnull << '\t' << r.sup
+                      << '\t' << r.ref << '\t' << (tier == 2 ? "Known" : tier == 1 ? "Believed" : "") << '\n';
                 }
             }
         }

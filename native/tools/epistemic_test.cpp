@@ -1,6 +1,6 @@
 // Known-answer tests for cypha/eval/epistemic.hpp (docs/DISCOVERY.md sections 2.1-2.3, 3.1, 3.3, 10), hypothesis.hpp
 // (S5: 4, 6.3, 7.2-7.5; invariants I1, I4, I7, I8; S7: 7.1-7.3, I5, I6; S7b: three-way likelihoods, the batch step
-// among the supported), gap_map.hpp (S3: 3.2, 3.5), gen_links.hpp (S8b: G6, G7) and gen_rules.hpp (S8a: G2, G14).
+// among the supported), gap_map.hpp (S3: 3.2, 3.5), gen_links.hpp (S8b: G6, G7) and gen_rules.hpp (S8a: G2, G14); S7c's batch rules.
 // Returns nonzero if any check fails.
 #include "cypha/eval/epistemic.hpp"
 #include "cypha/eval/gap_map.hpp"
@@ -1530,6 +1530,200 @@ static void test_gen_rules_S8a() {
   CHECK_STR(rule_kind_name(RuleKind::Inverse), "inverse");
 }
 
+// ---------------------------------------------------------------------------
+// S7c: batch rules that state their guarantee (weighted e-BH, conformal selection, null-model p-values), the hybrid
+// ---------------------------------------------------------------------------
+
+static void test_s7c() {
+  // Weighted e-BH: equal weights are plain e-BH (bh_reject_e) on every random batch; a zero weight is never rejected.
+  {
+    std::mt19937_64 g(7);
+    std::exponential_distribution<double> ex(0.05);
+    int same = 0;
+    for (int b = 0; b < 200; ++b) {
+      std::vector<double> e(40), w(40, 2.5);
+      for (double& x : e) x = ex(g);
+      same += weighted_e_bh(e, w, 0.1) == bh_reject_e(e, 0.1);
+    }
+    CHECK(same == 200);
+    // m 5, q 0.1: e-BH rejects the k largest with e_(k) >= 50 / k: 100 and 50 (50 >= 25), not 12 (12 < 16.7).
+    const std::vector<double> e{100, 50, 12, 1, 0.5};
+    const auto r = weighted_e_bh(e, {1, 1, 1, 1, 1}, 0.1);
+    CHECK(r[0] && r[1] && !r[2] && !r[3] && !r[4]);
+    CHECK(r == bh_reject_e(e, 0.1));
+    // Weights 0.5, 0.5, 4, 0, 0 (mean 1): w e = 50, 25, 48, 0, 0; sorted 50, 48, 25 against 50, 25, 16.7: all three.
+    const auto rw = weighted_e_bh(e, {0.5, 0.5, 4, 0, 0}, 0.1);
+    CHECK(rw[0] && rw[1] && rw[2] && !rw[3] && !rw[4]);
+    // Weights are rescaled to mean 1, so their scale does not matter; all-zero weights reject nothing.
+    CHECK(weighted_e_bh(e, {5, 5, 40, 0, 0}, 0.1) == rw);
+    const auto none = weighted_e_bh(e, {0, 0, 0, 0, 0}, 0.1);
+    CHECK(!none[0] && !none[1] && !none[2]);
+  }
+  // Conformal p-values: (1 + #{false calibration hypotheses with score >= s}) / (n + 1), n counting the true ones too.
+  {
+    const std::vector<double> cs{0.1, 0.5, 0.9, 0.95};
+    const std::vector<bool> ct{false, false, true, false};
+    const auto p = conformal_selection_pvalues(cs, ct, {0.92, 0.99, 0.5, 0.9});
+    CHECK_NEAR(p[0], 2.0 / 5, 1e-12);  // 0.95 only
+    CHECK_NEAR(p[1], 1.0 / 5, 1e-12);  // none
+    CHECK_NEAR(p[2], 3.0 / 5, 1e-12);  // 0.5 (a tie counts) and 0.95
+    CHECK_NEAR(p[3], 2.0 / 5, 1e-12);  // the true 0.9 is not counted
+  }
+  // Conformal selection's finite-sample guarantee, by simulation: scores N(1.5, 1) when true, N(0, 1) when false, a
+  // calibration set and a batch drawn the same way. Mixed (30% true) and all-null batches: the realised FDR stays at or
+  // below q = 0.1 (3 standard errors).
+  for (const double pi1 : {0.3, 0.0}) {
+    std::mt19937_64 g(pi1 > 0 ? 11 : 13);
+    std::normal_distribution<double> n01(0.0, 1.0);
+    std::uniform_real_distribution<double> u(0.0, 1.0);
+    double s = 0, s2 = 0, sel = 0;
+    const int reps = 2000;
+    for (int r = 0; r < reps; ++r) {
+      std::vector<double> cs(150), bs(150);
+      std::vector<bool> ct(150), bt(150);
+      for (int i = 0; i < 150; ++i) {
+        ct[i] = u(g) < pi1, bt[i] = u(g) < pi1;
+        cs[i] = n01(g) + (ct[i] ? 1.5 : 0.0), bs[i] = n01(g) + (bt[i] ? 1.5 : 0.0);
+      }
+      const auto pick = conformal_select(cs, ct, bs, 0.1);
+      double R = 0, V = 0;
+      for (int i = 0; i < 150; ++i)
+        if (pick[i]) R += 1, V += bt[i] ? 0 : 1;
+      const double fdp = R > 0 ? V / R : 0.0;
+      s += fdp, s2 += fdp * fdp, sel += R;
+    }
+    const double fdr = s / reps, se = std::sqrt(std::max(0.0, (s2 / reps - fdr * fdr) / (reps - 1)));
+    CHECK(fdr <= 0.1 + 3 * se);
+    if (pi1 > 0) CHECK(sel / reps > 5.0);  // and it does select
+  }
+  // Null-model p-values: one test, f = (0.1, 0.8, 0.1), t = (0.8, 0.1, 0.1); not independent, so the loop never stops early.
+  {
+    HypTest t;
+    t.independent = false;
+    t.likelihoods.t[0] = 0.8, t.likelihoods.t[1] = 0.1, t.likelihoods.t[2] = 0.1;
+    t.likelihoods.f[0] = 0.1, t.likelihoods.f[1] = 0.8, t.likelihoods.f[2] = 0.1;
+    const std::vector<HypTest> plan{t};
+    CHECK_NEAR(null_model_pvalue(plan, 0.5, 8.0), 0.1, 1e-12);     // only "positive" reaches e 8
+    CHECK_NEAR(null_model_pvalue(plan, 0.5, 1.0), 0.2, 1e-12);     // positive or inconclusive
+    CHECK_NEAR(null_model_pvalue(plan, 0.5, 0.0), 1.0, 1e-12);     // every path
+    CHECK_NEAR(null_model_pvalue(plan, 0.5, 100.0), 0.0, 1e-12);   // none
+    HypTest two_way = t;
+    two_way.likelihoods = OutcomeLikelihoods{};
+    CHECK_NEAR(null_model_pvalue({two_way}, 0.5, 8.0), 1.0, 1e-12);  // no null model: 1
+    // The loop's stopping counts: two independent copies of t from prior 0.7. A first "positive" reaches 0.949 and stops at
+    // e 8, so e 64 is never reached; e >= 8 is positive (0.1) or inconclusive then positive (0.01). Without stopping the
+    // answers would be 0.03 and 0.01.
+    HypTest ti = t;
+    ti.independent = true;
+    CHECK_NEAR(null_model_pvalue({ti, ti}, 0.7, 8.0), 0.11, 1e-12);
+    CHECK_NEAR(null_model_pvalue({ti, ti}, 0.7, 64.0), 0.0, 1e-12);
+    // Super-uniform under the model, with the loop's stopping: three tests, the second independent; draws from the null.
+    HypTest a = t, c = t;
+    a.independent = true;
+    c.likelihoods.t[0] = 0.6, c.likelihoods.t[1] = 0.2, c.likelihoods.t[2] = 0.2;
+    c.likelihoods.f[0] = 0.2, c.likelihoods.f[1] = 0.5, c.likelihoods.f[2] = 0.3;
+    const std::vector<HypTest> p3{t, a, c};
+    std::mt19937_64 g(17);
+    std::uniform_real_distribution<double> u(0.0, 1.0);
+    const HypothesisConfig cfg;
+    int below05 = 0, below20 = 0;
+    const int reps = 20000;
+    for (int r = 0; r < reps; ++r) {
+      double post = 0.7, e = 1;
+      bool ind = false;
+      for (const HypTest& x : p3) {
+        const double v = u(g);
+        const int o = v < x.likelihoods.f[0] ? 0 : v < x.likelihoods.f[0] + x.likelihoods.f[1] ? 1 : 2;
+        const TestOutcome out = o == 0 ? TestOutcome::Positive : o == 1 ? TestOutcome::Negative : TestOutcome::Inconclusive;
+        const double bf = bayes_factor(out, x);
+        post = update_posterior(post, bf), e *= bf, ind = ind || (x.independent && o != 2);
+        if ((post > cfg.supported_p && ind) || post < cfg.refuted_p) break;
+      }
+      const double p = null_model_pvalue(p3, 0.7, e, cfg);
+      below05 += p <= 0.05, below20 += p <= 0.20;
+    }
+    CHECK(below05 <= 0.05 * reps + 3 * std::sqrt(0.05 * reps));
+    CHECK(below20 <= 0.20 * reps + 3 * std::sqrt(0.20 * reps));
+  }
+  // The hybrid's tiers: kept and supported is Known, supported only is Believed, never Known without support.
+  {
+    const auto t = hybrid_tiers({true, true, false, false}, {true, false, true, false});
+    CHECK(t[0] == 2 && t[1] == 1 && t[2] == 0 && t[3] == 0);
+  }
+  // The chosen rule (K4 as the Known tier), planted cases. One independent test, t = (0.8, 0.1, 0.1), f = (0.01, 0.89, 0.1):
+  // "positive" from prior 0.7 is supported at e 80 with null p 0.01. In a batch of 4 (2 supported) BH's bar for 2 is
+  // 0.05, so both are Known; in a batch of 100 it is 0.002, so both stay Believed. Unsupported is never Known.
+  {
+    HypTest k;
+    k.independent = true;
+    k.likelihoods.t[0] = 0.8, k.likelihoods.t[1] = 0.1, k.likelihoods.t[2] = 0.1;
+    k.likelihoods.f[0] = 0.01, k.likelihoods.f[1] = 0.89, k.likelihoods.f[2] = 0.1;
+    CHECK_NEAR(null_model_pvalue({k}, 0.7, 80.0), 0.01, 1e-12);
+    const std::vector<std::vector<HypTest>> plans4(4, std::vector<HypTest>{k});
+    const auto t4 = hybrid_null_model_tiers(plans4, {0.7, 0.7, 0.7, 0.7}, {80, 80, 80, 1}, {true, true, false, false});
+    CHECK(t4.size() == 4 && t4[0] == 2 && t4[1] == 2 && t4[2] == 0 && t4[3] == 0);
+    std::vector<double> e100(100, 1.0);
+    std::vector<bool> s100(100, false);
+    e100[0] = e100[1] = 80, s100[0] = s100[1] = true;
+    const auto t100 = hybrid_null_model_tiers(std::vector<std::vector<HypTest>>(100, {k}), std::vector<double>(100, 0.7), e100, s100);
+    CHECK(t100[0] == 1 && t100[1] == 1 && t100[2] == 0);
+    // A plan without three-way likelihoods has no null model: Believed at most.
+    HypTest two_way = k;
+    two_way.likelihoods = OutcomeLikelihoods{};
+    const auto tw = hybrid_null_model_tiers({{two_way}, {k}}, {0.7, 0.7}, {80, 80}, {true, true});
+    CHECK(tw[0] == 1 && tw[1] == 2);
+  }
+  // The chosen rule's guarantee, by simulation under its model: batches of 200 hypotheses, priors 0.3, 0.5 or 0.7, the
+  // three-test plan above with the loop's stopping, outcomes drawn from t or f. 30% true or all false: the realised FDR
+  // among the Known stays at or below q = 0.1 (3 standard errors), and with true members it promotes some.
+  {
+    HypTest t, a, c;
+    t.independent = false, a.independent = true, c.independent = true;
+    t.likelihoods.t[0] = 0.8, t.likelihoods.t[1] = 0.1, t.likelihoods.t[2] = 0.1;
+    t.likelihoods.f[0] = 0.1, t.likelihoods.f[1] = 0.8, t.likelihoods.f[2] = 0.1;
+    a.likelihoods = t.likelihoods;
+    c.likelihoods.t[0] = 0.6, c.likelihoods.t[1] = 0.2, c.likelihoods.t[2] = 0.2;
+    c.likelihoods.f[0] = 0.05, c.likelihoods.f[1] = 0.65, c.likelihoods.f[2] = 0.3;
+    const std::vector<HypTest> plan{t, a, c};
+    const HypothesisConfig cfg;
+    for (const double pi1 : {0.3, 0.0}) {
+      std::mt19937_64 g(pi1 > 0 ? 29 : 31);
+      std::uniform_real_distribution<double> u(0.0, 1.0);
+      const int reps = 400, m = 200;
+      double sum = 0, sum2 = 0, known = 0;
+      for (int r = 0; r < reps; ++r) {
+        std::vector<double> pri(m), e(m);
+        std::vector<bool> sup(m), tru(m);
+        for (int i = 0; i < m; ++i) {
+          pri[i] = i % 3 == 0 ? 0.3 : i % 3 == 1 ? 0.5 : 0.7;
+          tru[i] = u(g) < pi1;
+          double post = pri[i], ev = 1;
+          bool ind = false;
+          for (const HypTest& x : plan) {
+            const double* pr = tru[i] ? x.likelihoods.t : x.likelihoods.f;
+            const double v = u(g);
+            const int o = v < pr[0] ? 0 : v < pr[0] + pr[1] ? 1 : 2;
+            const TestOutcome out = o == 0 ? TestOutcome::Positive : o == 1 ? TestOutcome::Negative : TestOutcome::Inconclusive;
+            const double bf = bayes_factor(out, x);
+            post = update_posterior(post, bf), ev *= bf, ind = ind || (x.independent && o != 2);
+            if ((post > cfg.supported_p && ind) || post < cfg.refuted_p) break;
+          }
+          e[i] = ev, sup[i] = post > cfg.supported_p && ind;
+        }
+        const auto tiers = hybrid_null_model_tiers(std::vector<std::vector<HypTest>>(m, plan), pri, e, sup, 0.1, cfg);
+        int k = 0, bad = 0;
+        for (int i = 0; i < m; ++i)
+          if (tiers[i] == 2) ++k, bad += !tru[i];
+        const double fdp = k ? static_cast<double>(bad) / k : 0.0;
+        sum += fdp, sum2 += fdp * fdp, known += k;
+      }
+      const double fdr = sum / reps, se = std::sqrt(std::max(0.0, sum2 / reps - fdr * fdr) / reps);
+      CHECK(fdr <= 0.1 + 3 * se);
+      if (pi1 > 0) CHECK(known / reps > 5.0);
+    }
+  }
+}
+
 static void test_gap_map() {
   // The gap id CyphaLM writes (cyphalm_trie dktext rows and its dev tags).
   CHECK_STR(gap_id("Honduras", "capital"), "G-AEC1");
@@ -1629,6 +1823,7 @@ int main() {
   test_s7b();
   test_links_S8b();
   test_gen_rules_S8a();
+  test_s7c();
   test_gap_map();
   std::printf("epistemic_test: %d checks, %d failed\n", g_checks, g_failed);
   return g_failed == 0 ? 0 : 1;
