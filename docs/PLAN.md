@@ -346,6 +346,8 @@ Each track lists its work items, how they are measured, and the gate to pass. Bu
 
 ### Track A: the 1 TB packed trie (running; science)
 
+**Runbook (2026-10-29):** [`TRAIN_1TB_RUNBOOK.md`](TRAIN_1TB_RUNBOOK.md): verify the live run's model (its 32-bit counts wrap at this scale), train a second run with counts that halve instead, and compare the two on held-out text. Snapshots of the second run give A1's scaling curve.
+
 This is the plan in [`CURRENT.md`](CURRENT.md): hold out first, shard at about 1 GB with `<|doc|>` breaks, pack and free, merge, store the next byte in the match record past 4 GiB, keep labelled chat separate.
 
 **Report at each checkpoint (8 MiB, 64 MiB, 1 GB, 10 GB, 100 GB, 1 TB):**
