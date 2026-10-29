@@ -128,6 +128,11 @@
 //   --fresh-test]: G4 and G5 on S8a's R1 random hide and S15's temporal read; pools. --pool-grade s15|wd FILE HALF HYPS
 //   SRC_FRESH grades a pool after S8d's source stage. Hypotheses for Cypha's own store only: it answers nothing.
 //
+// F2b (2026-10-29, docs/reports/F2_PATTERN_LEARNING.md, "F2b"; every flag off by default, outputs unchanged without them):
+//   --f2b-xa reads every article, with the fact's subject a link ([L]) and the object any candidate or the page's own subject;
+//   --f2b-wild 1|2 adds wildcard gaps (first token, <*>, last two | <*>, last two); --f2b-classes FILE adds word-class gaps;
+//   --f2b-gold-split scores D4's gold fifth by halves (dev; test only with --f2b-read-test). --f2b-selftest checks the keys.
+//
 // Build: g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp -o pattern_learn
 // Usage: pattern_learn <enwik8> <outdir> [--cv] [--folds K] [--min-train N] [--base-rate A] [--sample N] [--seed S]
 //          [--wikidata FILE [--wikidata-gold-only]] [--phi FILE] [--shard FILE --dev DEV --test TEST [--slice-end B] [--holdout-from B]]
@@ -1242,9 +1247,60 @@ bool make_keys(const Sent& s, const Span& S, int ob, int oe, std::array<string, 
 }
 // Pattern family: the core with no outer context, so the four variants of one match count as one kind of evidence.
 string family_of(const string& key) {
-    std::size_t a = std::min(key.find("[S]"), key.find("[P]")), b = key.find("[O]");
+    std::size_t a = std::min({key.find("[S]"), key.find("[P]"), key.find("[L]")}), b = key.find("[O]");  // [L]: F2b only
     std::size_t first = std::min(a, b), last = std::max(a, b);
     return key.substr(first, last + 3 - first);
+}
+
+// F2b (docs/reports/F2_PATTERN_LEARNING.md, "F2b"; off by default, so every output is unchanged without the flags):
+// generalised gaps beside each exact pattern, and a subject slot label for cross-article reading ([L]: the subject is a
+// link in another article). Cleaned tokens only (not --raw).
+int g_f2b_wild = 0;                              // --f2b-wild 1: first gap token, <*>, last two; 2: <*>, last two
+std::unordered_map<string, string> g_f2b_class;  // --f2b-classes: gap word -> C<k> (F2's stop words, digits and months stay)
+bool f2b_gen_on() { return g_f2b_wild > 0 || !g_f2b_class.empty(); }
+// The keys of one pair of mentions, make_keys' rule with the subject slot labelled SL: the exact core (gen false), or the
+// generalised cores (gen true), each in the four context variants. False when the spans overlap or the gap is 0 or > 6.
+bool f2b_keys(const Sent& s, int sb, int se, const char* SL, int ob, int oe, bool gen, vector<string>& out) {
+    out.clear();
+    int fb, fe, sb2, se2;
+    bool s_first;
+    if (se <= ob) { s_first = true; fb = sb; fe = se; sb2 = ob; se2 = oe; }
+    else if (oe <= sb) { s_first = false; fb = ob; fe = oe; sb2 = sb; se2 = se; }
+    else return false;
+    const int L = sb2 - fe;
+    if (L < 1 || L > kMaxBetween) return false;
+    vector<string> gap;
+    for (int k = fe; k < sb2; ++k) gap.push_back(ctx_tok(s, k));
+    auto join = [](const vector<string>& v) { string m; for (const string& x : v) { m += ' '; m += x; } return m; };
+    vector<string> mids;
+    const auto u = static_cast<std::size_t>(L);
+    if (!gen) {
+        mids.push_back(join(gap));
+    } else {
+        if (g_f2b_wild == 1 && L >= 4) mids.push_back(join({gap[0], "<*>", gap[u - 2], gap[u - 1]}));
+        if (g_f2b_wild == 2 && L >= 3) mids.push_back(join({"<*>", gap[u - 2], gap[u - 1]}));
+        if (!g_f2b_class.empty()) {
+            vector<string> cg = gap;
+            bool any = false;
+            for (string& w : cg) {
+                if (stop_words().count(w)) continue;
+                auto it = g_f2b_class.find(w);
+                if (it != g_f2b_class.end()) { w = it->second; any = true; }
+            }
+            if (any) mids.push_back(join(cg));
+        }
+    }
+    const char* A = s_first ? SL : "[O]";
+    const char* B = s_first ? "[O]" : SL;
+    const string lc = ctx_tok(s, fb - 1), rc = ctx_tok(s, se2);
+    for (const string& mid : mids) {
+        const string core = string(A) + mid + " " + B;
+        out.push_back(core);
+        out.push_back(core + " " + rc);
+        out.push_back(lc + " " + core);
+        out.push_back(lc + " " + core + " " + rc);
+    }
+    return !out.empty();
 }
 
 }  // namespace
@@ -1720,6 +1776,7 @@ void load_page(const string& data, const PageRef& pg, PageCtx& px) {
 template <class F>
 void apply_patterns(const Sent& s, const vector<Span>& spans, const vector<Cand>& cands, const string& title_key, F&& cb) {
     std::array<string, 4> keys;
+    vector<string> gk;  // F2b
     for (const Span& S : spans)
         for (const Cand& c : cands) {
             if (c.b < S.e && S.b < c.e) continue;
@@ -1734,6 +1791,15 @@ void apply_patterns(const Sent& s, const vector<Span>& spans, const vector<Cand>
                     if (subject_ok(rr) && type_ok(rr, c)) cb(pid, c, S);
                 }
             }
+            if (f2b_gen_on() && f2b_keys(s, S.b, S.e, S.pron ? "[P]" : "[S]", c.b, c.e, true, gk))  // F2b
+                for (const string& k : gk) {
+                    auto it = g_patmap.find(k);
+                    if (it == g_patmap.end()) continue;
+                    for (int pid : it->second) {
+                        int rr = g_pats[static_cast<std::size_t>(pid)].rel;
+                        if (subject_ok(rr) && type_ok(rr, c)) cb(pid, c, S);
+                    }
+                }
         }
 }
 
@@ -1744,6 +1810,7 @@ void train_page(const string& data, const PageRef& pg, const vector<int>& sidx, 
     std::unordered_set<string> page_keys;
     vector<Cand> cands;
     std::array<string, 4> keys;
+    vector<string> gk;  // F2b
     const string tk = px.forms.title_key;
     for (const Sent& s : px.sents) {
         auto spans = find_subject(s, px.forms);
@@ -1762,6 +1829,12 @@ void train_page(const string& data, const PageRef& pg, const vector<int>& sidx, 
                         ++tm[pk].sent;
                         page_keys.insert(pk);
                     }
+                    if (f2b_gen_on() && f2b_keys(s, S.b, S.e, S.pron ? "[P]" : "[S]", c.b, c.e, true, gk))  // F2b
+                        for (const string& k : gk) {
+                            string pk = std::to_string(sd.rel) + "\t" + k;
+                            ++tm[pk].sent;
+                            page_keys.insert(pk);
+                        }
                 }
             }
         }
@@ -1830,7 +1903,7 @@ void extract_page(const string& data, const PageRef& pg) {
         auto spans = find_subject(s, px.forms);
         if (spans.empty()) continue;
         gen_cands(s, cands);
-        apply_patterns(s, spans, cands, px.forms.title_key, [&](int pid, const Cand& c, const Span&) {
+        apply_patterns(s, spans, cands, px.forms.title_key, [&](int pid, const Cand& c, const Span& S) {
             const Pat& p = g_pats[static_cast<std::size_t>(pid)];
             if (sit != g_by_subj.end())
                 for (int si : sit->second) {
@@ -1841,7 +1914,9 @@ void extract_page(const string& data, const PageRef& pg) {
             FactAcc& f = g_new[fk];
             if (f.subj.empty()) { f.subj = pg.title; f.rel = p.rel; f.surf = obj_surface(p.rel, c); f.okey = obj_key(p.rel, c); f.d = c.d; }
             ++f.total;
-            if (f.ev.size() < 96) f.ev.push_back({pid, p.reliability, s.off, s.hash, s.idx, p.family});
+            // F2b: with generalised keys one pair of mentions can match several patterns; it is still one evidence item
+            const string fam = f2b_gen_on() ? "@" + std::to_string(S.b) + "," + std::to_string(S.e) + "," + std::to_string(c.b) + "," + std::to_string(c.e) : p.family;
+            if (f.ev.size() < 96) f.ev.push_back({pid, p.reliability, s.off, s.hash, s.idx, fam});
             if (p.reliability > f.snip_rel) { f.snip_rel = p.reliability; f.snippet = sentence_text(s); }
         });
     }
@@ -3829,6 +3904,357 @@ struct Args {
 };
 
 }  // namespace
+
+// ============================================================ F2b: cross-article reading, gold halves (docs/reports/F2_PATTERN_LEARNING.md, "F2b")
+// --f2b-xa: every sentence of every article is read; the fact's subject can be a link to an article with seeds (its slot
+// [L]), and the object any candidate F2 reads or a mention of the page's own subject ("[O] is the capital of [L]" in the
+// city's article). F2's folds, gate and type checks apply, with the subject's type from the linked page. A check counts
+// once per (pattern, subject, object) in a fold. At extraction each article's sentence is its own evidence item.
+// --f2b-gold-split scores D4's gold fifth in two halves by (fnv >> 50) & 1 (dev 0, test 1); the test half is printed
+// only with --f2b-read-test. Off by default: without the flags every output is unchanged.
+namespace f2b {
+
+bool g_xa = false, g_gold_split = false, g_read_test = false;
+std::unordered_map<string, string> g_redir;  // redirect page title -> its target title
+
+bool load_classes(const string& path) {  // word \t class
+    std::ifstream f(path);
+    if (!f) return false;
+    for (string l; std::getline(f, l);) {
+        auto c = split(l, '\t');
+        if (c.size() >= 2 && !c[0].empty()) g_f2b_class[c[0]] = "C" + c[1];
+    }
+    return !g_f2b_class.empty();
+}
+string norm_title(string t) {
+    for (char& ch : t) if (ch == '_') ch = ' ';
+    t = trim(t);
+    string o;
+    for (char ch : t) { if (ch == ' ' && !o.empty() && o.back() == ' ') continue; o += ch; }
+    if (!o.empty() && o[0] >= 'a' && o[0] <= 'z') o[0] = static_cast<char>(o[0] - 'a' + 'A');
+    return o;
+}
+void load_redirects(const string& data) {
+    std::size_t pos = 0;
+    while (true) {
+        std::size_t pb = data.find("<page>", pos);
+        if (pb == npos) break;
+        std::size_t pe = data.find("</page>", pb);
+        if (pe == npos) break;
+        pos = pe + 7;
+        std::size_t tb = data.find("<title>", pb), te = data.find("</title>", tb);
+        if (tb == npos || te == npos || te > pe) continue;
+        std::size_t xb = data.find("<text", te);
+        if (xb == npos || xb > pe) continue;
+        std::size_t xg = data.find('>', xb);
+        if (xg == npos || xg > pe) continue;
+        string head = data.substr(xg + 1, std::min<std::size_t>(300, pe - xg - 1));
+        if (lower(trim(head)).compare(0, 9, "#redirect") != 0) continue;
+        std::size_t a = head.find("[["), b = head.find("]]", a == npos ? 0 : a);
+        if (a == npos || b == npos) continue;
+        string tgt = head.substr(a + 2, b - a - 2);
+        std::size_t h = tgt.find('#');
+        if (h != npos) tgt = tgt.substr(0, h);
+        g_redir[xml_decode(data.substr(tb + 7, te - tb - 7))] = norm_title(xml_decode(tgt));
+    }
+}
+// A link target to an article index, through up to three redirects; -1 when it is not a main-namespace article.
+int resolve(const string& target, const std::unordered_map<string, int>& page_of) {
+    string t = norm_title(target);
+    for (int hop = 0; hop < 4; ++hop) {
+        auto it = page_of.find(t);
+        if (it != page_of.end()) return it->second;
+        auto r = g_redir.find(t);
+        if (r == g_redir.end()) return -1;
+        t = r->second;
+    }
+    return -1;
+}
+bool subject_ok_ent(int r, const string& key) {
+    const int t = subj_type(r);
+    return t == 0 || (t == 1 && g_person.count(key)) || (t == 2 && g_place.count(key)) || (t == 3 && g_country.count(key));
+}
+bool listish(const string& title) {
+    const string lt = lower(title);
+    return lt.compare(0, 8, "list of ") == 0 || lt.find("(disambiguation)") != npos;
+}
+// The cross-article pairs of one sentence: subject link (its article index and span) and object candidates (F2's
+// candidates other than the link, and the page subject's own mentions).
+struct XPair { int subj_page; int sb, se; Cand obj; };
+void pairs_of(const Sent& s, const vector<Cand>& cands, const vector<Span>& spans, const PageRef& pg, const string& title_key,
+              const vector<PageRef>& pages, const std::unordered_map<string, int>& page_of, vector<XPair>& out) {
+    out.clear();
+    vector<Cand> own;  // the page subject as an object
+    string base = pg.title;
+    std::size_t q = base.find(" (");
+    if (q != npos && q > 0 && base.back() == ')') base = base.substr(0, q);
+    for (const Span& S : spans) {
+        if (S.pron) continue;
+        Cand c;
+        c.b = S.b; c.e = S.e; c.kind = K_LINK;
+        c.k1 = title_key;
+        c.k2 = norm_ent(join_o(s, S.b, S.e));
+        c.surf = base;
+        std::size_t cm = pg.title.find(',');
+        if (cm != npos && cm > 0) c.k3 = norm_ent(pg.title.substr(0, cm));
+        own.push_back(c);
+    }
+    for (const Cand& L : cands) {
+        if (L.kind != K_LINK) continue;
+        const Lnk* lk = nullptr;
+        for (const Lnk& l : s.l) if (l.tb == L.b && l.te == L.e) { lk = &l; break; }
+        if (!lk) continue;
+        const int pi = resolve(lk->target, page_of);
+        if (pi < 0 || pages[static_cast<std::size_t>(pi)].title == pg.title || listish(pages[static_cast<std::size_t>(pi)].title)) continue;
+        const string ek = norm_ent(pages[static_cast<std::size_t>(pi)].title);
+        auto add = [&](const Cand& o) {
+            if (o.b < L.e && L.b < o.e) return;
+            if (o.k1 == ek) return;
+            out.push_back({pi, L.b, L.e, o});
+        };
+        for (const Cand& o : cands) if (&o != &L) add(o);
+        for (const Cand& o : own) add(o);
+    }
+}
+// One pass of cross-article reading over every article. mode 0: train (fold's training subjects, into tm); 1: eval (its
+// held-out subjects, into stat; seen dedupes per fold); 2: extract (any subject, into g_new).
+void xa_pass(int mode, const string& data, const vector<PageRef>& pages, const std::unordered_map<string, int>& page_of, int K, int fold,
+             std::unordered_map<string, TrainCnt>* tm, std::unordered_map<string, PStat>* stat) {
+    std::unordered_set<string> subj_keys, seen;
+    vector<Cand> cands;
+    vector<XPair> xp;
+    vector<string> ks, gks;
+    for (const PageRef& pg : pages) {
+        if (mode == 2 && listish(pg.title)) continue;
+        PageCtx px;
+        load_page(data, pg, px);
+        for (const Sent& s : px.sents) {
+            if (s.l.empty()) continue;
+            auto spans = find_subject(s, px.forms);
+            gen_cands(s, cands);
+            pairs_of(s, cands, spans, pg, px.forms.title_key, pages, page_of, xp);
+            for (const XPair& x : xp) {
+                const string& E = pages[static_cast<std::size_t>(x.subj_page)].title;
+                const string ek = norm_ent(E);
+                auto sit = g_by_subj.find(E);
+                if (mode != 2) {
+                    if (sit == g_by_subj.end()) continue;
+                    const bool held = heldout(E, K, fold);
+                    if ((mode == 0) == held) continue;
+                }
+                const Cand& c = x.obj;
+                vector<int> match;  // mode 0: the subject's seeds this object states
+                if (mode == 0) {
+                    for (int si : sit->second) {
+                        const Seed& sd = g_seeds[static_cast<std::size_t>(si)];
+                        if (subject_ok_ent(sd.rel, ek) && type_ok(sd.rel, c) && obj_matches(sd.rel, c, sd.o)) match.push_back(sd.rel);
+                    }
+                    if (match.empty()) continue;
+                }
+                if (!f2b_keys(s, x.sb, x.se, "[L]", x.obj.b, x.obj.e, false, ks)) continue;
+                if (f2b_gen_on() && f2b_keys(s, x.sb, x.se, "[L]", x.obj.b, x.obj.e, true, gks)) ks.insert(ks.end(), gks.begin(), gks.end());
+                if (mode == 0) {
+                    std::sort(match.begin(), match.end());
+                    match.erase(std::unique(match.begin(), match.end()), match.end());
+                    for (int rel : match) {
+                        for (const string& k : ks) {
+                            const string pk = std::to_string(rel) + "\t" + k;
+                            ++(*tm)[pk].sent;
+                            if (subj_keys.insert(pk + "\x1f" + E).second) ++(*tm)[pk].subj;
+                        }
+                    }
+                    continue;
+                }
+                for (const string& k : ks) {
+                    auto it = g_patmap.find(k);
+                    if (it == g_patmap.end()) continue;
+                    for (int pid : it->second) {
+                        const Pat& p = g_pats[static_cast<std::size_t>(pid)];
+                        if (!subject_ok_ent(p.rel, ek) || !type_ok(p.rel, c)) continue;
+                        if (mode == 1) {
+                            if (!seen.insert(std::to_string(pid) + "\x1f" + E + "\x1f" + obj_key(p.rel, c)).second) continue;
+                            bool known = false, ok = false;
+                            for (int si : sit->second) {
+                                const Seed& sd = g_seeds[static_cast<std::size_t>(si)];
+                                if (sd.rel != p.rel) continue;
+                                known = true;
+                                if (obj_consistent(p.rel, c, sd.o)) { ok = true; break; }
+                            }
+                            PStat& st = (*stat)[std::to_string(p.rel) + "\t" + p.key];
+                            if (!known) { ++st.unchecked; continue; }
+                            ++st.checks;
+                            if (ok) ++st.correct;
+                            continue;
+                        }
+                        bool seeded = false;  // mode 2: already a text seed of E
+                        if (sit != g_by_subj.end())
+                            for (int si : sit->second) {
+                                const Seed& sd = g_seeds[static_cast<std::size_t>(si)];
+                                if (sd.src < 3 && sd.rel == p.rel && obj_matches(p.rel, c, sd.o)) { seeded = true; break; }
+                            }
+                        if (seeded) continue;
+                        const string fk = E + "\x1f" + std::to_string(p.rel) + "\x1f" + obj_key(p.rel, c);
+                        FactAcc& f = g_new[fk];
+                        if (f.subj.empty()) { f.subj = E; f.rel = p.rel; f.surf = obj_surface(p.rel, c); f.okey = obj_key(p.rel, c); f.d = c.d; }
+                        ++f.total;
+                        const string fam = "x@" + std::to_string(x.sb) + "," + std::to_string(x.se) + "," + std::to_string(c.b) + "," + std::to_string(c.e);
+                        if (f.ev.size() < 96) f.ev.push_back({pid, p.reliability, s.off, s.hash, s.idx, fam});
+                        if (p.reliability > f.snip_rel) { f.snip_rel = p.reliability; f.snippet = sentence_text(s); }
+                    }
+                }
+            }
+        }
+    }
+}
+
+bool gold_test_half(const string& subj) { return ((fnv(subj) >> 50) & 1) != 0; }
+// D4's score_gold, in two halves; the test half only with --f2b-read-test. Also how many admitted facts rest on two or
+// more evidence items and reach grade Moderate. Writes facts_wd_check_f2b.tsv (test rows only with --f2b-read-test).
+void score_halves(const vector<Fused>& fused, const string& outdir, const std::function<void(const string&)>& say) {
+    std::ofstream f(outdir + "/facts_wd_check_f2b.tsv");
+    f << "subject\trelation\tobject\tP\twikidata\twikidata_values\thalf\n";
+    std::map<int, std::array<int, 3>> n[2];  // admitted right, admitted checked, coarse
+    int adm = 0, adm2 = 0, admmod = 0;
+    std::map<int, std::array<int, 3>> evr;  // per relation: admitted, >= 2 evidence, >= Moderate
+    for (const Fused& fu : fused) {
+        if (fu.op.P >= 0.8) {
+            ++adm;
+            auto& e = evr[fu.f->rel];
+            ++e[0];
+            if (fu.n_ev >= 2) { ++adm2; ++e[1]; }
+            if (ecs::grade_at_least(fu.op.grade, ecs::Grade::Moderate)) { ++admmod; ++e[2]; }
+        }
+        if (fu.op.P < 0.8) continue;
+        const FactAcc& fa = *fu.f;
+        auto it = g_gold.find(fa.subj + "\x1f" + kRel[fa.rel].name);
+        if (it == g_gold.end()) continue;
+        const int h = gold_test_half(fa.subj) ? 1 : 0;
+        if (h == 1 && !g_read_test) continue;
+        Cand c;
+        c.kind = is_datey(fa.rel) ? K_DATE : K_LINK;
+        c.d = fa.d;
+        c.k1 = fa.okey;
+        c.k2 = norm_ent(fa.surf);
+        string st = "wrong", vals;
+        for (const Obj& o : it->second) {
+            vals += (vals.empty() ? "" : "; ") + o.surf;
+            if (obj_consistent(fa.rel, c, o)) st = "right";
+        }
+        for (const Obj& o : it->second)
+            for (const string* k : {&o.k1, &o.k2, &o.k3})
+                if (st == "wrong" && (inside(*k, c.k1, 3) || inside(*k, c.k2, 3))) st = "coarse";
+        auto& a = n[h][fa.rel];
+        ++a[1];
+        if (st == "right") ++a[0];
+        if (st == "coarse") ++a[2];
+        f << fa.subj << '\t' << kRel[fa.rel].name << '\t' << fa.surf << '\t' << fu.op.P << '\t' << st << '\t' << vals << '\t' << (h ? "test" : "dev") << '\n';
+    }
+    char b[256];
+    for (int h = 0; h < 2; ++h) {
+        if (h == 1 && !g_read_test) continue;
+        say(string("\nF2B GOLD ") + (h ? "test" : "dev") + " half: admitted facts (P >= 0.8) against Wikidata, right/checked, Wilson 95%, coarse");
+        std::array<int, 3> t{};
+        for (auto& [r, a] : n[h]) {
+            std::snprintf(b, sizeof b, "  F2B GOLD %-4s %-13s %4d/%-4d %.3f [%.3f, %.3f] coarse %d", h ? "test" : "dev", kRel[r].name, a[0], a[1],
+                          a[1] ? static_cast<double>(a[0]) / a[1] : 0.0, ecs::wilson_lower(a[0], a[1]), ecs::wilson_upper(a[0], a[1]), a[2]);
+            say(b);
+            for (std::size_t k = 0; k < 3; ++k) t[k] += a[k];
+        }
+        std::snprintf(b, sizeof b, "  F2B GOLD %-4s %-13s %4d/%-4d %.3f [%.3f, %.3f] coarse %d", h ? "test" : "dev", "TOTAL", t[0], t[1],
+                      t[1] ? static_cast<double>(t[0]) / t[1] : 0.0, ecs::wilson_lower(t[0], t[1]), ecs::wilson_upper(t[0], t[1]), t[2]);
+        say(b);
+    }
+    std::snprintf(b, sizeof b, "\nF2B EVIDENCE admitted %d | two or more evidence items %d (%.3f) | grade Moderate or better %d", adm, adm2,
+                  adm ? static_cast<double>(adm2) / adm : 0.0, admmod);
+    say(b);
+    for (auto& [r, e] : evr) {
+        std::snprintf(b, sizeof b, "  F2B EVIDENCE %-13s admitted %5d | >= 2 items %5d | >= Moderate %5d", kRel[r].name, e[0], e[1], e[2]);
+        say(b);
+    }
+}
+
+
+// pattern_learn --f2b-selftest: the F2b key rules on built sentences (pattern_learn is not a CMake target, so this is not a CTest).
+int selftest() {
+    int fails = 0, checks = 0;
+    auto check = [&](bool ok, const string& what) { ++checks; if (!ok) { ++fails; std::fprintf(stderr, "F2B SELFTEST FAIL: %s\n", what.c_str()); } };
+    auto sent = [](const string& text) {
+        vector<Tok> T;
+        vector<Lnk> L;
+        tokenize_line(text, T, L);
+        vector<Sent> out;
+        int si = 0;
+        make_sentences(T, L, 0, out, si);
+        return out.empty() ? Sent{} : out[0];
+    };
+    auto tok_at = [](const Sent& s, const string& w) { for (std::size_t i = 0; i < s.t.size(); ++i) if (s.t[i].w == w) return static_cast<int>(i); return -1; };
+    vector<string> k;
+    // exact keys equal make_keys' for [S]
+    {
+        const Sent s = sent("Foo was born in Paris in 1950 .");
+        Span S{0, 1, false};
+        std::array<string, 4> mk;
+        bool sf;
+        const int ob = tok_at(s, "paris");
+        check(make_keys(s, S, ob, ob + 1, mk, sf) && f2b_keys(s, 0, 1, "[S]", ob, ob + 1, false, k) && k.size() == 4 &&
+              k[0] == mk[0] && k[1] == mk[1] && k[2] == mk[2] && k[3] == mk[3], "exact keys equal make_keys");
+        check(k[0] == "[S] was born in [O]", "exact core");
+    }
+    // wildcard mode 1: the three novel wordings share one core; mode 2 keeps only the last two
+    g_f2b_wild = 1;
+    {
+        const char* txt[3] = {"Foo is a novel by Bar Baz .", "Foo is a 1957 novel by Bar Baz .", "Foo is a science fiction novel by Bar Baz ."};
+        for (const char* t : txt) {
+            const Sent s = sent(t);
+            const int ob = tok_at(s, "bar");
+            check(f2b_keys(s, 0, 1, "[S]", ob, ob + 2, true, k) && k[0] == "[S] is <*> novel by [O]", string("wild 1: ") + t);
+        }
+        const Sent s = sent("Foo is by Bar Baz .");  // gap of 2: no wildcard key
+        check(!f2b_keys(s, 0, 1, "[S]", 3, 5, true, k), "wild 1 needs a gap of 4");
+    }
+    g_f2b_wild = 2;
+    {
+        const Sent s = sent("Foo was a novel by Bar Baz .");
+        const int ob = tok_at(s, "bar");
+        check(f2b_keys(s, 0, 1, "[S]", ob, ob + 2, true, k) && k[0] == "[S] <*> novel by [O]", "wild 2 core");
+        const Sent s2 = sent("Foo by Bar Baz now .");
+        check(!f2b_keys(s2, 0, 1, "[S]", 2, 4, true, k), "wild 2 needs a gap of 3");
+    }
+    g_f2b_wild = 0;
+    // object first, link subject second: "[O] is the capital of [L]"
+    {
+        const Sent s = sent("Luanda is the capital of [[Angola]] .");
+        const int lb = tok_at(s, "angola");
+        check(f2b_keys(s, lb, lb + 1, "[L]", 0, 1, false, k) && k[0] == "[O] is the capital of [L]" && k[2] == "^ [O] is the capital of [L]",
+              "orientation and context");
+        check(family_of(k[3]) == "[O] is the capital of [L]", "family with [L]");
+    }
+    // word classes: content words become classes, stop words and digits stay
+    g_f2b_class = {{"novel", "C7"}, {"science", "C3"}, {"fiction", "C3"}, {"is", "C1"}, {"by", "C9"}};
+    {
+        const Sent s = sent("Foo is a science fiction novel by Bar Baz .");
+        const int ob = tok_at(s, "bar");
+        check(f2b_keys(s, 0, 1, "[S]", ob, ob + 2, true, k) && k[0] == "[S] C1 a C3 C3 C7 by [O]", "classes in the gap");
+        const Sent s2 = sent("Foo is a 1957 novel by Bar Baz .");
+        check(f2b_keys(s2, 0, 1, "[S]", tok_at(s2, "bar"), tok_at(s2, "bar") + 2, true, k) && k[0] == "[S] C1 a # C7 by [O]", "digits stay");
+    }
+    g_f2b_class.clear();
+    check(!f2b_gen_on(), "generalised keys off again");
+    // titles and redirects
+    check(f2b::norm_title("foo_bar  baz") == "Foo bar baz", "norm_title");
+    {
+        std::unordered_map<string, int> po = {{"Angola", 3}};
+        f2b::g_redir = {{"Republic of Angola", "Angola"}, {"Angolan republic", "Republic of Angola"}, {"Loop", "Loop"}};
+        check(f2b::resolve("angola", po) == 3 && f2b::resolve("Republic_of_Angola", po) == 3 && f2b::resolve("Angolan republic", po) == 3,
+              "resolve through redirects");
+        check(f2b::resolve("Loop", po) == -1 && f2b::resolve("Nowhere", po) == -1, "unresolved targets");
+        f2b::g_redir.clear();
+    }
+    std::printf("f2b selftest: %d checks, %d failed\n", checks, fails);
+    return fails ? 1 : 0;
+}
+
+}  // namespace f2b
 
 // ============================================================ S6: scoring a planted set (docs/reports/S6_HYPOTHESIS_SCORING.md)
 //
@@ -11552,6 +11978,7 @@ int main(int argc, char** argv) {
     if (argc >= 2 && string(argv[1]) == "--gen-anomaly") return s11c::run_anomaly(argc, argv);  // S11c (G13 anomalies, G3 abduction)
     if (argc >= 2 && string(argv[1]) == "--gen-analogy") return s11c::run_analogy(argc, argv);  // S11c (G4 and G5 analogy)
     if (argc >= 2 && string(argv[1]) == "--pool-grade") return s11c::run_grade(argc, argv);  // S11c (a pool after the source stage)
+    if (argc >= 2 && string(argv[1]) == "--f2b-selftest") return f2b::selftest();  // F2b (key rules)
     if (argc >= 4 && string(argv[1]) == "--wilson") {
         double k = std::atof(argv[2]), n = std::atof(argv[3]);
         std::printf("%.0f/%.0f = %.3f  Wilson95 [%.3f, %.3f]\n", k, n, n > 0 ? k / n : 0.0, ecs::wilson_lower(k, n), ecs::wilson_upper(k, n));
@@ -11565,6 +11992,7 @@ int main(int argc, char** argv) {
                              "         [--frontier FILE [--frontier-test] [--frontier-split B]]\n"
                              "         [--signals DIR [--signals-dolly PAGES.xml] [--surprise SCORES.tsv,...] [--signals-gaps FILE]\n"
                              "          [--signals-scope dev|test|u-dev [--signals-plain PAGES.xml] [--signals-vec FILE]]]\n"
+                             "         [--f2b-xa] [--f2b-wild 1|2] [--f2b-classes FILE] [--f2b-gold-split] [--f2b-read-test]\n"
                              "       pattern_learn --wilson K N\n");
         return 2;
     }
@@ -11608,7 +12036,15 @@ int main(int argc, char** argv) {
         else if (a == "--signals-scope" && i + 1 < argc) A.signals.scope = argv[++i];  // S4c: dev | test; S4b-b: u-dev
         else if (a == "--signals-plain" && i + 1 < argc) A.signals.plain = argv[++i];
         else if (a == "--signals-vec" && i + 1 < argc) A.signals.vec = argv[++i];
+        else if (a == "--f2b-xa") f2b::g_xa = true;  // F2b: cross-article reading
+        else if (a == "--f2b-wild" && i + 1 < argc) g_f2b_wild = std::atoi(argv[++i]);
+        else if (a == "--f2b-classes" && i + 1 < argc) {
+            if (!f2b::load_classes(argv[++i])) { std::fprintf(stderr, "cannot read %s\n", argv[i]); return 1; }
+        }
+        else if (a == "--f2b-gold-split") f2b::g_gold_split = true;
+        else if (a == "--f2b-read-test") f2b::g_gold_split = f2b::g_read_test = true;
     }
+    if (g_raw && (f2b::g_xa || f2b_gen_on())) { std::fprintf(stderr, "--f2b-xa, --f2b-wild and --f2b-classes read cleaned tokens, not --raw\n"); return 2; }
     if (!A.reach.empty() && A.shard.dev.empty()) { std::fprintf(stderr, "--reach needs --dev\n"); return 2; }
     if (!A.frontier.path.empty() && A.gaps.path.empty()) { std::fprintf(stderr, "--frontier needs --gaps\n"); return 2; }
     if (!A.shard.join.empty() && A.shard.path.empty()) { std::fprintf(stderr, "--join needs --shard\n"); return 2; }
@@ -11658,6 +12094,11 @@ int main(int argc, char** argv) {
     }
     say("pass 1 (seeds, types): " + std::to_string(now_s() - t1) + " s; place pages " + std::to_string(g_place.size()) + ", person pages " + std::to_string(g_person.size()) +
         ", lexicon strings " + std::to_string(g_lex.size()));
+    if (f2b::g_xa) {  // F2b
+        f2b::load_redirects(data);
+        say("F2B cross-article reading: redirects " + std::to_string(f2b::g_redir.size()));
+    }
+    if (f2b_gen_on()) say("F2B generalised gaps: wildcard mode " + std::to_string(g_f2b_wild) + ", word classes " + std::to_string(g_f2b_class.size()));
 
     // seed table
     {
@@ -11693,6 +12134,7 @@ int main(int argc, char** argv) {
             auto pit = page_of.find(kv.first);
             if (pit != page_of.end()) train_page(data, pages[static_cast<std::size_t>(pit->second)], kv.second, tm);
         }
+        if (f2b::g_xa) f2b::xa_pass(0, data, pages, page_of, A.folds, fold, &tm, nullptr);  // F2b
         g_pats.clear();
         g_patmap.clear();
         for (auto& kv : tm) {
@@ -11713,6 +12155,7 @@ int main(int argc, char** argv) {
             auto pit = page_of.find(kv.first);
             if (pit != page_of.end()) eval_page(data, pages[static_cast<std::size_t>(pit->second)], local);
         }
+        if (f2b::g_xa) f2b::xa_pass(1, data, pages, page_of, A.folds, fold, nullptr, &local);  // F2b
         for (const Pat& p : g_pats) {
             PStat& st = stat[std::to_string(p.rel) + "\t" + p.key];
             if (fold == 0 || A.cv) { st.train_subj += p.train_subj; st.train_sent += p.train_sent; }
@@ -11798,6 +12241,7 @@ int main(int argc, char** argv) {
         if (lt.compare(0, 8, "list of ") == 0 || lt.find("(disambiguation)") != npos) continue;
         extract_page(data, pg);
     }
+    if (f2b::g_xa) f2b::xa_pass(2, data, pages, page_of, A.folds, 0, nullptr, nullptr);  // F2b
     say("pass 4 (extraction over all " + std::to_string(pages.size()) + " articles): " + std::to_string(now_s() - t4) + " s; raw new facts " + std::to_string(g_new.size()));
     vector<Fused> fused = fuse_all();
 
@@ -11849,7 +12293,10 @@ int main(int argc, char** argv) {
             sm << (k + 1) << '\t' << fu.f->subj << '\t' << kRel[fu.f->rel].name << '\t' << fu.f->surf << '\t' << fu.op.P << '\t' << fu.best_pattern << '\t' << fu.f->snippet << '\n';
         }
     }
-    if (!g_gold.empty()) score_gold(fused, A.outdir, say);
+    if (!g_gold.empty()) {
+        if (f2b::g_gold_split) f2b::score_halves(fused, A.outdir, say);  // F2b: gold-dev, and gold-test only with --f2b-read-test
+        else score_gold(fused, A.outdir, say);
+    }
     string shard_text;
     int exit_code = A.shard.path.empty() ? 0 : write_shard(A.shard, fused, pages, page_of, say, &shard_text);
     if (!A.reach.empty()) reach_report(cand_all, data, A.shard.holdout_from, A.shard.dev, A.reach, shard_text, say);
