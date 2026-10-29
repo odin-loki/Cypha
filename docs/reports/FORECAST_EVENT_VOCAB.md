@@ -66,3 +66,53 @@ Every candidate gives a distribution over the 842 ids, renormalised over valid i
 | F5 | Unmasked samples from the trained hp_pair model are invalid less than 1% of the time |
 | F6 | ngram trains and scores at least 100 times faster per event than hp_pair, and peaks under 100 MB |
 | F7 | The chosen candidate's top-1 accuracy on test is between 0.10 and 0.30 |
+
+## Results on dev (2026-10-29)
+
+Tool: `forecast_vocab_bench` at commit a18b16d. Train 200,000 events, dev 40,000, every candidate in its own process. The machine was shared (load average 25 to 35 on 4 cores), so times are slower than on a quiet machine.
+
+| Candidate | Bits per event [95%] | Minus ngram order 2 [95%] | Top-1 | Brier | ECE | Raw draws invalid | Train, µs per event | Score, µs per event | Peak |
+|---|---|---|---|---|---|---|---:|---:|---:|
+| uniform | 9.7177 | +6.1631 | 0.000 | 0.999 | 0.001 | 0 | 0 | 1 | 56 MB |
+| unigram (ngram order 1) | 4.6860 [4.6051, 4.7688] | +1.1315 [+1.0660, +1.2002] | 0.203 | 0.926 | 0.019 | 0 | 0.3 | 1.3 | 56 MB |
+| **ngram order 2** | **3.5546 [3.4947, 3.6128]** | — | 0.409 | 0.795 | 0.028 | 0 | 0.3 | 1.6 | 56 MB |
+| ngram order 3 | 3.6102 [3.5446, 3.6732] | +0.0556 [+0.0472, +0.0647] | 0.402 | 0.801 | 0.029 | 0 | 0.8 | 2.8 | 56 MB |
+| ngram order 4 | 3.7296 [3.6580, 3.7985] | +0.1750 [+0.1615, +0.1887] | 0.379 | 0.819 | 0.032 | 0 | 1.9 | 3.8 | 56 MB |
+| **hp_pair** | **3.5555 [3.4928, 3.6173]** | **+0.0009 [−0.0117, +0.0122]** | 0.395 | 0.802 | 0.052 | 0.006 | 608 | 2,493 | 297 MB |
+| hp_base256 | 3.5873 [3.5254, 3.6479] | +0.0327 [+0.0203, +0.0431] | 0.388 | 0.808 | 0.058 | 0.005 | 477 | 3,373 | 297 MB |
+| hp_theater | 3.5756 [3.5117, 3.6372] | +0.0211 [+0.0087, +0.0319] | 0.405 | 0.801 | 0.058 | 0.003 | 682 | 3,474 | 1,283 MB |
+
+- Top-1, Brier and ECE are on every 20th dev event (2,000). Masked samples: 0 invalid of 10,000 for every candidate.
+- **Context matters a lot:** one event of context takes unigram's 4.69 bits to 3.55. Consecutive GDELT events often come from the same article and share actors and theater. More context than one event hurts the counts (order 3, order 4).
+- **hp_pair and ngram order 2 tie.** The difference is 0.0009 bits per event, with an interval across 0.
+- **Codes with meaning help hp a little:** hp_pair beats hp_base256 by 0.032 bits per event, and splitting streams by theater costs 0.020.
+
+### The dev choice (rule 1)
+
+- ngram's order: 2 (lowest of 2, 3 and 4).
+- The lowest overall is ngram order 2. hp_pair is within 0.02 bits per event of it, so **rule 1 chooses hp_pair**: it keeps the forecast on CyphaLM's model.
+
+### Fitness (rule 2), on the repo's data
+
+| Pipeline | Peak RSS | CPU time | Wall time (load 27 to 35) |
+|---|---:|---:|---:|
+| main (reads every event as one token) | 919 MB | — | 37 s |
+| hp_pair at table bits 18 (as measured; the new default) | **292 MB** | about 60 s | 272 to 315 s |
+| hp_pair at the production recipe's 22 bits | 1,219 MB | 69 s | 506 s |
+
+- The registered hp configuration for every candidate was table bits 18, so the pipeline adopts hp_pair as measured: bits 18 (`forecast_event_model_default`). It peaks at 292 MB, below main's pipeline, and gives the same outputs as the 22-bit model on the repo's data.
+- 0 invalid of 10,000 masked samples.
+- **Time:** about 60 s of CPU, inside the smoke test's 300 s limit. On this loaded machine the wall time came near the limit. The cost is the rollout tree: each new node takes the full 842-way distribution, which for hp_pair is 44 hp branches (693 nodes on the repo's data). Main's tree had 34 nodes, because every event was one token.
+- At the production recipe's 22 bits the pipeline would peak at 1,219 MB, over the registered 1.2 GB. That configuration is not adopted.
+
+### Predictions scored on dev
+
+| # | Prediction | Result |
+|---|---|---|
+| F1 | hp_pair and ngram within 0.15 bits per event; ngram the lower | **Hit:** 0.0009 apart; ngram order 2 the lower |
+| F2 | hp_pair beats hp_base256 by at least 0.05 | **Miss:** by 0.033 |
+| F3 | hp_theater worse than hp_pair by at least 0.05 | **Miss:** worse by 0.020 |
+| F4 | Context models beat unigram by at least 0.1; unigram beats uniform by at least 3 | **Hit:** by 0.96 to 1.13; by 5.03 |
+| F5 | Unmasked samples from trained hp_pair invalid under 1% | **Hit:** 0.6% |
+| F6 | ngram at least 100 times faster than hp_pair, under 100 MB | **Hit:** about 2,000 times faster to train and 1,500 times to score; 56 MB |
+| F7 | The chosen candidate's top-1 on test is 0.10 to 0.30 | Scored at the test read |

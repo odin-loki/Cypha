@@ -16,13 +16,22 @@
 
 namespace cypha::forecast {
 
+/// The forecast's sequence model, chosen on dev by FORECAST_EVENT_VOCAB.md's registered rule (2026-10-29): hp_pair
+/// (each event as two CyphaLM bytes, theater x level then CAMEO root) at hp table bits 18, as it was measured.
+inline EventModelConfig forecast_event_model_default() {
+  EventModelConfig c;
+  c.kind = "hp_pair";
+  c.hp_table_bits = 18;
+  return c;
+}
+
 struct ForecastPipelineConfig {
   NodeEstimatorConfig node_cfg;
   RolloutTreeConfig tree_cfg;
   TheaterModelConfig theater_cfg;
   int sequence_epochs{2};
   /// The sequence model over all 842 event ids (FORECAST_EVENT_VOCAB.md: decided by measurement, 2026-10-29).
-  EventModelConfig model_cfg{};
+  EventModelConfig model_cfg{forecast_event_model_default()};
 };
 
 struct ForecastPipelineResult {
