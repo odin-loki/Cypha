@@ -288,6 +288,63 @@ void Cypha::apply_default_hparams() {
   tsp_.temp_recalib_every = 0;
 }
 
+void Cypha::reset_ood_threshold() {
+  ood_target_ = 0.05;
+  ood_h_.clear();
+  ood_count_ = 0;
+  ood_head_ = 0;
+  ood_tau_ = kOodThreshold;
+  ood_dirty_ = false;
+}
+
+void Cypha::set_ood_target_rate(double rate) {
+  if (!(rate > 0.0 && rate < 1.0)) {
+    throw std::invalid_argument("Cypha::set_ood_target_rate: the rate must be in (0, 1)");
+  }
+  ood_target_ = rate;
+  ood_dirty_ = true;
+}
+
+void Cypha::record_ood_latent(const std::vector<double>& h) {
+  const std::size_t d = h.size();
+  for (double v : h) {
+    if (!std::isfinite(v)) {
+      return;
+    }
+  }
+  if (ood_count_ < kOodWindow) {
+    ood_h_.insert(ood_h_.end(), h.begin(), h.end());
+    ++ood_count_;
+  } else {
+    std::copy(h.begin(), h.end(), ood_h_.begin() + static_cast<std::ptrdiff_t>(ood_head_ * d));
+    ood_head_ = (ood_head_ + 1) % kOodWindow;
+  }
+  ood_dirty_ = true;
+}
+
+double Cypha::ood_threshold() const {
+  if (ood_count_ < kOodMinScores || !infer_) {
+    return kOodThreshold;
+  }
+  if (ood_dirty_ || !(ood_tau_chi_ == gh_chi_) || !(ood_tau_psi_ == gh_psi_)) {
+    // Score every held latent with the model as it is now, then take the (1 - target) empirical quantile:
+    // s[ceil((1 - target) n) - 1] of the sorted scores, so at most a share ``target`` of them lies above it.
+    const std::size_t d = static_cast<std::size_t>(infer_->d_latent);
+    std::vector<double> v(ood_count_);
+    for (std::size_t r = 0; r < ood_count_; ++r) {
+      v[r] = gh_anomaly_score_at_h(*infer_, ood_h_.data() + r * d, gh_chi_, gh_psi_);
+    }
+    const double pos = std::ceil((1.0 - ood_target_) * static_cast<double>(ood_count_));
+    const std::size_t k = std::min(ood_count_ - 1, static_cast<std::size_t>(std::max(pos, 1.0)) - 1);
+    std::nth_element(v.begin(), v.begin() + static_cast<std::ptrdiff_t>(k), v.end());
+    ood_tau_ = v[k];
+    ood_tau_chi_ = gh_chi_;
+    ood_tau_psi_ = gh_psi_;
+    ood_dirty_ = false;
+  }
+  return ood_tau_;
+}
+
 bool Cypha::load_ff_json(const std::string& path, int d, int fd, std::vector<double>& out) const {
   if (path.empty()) {
     return false;
@@ -436,6 +493,13 @@ CNode Cypha::export_save_state(const CyphaInferModel& m) const {
   ses.map.emplace_back("ewc_lambda", cn_f64(ewc_lambda_));
   ses.map.emplace_back("last_active_query_score", cn_f64(last_active_query_score_));
   ses.map.emplace_back("rng", cn_str(rng_to_string(rng_)));
+  ses.map.emplace_back("ood_target", cn_f64(ood_target_));
+  ses.map.emplace_back("ood_count", cn_i64(static_cast<std::int64_t>(ood_count_)));
+  ses.map.emplace_back("ood_head", cn_i64(static_cast<std::int64_t>(ood_head_)));
+  if (ood_count_ > 0) {
+    ses.map.emplace_back("ood_latents", cn_tensor(ood_h_, {static_cast<std::uint32_t>(ood_count_),
+                                                           static_cast<std::uint32_t>(m.d_latent)}));
+  }
   {
     const intelligence::NigStatisticState::Raw r = epistemic_threshold_.state().raw();
     CNode ep = cn_map();
@@ -558,6 +622,24 @@ void Cypha::import_save_state(const CNode& st) {
   ewc_lambda_ = get_num(ses, "ewc_lambda");
   last_active_query_score_ = get_num(ses, "last_active_query_score");
   rng_from_string(get_str(ses, "rng"), rng_);
+  if (const CNode* ot = map_get(ses, "ood_target"); ot != nullptr && ot->kind != CNode::Nil) {
+    const double target = cn_num(*ot, "ood_target");
+    const std::int64_t count = get_int(ses, "ood_count");
+    const std::int64_t head = get_int(ses, "ood_head");
+    std::vector<double> lat = get_vec(ses, "ood_latents");
+    const std::size_t d = static_cast<std::size_t>(infer_->d_latent);
+    const std::int64_t window = static_cast<std::int64_t>(kOodWindow);
+    if (!(target > 0.0 && target < 1.0) || count < 0 || count > window || head < 0 ||
+        (count < window && head != 0) || (count == window && head >= window) ||
+        lat.size() != static_cast<std::size_t>(count) * d) {
+      throw std::runtime_error("Cypha::load: bad OOD threshold state in cypha_save_state");
+    }
+    ood_target_ = target;
+    ood_count_ = static_cast<std::size_t>(count);
+    ood_head_ = static_cast<std::size_t>(head);
+    ood_h_ = std::move(lat);
+    ood_dirty_ = true;
+  }
   {
     const CNode& ep = get_map(ses, "epistemic_threshold");
     intelligence::NigStatisticState::Raw r;
@@ -653,6 +735,7 @@ bool Cypha::load(const std::string& cypha_path, const std::string& preprocessor_
                  const std::string& f_field_json_path, const std::string& regression_json_path,
                  const std::string& train_hparams_path) {
   apply_default_hparams();
+  reset_ood_threshold();
   reg_mu_.clear();
   reg_var_.clear();
   clear_mke();
@@ -998,7 +1081,7 @@ PredictOut Cypha::predict(const double* x_in, int n, const PredictOpts& o) {
     llr_for_scores = std::move(gh.llrs);
     // Pair r_eff with the baseline it was formed against, not with mahal_ema (different units).
     out.anomaly_score = gh_infer_anomaly_score(out.r_eff, gh.r_base);
-    out.is_ood = out.anomaly_score > kOodThreshold;
+    out.is_ood = out.anomaly_score > ood_threshold();
   } else if (o.self_correct) {
     const auto scr = intelligence::self_correcting_infer_at_h(*infer_, H.data(), iopt, epistemic_threshold_,
                                                             o.self_correct_max_passes);
@@ -1117,6 +1200,13 @@ UpdateOut Cypha::update(const double* x_in, int n, const std::string* label, con
     replay_ = std::make_unique<ReplayBuffer>(tsp_.replay_cap);
   }
   TrainStepExtras extras{};
+  // Keep the row's latent, encoded before learning it (the training step writes it). The current model's scores on
+  // the last kOodWindow such latents set the OOD threshold (docs/reports/CYPHA_OOD_THRESHOLD.md).
+  std::vector<double> ood_latent;
+  const bool keep_ood_latent = !has_y && !mke_active_ && !infer_->labels.empty();
+  if (keep_ood_latent) {
+    extras.latent_out = &ood_latent;
+  }
   extras.total_steps = &total_steps_;
   extras.ood_sigma = &ood_sigma_;
   extras.llr_ema = &llr_ema_;
@@ -1171,6 +1261,9 @@ UpdateOut Cypha::update(const double* x_in, int n, const std::string* label, con
     out.loss = dif_train_step_vector(*infer_, *mem_, *replay_, x.data(), d, *label, world_lr_, delta_lr_,
                                      world_lr_, delta_lr_, ood_sigma_, tsp_, rng_, enc_updates_, nullptr,
                                      &extras);
+  }
+  if (keep_ood_latent && static_cast<int>(ood_latent.size()) == d) {
+    record_ood_latent(ood_latent);
   }
   return out;
 }

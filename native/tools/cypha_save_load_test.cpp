@@ -344,6 +344,11 @@ std::vector<std::string> state_diff(cypha::Cypha& a, cypha::Cypha& b) {
   s.d("gh_psi", a.gh_psi(), b.gh_psi());
   s.eq("rng", a.rng(), b.rng());
   s.d("active_query_score", a.active_query_score(), b.active_query_score());
+  s.v("ood_latents", a.ood_latents(), b.ood_latents());
+  s.eq("ood_rows_held", a.ood_rows_held(), b.ood_rows_held());
+  s.eq("ood_head", a.ood_head(), b.ood_head());
+  s.d("ood_target", a.ood_target_rate(), b.ood_target_rate());
+  s.d("ood_threshold", a.ood_threshold(), b.ood_threshold());
   {
     const auto ea = a.epistemic_threshold().state().raw();
     const auto eb = b.epistemic_threshold().state().raw();

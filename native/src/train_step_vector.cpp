@@ -71,6 +71,9 @@ double dif_train_step_vector(CyphaInferModel& infer, CyphaDifMemoryState& mem, R
 
   std::vector<double> H;
   batch_encode(infer, x_preprocessed, 1, H);
+  if (extras != nullptr && extras->latent_out != nullptr) {
+    *extras->latent_out = H;
+  }
 
   // Match Python `train_step`: `classes` includes `label` before `memory.train` when the class is new.
   std::vector<std::string> classes_for_ctx = mem.labels;

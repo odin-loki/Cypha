@@ -57,6 +57,9 @@ struct TrainStepExtras {
   /// D16 task-sticky CL: when set (e.g. ``"iris"``), zero repulsion/attraction scales for
   /// labels whose prefix before ``_`` does not match. Env: CYPHA_D16_TASK_STICKY=1.
   const std::string* task_prefix_protect{nullptr};
+  /// When non-null, ``dif_train_step_vector`` writes the row's latent here, encoded before the step learns anything
+  /// (``Cypha::update`` keeps it for the OOD threshold, docs/reports/CYPHA_OOD_THRESHOLD.md).
+  std::vector<double>* latent_out{nullptr};
 };
 
 /// `CyphaDIF.train_step` for `VectorEncoder`: memory → sync → replay.push → contrastive (if misclassified) → replay `memory.train` (unscaled lr).
