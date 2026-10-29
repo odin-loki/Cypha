@@ -107,6 +107,13 @@
 //   on S7's dev set and, once, on S15 dev's choose half; fragility of the v2 store (single points of failure, blast radius
 //   per source); hypothetical cards as data; I9 checked on every world. Bookkeeping only: it answers nothing.
 //
+// S10 (2026-10-29, docs/reports/S10_CURIOSITY_SCHEDULER.md):
+//   --schedule OUT --dev DIR S15_FILE [--gate DIR S15_FILE] [--gaps GAP_MAP]: the curiosity scheduler (curiosity.hpp:
+//   Thompson sampling, learning progress, floors, retirement) against the uniform scheduler, replayed on recorded P2
+//   pools (a fresh G2 set, a fresh G6/G7 set and their source stage). --gen-rules / --gen-links --fresh-test-half write
+//   the gate pool (S8d's construction on S15 test's bit-17 half); --sources --fresh writes each hypothesis's source
+//   tests run (*.s8d_fresh_ran.tsv). Scheduling only: it answers nothing.
+//
 // Build: g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp -o pattern_learn
 // Usage: pattern_learn <enwik8> <outdir> [--cv] [--folds K] [--min-train N] [--base-rate A] [--sample N] [--seed S]
 //          [--wikidata FILE [--wikidata-gold-only]] [--phi FILE] [--shard FILE --dev DEV --test TEST [--slice-end B] [--holdout-from B]]
@@ -121,6 +128,7 @@
 //
 // Author: Odin Loch
 
+#include "cypha/eval/curiosity.hpp"
 #include "cypha/eval/ecs.hpp"
 #include "cypha/eval/epistemic.hpp"
 #include "cypha/eval/gap_map.hpp"
@@ -6049,15 +6057,17 @@ vector<S15Row> load_s15(const string& path) {
 
 int run(int argc, char** argv) {
     if (argc < 9) {
-        std::fprintf(stderr, "usage: pattern_learn --gen-links ENWIK8 SEEDS.tsv FACTS_F2.tsv WD_VALUES.tsv PATTERNS.tsv S15_DIR OUT_PREFIX [--read-test] [--fresh-confirm]\n");
+        std::fprintf(stderr, "usage: pattern_learn --gen-links ENWIK8 SEEDS.tsv FACTS_F2.tsv WD_VALUES.tsv PATTERNS.tsv S15_DIR OUT_PREFIX [--read-test] [--fresh-confirm | --fresh-test-half]\n");
         return 2;
     }
     const double t0 = now_s();
     const string out = argv[8];
     bool read_test = false, fresh_confirm = false;  // --fresh-confirm: S8d's fresh G6/G7 set (docs/reports/S8D_PROMOTION.md)
+    bool fresh_test = false;  // --fresh-test-half: S10's gate set, the same on S15 test's bit-17 half (docs/reports/S10_CURIOSITY_SCHEDULER.md)
     for (int i = 9; i < argc; ++i) {
         if (string(argv[i]) == "--read-test") read_test = true;
         else if (string(argv[i]) == "--fresh-confirm") fresh_confirm = true;
+        else if (string(argv[i]) == "--fresh-test-half") fresh_test = true;
         else { std::fprintf(stderr, "unknown option %s\n", argv[i]); return 2; }
     }
     char b[1024];
@@ -6324,9 +6334,12 @@ int run(int argc, char** argv) {
         }
         // ---- S8d: the chosen generator on S15 dev's confirm-half slots with their facts hidden (docs/reports/S8D_PROMOTION.md).
         // S15's labels are not read. Priors by PROMO's isotonic map (fitted on its dev items only); tests T1, T6, T4.
-        if (fresh_confirm) {
+        // S10: --fresh-test-half takes the slots of S15 test's subjects with bit 17 = 1 instead.
+        if (fresh_confirm || fresh_test) {
+            const char* ftag = fresh_test ? "S10 FRESH" : "S8D FRESH";
+            const char* fslots = fresh_test ? "test-half (bit 17 = 1)" : "confirm-half";
             std::set<std::pair<string, string>> cslots;
-            for (const S15Row& x : load_s15(string(argv[7]) + "/temporal_holdout_dev.tsv"))
+            for (const S15Row& x : load_s15(string(argv[7]) + (fresh_test ? "/temporal_holdout_test.tsv" : "/temporal_holdout_dev.tsv")))
                 if (((fnv(x.s) >> 17) & 1) == 1 && rel_index(x.r) >= 0) cslots.insert({x.s, x.r});
             ecs::TripleStore fst;
             std::size_t held = 0;
@@ -6365,9 +6378,9 @@ int run(int argc, char** argv) {
             vector<LoopItem*> batch;
             for (LoopItem& h : fh) batch.push_back(&h);
             const LoopRead R = run_loop(batch, out + ".fresh_links.prereg.tsv");
-            std::snprintf(b, sizeof b, "S8D FRESH G6/G7 (generator %s) confirm-half slots %zu | store facts hidden %zu, reduced store %zu | slots whose subject is in "
+            std::snprintf(b, sizeof b, "%s G6/G7 (generator %s) %s slots %zu | store facts hidden %zu, reduced store %zu | slots whose subject is in "
                           "the store %zu | hypotheses %zu | supported %.0f, promoted after BH %.0f, refuted %.0f (no grade read) | log %zu entries verify %s",
-                          kGenName[chosen], cslots.size(), held, fst.size(), in_store, fh.size(), R.sup, R.pro, R.ref, R.log_entries, R.log_ok ? "ok" : "BROKEN");
+                          ftag, kGenName[chosen], fslots, cslots.size(), held, fst.size(), in_store, fh.size(), R.sup, R.pro, R.ref, R.log_entries, R.log_ok ? "ok" : "BROKEN");
             std::cout << b << "\n";
             std::ofstream ff(out + ".fresh_links.hyps.tsv");
             ff << "split\tsubject\trelation\tobject\tscore\tprior\tT1\tT6\tT4\tposterior\tstate\tpromoted\tpath\n";
@@ -7079,16 +7092,18 @@ long days_of(const Date& D) {  // days from civil (proleptic Gregorian), for the
 
 int run(int argc, char** argv) {
     if (argc < 9) {
-        std::fprintf(stderr, "usage: pattern_learn --gen-rules ENWIK8 SEEDS.tsv FACTS_F2.tsv WD_VALUES.tsv PATTERNS.tsv S15_DIR OUT_PREFIX [--read-test] [--fresh-confirm]\n");
+        std::fprintf(stderr, "usage: pattern_learn --gen-rules ENWIK8 SEEDS.tsv FACTS_F2.tsv WD_VALUES.tsv PATTERNS.tsv S15_DIR OUT_PREFIX [--read-test] [--fresh-confirm | --fresh-test-half]\n");
         return 2;
     }
     const double t0 = now_s();
     const string out = argv[8], s15dir = argv[7];
     bool read_test = false, fresh_confirm = false;  // --fresh-confirm: S8d's fresh G2 set (docs/reports/S8D_PROMOTION.md)
+    bool fresh_test = false;  // --fresh-test-half: S10's gate set, the same on S15 test's bit-17 half (docs/reports/S10_CURIOSITY_SCHEDULER.md)
     int t4_variant = 1;
     for (int i = 9; i < argc; ++i) {
         if (string(argv[i]) == "--read-test") read_test = true;
         else if (string(argv[i]) == "--fresh-confirm") fresh_confirm = true;
+        else if (string(argv[i]) == "--fresh-test-half") fresh_test = true;
         else if (string(argv[i]) == "--t4-pattern") t4_variant = 0;
         else {
             std::fprintf(stderr, "unknown option %s\n", argv[i]);
@@ -7346,9 +7361,11 @@ int run(int argc, char** argv) {
         }
         // ---- S8d: G2 on S15 dev's confirm-half slots with their facts hidden (docs/reports/S8D_PROMOTION.md). S15's labels
         // are not read; R1's plan and combination rule; T5 left out (Wikidata is what S15 grades against).
-        if (fresh_confirm) {
+        // S10: --fresh-test-half takes the slots of S15 test's subjects with bit 17 = 1 instead.
+        if (fresh_confirm || fresh_test) {
+            const string ftag = fresh_test ? "S10 FRESH" : "S8D FRESH";
             std::set<std::pair<string, string>> cslots;
-            for (const auto& R : load_s15(s15dir + "/temporal_holdout_dev.tsv"))
+            for (const auto& R : load_s15(s15dir + (fresh_test ? "/temporal_holdout_test.tsv" : "/temporal_holdout_dev.tsv")))
                 if (((fnv(R.s) >> 17) & 1) == 1 && rel_index(R.r) >= 0) cslots.insert({R.s, R.r});
             Facts fred;
             std::size_t held = 0;
@@ -7382,14 +7399,14 @@ int run(int argc, char** argv) {
                     fh.push_back(std::move(x));
                 }
             }
-            std::snprintf(b, sizeof b, "S8D FRESH G2 confirm-half slots %zu | store facts hidden %zu, reduced store %zu | slots whose subject is in the store %zu, "
-                          "with a rule candidate %zu | hypotheses %zu", cslots.size(), held, fst.size(), in_store, with_cand, fh.size());
+            std::snprintf(b, sizeof b, "%s G2 %s slots %zu | store facts hidden %zu, reduced store %zu | slots whose subject is in the store %zu, "
+                          "with a rule candidate %zu | hypotheses %zu", ftag.c_str(), fresh_test ? "test-half (bit 17 = 1)" : "confirm-half", cslots.size(), held, fst.size(), in_store, with_cand, fh.size());
             std::cout << b << "\n";
-            run_loop(fh, PL, "S8D FRESH G2", out + ".fresh_g2.prereg.tsv");
+            run_loop(fh, PL, ftag + " G2", out + ".fresh_g2.prereg.tsv");
             std::map<string, std::size_t> states;
             std::size_t promoted = 0;
             for (const Item& x : fh) ++states[x.state], promoted += x.promoted73;
-            string line = "S8D FRESH G2 states (no grade read):";
+            string line = ftag + " G2 states (no grade read):";
             for (const auto& [s, n] : states) line += " " + s + " " + std::to_string(n);
             std::cout << line << " | promoted (BH among supported) " << promoted << "\n";
             std::ofstream f(out + ".fresh_g2.hyps.tsv");
@@ -8604,7 +8621,7 @@ string item_key(const Hyp& h) { return src::norm_subject(h.s) + '\x1f' + h.r + '
 struct Stage {
     double p0 = 0, post = 0, e = 1;
     bool sup = false, ref = false;
-    int known = 0, graded = -1;
+    int known = 0, graded = -1, ran = 0;  // ran: source tests run before it left the queue (S10's cost)
     string by;
     TestOutcome o[kNSrc] = {TestOutcome::Inconclusive, TestOutcome::Inconclusive, TestOutcome::Inconclusive, TestOutcome::Inconclusive,
                             TestOutcome::Inconclusive};
@@ -8646,6 +8663,7 @@ vector<Stage> source_stage(const Sources& S, const vector<Hyp>& H, const Accepte
             if (hs.find(x.id)->state != ecs::HypState::Queued) break;
             hs.transition(x.id, ecs::HypState::UnderTest, "next source");
             hs.record_outcome(x.id, k, outs[k]);
+            ++z.ran;
         }
         const ecs::Hypothesis* hh = hs.find(x.id);
         z.post = hh->posterior, z.e = ecs::e_value(*hh);
@@ -8807,6 +8825,12 @@ void s8d(const Sources& S, const vector<Hyp>& hyps, const Accepted& accepted, co
     std::cout << b << "\n";
     const vector<Stage> st = source_stage(S, fresh, cal, carry, conf);
     const auto [g, t] = stage_report("FRESH", fresh, st, out + ".s8d_fresh.tsv");
+    {  // S10: the source tests each hypothesis ran (its cost), in the rows' order (docs/reports/S10_CURIOSITY_SCHEDULER.md)
+        std::ofstream rf(out + ".s8d_fresh_ran.tsv");
+        rf << "generator\tsubject\trelation\tobject\tsources_run\n";
+        for (std::size_t i = 0; i < fresh.size(); ++i)
+            rf << fresh[i].gen << '\t' << fresh[i].s << '\t' << fresh[i].r << '\t' << fresh[i].o << '\t' << st[i].ran << '\n';
+    }
     std::snprintf(b, sizeof b, "S8D GATE (fresh, supported, each distinct once): graded %.0f, precision %.3f [%.3f, %.3f] -> %s", g, g > 0 ? t / g : 0.0,
                   ecs::wilson_lower(t, g), ecs::wilson_upper(t, g), g >= 20 && t / g >= 0.9 ? "MET" : "NOT MET");
     std::cout << b << "\n";
@@ -9125,6 +9149,435 @@ int run(int argc, char** argv) {
 
 }  // namespace s8c
 
+// ============================================================ S10 (docs/reports/S10_CURIOSITY_SCHEDULER.md)
+// --schedule OUT --dev DIR S15_FILE [--gate DIR S15_FILE] [--gaps GAP_MAP] [--draws N] [--draws-dev N] [--seeds K]:
+// DISCOVERY 9's curiosity scheduler (curiosity.hpp) against the uniform scheduler, replayed on recorded P2 pools. A
+// pool DIR holds a fresh G2 set and a fresh G6/G7 set (s8a.fresh_g2.*, s8b.fresh_links.*: hypotheses and their
+// pre-registration logs) and their source stage (src.s8d_fresh.tsv, src.s8d_fresh_ran.tsv from --sources --fresh).
+// Graded by S15_FILE's rows for subjects with bit 17 = 1; the gate pool is graded only with --gate (read once).
+// Scheduling only: it answers nothing.
+namespace s10 {
+namespace cur = cypha::eval::curiosity;
+
+struct Meta {
+    string gen, group, s, r, o;
+};
+
+struct Pool {
+    vector<cur::PoolItem> items;
+    vector<Meta> meta;
+    double total_cost = 0, impact_max = 1;
+    std::size_t slots = 0, min_cost_guard = 0, demand_items = 0;
+};
+
+struct ArmSet {
+    vector<cur::Arm> arms;
+    std::map<string, int> id;
+    int get(const string& gen, const string& group, ecs::Tier t) {
+        const string name = gen + " " + group + " " + ecs::tier_name(t);
+        const auto it = id.find(name);
+        if (it != id.end()) return it->second;
+        cur::Arm a;
+        a.name = name, a.generator = gen, a.tier = t;
+        arms.push_back(a);
+        return id[name] = static_cast<int>(arms.size() - 1);
+    }
+};
+
+// Results recorded per hypothesis in a pre-registration log (the number after the id's last '-' is its row).
+vector<int> prereg_results(const string& path) {
+    vector<int> n;
+    std::ifstream f(path);
+    string l;
+    while (std::getline(f, l)) {
+        const auto c = split(l, '\t');
+        if (c.size() < 3 || c[1] != "result") continue;
+        const auto pos = c[2].rfind('-');
+        if (pos == string::npos) continue;
+        const std::size_t i = std::strtoul(c[2].c_str() + pos + 1, nullptr, 10);
+        if (n.size() <= i) n.resize(i + 1, 0);
+        ++n[i];
+    }
+    return n;
+}
+
+struct TsvTable {
+    vector<string> head;
+    vector<vector<string>> rows;
+    std::size_t col(const char* name) const {
+        const auto it = std::find(head.begin(), head.end(), string(name));
+        if (it == head.end()) throw std::runtime_error(string("missing column ") + name);
+        return static_cast<std::size_t>(it - head.begin());
+    }
+};
+TsvTable read_tsv(const string& path) {
+    TsvTable t;
+    std::ifstream f(path);
+    if (!f) throw std::runtime_error("cannot read " + path);
+    string l;
+    std::getline(f, l);
+    t.head = split(l, '\t');
+    while (std::getline(f, l))
+        if (!l.empty()) t.rows.push_back(split(l, '\t'));
+    return t;
+}
+
+// A recorded pool. `grade` false: every item ungraded (the gate pool before its read).
+Pool load_pool(const string& dir, const string& s15_file, bool grade, const std::map<std::pair<string, string>, double>& demand, ArmSet& A) {
+    Pool P;
+    const TsvTable st = read_tsv(dir + "/src.s8d_fresh.tsv"), ran = read_tsv(dir + "/src.s8d_fresh_ran.tsv");
+    const TsvTable g2 = read_tsv(dir + "/s8a.fresh_g2.hyps.tsv"), lk = read_tsv(dir + "/s8b.fresh_links.hyps.tsv");
+    const vector<int> g2n = prereg_results(dir + "/s8a.fresh_g2.prereg.tsv"), lkn = prereg_results(dir + "/s8b.fresh_links.prereg.tsv");
+    if (st.rows.size() != ran.rows.size() || st.rows.size() != g2.rows.size() + lk.rows.size())
+        throw std::runtime_error("pool " + dir + ": the stage, cost and hypothesis files do not line up");
+    s8c::Grader G;
+    if (grade)
+        for (const s8c::Row& x : s8c::load_s15(s15_file))
+            if (!s8c::choose_half(x.s)) G.add(x);  // bit 17 = 1
+    const std::size_t cg = st.col("generator"), cs = st.col("subject"), cr = st.col("relation"), co = st.col("object"),
+                      cps = st.col("posterior_src"), csup = st.col("supported"), crun = ran.col("sources_run");
+    std::set<std::pair<string, string>> slots;
+    std::size_t i2 = 0, il = 0;
+    for (std::size_t i = 0; i < st.rows.size(); ++i) {
+        const auto& row = st.rows[i];
+        const bool is_g2 = row[cg] == "G2-fresh";
+        const TsvTable& H = is_g2 ? g2 : lk;
+        const std::size_t k = is_g2 ? i2++ : il++;
+        if (k >= H.rows.size()) throw std::runtime_error("pool " + dir + ": more stage rows than hypotheses");
+        const auto& h = H.rows[k];
+        if (h[H.col("subject")] != row[cs] || h[H.col("relation")] != row[cr] || h[H.col("object")] != row[co] ||
+            ran.rows[i][ran.col("subject")] != row[cs] || ran.rows[i][ran.col("object")] != row[co])
+            throw std::runtime_error("pool " + dir + ": row " + std::to_string(i) + " does not match");
+        Meta m;
+        m.gen = is_g2 ? "G2" : "G6/G7", m.group = s8c::group_of(row[cr]), m.s = row[cs], m.r = row[cr], m.o = row[co];
+        cur::PoolItem it;
+        it.prior = std::atof(h[is_g2 ? H.col("P0") : H.col("prior")].c_str());
+        it.posterior = std::atof(row[cps].c_str());
+        it.supported = row[csup] == "1";
+        const vector<int>& gn = is_g2 ? g2n : lkn;
+        const double cost = (k < gn.size() ? gn[k] : 0) + std::atof(ran.rows[i][crun].c_str());
+        if (cost < 1) ++P.min_cost_guard;
+        it.cost = std::max(1.0, cost);
+        const auto dit = demand.find({m.s, m.r});
+        it.demand = dit == demand.end() ? 0.0 : dit->second;
+        P.demand_items += it.demand > 0;
+        it.impact = ecs::hypothesis_impact(1.0, 0.0, it.demand);
+        it.reward = cur::pull_reward(it.supported, it.impact, it.prior, it.posterior);
+        it.bits = cur::bits_removed(it.prior, it.posterior);
+        it.arm = A.get(m.gen, m.group, ecs::tier_of(it.prior));
+        it.graded = grade ? G.grade(m.s, m.r, cypha::eval::sources::make_value(m.o)) : -1;
+        P.total_cost += it.cost, P.impact_max = std::max(P.impact_max, it.impact);
+        slots.insert({m.s, m.r});
+        P.items.push_back(it), P.meta.push_back(m);
+    }
+    P.slots = slots.size();
+    return P;
+}
+
+struct Config {
+    string name;
+    cur::WithinArm order = cur::WithinArm::Random;
+    double lp = 0;
+};
+
+cur::SchedulerConfig uniform_cfg() {
+    cur::SchedulerConfig c;
+    c.policy = cur::Policy::Uniform, c.floors = false, c.retire = false;
+    return c;
+}
+cur::SchedulerConfig s10_cfg(const Config& k, bool retire = true) {
+    cur::SchedulerConfig c;
+    c.policy = cur::Policy::Thompson, c.lp_weight = k.lp, c.retire = retire;
+    return c;
+}
+
+// One draw's pooled reads (over its seeds) for one policy.
+struct Read {
+    double value = 0, cost = 0, graded = 0, graded_false = 0, brier = 0, promoted = 0, pulls = 0;
+    void add(const cur::ReplayResult& r) {
+        value += r.value, cost += r.cost, graded += r.graded, graded_false += r.graded_false, brier += r.brier, promoted += r.promoted, pulls += r.pulls;
+    }
+    double V() const { return cost > 0 ? 1000.0 * value / cost : 0.0; }
+    double fdr() const { return graded > 0 ? graded_false / graded : -1.0; }
+    double brier_mean() const { return graded > 0 ? brier / graded : -1.0; }
+};
+
+struct DrawSet {
+    vector<Read> u, s;
+    vector<double> arm_pulls_u, arm_pulls_s, arm_prom_u, arm_prom_s;
+    double retired_runs = 0, s_seconds = 0, s_pulls = 0;
+    std::map<string, double> retired_arms;
+};
+
+// draws x seeds replays of U and one S10 configuration on stratified bootstraps of the pool, at budget f x total cost.
+// draws = 0: the pool itself, no bootstrap (one "draw").
+DrawSet run_draws(const Pool& P, const ArmSet& A, const Config& k, double f, std::size_t draws, std::size_t seeds, std::uint64_t base,
+                  bool retire = true) {
+    DrawSet D;
+    const std::size_t na = A.arms.size();
+    D.arm_pulls_u.assign(na, 0), D.arm_pulls_s.assign(na, 0), D.arm_prom_u.assign(na, 0), D.arm_prom_s.assign(na, 0);
+    const cur::SchedulerConfig cu = uniform_cfg(), cs = s10_cfg(k, retire);
+    const std::size_t nd = std::max<std::size_t>(1, draws);
+    for (std::size_t d = 0; d < nd; ++d) {
+        const vector<cur::PoolItem> pool = draws == 0 ? P.items : cur::stratified_bootstrap(P.items, na, cur::mix_seed(base, d, 1));
+        double tot = 0;
+        for (const auto& it : pool) tot += it.cost;
+        const double budget = f * tot;
+        Read ru, rs;
+        for (std::size_t q = 0; q < seeds; ++q) {
+            const std::uint64_t os = cur::mix_seed(base, d * 1000 + q, 2);
+            const auto ou = cur::arm_orders(pool, na, cur::WithinArm::Random, os), osd = cur::arm_orders(pool, na, k.order, os);
+            const cur::ReplayResult a = cur::replay(pool, A.arms, ou, cu, budget, cur::mix_seed(base, d * 1000 + q, 3));
+            const double t0 = now_s();
+            const cur::ReplayResult b = cur::replay(pool, A.arms, osd, cs, budget, cur::mix_seed(base, d * 1000 + q, 4));
+            D.s_seconds += now_s() - t0, D.s_pulls += b.pulls;
+            ru.add(a), rs.add(b);
+            bool any = false;
+            for (std::size_t x = 0; x < na; ++x) {
+                D.arm_pulls_u[x] += a.arm_pulls[x], D.arm_pulls_s[x] += b.arm_pulls[x];
+                D.arm_prom_u[x] += a.arm_promoted[x], D.arm_prom_s[x] += b.arm_promoted[x];
+                if (b.retired[x]) any = true, D.retired_arms[A.arms[x].name] += 1;
+            }
+            D.retired_runs += any;
+        }
+        D.u.push_back(ru), D.s.push_back(rs);
+    }
+    return D;
+}
+
+double mean_V(const vector<Read>& v) {
+    double s = 0;
+    for (const Read& r : v) s += r.V();
+    return v.empty() ? 0.0 : s / static_cast<double>(v.size());
+}
+// FDR pooled over every run of the set.
+double pooled_fdr(const vector<Read>& v) {
+    double g = 0, f = 0;
+    for (const Read& r : v) g += r.graded, f += r.graded_false;
+    return g > 0 ? f / g : -1.0;
+}
+
+void print_pool(const string& tag, const Pool& P, const ArmSet& A) {
+    char b[1024];
+    std::map<int, std::array<double, 6>> by;  // arm -> n, cost, supported, graded supported, true supported, graded
+    double g2 = 0;
+    for (std::size_t i = 0; i < P.items.size(); ++i) {
+        const auto& it = P.items[i];
+        auto& x = by[it.arm];
+        x[0] += 1, x[1] += it.cost, x[2] += it.supported, x[5] += it.graded >= 0;
+        if (it.supported && it.graded >= 0) x[3] += 1, x[4] += it.graded == 1;
+        g2 += P.meta[i].gen == "G2";
+    }
+    std::snprintf(b, sizeof b, "S10 POOL %s: hypotheses %zu (G2 %.0f, G6/G7 %.0f; G6/G7 share %.3f) | distinct slots %zu | total cost %.0f (mean %.2f tests) | "
+                  "cost guard used %zu | items with demand %zu | largest impact %.2f", tag.c_str(), P.items.size(), g2, static_cast<double>(P.items.size()) - g2,
+                  P.items.empty() ? 0.0 : 1.0 - g2 / static_cast<double>(P.items.size()), P.slots, P.total_cost,
+                  P.items.empty() ? 0.0 : P.total_cost / static_cast<double>(P.items.size()), P.min_cost_guard, P.demand_items, P.impact_max);
+    std::cout << b << "\n";
+    for (const auto& [a, x] : by) {
+        std::snprintf(b, sizeof b, "S10 POOL %s arm %-30s hyps %4.0f cost %5.0f supported %3.0f (graded %3.0f, true %3.0f) graded %4.0f", tag.c_str(),
+                      A.arms[static_cast<std::size_t>(a)].name.c_str(), x[0], x[1], x[2], x[3], x[4], x[5]);
+        std::cout << b << "\n";
+    }
+}
+
+void print_compare(const string& tag, const DrawSet& D) {
+    char b[1024];
+    const double vu = mean_V(D.u), vs = mean_V(D.s);
+    double win = 0;
+    for (std::size_t d = 0; d < D.u.size(); ++d) win += D.s[d].V() > 1.10 * D.u[d].V();
+    double pu = 0, ps = 0, gu = 0, gs = 0;
+    for (std::size_t d = 0; d < D.u.size(); ++d) pu += D.u[d].promoted, ps += D.s[d].promoted, gu += D.u[d].graded, gs += D.s[d].graded;
+    std::snprintf(b, sizeof b, "S10 %s: V (x1000 per cost) U %.3f S10 %.3f | gain %+.3f | V_S10 > 1.1 V_U in %.3f of %zu draws | promotions per draw U %.2f S10 %.2f | "
+                  "graded U %.2f S10 %.2f | FDR U %.3f S10 %.3f", tag.c_str(), vu, vs, vu != 0 ? vs / vu - 1.0 : 0.0,
+                  D.u.empty() ? 0.0 : win / static_cast<double>(D.u.size()), D.u.size(), pu / static_cast<double>(D.u.size()),
+                  ps / static_cast<double>(D.u.size()), gu / static_cast<double>(D.u.size()), gs / static_cast<double>(D.u.size()), pooled_fdr(D.u),
+                  pooled_fdr(D.s));
+    std::cout << b << "\n";
+}
+
+void print_arms(const string& tag, const DrawSet& D, const ArmSet& A, double runs) {
+    char b[512];
+    for (std::size_t x = 0; x < A.arms.size(); ++x) {
+        if (D.arm_pulls_u[x] + D.arm_pulls_s[x] == 0) continue;
+        std::snprintf(b, sizeof b, "S10 %s arm %-30s pulls per run U %7.2f S10 %7.2f | promotions per run U %5.2f S10 %5.2f", tag.c_str(),
+                      A.arms[x].name.c_str(), D.arm_pulls_u[x] / runs, D.arm_pulls_s[x] / runs, D.arm_prom_u[x] / runs, D.arm_prom_s[x] / runs);
+        std::cout << b << "\n";
+    }
+    for (const auto& [n, c] : D.retired_arms) {
+        std::snprintf(b, sizeof b, "S10 %s retired %-30s in %.0f of %.0f runs", tag.c_str(), n.c_str(), c, runs);
+        std::cout << b << "\n";
+    }
+}
+
+int run(int argc, char** argv) {
+    if (argc < 6 || string(argv[3]) != "--dev") {
+        std::fprintf(stderr, "usage: pattern_learn --schedule OUT_PREFIX --dev DIR S15_FILE [--gate DIR S15_FILE] [--gaps GAP_MAP] [--draws N] [--draws-dev N] "
+                             "[--seeds K]\n");
+        return 2;
+    }
+    const double t0 = now_s();
+    const string out = argv[2], dev_dir = argv[4], dev_s15 = argv[5];
+    string gate_dir, gate_s15, gaps;
+    std::size_t draws = 4000, draws_dev = 1000, seeds = 5;
+    for (int i = 6; i < argc; ++i) {
+        const string a = argv[i];
+        if (a == "--gate" && i + 2 < argc) gate_dir = argv[i + 1], gate_s15 = argv[i + 2], i += 2;
+        else if (a == "--gaps" && i + 1 < argc) gaps = argv[++i];
+        else if (a == "--draws" && i + 1 < argc) draws = std::strtoul(argv[++i], nullptr, 10);
+        else if (a == "--draws-dev" && i + 1 < argc) draws_dev = std::strtoul(argv[++i], nullptr, 10);
+        else if (a == "--seeds" && i + 1 < argc) seeds = std::strtoul(argv[++i], nullptr, 10);
+        else {
+            std::fprintf(stderr, "unknown option %s\n", argv[i]);
+            return 2;
+        }
+    }
+    char b[1024];
+    std::map<std::pair<string, string>, double> demand;
+    if (!gaps.empty()) {
+        const TsvTable g = read_tsv(gaps);
+        const std::size_t ce = g.col("entity"), cr = g.col("relation"), cd = g.col("demand");
+        for (const auto& row : g.rows) {
+            const double d = std::atof(row[cd].c_str());
+            if (d > 0) demand[{row[ce], row[cr]}] += d;
+        }
+    }
+    ArmSet A;
+    const Pool dev = load_pool(dev_dir, dev_s15, true, demand, A);
+    print_pool("DEV", dev, A);
+    // ---- the four configurations on dev at f = 0.25; the registered choice
+    const vector<Config> configs = {{"random order, lambda 0", cur::WithinArm::Random, 0.0},
+                                    {"random order, lambda 1", cur::WithinArm::Random, 1.0},
+                                    {"P0 first, lambda 0", cur::WithinArm::PriorFirst, 0.0},
+                                    {"P0 first, lambda 1", cur::WithinArm::PriorFirst, 1.0}};
+    vector<double> vdev;
+    double vu_dev = 0;
+    for (const Config& k : configs) {
+        const DrawSet D = run_draws(dev, A, k, 0.25, draws_dev, seeds, 1000001);
+        print_compare("DEV f 0.25 " + k.name, D);
+        vdev.push_back(mean_V(D.s)), vu_dev = mean_V(D.u);
+    }
+    // Registered: the simpler configuration stays unless another beats it by more than 2%, order first, then lambda.
+    auto better = [](double v, double base) { return v > base * 1.02 + 1e-12 * (base == 0); };
+    std::size_t pick = 0;
+    const bool order_wins = better(std::max(vdev[2], vdev[3]), std::max(vdev[0], vdev[1]));
+    const std::size_t o = order_wins ? 2 : 0;
+    pick = better(vdev[o + 1], vdev[o]) ? o + 1 : o;
+    const Config chosen = configs[pick];
+    const double gain_dev = vu_dev != 0 ? vdev[pick] / vu_dev - 1.0 : 0.0;
+    std::snprintf(b, sizeof b, "S10 DEV CHOICE: %s (V %.3f; U %.3f; dev gain %+.3f)", chosen.name.c_str(), vdev[pick], vu_dev, gain_dev);
+    std::cout << b << "\n";
+    {
+        const DrawSet D = run_draws(dev, A, chosen, 0.25, draws_dev, seeds, 1000001);
+        print_arms("DEV f 0.25", D, A, static_cast<double>(D.u.size() * seeds));
+    }
+    for (const double f : {0.1, 0.5, 1.0}) {
+        const DrawSet D = run_draws(dev, A, chosen, f, draws_dev, seeds, 1000001);
+        std::snprintf(b, sizeof b, "DEV f %.2f", f);
+        print_compare(b, D);
+        print_arms(b, D, A, static_cast<double>(D.u.size() * seeds));
+    }
+    {  // Q9: at f = 1 with retirement off both process everything and must tie exactly, draw by draw.
+        const DrawSet D = run_draws(dev, A, chosen, 1.0, 200, seeds, 1000001, false);
+        std::size_t tie = 0;
+        for (std::size_t d = 0; d < D.u.size(); ++d)
+            tie += std::fabs(D.u[d].value - D.s[d].value) <= 1e-9 * (1.0 + std::fabs(D.u[d].value)) && D.u[d].cost == D.s[d].cost &&
+                   D.u[d].pulls == D.s[d].pulls;
+        std::snprintf(b, sizeof b, "S10 DEV CHECK f 1.0, retirement off: exact ties in %zu of %zu draws", tie, D.u.size());
+        std::cout << b << "\n";
+    }
+    {  // U0: no arms, a random order over all hypotheses (for reference)
+        ArmSet A0;
+        A0.arms.push_back({"all", "all", ecs::Tier::Conjecture});
+        Pool P0 = dev;
+        for (auto& it : P0.items) it.arm = 0;
+        const DrawSet D = run_draws(P0, A0, configs[0], 0.25, draws_dev, seeds, 1000001);
+        std::snprintf(b, sizeof b, "S10 DEV REFERENCE U0 (one arm, random order over all hypotheses) f 0.25: V %.3f", mean_V(D.u));
+        std::cout << b << "\n";
+    }
+    if (gate_dir.empty()) {
+        std::snprintf(b, sizeof b, "S10 seconds %.1f (no gate read)", now_s() - t0);
+        std::cout << b << "\n";
+        return 0;
+    }
+    // ================================================================ the gate: read once
+    const Pool gate = load_pool(gate_dir, gate_s15, true, demand, A);
+    print_pool("GATE", gate, A);
+    const DrawSet D = run_draws(gate, A, chosen, 0.25, draws, seeds, 2000003);
+    print_compare("GATE f 0.25 " + chosen.name, D);
+    print_arms("GATE f 0.25", D, A, static_cast<double>(D.u.size() * seeds));
+    // LCI (registered)
+    const std::size_t n = D.u.size();
+    double pg = 0, r_n = 0, r_ok = 0, dbr = 0, dbr_n = 0;
+    vector<double> block(3, 0.0), block_n(3, 0.0);
+    std::ofstream tf(out + ".gate_draws.tsv");
+    tf << "draw\tV_U\tV_S10\tFDR_U\tFDR_S10\tBrier_U\tBrier_S10\tpromoted_U\tpromoted_S10\tgraded_U\tgraded_S10\n";
+    for (std::size_t d = 0; d < n; ++d) {
+        const Read &u = D.u[d], &s = D.s[d];
+        const double vu = u.V(), vs = s.V();
+        pg += vu > 0 ? vs > 1.10 * vu : vs - vu > 0.10 * std::fabs(vu);
+        if (u.graded > 0 && s.graded > 0) {
+            r_n += 1, r_ok += s.fdr() <= u.fdr() + 0.05 + 1e-12;
+            dbr += s.brier_mean() - u.brier_mean(), dbr_n += 1;
+        }
+        const std::size_t bl = std::min<std::size_t>(2, d * 3 / std::max<std::size_t>(1, n));
+        block[bl] += vs - vu, block_n[bl] += 1;
+        std::snprintf(b, sizeof b, "%zu\t%.6f\t%.6f\t%.6f\t%.6f\t%.6f\t%.6f\t%.0f\t%.0f\t%.0f\t%.0f\n", d, vu, vs, u.fdr(), s.fdr(), u.brier_mean(), s.brier_mean(),
+                      u.promoted, s.promoted, u.graded, s.graded);
+        tf << b;
+    }
+    const double p_gain = n ? pg / static_cast<double>(n) : 0.0;
+    const double r_share = r_n > 0 ? r_ok / r_n : 0.0;
+    const double r = r_share >= 0.95 ? 1.0 : 0.0;
+    const double vu = mean_V(D.u), vs = mean_V(D.s);
+    const double gain_gate = vu != 0 ? vs / vu - 1.0 : 0.0;
+    const double G = gain_dev > 0 ? gain_gate / gain_dev : 0.0;
+    const double gamma = gain_dev > 0 ? std::min(1.0, std::max(0.0, G) / 0.5) : (gain_gate > 0 ? 1.0 : 0.0);
+    const double brier_rise = dbr_n > 0 ? dbr / dbr_n : 0.0;
+    const double c = brier_rise <= 0.01 ? 1.0 : 0.5;
+    vector<double> bmeans;
+    for (int k = 0; k < 3; ++k) bmeans.push_back(block_n[k] > 0 ? block[k] / block_n[k] : 0.0);
+    const double sigma = ecs::stability_sigma(bmeans);
+    const double us_per_pull = D.s_pulls > 0 ? 1e6 * D.s_seconds / D.s_pulls : 0.0;
+    const double state_bytes = static_cast<double>(A.arms.size()) * (sizeof(cur::ArmState) + sizeof(cur::Arm) + 10 * sizeof(double) + 64);
+    const double kappa = ecs::cost_kappa(state_bytes, 1e6, us_per_pull, 1000.0);
+    const double product = p_gain * r * gamma * c * sigma * kappa;
+    const double lci = gate.slots < ecs::kMinEffectiveN ? std::min(product, ecs::kLowNEffCap) : product;
+    std::snprintf(b, sizeof b,
+                  "S10 GATE LCI: P_gain %.4f | n_eff %zu | r %.0f (FDR_S10 <= FDR_U + 0.05 in %.4f of %.0f draws; pooled FDR U %.3f S10 %.3f) | gamma %.3f "
+                  "(gain gate %+.3f, dev %+.3f) | c %.1f (Brier rise %+.4f) | sigma %.1f (blocks %+.3f %+.3f %+.3f) | kappa %.0f (%.2f us per pull, state %.0f B) | "
+                  "LCI %.4f -> %s",
+                  p_gain, gate.slots, r, r_share, r_n, pooled_fdr(D.u), pooled_fdr(D.s), gamma, gain_gate, gain_dev, c, brier_rise, sigma, bmeans[0], bmeans[1],
+                  bmeans[2], kappa, us_per_pull, state_bytes, lci, lci >= 0.95 ? "MET" : "NOT MET");
+    std::cout << b << "\n";
+    {  // Q8: S10's promotions on the gate by relation group (the pool itself, every seed)
+        std::map<string, double> by;
+        for (std::size_t x = 0; x < A.arms.size(); ++x) {
+            const string& nm = A.arms[x].name;
+            const auto p1 = nm.find(' '), p2 = nm.find(' ', p1 + 1);
+            by[nm.substr(p1 + 1, p2 - p1 - 1)] += D.arm_prom_s[x];
+        }
+        double tot = 0;
+        for (const auto& [g, v] : by) tot += v;
+        string line = "S10 GATE S10's promotions by group:";
+        for (const auto& [g, v] : by) {
+            std::snprintf(b, sizeof b, " %s %.3f", g.c_str(), tot > 0 ? v / tot : 0.0);
+            line += b;
+        }
+        std::cout << line << "\n";
+    }
+    for (const double f : {0.1, 0.5, 1.0}) {
+        const DrawSet E = run_draws(gate, A, chosen, f, 1000, seeds, 2000003);
+        std::snprintf(b, sizeof b, "GATE f %.2f", f);
+        print_compare(b, E);
+        print_arms(b, E, A, static_cast<double>(E.u.size() * seeds));
+    }
+    std::snprintf(b, sizeof b, "S10 seconds %.1f", now_s() - t0);
+    std::cout << b << "\n";
+    return 0;
+}
+
+}  // namespace s10
+
 int main(int argc, char** argv) {
     if (argc >= 2 && string(argv[1]) == "--score-planted") return s6::run(argc, argv);  // S6 (hypothesis scoring)
     if (argc >= 2 && string(argv[1]) == "--test-kinds") return s7::run(argc, argv);  // S7 (testing hypotheses)
@@ -9132,6 +9585,7 @@ int main(int argc, char** argv) {
     if (argc >= 2 && string(argv[1]) == "--gen-rules") return s8a::run(argc, argv);  // S8a (G2 rules, G14 contradictions)
     if (argc >= 2 && string(argv[1]) == "--sources") return s8c::run(argc, argv);  // S8c (evidence sources and their reliability)
     if (argc >= 2 && string(argv[1]) == "--worlds") return s9::run(argc, argv);  // S9 (possible worlds, T2, fragility)
+    if (argc >= 2 && string(argv[1]) == "--schedule") return s10::run(argc, argv);  // S10 (the curiosity scheduler)
     if (argc >= 4 && string(argv[1]) == "--wilson") {
         double k = std::atof(argv[2]), n = std::atof(argv[3]);
         std::printf("%.0f/%.0f = %.3f  Wilson95 [%.3f, %.3f]\n", k, n, n > 0 ? k / n : 0.0, ecs::wilson_lower(k, n), ecs::wilson_upper(k, n));

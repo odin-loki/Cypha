@@ -1,8 +1,9 @@
 // Known-answer tests for cypha/eval/epistemic.hpp (docs/DISCOVERY.md sections 2.1-2.3, 3.1, 3.3, 10), hypothesis.hpp
 // (S5: 4, 6.3, 7.2-7.5; invariants I1, I4, I7, I8; S7: 7.1-7.3, I5, I6; S7b: three-way likelihoods, the batch step
 // among the supported), gap_map.hpp (S3: 3.2, 3.5), gen_links.hpp (S8b: G6, G7), gen_rules.hpp (S8a: G2, G14), sources.hpp
-// (S8c: evidence sources) and worlds.hpp (S9); S7c's batch rules.
+// (S8c: evidence sources), worlds.hpp (S9) and curiosity.hpp (S10); S7c's batch rules.
 // Returns nonzero if any check fails.
+#include "cypha/eval/curiosity.hpp"
 #include "cypha/eval/epistemic.hpp"
 #include "cypha/eval/gap_map.hpp"
 #include "cypha/eval/gen_links.hpp"
@@ -2342,6 +2343,192 @@ static void test_sources_S8c() {
   CHECK(src::outcome_index(TestOutcome::Negative) == 1 && src::single_valued("birth_place") && !src::single_valued("genre"));
 }
 
+// ---------------------------------------------------------------------------
+// S10: the curiosity scheduler (curiosity.hpp)
+// ---------------------------------------------------------------------------
+
+static void test_curiosity_S10() {
+  namespace cu = cypha::eval::curiosity;
+  // Random numbers: the same seed draws the same; the draws have the right means.
+  {
+    cu::Rng a(7), b(7), c(8);
+    bool same = true, differ = false;
+    for (int i = 0; i < 100; ++i) {
+      const std::uint64_t x = a.next();
+      same = same && x == b.next();
+      differ = differ || x != c.next();
+    }
+    CHECK(same && differ);
+    cu::Rng r(11);
+    double sb = 0, sg = 0, su = 0, umin = 1, umax = 0;
+    bool in_range = true;
+    const int n = 40000;
+    for (int i = 0; i < n; ++i) {
+      sb += r.beta(2.0, 5.0), sg += r.gamma(0.5);
+      const double u = r.uniform();
+      su += u, umin = std::min(umin, u), umax = std::max(umax, u);
+      in_range = in_range && r.below(7) < 7;
+    }
+    CHECK_NEAR(sb / n, 2.0 / 7.0, 0.006);
+    CHECK_NEAR(sg / n, 0.5, 0.02);
+    CHECK_NEAR(su / n, 0.5, 0.01);
+    CHECK(umin >= 0.0 && umax < 1.0 && in_range && r.below(0) == 0);
+    CHECK(cu::mix_seed(1, 2, 3) != cu::mix_seed(1, 2, 4) && cu::mix_seed(1, 2, 3) != cu::mix_seed(2, 1, 3));
+  }
+  // The value of a pull.
+  CHECK_NEAR(cu::certainty_gained(0.3, 0.95), 0.65, 1e-12);
+  CHECK(cu::certainty_gained(0.98, 0.95) == 0.0);
+  CHECK_NEAR(cu::bits_removed(0.5, 0.95), 1.0 - binary_entropy_bits(0.95), 1e-12);
+  CHECK(cu::bits_removed(0.95, 0.5) == 0.0);
+  CHECK(cu::pull_reward(false, 1.0, 0.3, 0.95) == 0.0);
+  CHECK_NEAR(cu::pull_reward(true, 2.0, 0.3, 0.95), 1.3, 1e-12);
+
+  // A simulated bandit: arm k pays reward 1 with probability p[k] at cost c[k].
+  auto simulate = [](const std::vector<cu::Arm>& arms, const cu::SchedulerConfig& cfg, const std::vector<double>& p,
+                     const std::vector<double>& c, int pulls, std::uint64_t seed) {
+    cu::Scheduler s(arms, cfg, seed);
+    cu::Rng env(seed + 99);
+    const std::vector<bool> all(arms.size(), true);
+    for (int i = 0; i < pulls; ++i) {
+      const int a = s.choose(all);
+      if (a < 0) break;
+      const bool win = env.uniform() < p[static_cast<std::size_t>(a)];
+      s.update(static_cast<std::size_t>(a), c[static_cast<std::size_t>(a)], win ? 1.0 : 0.0, win ? 0.5 : 0.0, win);
+    }
+    return s;
+  };
+  const std::vector<cu::Arm> two = {{"a", "G1", Tier::Conjecture}, {"b", "G1", Tier::Conjecture}};
+  cu::SchedulerConfig ts;
+  ts.floors = false, ts.retire = false;
+  {  // Thompson finds the better arm
+    const cu::Scheduler s = simulate(two, ts, {0.4, 0.1}, {1, 1}, 2000, 5);
+    CHECK(s.state(0).pulls / s.pulls() > 0.85);
+  }
+  {  // ... per unit cost: 0.4 at cost 5 (0.08 per unit) loses to 0.2 at cost 1
+    const cu::Scheduler s = simulate(two, ts, {0.4, 0.2}, {5, 1}, 3000, 6);
+    CHECK(s.state(1).pulls / s.pulls() > 0.75);
+    CHECK_NEAR(s.expected_cost(0), (s.state(0).cost + s.spent() / s.pulls()) / (s.state(0).pulls + 1.0), 1e-12);
+  }
+  {  // the uniform scheduler gives every arm the same share and never looks at rewards
+    cu::SchedulerConfig u;
+    u.policy = cu::Policy::Uniform, u.floors = false, u.retire = false;
+    const std::vector<cu::Arm> three = {{"a", "G1", Tier::Conjecture}, {"b", "G1", Tier::Conjecture}, {"c", "G2", Tier::Wild}};
+    const cu::Scheduler s = simulate(three, u, {0.9, 0.0, 0.0}, {1, 1, 1}, 6000, 7);
+    for (std::size_t a = 0; a < 3; ++a) CHECK_NEAR(s.state(a).pulls / 6000.0, 1.0 / 3.0, 0.03);
+  }
+  {  // floors: a useless generator keeps 2% of the cost spent, the wild tier 5%
+    const std::vector<cu::Arm> arms = {{"good", "G1", Tier::Conjecture}, {"bad", "G2", Tier::Conjecture}, {"wild", "G1", Tier::Wild}};
+    cu::SchedulerConfig f = ts;
+    f.floors = true;
+    const cu::Scheduler s = simulate(arms, f, {0.5, 0.0, 0.0}, {1, 1, 1}, 4000, 8);
+    const double bad = s.state(1).cost / s.spent(), wild = s.state(2).cost / s.spent();
+    CHECK(bad >= 0.019 && bad < 0.04);
+    CHECK(wild >= 0.049 && wild < 0.08);
+    const cu::Scheduler n = simulate(arms, ts, {0.5, 0.0, 0.0}, {1, 1, 1}, 4000, 8);
+    CHECK(n.state(1).cost / n.spent() < 0.015 && n.state(2).cost / n.spent() < 0.015);
+  }
+  {  // retirement: Wilson upper bound of the promotion rate below 0.05 after at least 200 pulls
+    cu::SchedulerConfig r;
+    r.policy = cu::Policy::Uniform, r.floors = false, r.retire = true;
+    const cu::Scheduler s = simulate(two, r, {0.5, 0.0}, {1, 1}, 2000, 9);
+    CHECK(s.state(1).retired && s.state(1).pulls == 200.0 && !s.state(0).retired);
+    cu::Scheduler t({{"x", "G1", Tier::Wild}, {"y", "G1", Tier::Wild}, {"z", "G1", Tier::Wild}}, r, 1);
+    for (int i = 0; i < 199; ++i) t.update(0, 1, 0, 0, false);
+    CHECK(!t.state(0).retired);
+    t.update(0, 1, 0, 0, false);
+    CHECK(t.state(0).retired);
+    for (int i = 0; i < 200; ++i) t.update(1, 1, 0, 0, i % 22 == 0), t.update(2, 1, 0, 0, i % 70 == 0);  // 10 / 200 (upper 0.090) and 3 / 200 (0.043)
+    CHECK(!t.state(1).retired && t.state(2).retired);
+    CHECK(t.choose({true, true, true}) == 1);
+  }
+  {  // learning progress: bits per unit cost over the last 10 pulls; the bonus multiplies the score
+    cu::SchedulerConfig l = ts;
+    l.lp_weight = 1.0;
+    cu::Scheduler s({{"a", "G1", Tier::Conjecture}}, l, 3);
+    CHECK(s.learning_progress(0) == 0.0 && s.expected_cost(0) == 1.0);
+    for (int i = 1; i <= 15; ++i) s.update(0, 2, 0, 2.0 * i, false);
+    CHECK_NEAR(s.learning_progress(0), 10.5, 1e-12);
+    CHECK_NEAR(s.score(0, 0.2), 0.2 * 0.5 / s.expected_cost(0) * 11.5, 1e-12);  // no promotion yet: reward size 0.5
+    CHECK(s.choose({false}) == -1);
+  }
+  {  // amendment 1: the promotion probability's prior comes from the pool; the reward size is a mean of its own
+    cu::Scheduler s({{"a", "G1", Tier::Conjecture}, {"b", "G1", Tier::Conjecture}}, ts, 3);
+    CHECK_NEAR(s.pooled_rate(), 0.5, 1e-12);
+    for (int i = 0; i < 10; ++i) s.update(0, 1, i == 0 ? 0.6 : i == 1 ? 0.8 : 0.0, 0, i < 2), s.update(1, 1, 5.0, 0, false);
+    CHECK_NEAR(s.pooled_rate(), 3.0 / 22.0, 1e-12);
+    CHECK_NEAR(s.beta_of(0).first, 2.0 * 3.0 / 22.0 + 2.0, 1e-12);
+    CHECK_NEAR(s.beta_of(0).second, 2.0 * 19.0 / 22.0 + 8.0, 1e-12);
+    CHECK_NEAR(s.reward_size(0), (1.4 + 0.7) / 3.0, 1e-12);
+    CHECK_NEAR(s.reward_size(1), 0.7, 1e-12);  // a reward without a promotion pays nothing
+    CHECK(s.state(1).reward == 0.0);
+  }
+  // Replay on a recorded pool.
+  {
+    std::vector<cu::PoolItem> pool;
+    for (int i = 0; i < 10; ++i) {
+      cu::PoolItem it;
+      it.arm = 0, it.cost = 2, it.prior = 0.1 * i;
+      pool.push_back(it);
+    }
+    pool[3].supported = true, pool[3].graded = 1, pool[3].prior = 0.3, pool[3].posterior = 0.95;   // +0.65
+    pool[5].supported = true, pool[5].graded = 0, pool[5].prior = 0.5, pool[5].posterior = 0.92;   // -0.42
+    pool[6].supported = true, pool[6].graded = -1, pool[6].prior = 0.2, pool[6].posterior = 0.97;  // ungraded: 0
+    pool[7].graded = 1, pool[7].posterior = 0.6;                                                   // not supported: 0
+    for (auto& it : pool) it.reward = cu::pull_reward(it.supported, it.impact, it.prior, it.posterior);
+    const std::vector<cu::Arm> one = {{"a", "G1", Tier::Conjecture}};
+    cu::SchedulerConfig u;
+    u.policy = cu::Policy::Uniform, u.floors = false, u.retire = false;
+    const auto ord = cu::arm_orders(pool, 1, cu::WithinArm::Random, 4);
+    std::vector<std::size_t> sorted = ord[0];
+    std::sort(sorted.begin(), sorted.end());
+    bool perm = sorted.size() == 10;
+    for (std::size_t i = 0; perm && i < 10; ++i) perm = sorted[i] == i;
+    CHECK(perm);
+    const cu::ReplayResult all = cu::replay(pool, one, ord, u, 1e9, 1);
+    CHECK(all.pulls == 10.0 && all.cost == 20.0 && all.promoted == 3.0 && all.graded == 2.0 && all.graded_false == 1.0);
+    CHECK_NEAR(all.value, 0.65 - 0.42, 1e-12);
+    CHECK_NEAR(all.brier, 0.05 * 0.05 + 0.92 * 0.92, 1e-12);
+    const cu::ReplayResult part = cu::replay(pool, one, ord, u, 5.0, 1);
+    CHECK(part.pulls == 3.0 && part.cost == 6.0);  // the pull that crosses the budget completes
+    // orders: P0 first, demand before everything; with equal priors P0 first is the random order (common random numbers)
+    pool[1].demand = 1;
+    const auto pf = cu::arm_orders(pool, 1, cu::WithinArm::PriorFirst, 4)[0];
+    CHECK(pf[0] == 1 && pf[1] == 9 && pf[2] == 8);
+    std::vector<cu::PoolItem> flat = pool;
+    for (auto& it : flat) it.prior = 0.5, it.demand = 0;
+    CHECK(cu::arm_orders(flat, 1, cu::WithinArm::PriorFirst, 4)[0] == cu::arm_orders(flat, 1, cu::WithinArm::Random, 4)[0]);
+    CHECK(cu::arm_orders(flat, 1, cu::WithinArm::Random, 4)[0] != cu::arm_orders(flat, 1, cu::WithinArm::Random, 5)[0]);
+  }
+  {  // a stratified bootstrap keeps each arm's size; at the whole budget with retirement off, U and Thompson tie
+    std::vector<cu::PoolItem> pool;
+    cu::Rng g(21);
+    for (int i = 0; i < 300; ++i) {
+      cu::PoolItem it;
+      it.arm = i % 3, it.cost = 1 + static_cast<double>(g.below(3)), it.prior = g.uniform();
+      it.supported = g.uniform() < (it.arm == 0 ? 0.3 : 0.02);
+      it.posterior = it.supported ? 0.95 : 0.02, it.graded = g.uniform() < 0.8 ? (g.uniform() < 0.9 ? 1 : 0) : -1;
+      it.reward = cu::pull_reward(it.supported, 1.0, it.prior, it.posterior);
+      pool.push_back(it);
+    }
+    const auto bs = cu::stratified_bootstrap(pool, 3, 9);
+    int n[3] = {0, 0, 0};
+    for (const auto& it : bs) ++n[it.arm];
+    CHECK(bs.size() == 300 && n[0] == 100 && n[1] == 100 && n[2] == 100);
+    const std::vector<cu::Arm> arms = {{"a", "G1", Tier::Conjecture}, {"b", "G1", Tier::Speculation}, {"c", "G2", Tier::Wild}};
+    double tot = 0;
+    for (const auto& it : pool) tot += it.cost;
+    cu::SchedulerConfig u, t;
+    u.policy = cu::Policy::Uniform, u.floors = false, u.retire = false;
+    t.retire = false;
+    const auto ord = cu::arm_orders(pool, 3, cu::WithinArm::Random, 2);
+    const cu::ReplayResult ru = cu::replay(pool, arms, ord, u, tot, 3), rt = cu::replay(pool, arms, ord, t, tot, 4);
+    CHECK(ru.pulls == 300.0 && rt.pulls == 300.0 && ru.cost == rt.cost);
+    CHECK_NEAR(ru.value, rt.value, 1e-9);
+    // at a quarter of the budget Thompson finds the arm that promotes
+    const cu::ReplayResult qu = cu::replay(pool, arms, ord, u, 0.25 * tot, 3), qt = cu::replay(pool, arms, ord, t, 0.25 * tot, 4);
+    CHECK(qt.arm_pulls[0] > qu.arm_pulls[0] && qt.promoted > qu.promoted);
+  }
+}
 
 static void test_gap_map() {
   // The gap id CyphaLM writes (cyphalm_trie dktext rows and its dev tags).
@@ -2582,6 +2769,7 @@ int main() {
   test_sources_S8c();
   test_gap_map();
   test_scope_S4c();
+  test_curiosity_S10();
   std::printf("epistemic_test: %d checks, %d failed\n", g_checks, g_failed);
   return g_failed == 0 ? 0 : 1;
 }
