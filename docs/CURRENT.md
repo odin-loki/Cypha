@@ -32,6 +32,18 @@ Surface scores of trie samples are about **0.74–0.83**. That is readable fragm
 
 BPC is held-out `−log2 p`. It is not a generation score.
 
+### Report card, main's defaults (2026-10-29, dev)
+
+[`reports/REPORT_CARD.md`](reports/REPORT_CARD.md); `scripts/cypha_report_card.sh` makes it for any set of flags.
+
+| Measure | Result |
+|---|---|
+| BPC | `qa` holdout **1.7895**, `context8k` 1.7897; every expert's paired gain interval is clear of zero |
+| Answers, after the gate | 2 right / 0 wrong / 128 abstained of 130 (before the gate 7 / 57 / 66) |
+| Don't know | recall 30/30; precision 0.455 [0.340, 0.574] |
+| Text | SCRIBE v2 0.063 [0.051, 0.078] (human 0.923, sentences shuffled 0.344); surface S 0.860 |
+| Peak RAM | `qa` 184.7 MB, `context8k` 202.3 MB, `sample` 69.8 MB, `scribe` 400 MB |
+
 ### What the measurements settled
 
 - Context hashes are spread out. The bytes underneath are not. Order-2 prefixes on 2 MiB had about **6.2** extensions on average, and **47%** of order-4 contexts occurred once.
