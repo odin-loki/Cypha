@@ -1,6 +1,6 @@
 # CyphaLM over tokens: plan (Track T)
 
-**Odin Loch** · 2026-10-29 · **queued, not started** · from the discussion of 2026-10-29 ("Modern NLP uses tokens, which naturally map to words. Ours doesn't.")
+**Odin Loch** · 2026-10-29 · **started 2026-10-29** (Odin: "You pick for the questions"; PLAN ledger 74) · from the discussion of 2026-10-29 ("Modern NLP uses tokens, which naturally map to words. Ours doesn't.")
 
 This plan moves CyphaLM from bytes to tokens, and then above tokens. Nothing here is built yet. Each step is a registered experiment: rules and predictions first, dev for choices, the frozen test read once, intervals, and Odin's veto.
 
@@ -131,15 +131,15 @@ This is PLAN §3.2's context hierarchy, built.
 
 ## 8. Order and dependencies
 
-1. **Queued until** the GEN agents finish (they share `cyphalm_trie.cpp`), or started at once as its own library and tool: `native/include/cypha/cyphalm/tokenizer.hpp`, `token_model.hpp`, tool `cyphalm_tok`.
+1. **Built as its own library and tool** (`native/include/cypha/cyphalm/tokenizer.hpp`, `token_model.hpp`, tool `cyphalm_tok`), clear of the GEN agents' work in `cyphalm_trie.cpp`.
 2. T0 → T1 → T2 → T3 → T4 is the spine. T5–T8 follow T4. T9 needs the GEN track. T10 needs T3. T11 is on Odin's PC.
 3. Agents can split it: one for T1 (tokenizers), one for T2 and T3 (models and bridge), then T4 onward.
 
 ---
 
-## 9. Questions for Odin
+## 9. Decisions (2026-10-29, Odin: "You pick for the questions"; PLAN ledger 74)
 
-1. **Subwords or whole words?** Recommended: subwords with word boundaries, then superwords. Whole words with a byte fallback is one arm of T1.
-2. **Add or replace?** Recommended: add beside the byte model; switch defaults only on T4 and T10.
-3. **When to start?** Now, as its own tool, or after the GEN agents finish.
-4. **T11 on your PC:** when the 1 TB run allows.
+1. **Subwords with word boundaries, then superwords.** Whole words with a byte fallback stay as one arm of T1.
+2. **Add beside the byte model.** Defaults switch only on T4 (generation) and T10 (answers).
+3. **Start now, as its own library and tool** (`cyphalm_tok`), clear of the GEN agents' files. Two agents: TOK-A (T0–T2: tokenizers and token count models) and TOK-B (T3: the byte–token bridge, then T4 when TOK-A and GEN-A's harness are ready).
+4. **T11 on Odin's PC** after T4 passes on 8 MiB, run when the 1 TB run has finished or has spare capacity. It never competes with Track A.
