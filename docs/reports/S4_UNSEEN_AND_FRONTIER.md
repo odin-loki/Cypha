@@ -517,3 +517,262 @@ build/epistemic_test   # 1,019 checks
 ```
 
 - The SIGNAL lines are on stdout. Per-page scores: `units.tsv` (11,375 rows, sha256 prefix 9ef72f7c87b09d26). Gaps: `signal_gaps.tsv` (ad9133c8122637f7) and `.planted.tsv` (8b2dc7b9a23800fe). Surprise files: 0f97e1c7c29b9574 and b7be672fc81a5ca8.
+
+## S4c: an out-of-scope signal that reads content (2026-10-29)
+
+**Odin Loch** · 2026-10-29 · follows S4b's decision 4
+
+**Task.** S4b found that no signal sees an unseen domain written in plain prose. Surprise rises only about 0.13 bits per byte on Dolly pages, the unparsed rate cannot rise, and vocabulary misses it. S4c builds DISCOVERY §3.4's first signal, out-of-scope inputs, so that it reads the words of a page and not its markup. It runs under S4b's alarm rule and on the same kinds of planted shifts.
+
+(The design, the selection rule and the predictions below were written and committed before any S4c run. Results and decisions are added under them.)
+
+**Rule 10.** Like S4b's signals, this one watches what Cypha reads. It never answers a question, never feeds a gate or a tag, and never changes a fact.
+
+### Design (fixed before any run)
+
+#### What the signal reads: prose words, never markup
+
+- **The reader.** Each page is read by S3's prose reader (`page_sentences`): lines outside templates, tables, list items and headings, with references removed and every link reduced to its shown words.
+- **One more list rule, for every page.** Lines that start with `-`, `•` or a number followed by `.` or `)` are list items too, and are dropped. The prose reader already drops wiki lists (`*`, `#`); Dolly writes its lists with `-` and `1.`. So a list never enters, whatever its markup.
+- **Words.** The reader's word tokens that start with an ASCII letter, lower-cased (letters with inner apostrophes and hyphens).
+- **The window.** The first m = 50 words of a page's prose. A page with fewer than 50 prose words is not a unit. One window of fixed size for every page means no score depends on page length.
+- **The reference.** Word counts over all prose words of the reader pages: body before byte 7,340,032 (CyphaLM's train), not lists or disambiguation pages. F is its 100 most frequent words (ties by the word).
+
+#### The candidates (one is chosen on dev)
+
+| # | Candidate | Score of a window (high = unusual) |
+|---|---|---|
+| O1 | **Register** | G per word: (2 / m) Σ_b c_b ln(c_b / (m p_b)). The bins b are the 100 words of F and one bin for every other word; c_b is the window's count and p_b the reference's share |
+| O2 | **Rare content words** | The mean of −ln p̂(w) over the window's words not in F, with p̂(w) = (n_w + 0.5) / (N + 0.5 (V + 1)) from the reference (n_w the word's count, N its words, V its distinct words) |
+| O3 | **Topic distance** | 1 − the largest cosine between the page's vector and the reader pages' vectors. A page's vector is Σ a / (a + f_w) · vec_w over the window's words not in F that have a vector (`data/cyphalm/simvec_ppmi32.bin`), with a = 0.001 and f_w the word's reference share, then normalised. No such word: score 1 |
+
+- O1 reads how a page is written (which common words it uses, and how often). O2 and O3 read what it is about.
+- The vectors were built from enwik8 without the BPC holdout and the fresh text. They have read C's and S's words, but never Dolly.
+- **Strata:** the page's type (country, person, place, other), as for U. Dolly pages are "other".
+- **The alarm rule:** S4b's, unchanged (events at p < 0.05, Shiryaev–Roberts with p1 = 0.25, alarm at A = 20,000, running windows of 500, scored after 100).
+- **Gaps.** An alarm opens a gap in S3's form in the `--signals-gaps` file, as in S4b. Its kind is `scope`. DISCOVERY §3.2 has no kind for out-of-scope text, so this is a proposal for Odin.
+
+#### The control: a wiki page with its markup removed must score as itself
+
+- **Pool P.** Article pages whose body starts at or after byte 50,000,000 (neither C, S nor S4b's reader has read them), not lists or disambiguation pages, every 4th in dump order. `scripts/s4c_plain_pages.py` writes each one as a Dolly-style page, with a separate renderer written in Python. It removes templates, tables, references, comments, tags, categories and images; it turns links into their shown words; it drops headings; and it writes list items as `- item`.
+- **Two checks:**
+  - **Same score.** For each P page, its score against the score of its source page in the dump.
+  - **No shift.** P planted as a shift, like D. A signal that fires on P is reading markup, not content.
+
+#### Reads
+
+- **Dev (for the choice).** Calibration: C's pages whose body starts in [9,437,184, 19,718,592). Stream: C's pages in [19,718,592, 30,000,000). Pools: D-dev (Dolly records with an even line number in `dolly_pages.xml`), P-dev (P's pages with an even index), and L.
+- **Test (the gate, read once).** S4b's streams, C then S. Pools: D-test (odd line numbers), P-test (odd index), and L.
+- S4b read C, S, D and L with its own signals. No S4c score has been computed on any page before this commit. The dev read never scores S.
+- Planted shifts, delays and replicates are S4b's: 200 replicates per pool, π ∈ {1, 0.5, 0.2}, both references, t0 uniform over the stream's units [100, |stream| − 200].
+
+#### The choice on dev (fixed now)
+
+- A candidate is **eligible** when, on the dev stream with the running reference, it has at most one alarm, and P-dev at π = 1 is detected within 50 units in at most 10% of the replicates.
+- The chosen candidate is the eligible one with the most D-dev detections within 50 at π = 1. Ties go to the lower median delay, then to O1, O2, O3 in that order.
+- If none is eligible, the one with the most D-dev detections is read on test, and is reported as having failed on dev.
+- m, F's size, a, the strata and the list rule are fixed above. Dev chooses the candidate only.
+
+#### The gate (test, read once, the chosen candidate)
+
+The signal passes for an unseen domain in plain prose when all three hold:
+1. S in dump order (running reference): at most one alarm.
+2. D-test at π = 1: at least 90% of 200 replicates detected within 50 units.
+3. P-test at π = 1: detected within 50 units in at most 10% of the replicates.
+
+Detection shares get Wilson 95% intervals. L, π = 0.5 and 0.2, the fixed reference and the other candidates are reported, not gated.
+
+### Predictions (registered before any run)
+
+| # | Prediction |
+|---|---|
+| E1 | O1 (register) is chosen on dev |
+| E2 | O1 on D-dev: at least 90% of replicates within 50 units at π = 1, median delay at most 10 |
+| E3 | O2 does not detect D (fewer than half the replicates within 200 at π = 1): Dolly's words are common, as V found |
+| E4 | O3 detects D in 30–90% of replicates within 50 at π = 1: Dolly's topics overlap wiki topics in part |
+| E5 | Every candidate on the dev stream (running reference): event rate in [0.03, 0.08], at most one alarm |
+| E6 | P: for O1 and O2, at least 90% of P pages score exactly as their source page; every candidate detects P-dev within 50 in at most 5% of replicates |
+| E7 | The chosen candidate passes the test gate, with the Wilson lower bound of D-test's share at least 0.85 |
+| E8 | Fewer than 30% of L's pages are units: a list page is mostly list items, which the reader skips |
+
+### Round 2 (registered after round 1's dev read, before any test read)
+
+**Round 1 on dev** (the full lines are in "Results" below). Every candidate is eligible: no alarm on the dev stream, and P-dev is never detected within 50 units. None comes near the bar on D-dev. At π = 1 with the running reference, the shares within 50 units are O1 1 / 200, O2 0 / 200 and O3 50 / 200. Against the fixed reference, D's event rate is O1 0.145, O2 0.056 and O3 0.184. A pass needs about 0.3.
+
+**Why O1 is weak.** F holds the reference's 100 most frequent words. Words that wiki prose rarely uses and other registers use often all fall in O1's one "other" bin. O1 also weights each bin by its multinomial variance. Real pages vary far more than that in some words (he, his, she) and far less in others.
+
+**Round 2 adds one candidate. Nothing else changes** (m, the reader, the list rule, the strata, the alarm rule, the reads, the choice rule and the gate):
+
+| # | Candidate | Score of a window (high = unusual) |
+|---|---|---|
+| O4 | **Register profile (Burrows' Delta)** | (1 / (K + 1)) Σ_b \|x_b − μ_b\| / σ_b over the reference's K = 500 most frequent words and one bin for every other word. x_b is the bin's share of the window's 50 words. μ_b and σ_b are the bin's mean and standard deviation over every whole 50-word window of the reader pages' prose (windows do not cross pages). σ_b is at least √(μ_b (1 − μ_b) / 50) |
+
+- O4 measures how far a window's use of the 500 commonest words is from wiki prose, in units of how much wiki windows vary. It is the stylometric distance of Burrows (2002), used here as a one-class score.
+- **The choice** is the registered rule over O1–O4.
+- **Predictions (round 2):**
+
+| # | Prediction |
+|---|---|
+| E9 | O4 is eligible: at most one alarm on the dev stream, and P-dev within 50 in at most 10% of replicates |
+| E10 | O4's D event rate against the fixed reference on dev is at least 0.25, and O4 is chosen |
+| E11 | O4 on D-dev at π = 1 (running reference): at least 70% of replicates within 50 units |
+
+### Round 3 (registered after round 2's dev read, before any test read)
+
+**Round 2 on dev.** O4 is flat. Its mean on D-dev is 0.2865, against 0.2870 on the calibration half, and D's event rate is 0.034. With 50 words, most of the 501 bins are empty, so Delta counts mid-frequency words, not register. O4 also had one alarm in the calibration half (*Transportation in Brazil*).
+
+**What D-dev is (dev analysis, no test page read).** By Dolly category, the area under the ROC curve against the dev stream's "other" pages:
+
+| Candidate | All D-dev (234) | brainstorming (25) | creative writing (29) | general QA (70) | open QA (53) | closed QA (17) | summarisation (22) | information extraction (11) |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| O1 register | 0.602 | 0.634 | 0.616 | 0.635 | 0.573 | 0.516 | 0.572 | 0.423 |
+| O3 topic | 0.654 | 0.723 | 0.722 | 0.628 | 0.684 | 0.679 | 0.560 | 0.523 |
+
+- Dolly answers of 256 bytes or more are mostly encyclopedic prose: "Lollapalooza is an annual musical festival held in Grant Park in Chicago, Illinois. It was started in 1991 …". Closed QA, summarisation and information extraction rewrite Wikipedia passages, and many open and general QA answers read like a lead paragraph.
+- So D is mostly the same register as wiki prose. What differs is what it is about: topics the reader has not met, many after 2006. Topic distance (O3) separates best, in every category.
+
+**Round 3 adds one candidate. Nothing else changes:**
+
+| # | Candidate | Score of a window (high = unusual) |
+|---|---|---|
+| O5 | **Topic novelty (TF-IDF, the first-story-detection score)** | 1 − the largest cosine between the window's TF-IDF vector and each reader page's. Vectors use words outside F: tf × idf, with idf(w) = ln((N_d + 1) / (df_w + 1)) + 1 over the N_d reader pages (a word on no reader page gets ln(N_d + 1) + 1). A reader page's vector uses all of its prose words. No word outside F: score 1 |
+
+- The bank is the same as O3's (the reader pages), so the two differ only in how a text is represented: 32 projected dimensions, or every word.
+- **The choice** is the registered rule over O1–O5. After this round the choice is final, and the test is read once.
+- **Predictions (round 3):**
+
+| # | Prediction |
+|---|---|
+| E12 | O5 is eligible, and its AUROC on D-dev against the dev stream's "other" pages is above O3's (0.654) |
+| E13 | No candidate reaches 90% of D-dev replicates within 50 at π = 1 with the running reference, so the chosen one fails the test gate. Most of D is encyclopedic text that a content signal should not call out of scope |
+
+### The dev choice (fixed before the test read)
+
+Dev read, π = 1, 200 replicates each. "Stream alarms" is the dev stream (C's second half, 752 units) with the running reference.
+
+| Candidate | Stream alarms | P-dev within 50 | D-dev within 50 (running) | D-dev within 200 | D-dev AUROC against the stream's "other" pages | Eligible |
+|---|---:|---:|---:|---:|---:|---|
+| O1 register | 0 | 0 / 200 | 1 / 200 | 14 / 200 | 0.602 | yes |
+| O2 rare content words | 0 | 0 / 200 | 0 / 200 | 3 / 200 | 0.488 | yes |
+| **O3 topic distance** | 0 | 0 / 200 | **50 / 200** | 147 / 200 | 0.654 | yes |
+| O4 Delta (round 2) | 0 | 0 / 200 | 0 / 200 | 0 / 200 | 0.515 | yes |
+| O5 TF-IDF novelty (round 3) | 1 | 0 / 200 | 10 / 200 | 55 / 200 | 0.611 | yes |
+
+**The choice: O3, topic distance.** It is eligible and has the most D-dev detections within 50 units. On dev it misses the gate's 90% by far (25%), so E13's expected fail is the likely test outcome. The test is read once, with O3 as the gated signal. The other four are reported beside it, not gated.
+
+### Results (run 2026-10-29)
+
+**The runs.** `pattern_learn --signals --signals-scope dev|test` is S3's run, S4b's signals and S4c's candidates: 30–32 s and 190 MB peak. Pool P: `scripts/s4c_plain_pages.py` wrote 1,022 of the 4,088 qualifying pages after byte 50,000,000. The dev read ran three times, once per round; each round only added a candidate (O1–O3's lines are identical across rounds). The test read ran once.
+
+**Units** (pages with at least 50 prose words):
+
+| Read | Calibration | Stream | D | L | P |
+|---|---:|---:|---:|---:|---:|
+| Dev | 926 of 1,015 | 752 of 830 | 234 of 307 (76%) | 55 of 218 (25%) | 469 of 511 |
+| Test | 1,678 of 1,845 (C) | 1,474 of 1,640 (S) | 237 of 309 (77%) | 55 of 218 (25%) | 451 of 511 |
+
+**The control, check 1: the same page with its markup removed.** Of the 446 P-test pages that are units in both forms, 353 (79%) give the reader exactly the same 50 words. The rest differ because the two renderers disagree at the edges: a template inside a sentence, a caption, an indented line. The mean score change is small against each score's spread: O1 0.026 (its mean is about 1.0), O3 0.006 (about 0.15), O5 0.006 (about 0.87).
+
+**The control, check 2: P planted as a shift.** No candidate detects P. At π = 1 with the running reference, the shares within 50 units on test are O1 0 / 200, O2 0, O3 3 / 200 (1.5% [0.5%, 4.3%]), O4 0 and O5 0. Dev's were all 0 / 200. So no candidate reads markup.
+
+**False alarms (test, running reference):**
+
+| Candidate | S: event rate, alarms | C: alarms (warm-up, not gated) | S, 200 random orders (fixed) |
+|---|---|---|---|
+| O1 | 0.060, 0 | 0 | 0.165 per 1,000 |
+| O2 | 0.048, 0 | 0 | 0 |
+| **O3** | **0.041, 0** | 0 | 0 |
+| O4 | 0.050, 0 | 1 (*Transportation in Brazil*) | 0.086 |
+| O5 | 0.043, 0 | 2 (*Athlon*, *Bayonne*) | 0.003 |
+
+**Detection (test, π = 1, 200 replicates).** Within 50 and within 200 units, then the median delay:
+
+| Candidate | D, running | D, fixed | L, running | P, running |
+|---|---|---|---|---|
+| O1 register | 52 / 124; 102 | 86 / 200; 59 | 1 / 43 | 0 / 2 |
+| O2 rare words | 0 / 2 | 0 / 0 | 0 / 0 | 0 / 0 |
+| **O3 topic distance** | **76 / 151; 66** | 34 / 190; 100 | 0 / 0 | 3 / 12 |
+| O4 Delta | 0 / 0 | 0 / 0 | 9 / 113; 129 | 0 / 2 |
+| O5 TF-IDF novelty | 1 / 7 | 8 / 28 | **200 / 200; 16** | 0 / 0 |
+
+- O3 at π = 0.5: 19 / 53 within 50 / 200; at π = 0.2: 4 / 11.
+- D's event rate against the fixed reference: O1 0.173, O3 0.144, O5 0.089, O2 0.055, O4 0.046. A pass needs about 0.3.
+
+**The registered verdict (O3, the dev choice):**
+
+| Condition | Result |
+|---|---|
+| 1. S in dump order: at most one alarm | **pass** (0) |
+| 2. D-test at π = 1: at least 90% within 50 | **fail**: 76 / 200 = 0.380 [0.316, 0.449] (within 200: 0.755 [0.691, 0.809]) |
+| 3. P-test at π = 1: at most 10% within 50 | **pass**: 0.015 [0.005, 0.043] |
+
+**O3 does not pass.** No candidate does.
+
+**Why: what Dolly-as-pages is.** By Dolly category, O3's AUROC on test against S's "other" pages is 0.675 overall. It is highest where Dolly writes in its own voice: brainstorming 0.841 (20 units), classification 0.748 (8), creative writing 0.739 (28) and general QA 0.714 (66). It is lowest where Dolly rewrites Wikipedia: summarisation 0.579 (29), information extraction 0.606 (5), open QA 0.612 (71) and closed QA 0.615 (10). Most of D (the 256-byte-and-longer answers S4b planted) is encyclopedic prose about a topic. By content it is in scope. What sets it apart is mainly what it is about, and topic distance sees that part.
+
+**Found on the way (not gated).** O5, TF-IDF novelty, detects L (list and disambiguation pages) in 200 of 200 replicates within 50 units on both reads, median 16 (S4b's V: 95.5%, median 24). It has no alarm on S. It does see L from the words of their few prose lines; only 25% of L pages have 50 prose words.
+
+### Predictions, scored
+
+| # | Prediction | Result |
+|---|---|---|
+| E1 | O1 is chosen | **Miss**: O3 is chosen |
+| E2 | O1 on D-dev ≥ 90% within 50, median ≤ 10 | **Miss**: 1 / 200 |
+| E3 | O2 does not detect D | **Hit**: 3 / 200 within 200 (dev), 2 / 200 (test) |
+| E4 | O3 detects D in 30–90% within 50 | **Miss on dev** (25%); in range on test (38%) |
+| E5 | Every candidate on the dev stream: rate in [0.03, 0.08], ≤ 1 alarm | **Hit**: 0.044–0.063; O5 1 alarm, the rest 0 |
+| E6 | ≥ 90% of P pages score as their source (O1, O2); P-dev ≤ 5% | **Miss** for the first part (O1 80%, O2 77% on dev); **hit** for the second (0 / 200 for every candidate) |
+| E7 | O3 passes the test gate, lower bound ≥ 0.85 | **Miss**: 0.380 [0.316, 0.449] |
+| E8 | Fewer than 30% of L's pages are units | **Hit**: 25% |
+| E9 | O4 eligible | **Hit** |
+| E10 | O4's D event rate ≥ 0.25 and O4 chosen | **Miss**: 0.034 (dev) |
+| E11 | O4 ≥ 70% within 50 on D-dev | **Miss**: 0 / 200 |
+| E12 | O5's AUROC on D-dev above O3's | **Miss**: 0.611 against 0.654 |
+| E13 | No candidate reaches 90% on dev; the chosen one fails the test gate | **Hit** |
+
+### Checks
+
+- **`native_epistemic_test`:** 1,119 checks, 46 of them new (`test_scope_S4c`). The new checks cover:
+  - the list rule;
+  - the reference and F, with ties;
+  - O1–O5 against values worked by hand;
+  - O4's binomial floor;
+  - an end-to-end case through S4b's rule: a planted language with another register is detected within 50 units in at least 90 of 100 replicates, and more of the reference language in at most 5.
+- **Six planted bugs are caught:** the number list rule removed (2 checks fail); O1 without its factor 2 (2); O4 without its floor (2); O3 returning the cosine, not the distance (2); idf without its + 1 (1); O2 counting F's words (2).
+- **S3 parity.** Without `--signals`, all 10 files of S3's run are byte-identical to main 7f77615's, and stdout matches apart from timings.
+- **S4b parity.** With `--signals` and without `--signals-scope`, all 13 files (gap map, units, signal gaps, planted gaps, facts, patterns and seeds) and stdout are S4b's, byte for byte.
+- **The nine CTests of HANDOFF §4.4 pass** (CMake Release build of their targets; `native_epistemic_test` 1,119 checks).
+
+## S4c decisions
+
+1. **No out-of-scope signal is adopted.** O3 (topic distance) was chosen on dev and read once: 38% of Dolly shifts are detected within 50 pages, against the 90% bar. It stays built and reported, like Σ and U.
+2. **No candidate reads markup.** Wiki pages with their markup removed (P) are never detected as a shift, and on most pages they score exactly as their source. The reader (prose lines only, list items in any markup dropped, the first 50 words) is the one to use for any later content signal.
+3. **Dolly-as-pages is mostly in scope by content.** Answers of 256 bytes or more are mostly encyclopedic prose. A content signal should not call them out of scope, and none does. Only the part in Dolly's own voice (brainstorming, creative writing) separates well (AUROC 0.74–0.84 with O3). A cleaner planted pool for "an unseen domain in plain prose" would be text with neither wiki's topics nor its register, such as Dolly's brainstorming and creative-writing answers, or another corpus.
+4. **The `scope` gap kind** is written for the O alarms in the run's own gap file (three on C in the test read: O4's and O5's). Since no O signal is adopted, none of them opens a gap in Cypha's map.
+
+## S4c for Odin
+
+- **A different planted pool?** S4b's D is mostly encyclopedic prose, so the gate asks a content signal to flag in-scope text. Should the out-of-scope gate be read on Dolly's own-voice answers only (brainstorming, creative writing, general QA), or on another corpus? That needs a new registration and a fresh read.
+- **O5 for new page types?** O5 sees lists and disambiguation pages faster than V (100% within 50, median 16 against 95.5%, median 24), with no alarm on S. L was not S4c's gate, so it is not adopted here. Adopt it beside V under S4b's rule, or leave V alone?
+- **A `scope` gap kind** for DISCOVERY §3.2, for out-of-scope text, if a signal ever passes.
+
+## S4c reproduce
+
+```bash
+g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp -o pattern_learn
+g++ -O2 -std=c++20 -I native/include native/tools/epistemic_test.cpp -o epistemic_test && ./epistemic_test   # 1,119 checks
+R=/root/work/s4c/runs; S4B=/root/work/s4b/runs   # S4b's Dolly pages and surprise files (S4b reproduce)
+python3 scripts/s4c_plain_pages.py /root/cdata/enwik8 $R/plain_pages.xml   # 1,022 pages
+E=/root/cdata/enwik8; W=/root/work/f2/wikidata/wd_values.tsv; DEV=bench/eval/t_qa_wiki_dev.tsv
+A=/root/work/answer; Q=/root/work/qa2/runs
+D=$A/d_rows.tsv,$A/d2_rows.tsv,$Q/E1a.rows.tsv,$Q/E1b.rows.tsv,$Q/E1c.rows.tsv,$Q/E1d.rows.tsv
+for read in dev test; do   # from the repository root (the vectors); dev never scores S
+  O=$R/$read; mkdir -p $O
+  ./pattern_learn $E $O --cv --wikidata $W --dev $DEV --gaps $O/gap_map.tsv --demand $D --parse $A/parse_dev.tsv \
+    --signals $O --signals-dolly $S4B/dolly_pages.xml --signals-gaps $O/signal_gaps.tsv \
+    --surprise $S4B/sig/surprise.0.tsv,$S4B/sig/surprise.1.tsv --signals-scope $read --signals-plain $R/plain_pages.xml > $R/$read.out
+done
+```
+
+- The S4c lines are on stdout: `S4c SCOPE`, `SIGNAL_O_SET`, `SIGNAL_O_SAME`, and the SIGNAL lines of O1-register to O5-novelty.
+- Test outputs (sha256 prefix): `units.tsv` 6c5e5f67215316b5 (30,850 rows), `signal_gaps.tsv` 75f7569e3c57f088, `.planted.tsv` 37db7de14ca78b22. `plain_pages.xml` 6b1f2dcc97bbc302.

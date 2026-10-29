@@ -2423,6 +2423,139 @@ static void test_gap_map() {
   CHECK_STR(gap_status_name(GapStatus::Queued), "queued");
 }
 
+// ---------------------------------------------------------------------------
+// S4c: the out-of-scope signal read from prose words (unknown_signals.hpp)
+// ---------------------------------------------------------------------------
+
+static void test_scope_S4c() {
+  // The list rule: '-', a bullet, or digits then '.' or ')' at the start of a line (after blanks).
+  const std::string lines = "- apples\n  - pears\n\xE2\x80\xA2 plums\n1. one\n12) two\n1990 was a year\nText - here\n\n7";
+  CHECK(ood_list_line(lines, 0));
+  CHECK(ood_list_line(lines, lines.find("  - pears")));
+  CHECK(ood_list_line(lines, lines.find("\xE2\x80\xA2")));
+  CHECK(ood_list_line(lines, lines.find("1. one")));
+  CHECK(ood_list_line(lines, lines.find("12) two")));
+  CHECK(!ood_list_line(lines, lines.find("1990 was")));
+  CHECK(!ood_list_line(lines, lines.find("Text")));
+  CHECK(!ood_list_line(lines, lines.find("\n\n7") + 1));  // an empty line
+  CHECK(!ood_list_line(lines, lines.size() - 1));          // digits with nothing after them
+  CHECK(!ood_list_line(lines, lines.size()));
+
+  // The reference: F by count, ties by the word; the other words' share last.
+  OodRef ref;
+  for (const char* w : {"the", "the", "the", "the", "of", "of", "and", "and", "cat", "dog"}) ref.add(w);
+  ref.finish(3);
+  CHECK(ref.N == 10 && ref.top.size() == 3);
+  CHECK_STR(ref.top[0], "the");
+  CHECK_STR(ref.top[1], "and");  // ties (2 each) by the word
+  CHECK_STR(ref.top[2], "of");
+  CHECK_NEAR(ref.share[0], 0.4, 1e-12);
+  CHECK_NEAR(ref.share[3], 0.2, 1e-12);
+  CHECK(ref.in_top("of") && !ref.in_top("cat"));
+  CHECK_NEAR(ref.freq("cat"), 0.1, 1e-12);
+  CHECK_NEAR(ref.freq("emu"), 0.0, 1e-12);
+
+  // O1: a window with the reference's shares has G 0; a window of one word has G = 2 ln(1 / p).
+  const std::vector<std::string> same = {"the", "the", "the", "the", "of", "of", "and", "and", "cat", "emu"};
+  CHECK_NEAR(ood_register(same, ref), 0.0, 1e-12);
+  CHECK_NEAR(ood_register(std::vector<std::string>(10, "of"), ref), 2.0 * std::log(1.0 / 0.2), 1e-12);
+  CHECK_NEAR(ood_register(std::vector<std::string>(10, "zebra"), ref), 2.0 * std::log(1.0 / 0.2), 1e-12);  // the other bin
+  CHECK(ood_register({}, ref) == 0.0);
+
+  // O2: the mean -ln p over words outside F, with p = (n + 0.5) / (N + 0.5 (V + 1)); V = 5 distinct words.
+  const double den = 10.0 + 0.5 * 6.0;
+  CHECK_NEAR(ood_rare({"the", "cat", "emu"}, ref), (-std::log(1.5 / den) - std::log(0.5 / den)) / 2.0, 1e-12);
+  CHECK(ood_rare({"the", "of"}, ref) == 0.0);
+
+  // O3: the page vector skips F and words with no vector; distance 1 - the best cosine.
+  const float vcat[2] = {1.0f, 0.0f}, vdog[2] = {0.0f, 1.0f};
+  auto vec = [&](const std::string& w) -> const float* { return w == "cat" ? vcat : w == "dog" ? vdog : nullptr; };
+  const auto pc = ood_page_vector({"the", "cat", "emu"}, ref, 2, vec);
+  CHECK(pc.size() == 2);
+  CHECK_NEAR(pc[0], 1.0, 1e-12);
+  CHECK(ood_page_vector({"the", "emu"}, ref, 2, vec).empty());
+  const auto pcd = ood_page_vector({"cat", "dog"}, ref, 2, vec);  // equal weights (equal shares): the diagonal
+  CHECK_NEAR(pcd[0], std::sqrt(0.5), 1e-12);
+  CHECK_NEAR(pcd[1], std::sqrt(0.5), 1e-12);
+  const std::vector<std::vector<double>> bank = {{0.0, 1.0}, {std::sqrt(0.5), std::sqrt(0.5)}};
+  CHECK_NEAR(ood_topic_distance(pc, bank), 1.0 - std::sqrt(0.5), 1e-12);
+  CHECK_NEAR(ood_topic_distance(pcd, bank), 0.0, 1e-12);
+  CHECK(ood_topic_distance({}, bank) == 1.0 && ood_topic_distance(pc, {}) == 1.0);
+
+  // O4: windows of one fixed composition give mean = share and sd at its binomial floor; such a window scores 0.
+  {
+    OodRef r2;
+    std::vector<std::vector<std::string>> pages;
+    for (int p = 0; p < 3; ++p) {
+      std::vector<std::string> w;
+      for (int k = 0; k < 10; ++k)
+        for (const char* x : {"a", "a", "b", "c", "d"}) w.push_back(x), r2.add(x);
+      pages.push_back(w);
+    }
+    r2.finish(2);
+    OodProfile pr;
+    pr.build(r2, pages, 2, 5);
+    CHECK(pr.windows == 30 && pr.mu.size() == 3);
+    CHECK_NEAR(pr.mu[pr.bin.at("a")], 0.4, 1e-12);
+    CHECK_NEAR(pr.sd[pr.bin.at("a")], std::sqrt(0.4 * 0.6 / 5.0), 1e-12);
+    CHECK_NEAR(ood_delta({"a", "b", "a", "c", "d"}, pr), 0.0, 1e-12);
+    const double z = (std::fabs(0.0 - 0.4) / std::sqrt(0.24 / 5) + std::fabs(0.0 - 0.2) / std::sqrt(0.16 / 5) + std::fabs(1.0 - 0.4) / std::sqrt(0.24 / 5)) / 3.0;
+    CHECK_NEAR(ood_delta({"c", "c", "d", "e", "f"}, pr), z, 1e-12);
+  }
+
+  // O5: TF-IDF novelty against the bank pages; F's words never count.
+  {
+    OodTfidf tf;
+    tf.build(ref, {{"apple", "banana", "the"}, {"cherry", "date", "date"}});
+    CHECK(tf.pages == 2);
+    CHECK_NEAR(tf.novelty({"apple", "banana", "of"}, ref), 0.0, 1e-12);
+    CHECK_NEAR(tf.novelty({"zebra", "yak"}, ref), 1.0, 1e-12);
+    CHECK_NEAR(tf.novelty({"the", "of"}, ref), 1.0, 1e-12);
+    const double ia = std::log(3.0 / 2.0) + 1.0, iz = std::log(3.0) + 1.0;  // apple on 1 of 2 pages; zebra on none
+    CHECK_NEAR(tf.novelty({"apple", "zebra"}, ref), 1.0 - ia / std::sqrt(ia * ia + iz * iz) * std::sqrt(0.5), 1e-12);
+  }
+
+  // End to end: windows drawn from the reference language are silent; a planted language with another register
+  // (function words used in other shares) is detected by O1 through S4b's rule.
+  {
+    std::mt19937_64 rng(4041);
+    const std::vector<std::string> fwords = {"the", "of", "and", "in", "to", "a", "is", "was", "you", "can"};
+    const std::vector<double> pa = {0.30, 0.18, 0.14, 0.12, 0.10, 0.08, 0.04, 0.03, 0.005, 0.005};  // wiki-like
+    const std::vector<double> pb = {0.12, 0.05, 0.10, 0.06, 0.12, 0.10, 0.12, 0.01, 0.16, 0.16};    // another register
+    auto draw = [&](const std::vector<double>& p, std::size_t n, double content) {
+      std::discrete_distribution<int> fd(p.begin(), p.end());
+      std::uniform_real_distribution<double> U(0, 1);
+      std::uniform_int_distribution<int> cw(0, 4999);
+      std::vector<std::string> w;
+      for (std::size_t i = 0; i < n; ++i) w.push_back(U(rng) < content ? "w" + std::to_string(cw(rng)) : fwords[static_cast<std::size_t>(fd(rng))]);
+      return w;
+    };
+    OodRef r;
+    for (int i = 0; i < 400; ++i)
+      for (const auto& w : draw(pa, 200, 0.5)) r.add(w);
+    r.finish(10);
+    std::vector<SignalUnit> C, S, A, B;
+    for (int i = 0; i < 600; ++i) C.push_back({ood_register(draw(pa, kOodWindow, 0.5), r), 0, signal_unit_id("C", static_cast<std::size_t>(i))});
+    for (int i = 0; i < 1500; ++i) S.push_back({ood_register(draw(pa, kOodWindow, 0.5), r), 0, signal_unit_id("S", static_cast<std::size_t>(i))});
+    for (int i = 0; i < 400; ++i) A.push_back({ood_register(draw(pa, kOodWindow, 0.5), r), 0, signal_unit_id("A", static_cast<std::size_t>(i))});
+    for (int i = 0; i < 400; ++i) B.push_back({ood_register(draw(pb, kOodWindow, 0.5), r), 0, signal_unit_id("B", static_cast<std::size_t>(i))});
+    const SignalRule rule;
+    const SignalRun run = signal_run(C, S, 1, true, rule);
+    CHECK(run.alarms.size() <= 1);
+    std::size_t hitB = 0, hitA = 0;
+    std::uniform_int_distribution<std::size_t> T(100, S.size() - 200);
+    for (int rep = 0; rep < 100; ++rep) {
+      const std::size_t t0 = T(rng);
+      const SignalDetection db = signal_planted(C, S, B, 1, true, rule, run, t0, 1.0, 200, rng);
+      const SignalDetection da = signal_planted(C, S, A, 1, true, rule, run, t0, 1.0, 200, rng);
+      hitB += db.delay > 0 && db.delay <= 50;
+      hitA += da.delay > 0 && da.delay <= 50;
+    }
+    CHECK(hitB >= 90);  // the other register: detected within 50 units
+    CHECK(hitA <= 5);   // more of the reference language: silent
+  }
+}
+
 int main() {
   test_degree_of_conflict();
   test_classify();
@@ -2448,6 +2581,7 @@ int main() {
   test_signals_S4b();
   test_sources_S8c();
   test_gap_map();
+  test_scope_S4c();
   std::printf("epistemic_test: %d checks, %d failed\n", g_checks, g_failed);
   return g_failed == 0 ? 0 : 1;
 }
