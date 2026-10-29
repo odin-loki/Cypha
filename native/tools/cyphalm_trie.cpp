@@ -341,6 +341,7 @@ struct Args {
     std::string fam_ent_at = "all";               // DK2: where --fam-ent's frames go (all | answer | start)
     bool copy_frame = false;                      // DK2: copy a frame's entity, not its end; the tag may repeat the message
     std::string gate;                             // GEN-B: sample's sentence gate, K[,wf=..][,wp=..][,wm=..][,min=..][,max=..]
+    std::string temps;                            // TEMPS: sample's temperatures, T[,T][,T] (default 0.6,0.8,1.0)
 };
 
 std::string env_or(const char* name, const char* fallback) {
@@ -398,6 +399,7 @@ Args parse(int argc, char** argv, int from) {
         else if (s == "--no-cls") a.no_cls = true;
         else if (s == "--no-copy") a.no_copy = true;
         else if (s == "--gate") a.gate = next();
+        else if (s == "--temps") a.temps = next();  // TEMPS
         else if (s == "--fam-only") a.fam_only = true;
         else if (s == "--model") a.model = next();
         else if (s == "--plan") a.plan = next();
@@ -1156,9 +1158,34 @@ int cmd_sample(const Args& a) {
     if (a.outs.empty() || a.outs.size() > 2 || a.prompts < 1 || a.bytes < 100) {
         std::fprintf(stderr,
                      "usage: cyphalm_trie sample <enwik8> <out_dev.txt> [out_fresh.txt] [--prompts 250] [--bytes 600]\n"
-                     "       cyphalm_trie sample <enwik8> <out.txt> --prompts-file bench/eval/gen_prompts_dev.tsv\n");
+                     "       cyphalm_trie sample <enwik8> <out.txt> --prompts-file bench/eval/gen_prompts_dev.tsv\n"
+                     "       [--temps T[,T][,T]] (default 0.6,0.8,1.0)\n");
         return 2;
     }
+    // TEMPS: one to three temperatures; each keeps the seed of its position, so --temps 0.4 pairs with 0.6's draws.
+    std::vector<double> temps = {0.6, 0.8, 1.0};
+    if (!a.temps.empty()) {
+        temps.clear();
+        for (const auto& t : split(a.temps, ',')) {
+            char* end = nullptr;
+            const double v = std::strtod(t.c_str(), &end);
+            if (t.empty() || end == t.c_str() || *end != '\0' || !(v > 0.0) || v > 4.0) {
+                std::cerr << "bad --temps: " << a.temps << " (one to three temperatures in (0, 4], e.g. 0.4,0.6,0.8)\n";
+                return 2;
+            }
+            temps.push_back(v);
+        }
+        if (temps.empty() || temps.size() > 3) {
+            std::cerr << "--temps takes one to three temperatures\n";
+            return 2;
+        }
+    }
+    const std::size_t nt = temps.size();
+    const auto temp_label = [](double t) {  // trie_T0.6 for one decimal (as before), else two
+        char b[32];
+        std::snprintf(b, sizeof b, std::fabs(t * 10.0 - std::round(t * 10.0)) < 1e-9 ? "%.1f" : "%.2f", t);
+        return std::string(b);
+    };
     const std::size_t nfiles = a.outs.size();
     GateSpec gate;  // GEN-B
     if (!a.gate.empty() && !parse_gate(a.gate, gate)) {
@@ -1348,10 +1375,10 @@ int cmd_sample(const Args& a) {
     if (cps) model_line += "\tplan=" + a.plan;
     if (kn) model_line += "\tbkn=" + a.bkn + ":" + a.bkn_way;  // BKN
     if (gate.k > 0) model_line += "\tgate=" + a.gate;  // GEN-B
-    const double temps[3] = {0.6, 0.8, 1.0};
-    std::vector<std::string> gens[3];  // GEN-A: the generated texts by temperature (--prompts-file)
+    if (!a.temps.empty()) model_line += "\ttemps=" + a.temps;  // TEMPS
+    std::vector<std::vector<std::string>> gens(nt);  // GEN-A: the generated texts by temperature (--prompts-file)
     std::vector<int> planned(nfiles, 0);
-    GateStats gst[3];
+    std::vector<GateStats> gst(nt);
     const auto t_gen = std::chrono::steady_clock::now();
     const std::clock_t c_gen = std::clock();  // GEN-B: CPU time too (wall time varies with the machine's load)
     std::size_t gen_bytes = 0;
@@ -1361,7 +1388,7 @@ int cmd_sample(const Args& a) {
             std::cerr << "cannot write " << a.outs[f] << "\n";
             return 1;
         }
-        if (experts || gate.k > 0) out << model_line << "\n";
+        if (experts || gate.k > 0 || !a.temps.empty()) out << model_line << "\n";
         for (int k = 0; k < a.prompts; ++k) {
             const std::size_t id = f * static_cast<std::size_t>(a.prompts) + static_cast<std::size_t>(k);
             const std::string& p = prompts[id];
@@ -1375,7 +1402,7 @@ int cmd_sample(const Args& a) {
                 out << "\n";
                 planned[f] += !plan.facts.empty();
             }
-            for (int ti = 0; ti < 3; ++ti) {
+            for (std::size_t ti = 0; ti < nt; ++ti) {
                 const std::uint64_t seed = 1000003ull * (id + 1) + static_cast<std::uint64_t>(ti) * 7919ull;
                 SampleOptions opt;
                 opt.temperature = temps[ti];
@@ -1392,9 +1419,7 @@ int cmd_sample(const Args& a) {
                                                   kn_rep)
                               : sample_continuation(pm, w, p, cfg.train, a.bytes, seed32, opt);
                 gen_bytes += text.size();
-                char kind[32];
-                std::snprintf(kind, sizeof kind, "trie_T%.1f", temps[ti]);
-                out << "GEN\t" << kind << "\t" << printable(text) << "\n";
+                out << "GEN\ttrie_T" << temp_label(temps[ti]) << "\t" << printable(text) << "\n";
                 if (!a.prompts_file.empty()) gens[ti].push_back(text);
             }
             if ((k + 1) % 50 == 0) std::cerr << "file " << f << " prompt " << (k + 1) << "/" << a.prompts << "\n";
@@ -1405,9 +1430,9 @@ int cmd_sample(const Args& a) {
     const double cpu = static_cast<double>(std::clock() - c_gen) / CLOCKS_PER_SEC;
     std::cerr << "generated " << gen_bytes << " bytes in " << secs << " s (" << 1e6 * secs / std::max<std::size_t>(gen_bytes, 1)
               << " us per byte); cpu " << cpu << " s (" << 1e6 * cpu / std::max<std::size_t>(gen_bytes, 1) << " us per byte)\n";
-    for (int ti = 0; ti < 3 && gate.k > 0; ++ti) {  // GEN-B: what the gate kept
+    for (std::size_t ti = 0; ti < nt && gate.k > 0; ++ti) {  // GEN-B: what the gate kept
         const double ns = static_cast<double>(std::max<std::size_t>(gst[ti].sentences, 1));
-        std::fprintf(stderr, "gate T%.1f sentences %zu mean fluency %.4f pmi %.4f markup %.4f not-first %.3f\n", temps[ti],
+        std::fprintf(stderr, "gate T%s sentences %zu mean fluency %.4f pmi %.4f markup %.4f not-first %.3f\n", temp_label(temps[ti]).c_str(),
                      gst[ti].sentences, gst[ti].fluency / ns, gst[ti].pmi / ns, gst[ti].markup / ns, gst[ti].changed / ns);
     }
     if (a.prompts_file.empty()) return 0;
@@ -1485,7 +1510,7 @@ int cmd_sample(const Args& a) {
     sp.finish();
     std::size_t all_c = 0, all_n = 0;
     std::printf("GEN_EVAL copy32");
-    for (int ti = 0; ti < 3; ++ti) {
+    for (std::size_t ti = 0; ti < nt; ++ti) {
         std::size_t cv = 0, n = 0;
         for (const auto& g : gens[ti]) {
             const auto [x, y] = sp.covered(g);
@@ -1494,7 +1519,7 @@ int cmd_sample(const Args& a) {
         }
         all_c += cv;
         all_n += n;
-        std::printf(" T%.1f %.4f", temps[ti], n ? static_cast<double>(cv) / static_cast<double>(n) : 0.0);
+        std::printf(" T%s %.4f", temp_label(temps[ti]).c_str(), n ? static_cast<double>(cv) / static_cast<double>(n) : 0.0);
     }
     std::printf(" pooled %.4f\n", all_n ? static_cast<double>(all_c) / static_cast<double>(all_n) : 0.0);
     return 0;
