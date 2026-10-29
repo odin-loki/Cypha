@@ -378,6 +378,199 @@ The gate above asked for superiority, and (b) came out level. Odin's instruction
 - **Prediction:** missed (it failed on RW).
 - The scores were read with `cwc eval`, passing the fresh sets in the three pair-file slots (its section titles then name the slots, not the sets).
 
+## S-1c: rare words, a fresh read, the step's cost and an information-weighted count (registered 2026-10-29, before any run)
+
+**Odin Loch** · 2026-10-29 · follows §9 above and the bill of work's "Next" for semantics
+
+(The definitions, data, rules and predictions below were written and committed before any S-1c run. Results are added under them.)
+
+**Question.** (b) is level with PPMI-SVD on common words but failed the non-inferiority rule on rare words (RW: −0.035 [−0.083, +0.013]). Four items:
+1. A count-dependent prior that shrinks rare words toward a prior (SEMANTICS §2: "MDL shrinkage on ‖Δk‖: rare words stay near the prior"). Does it fix rare words without hurting common ones?
+2. A non-inferiority read on fresh sets never read before.
+3. `geometry.hpp`: remove the per-call heap allocation in the §4.2 step, with outputs byte-identical, and measure the speedup.
+4. An evidence count weighted by information in the §4.2 step (§9 point 3), measured on dev.
+
+### S-1c.1 The prior (item 1)
+
+- **Vectors.** (b)'s published table `sgns_v0p3_e5_wc` (W + C, 50,000 × 256), unchanged. No retraining.
+- **Rule.** `geometry.hpp` `mdl_shrink` on each word: μ ← μ + λ_w (θ0_w − μ), λ_w = min(1, λ / (n_w + 1)), then back to unit length. n_w is the word's corpus count (the vocabulary count of C1's stream). μ starts as the word's unit vector.
+- **Two priors θ0_w, chosen between on dev:**
+  - **P-world:** one shared prior, the mean of the 50,000 unit word vectors, normalised (the world prior θ0).
+  - **P-context:** a per-word prior from the word's own contexts ("à la carte", Khodak et al. 2018). c̄_w is the mean, over every occurrence of w in C1's stream (no subsampling), of the (b) W + C vectors of the words within ±5 positions on the same line. A linear map A (256 × 256) is fitted by least squares with a ridge of 1e-6 × the mean diagonal, from c̄_w to the unit vector of w, on the words with n_w ≥ 500. θ0_w = A c̄_w, normalised.
+- **Dev grid.** λ ∈ {0, 1, 3, 10, 30, 100, 300, 1000} for each prior; λ = 0 is (b) itself.
+- **Dev sets.** MEN (C5 pairs, as S-1b) and RW (Stanford rare words, C1 protocol: both words in the top 50,000, 732 pairs). RW was read once in §9; after that read it is spent as a test set, so it is used here only as dev, and this is said wherever its numbers appear.
+- **Dev choice.** The (prior, λ) with the largest RW ρ, subject to MEN ρ not below (b)'s by more than 0.01 and WordSim/SimLex not read. Ties go to the smaller λ, then to P-world.
+
+### S-1c.2 The fresh read (item 2)
+
+Fresh sets, never read by S-1, S-1b or anyone in this repository (downloaded 2026-10-29 into `/root/work/sem2/fresh2`, used for evaluation only, not committed):
+
+| set | source | sha256 | pairs | pairs with both words in the top 50,000 (counted from the words only, before any score was read) |
+|---|---|---|---|---|
+| Card-660 (rare words; Pilehvar et al., EMNLP 2018) | `pilehvar.github.io/card-660/dataset.tsv` (the page states no licence; cited, not redistributed) | `0cfae4d9ee596c4dd745a138f49c99e74c31a8e171bc4108b62d243607a6c1a8` | 660 | 91 (median rarer word rank 18,507) |
+| MTurk-287 (Radinsky et al. 2011) | `mfaruqui/eval-word-vectors`, `EN-MTurk-287.txt` (S-1b's source) | `a9ae3a9decb75a9700fe0cf18b048c1344774d9f40e0196baf8e34d4cd9d1ce5` | 287 | 284 |
+| VERB-143 (Baker et al. 2014) | the same, `EN-VERB-143.txt` | `7259e19961c81912aa4c72de0102e480b2ad2bb9f4ce97d036fbde8e1a403001` | 143 | 144 lines read as pairs |
+
+- **Read once**, with the dev choice fixed: (b) + prior, (b) alone and PPMI-SVD, paired bootstrap (2,000 resamples, `cwc eval`), Spearman ρ.
+- **Rule (the vector source).** (b) + prior replaces PPMI-SVD as the vector source if all three hold:
+  - MTurk-287: the lower 95% bound of ρ(b + prior) − ρ(PPMI-SVD) is above −0.03 (S-1b's margin);
+  - VERB-143: the same;
+  - Card-660: the point difference is ≥ 0 and its lower 95% bound is above −0.10. The margin is wider because only 91 pairs are usable (a 0.03 margin cannot be met at that size whatever the vectors); it is fixed here, before the read.
+- **Also reported, not part of the rule:** ρ(b + prior) − ρ(b) on each fresh set, with P(diff > 0).
+
+### S-1c.3 The step's allocation (item 3)
+
+- `pull_push_step` and `distill_step` build several `std::vector`s per call: the per-item force accumulator (one 256-double vector per touched item), the softmax terms, the residuals and one step vector per item. They are replaced by a scratch buffer reused across calls (one per thread), with the same arithmetic in the same order.
+- **Lossless check:** `native_geometry_test`'s output (its determinism hashes and every printed number) byte-identical before and after; the (c) run on the 5 MB prefix (τ 0.05, η 300, κ0 100) gives S-1b's state hash `8f4f325f6752c543`; a `distill` run gives the same hash before and after.
+- **Speed:** time per `pull_push_step` at d = 256 with 11 candidates, the old and new header compiled the same way, interleaved runs, median and range over runs.
+
+### S-1c.4 The information-weighted count (item 4)
+
+- **Option** `StepOptions::info_count` (default off, so every default output is unchanged). When on, each observation in `pull_push_step` adds w = 1 − H(p) / ln k to the evidence count n of the anchor and of the positive, instead of 1. p is the anchor's masked InfoNCE softmax at the largest prefix and k the number of unmasked entries (w = 1 when k < 2). A flat softmax (random partners) adds little evidence, so K = Σ / (n + κ0) does not decay before structure forms; a peaked one adds nearly one.
+- **Dev read only** (no test read; nothing is adopted as a default): the 5 MB prefix (`texts/enwik5m`), MEN on that prefix's top 5,000 words (558 pairs), as in §2.3, from a random start at (τ, η, κ0) ∈ {(0.05, 300, 100), (0.05, 1000, 1000)} with the option off and on, and from (b)'s tables at (0.05, 100, 1000).
+
+### S-1c predictions
+
+| # | Prediction |
+|---|---|
+| C1 | On dev RW, the chosen prior lifts (b)'s ρ by ≥ 0.02, to within ±0.01 of PPMI-SVD or above; the chosen λ is 3–100; P-context beats P-world |
+| C2 | On dev MEN, the chosen prior moves ρ by less than ±0.01 |
+| C3 | The fresh rule passes: non-inferior on MTurk-287 and VERB-143; Card-660's point difference ≥ 0 with the lower bound above −0.10 |
+| C4 | On Card-660, ρ(b + prior) − ρ(b) > 0 |
+| C5 | The allocation change is lossless (all three checks identical) and makes `pull_push_step` 2–5× faster (from about 110 µs) |
+| C6 | With `info_count`, (c) from a random start reaches 5 MB MEN 0.10–0.25 at one of the two settings (without it: 0.111 and 0.064) |
+| C7 | With `info_count`, (c) from (b)'s tables stays within ±0.02 of the run without it |
+
+### S-1c results (run 2026-10-29)
+
+The machine was shared with about twenty other jobs on 4 cores (load average 25–30), so wall-clock times below are slow and only their ratios mean anything.
+
+#### Item 1: the prior, on dev
+
+(b) = `sgns_v0p3_e5_wc`. λ = 0 reproduces (b) to the printed digit (MEN 0.756, RW 0.329, Δ RW −0.035 [−0.083, +0.013]). Spearman ρ; Δ against PPMI-SVD on the same pairs, 2,000 paired resamples.
+
+| prior, λ | MEN (C5 pairs, 1,316) | RW (dev; C1 pairs, 732) | Δ RW against PPMI-SVD [95%] |
+|---|---|---|---|
+| none (λ 0) = (b) | 0.756 | 0.329 | −0.035 [−0.083, +0.013] |
+| context, 1 / 3 / 10 | 0.756 / 0.756 / 0.756 | 0.332 / 0.336 / 0.347 | −0.031 / −0.027 / −0.017 |
+| **context, 30** | **0.755** | **0.357** | **−0.007 [−0.049, +0.037]** |
+| context, 100 | 0.743 (fails the MEN limit) | 0.365 | +0.002 [−0.038, +0.045] |
+| context, 300 / 1,000 | 0.730 / 0.723 | 0.363 / 0.358 | −0.001 / −0.005 |
+| world, 1 / 3 / 10 | 0.756 / 0.756 / 0.756 | 0.335 / 0.352 / 0.342 | −0.029 / −0.012 / −0.022 |
+| world, 30 | 0.747 | 0.291 | −0.072 [−0.151, +0.007] |
+| world, 100 / 300 / 1,000 | 0.427 / 0.091 / 0.001 | 0.241 / 0.189 / 0.125 | −0.123 / −0.174 / −0.239 |
+| PPMI-SVD | 0.732 | 0.364 | |
+
+- **The context prior.** A was fitted on the 2,607 words with n ≥ 500. Its prior points close to a word's own vector: mean cosine 0.927 on those words (in-sample), 0.776 on the other 47,393.
+- **The world prior** helps a little at small λ, then destroys the space: one shared direction pulls every word together.
+- **Dev choice (the registered rule):** the largest RW ρ with MEN no more than 0.01 below (b)'s (0.756), so MEN ≥ 0.746. That is **the context prior at λ = 30**: RW 0.329 → 0.357, MEN 0.756 → 0.755. With n_w the corpus count, a word seen 30 times takes half its vector from the prior, and a word seen 3,000 times about 1%.
+
+#### Item 2: the fresh read (once, 2026-10-29)
+
+The dev choice was fixed before this read. Both words in the top 50,000; 2,000 paired resamples.
+
+| set | pairs used | ρ (b) + prior | ρ (b) | ρ PPMI-SVD | Δ (b) + prior − PPMI-SVD [95%], P(Δ > 0) | Δ (b) + prior − (b) [95%], P(Δ > 0) | rule |
+|---|---|---|---|---|---|---|---|
+| Card-660 (rare) | 91 of 660 | 0.228 [0.017, 0.413] | 0.130 | 0.171 | +0.057 [−0.064, +0.190], 0.797 | **+0.098 [+0.021, +0.182], 0.996** | pass (point ≥ 0, lower bound > −0.10) |
+| MTurk-287 | 284 of 287 | 0.685 [0.616, 0.742] | 0.676 | 0.619 | **+0.066 [+0.015, +0.119], 0.998** | +0.009 [−0.003, +0.021], 0.945 | pass |
+| VERB-143 | 144 of 144 | 0.319 [0.155, 0.472] | 0.318 | 0.388 | −0.069 [−0.189, +0.049], 0.117 | +0.001 [−0.021, +0.023], 0.509 | **fail** (lower bound −0.189 < −0.03) |
+
+- **Decision: the rule fails on VERB-143, so PPMI-SVD stays the vector source.**
+- **The prior does what it was for.** On the fresh rare words (Card-660) it lifts (b) by +0.098, significantly. It leaves common words alone (MTurk-287 +0.009, VERB-143 +0.001).
+- **On common nouns (b) is now above PPMI-SVD significantly** (MTurk-287 +0.066). On verbs (VERB-143) both Cypha tables are below it. That set has only 144 pairs: a −0.03 margin cannot be met at that size, which this registration should have seen, as it did for Card-660. The rule is applied as written. SimVerb-3500 (3,056 pairs, §9) had (b) level with PPMI-SVD (+0.006).
+- `cwc eval` names its three slots WordSim-353, SimLex-999 and MEN. In `fresh_vs_ppmi.md` they hold Card-660, MTurk-287 and VERB-143.
+
+#### Item 3: the step's allocation and cost
+
+- **What changed** (`geometry.hpp`):
+  - `pull_push_step` and `distill_step` reuse one scratch buffer per thread: the force accumulator's rows, the softmax terms, the residuals and the step vector.
+  - The InfoNCE forces reuse each term's norms and cosine (`add_pair_force_known`) instead of recomputing them for the softmax and for each side's gradient. The values are the same bits: the same `norm` and `dot` on the same data, with dot(j, i) = dot(i, j) and |j||i| = |i||j| exactly in IEEE arithmetic.
+- **Lossless, three ways:**
+  - `geometry_test`'s output is identical before and after, except one timing line. Its determinism hashes are unchanged (seed 77 `6fc6b79174ae5241`).
+  - (c) on the 5 MB prefix (τ 0.05, η 300, κ0 100) gives S-1b's state hash `8f4f325f6752c543`.
+  - `distill` (2,000 items, 3 epochs) writes byte-identical `.npy` files with the old and new header.
+- **Speed** (`pull_push_step`, d = 256, 11 candidates, 20,000 steps after 200 warm-up steps; the old and new header built the same way; interleaved runs on the loaded machine):
+
+| version | runs | median µs per step | speedup, range over paired runs |
+|---|---|---|---|
+| old header | 6 | 287.7 | |
+| scratch buffer only | 5 | 273.8 (old 281.8 in the same session) | 1.03 (1.00–1.06) |
+| **scratch buffer + reused norms and cosines** | 6 | **202.3** | **1.42 (1.37–1.47)** |
+
+- **The allocation was not the main cost** (S-1b's §6 guessed it was, without profiling). The step is dominated by serial double-precision dot products: about nine per term before, about two now. The rest is the natural-gradient step and the retraction, which need their own dot products.
+
+#### Item 4: the information-weighted count (dev only)
+
+5 MB prefix, MEN on its top 5,000 words (558 pairs).
+
+| start | (τ, η, κ0) | count by events (S-1b) | count by information | Δ |
+|---|---|---|---|---|
+| random | (0.05, 300, 100) | 0.111 [0.032, 0.192] | 0.067 [−0.015, 0.148] | −0.044 |
+| random | (0.05, 1000, 1000) | 0.064 [−0.018, 0.144] | 0.070 [−0.011, 0.150] | +0.006 |
+| (b)'s 5 MB tables | (0.05, 100, 1000) | 0.245 [0.165, 0.327] | 0.245 [0.164, 0.327] | −0.001 [−0.002, +0.000] |
+
+- **It does not let the §4.2 rule learn from a random start.** Keeping K large while the softmax is flat only keeps the steps large, and early steps still follow random partners. S-1b's diagnosis was half right: the decay is not the binding problem; the random pull is.
+- From (b)'s start it changes nothing, as predicted. The option stays in the library, off by default.
+
+#### S-1c predictions, scored
+
+| # | Result | |
+|---|---|---|
+| C1 | RW +0.028 (0.329 → 0.357), Δ against PPMI-SVD −0.007; λ 30; context 0.357 beats world 0.352 | **Hit** |
+| C2 | MEN 0.756 → 0.755 | **Hit** |
+| C3 | Card-660 and MTurk-287 pass; VERB-143 fails (lower bound −0.189) | **Miss** |
+| C4 | Card-660: +0.098 [+0.021, +0.182] | **Hit** |
+| C5 | Lossless on all three checks; but 1.42×, below the 2–5× band | **Miss** (speed) |
+| C6 | 0.067 and 0.070 | **Miss** |
+| C7 | Δ −0.001 | **Hit** |
+
+4 hits, 3 misses.
+
+#### S-1c verdict
+
+- **Rare words:** a count-dependent prior built from a word's own contexts fixes most of (b)'s rare-word gap on dev (RW Δ −0.035 → −0.007), and it helps significantly on fresh rare words (Card-660 +0.098). It is in the tool (`prior`), not a default anywhere.
+- **Vector source:** unchanged, PPMI-SVD. The registered rule failed on the 144-pair verb set.
+- **The §4.2 step:** 1.42× faster with bit-identical results.
+- **The information-weighted count:** measured, not useful from a random start; off by default.
+
+#### S-1c checks
+
+- **The nine CTests of HANDOFF §4.4 pass** (built from this branch). `native_geometry_test` now has 32,107 checks; 11 are new in its S-1c section (i):
+  - the cached forces are bit-identical to `add_pair_force` on 264 of 264 pairs;
+  - a zero vector gets zero force;
+  - the scratch buffer is shared across two interleaved stores without changing either's state;
+  - the evidence count adds exactly 1 with the option off and exactly the information share with it on (0.000 for a flat softmax, 1.000 for a peaked one).
+- **Three planted bugs each fail the test:**
+  - the wrong norm in the j-side cached force (1 check fails);
+  - `info_count` ignored (3 fail);
+  - ln(k + 1) for ln k (1 fails).
+- The tool builds clean under `-Wall -Wextra`.
+
+#### S-1c reproduce
+
+```
+G="-O3 -DNDEBUG -std=c++20 -msse4.1 -fopenmp -DCYPHA_ACCEL_GPU_MIN_BATCH_ROWS=1 -DCYPHA_HP_GATE24=1 -DCYPHA_HP_SLOT_MAX=24 \
+   -DCYPHA_LLM_ALGORITHM_HP=1 -DHP_SLOT_MAX=24 -DHP_XSIMD=1 -Inative/third_party/hp/include \
+   -Inative/third_party/hp/third_party/xsimd/include -Inative/third_party -Inative/include"
+g++ $G native/tools/cypha_word_classes.cpp <build>/libcypha_core.a -lpthread -o cwc
+# item 1: the context prior once, then the lambda grid (each grid file is 51 MB; score, then delete)
+./cwc prior $E --vectors out/sgns_v0p3_e5_wc.npy --prior context --theta-out prior/theta_ctx --out prior/ctx --lambdas 0,1,3,10
+./cwc prior $E --vectors out/sgns_v0p3_e5_wc.npy --prior context --theta prior/theta_ctx.npy --out prior/ctx --lambdas 30,100,300,1000
+./cwc prior $E --vectors out/sgns_v0p3_e5_wc.npy --prior world --out prior/wld --lambdas 1,3,10,30
+./cwc eval ev/EN-WS-353-ALL.txt ev/EN-SIMLEX-999.txt ev/EN-MEN-TR-3k.txt wn prior/ctx_l*.npy out/enwik8.vectors.f32 --top 10000 --dev
+./cwc eval ev/EN-WS-353-ALL.txt ev/EN-SIMLEX-999.txt fresh/EN-RW-STANFORD.txt wn prior/ctx_l*.npy out/enwik8.vectors.f32 --top 50000 --dev
+# item 2: the chosen prior, then the one fresh read
+./cwc prior $E --vectors out/sgns_v0p3_e5_wc.npy --prior context --theta prior/theta_ctx.npy --out prior/ctx30 --lambda 30
+./cwc eval fresh2/dataset.tsv fresh2/EN-MTurk-287.txt fresh2/EN-VERB-143.txt wn prior/ctx30.npy out/sgns_v0p3_e5_wc.npy out/enwik8.vectors.f32 --top 50000
+./cwc eval fresh2/dataset.tsv fresh2/EN-MTurk-287.txt fresh2/EN-VERB-143.txt wn prior/ctx30.npy out/sgns_v0p3_e5_wc.npy --top 50000
+# item 4: the 5 MB prefix with the information-weighted count
+./cwc train texts/enwik5m --method pullpush --epochs 1 --tau 0.05 --eta 300 --kappa0 100 --info-count --out c5m/info_r300
+./cwc train texts/enwik5m --method pullpush --epochs 1 --tau 0.05 --eta 1000 --kappa0 1000 --info-count --out c5m/info_r1000
+./cwc train texts/enwik5m --method pullpush --epochs 1 --tau 0.05 --eta 100 --kappa0 1000 --init out/sg5m --info-count --out c5m/info_i100
+```
+
+The step timer for item 3 is a 40-line program that includes `geometry.hpp`. It runs `pull_push_step` with d = 256 and 11 candidates on 100,000 random unit items (seed 1; examples from seed 7), and prints µs per step and `ItemStore::state_hash()`. Both headers print hash `0be5519a3eb130ab` after 20,200 steps. Runs are in `/root/work/sem2/runs` and `/root/work/sem2/bench` (about 120 MB).
+
 ## Reproduce
 
 Build the core library and the tools (from the repo root):

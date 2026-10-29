@@ -9,7 +9,10 @@
 //   ParaphraseSet       known synonym / alias / paraphrase pairs, admitted at ECS grade >= Moderate
 //   pull_push_step      the section 4.2 rule: masked softmax at tau, tangent cosine gradients,
 //                       natural-gradient step K = Sigma / (n + kappa0), mirror updates, optional
-//                       query-query / document-document uniformity terms, MDL shrinkage, online variance
+//                       query-query / document-document uniformity terms, MDL shrinkage, online variance;
+//                       optional evidence count weighted by information (StepOptions::info_count, S-1c)
+//                       pull_push_step and distill_step reuse one scratch buffer per thread (no heap
+//                       allocation per call once warm; S-1c), with the arithmetic unchanged
 //   distill_step        section 5.1 relational softmax distillation, force (p_T - p_S) / tau_S per pair,
 //                       and the combined loss alpha * KL + (1 - alpha) * InfoNCE
 //   MRL                 PCA rotation that orders dimensions by variance (cyclic Jacobi), nested loss
@@ -148,16 +151,25 @@ inline double normal01(std::mt19937_64& eng) {
 }
 
 /// Sparse per-item accumulator for one step (<= a few hundred touched items); ordered by first touch.
+/// g[k] belongs to ids[k] for k < ids.size(); rows past that are kept for reuse (reset() keeps them).
 struct DeltaAcc {
   int d = 0;
   std::vector<int> ids;
   std::vector<std::vector<double>> g;
+  void reset(int dim) {
+    d = dim;
+    ids.clear();
+  }
   std::vector<double>& at(int id) {
     for (std::size_t k = 0; k < ids.size(); ++k)
       if (ids[k] == id) return g[k];
+    const std::size_t k = ids.size();
     ids.push_back(id);
-    g.emplace_back(static_cast<std::size_t>(d), 0.0);
-    return g.back();
+    if (k < g.size())
+      g[k].assign(static_cast<std::size_t>(d), 0.0);
+    else
+      g.emplace_back(static_cast<std::size_t>(d), 0.0);
+    return g[k];
   }
 };
 
@@ -178,19 +190,26 @@ inline void cosine_grad(const float* a, const float* b, int m, double* out) {
   for (int j = 0; j < m; ++j) out[j] = (b[j] / nb - c * a[j] / na) / na;
 }
 
-/// Softmax of logits s / tau over the entries with mask != 0 (masked entries get weight 0).
-/// An empty mask means every entry is kept.
-inline std::vector<double> masked_softmax(const std::vector<double>& s, double tau,
-                                          const std::vector<char>& mask = {}) {
-  std::vector<double> p(s.size(), 0.0);
+/// masked_softmax written into p (resized to s.size()); used by the steps so that p's buffer is reused.
+inline void masked_softmax_into(const std::vector<double>& s, double tau, const std::vector<char>& mask,
+                                std::vector<double>& p) {
+  p.assign(s.size(), 0.0);
   double mx = -std::numeric_limits<double>::infinity();
   for (std::size_t i = 0; i < s.size(); ++i)
     if (mask.empty() || mask[i]) mx = std::max(mx, s[i] / tau);
-  if (!std::isfinite(mx)) return p;
+  if (!std::isfinite(mx)) return;
   double z = 0.0;
   for (std::size_t i = 0; i < s.size(); ++i)
     if (mask.empty() || mask[i]) z += (p[i] = std::exp(s[i] / tau - mx));
   for (double& v : p) v /= z;
+}
+
+/// Softmax of logits s / tau over the entries with mask != 0 (masked entries get weight 0).
+/// An empty mask means every entry is kept.
+inline std::vector<double> masked_softmax(const std::vector<double>& s, double tau,
+                                          const std::vector<char>& mask = {}) {
+  std::vector<double> p;
+  masked_softmax_into(s, tau, mask, p);
   return p;
 }
 
@@ -356,6 +375,11 @@ struct StepOptions {
   float var_floor = 1e-6f;
   bool renormalise = true;    // retraction onto the unit sphere after each step
   bool update_variance = true;
+  // S-1c: pull_push_step adds w = 1 - H(p) / ln k to the evidence count n (anchor and positive) instead of 1,
+  // where p is the anchor's masked InfoNCE softmax at the largest prefix and k its unmasked entries (w = 1 for
+  // k < 2). A flat softmax (random partners) adds little evidence, so K = Sigma / (n + kappa0) does not decay
+  // before structure forms. Off by default: every default output is unchanged.
+  bool info_count = false;
   // section 5.1
   double tau_T = 0.05;
   double tau_S = 0.05;
@@ -368,6 +392,7 @@ struct StepStats {
   double loss = 0.0;   // mean over prefixes
   double p_pos = 0.0;  // InfoNCE positive weight at the last prefix
   int masked = 0;      // candidates masked, summed over prefixes
+  double info = 1.0;   // 1 - H(p) / ln k of the InfoNCE softmax at the last prefix (1 when k < 2)
 };
 
 struct PullPushExample {
@@ -387,14 +412,33 @@ struct DistillExample {
 
 namespace detail {
 
-inline std::vector<int> resolve_prefixes(const StepOptions& o, int d) {
-  std::vector<int> p;
+inline void resolve_prefixes_into(const StepOptions& o, int d, std::vector<int>& p) {
+  p.clear();
   for (int m : o.prefixes)
     if (m > 0) p.push_back(std::min(m, d));
   if (p.empty()) p.push_back(d);
   std::sort(p.begin(), p.end());
   p.erase(std::unique(p.begin(), p.end()), p.end());
+}
+
+inline std::vector<int> resolve_prefixes(const StepOptions& o, int d) {
+  std::vector<int> p;
+  resolve_prefixes_into(o, d, p);
   return p;
+}
+
+/// Buffers reused across calls of pull_push_step and distill_step (one per thread): no heap allocation per call
+/// once they have grown. The arithmetic is the same as with fresh vectors (S-1c).
+struct StepScratch {
+  DeltaAcc acc;
+  std::vector<int> pref, ti, tj;
+  std::vector<char> mask;
+  std::vector<double> tmp, s, p, ra, rb, r, rc, step, sT, pT, sS, pS, tni, tnj;
+};
+
+inline StepScratch& step_scratch() {
+  thread_local StepScratch sc;
+  return sc;
 }
 
 /// Adds f * grad_i s_m(i, j) to acc[i] and f * grad_j s_m(i, j) to acc[j] (the mirror force).
@@ -411,19 +455,52 @@ inline void add_pair_force(const ItemStore& st, int i, int j, double f, int m, D
   for (int k = 0; k < m; ++k) gj[static_cast<std::size_t>(k)] += f * tmp[static_cast<std::size_t>(k)];
 }
 
+/// add_pair_force with |i|, |j| and cos(i, j) on the first m coordinates already known (S-1c). They are the values
+/// cosine_grad would compute again (the same norm and dot functions on the same data; dot(j, i) = dot(i, j) and
+/// |j||i| = |i||j| exactly), so the forces are bit-identical, without three dot products per pair.
+inline void add_pair_force_known(const ItemStore& st, int i, int j, double f, int m, double ni, double nj, double c,
+                                 DeltaAcc& acc) {
+  if (f == 0.0) return;
+  const float* a = st.mean(i);
+  const float* b = st.mean(j);
+  const bool ok = ni > 0.0 && nj > 0.0;
+  {
+    std::vector<double>& gi = acc.at(i);
+    for (int k = 0; k < m; ++k) gi[static_cast<std::size_t>(k)] += f * (ok ? (b[k] / nj - c * a[k] / ni) / ni : 0.0);
+  }
+  std::vector<double>& gj = acc.at(j);
+  for (int k = 0; k < m; ++k) gj[static_cast<std::size_t>(k)] += f * (ok ? (a[k] / ni - c * b[k] / nj) / nj : 0.0);
+}
+
 /// One InfoNCE term set (section 4.2) at prefix m: pushes the forces into acc, returns -log p_b.
 inline double infonce_forces(const ItemStore& st, const PullPushExample& ex, const StepOptions& o,
                              const ParaphraseSet* para, int m, double weight, DeltaAcc& acc,
-                             std::vector<double>& tmp, StepStats& stats) {
-  struct Term {
-    int i, j;
+                             std::vector<double>& tmp, StepStats& stats, StepScratch& sc) {
+  (void)tmp;
+  std::vector<int>& ti = sc.ti;
+  std::vector<int>& tj = sc.tj;
+  std::vector<double>& s = sc.s;
+  std::vector<double>& tni = sc.tni;
+  std::vector<double>& tnj = sc.tnj;
+  std::vector<char>& mask = sc.mask;
+  ti.clear();
+  tj.clear();
+  s.clear();
+  tni.clear();
+  tnj.clear();
+  mask.clear();
+  // cosine(x, y) = dot / (|x||y|), or 0 when a norm is 0: computed once per term, with each norm computed once
+  const double n_a = norm(st.mean(ex.a), m), n_b = norm(st.mean(ex.b), m);
+  auto cos_known = [&](int x, double nx, int y, double ny) {
+    if (nx <= 0.0 || ny <= 0.0) return 0.0;
+    return dot(st.mean(x), st.mean(y), m) / (nx * ny);
   };
-  std::vector<Term> terms;
-  std::vector<double> s;
-  std::vector<char> mask;
-  const double s_ab = cosine(st.mean(ex.a), st.mean(ex.b), m);
-  terms.push_back({ex.a, ex.b});
+  const double s_ab = cos_known(ex.a, n_a, ex.b, n_b);
+  ti.push_back(ex.a);
+  tj.push_back(ex.b);
   s.push_back(s_ab);
+  tni.push_back(n_a);
+  tnj.push_back(n_b);
   mask.push_back(1);
   auto masked_out = [&](int other, double sim) {
     if (other == ex.a || other == ex.b) return true;  // the positive itself, or the anchor
@@ -431,38 +508,55 @@ inline double infonce_forces(const ItemStore& st, const PullPushExample& ex, con
     if (sim > s_ab + o.delta) return true;            // assumed unlabelled paraphrase
     return para != nullptr && (para->contains(ex.b, other) || para->contains(ex.a, other));
   };
-  auto add_side = [&](int from, const std::vector<int>& others) {
+  auto add_side = [&](int from, double n_from, const std::vector<int>& others) {
     for (int c : others) {
-      const double sc = cosine(st.mean(from), st.mean(c), m);
-      terms.push_back({from, c});
-      s.push_back(sc);
-      const bool out = masked_out(c, sc);
+      const double n_c = norm(st.mean(c), m);
+      const double sim = cos_known(from, n_from, c, n_c);
+      ti.push_back(from);
+      tj.push_back(c);
+      s.push_back(sim);
+      tni.push_back(n_from);
+      tnj.push_back(n_c);
+      const bool out = masked_out(c, sim);
       mask.push_back(out ? 0 : 1);
       if (out) ++stats.masked;
     }
   };
-  add_side(ex.a, ex.cands);
+  add_side(ex.a, n_a, ex.cands);
   if (o.uniformity) {
-    add_side(ex.a, ex.qq);
-    add_side(ex.b, ex.dd);
+    add_side(ex.a, n_a, ex.qq);
+    add_side(ex.b, n_b, ex.dd);
   }
-  const std::vector<double> p = masked_softmax(s, o.tau, mask);
+  std::vector<double>& p = sc.p;
+  masked_softmax_into(s, o.tau, mask, p);
   stats.p_pos = p[0];
-  add_pair_force(st, ex.a, ex.b, weight * (1.0 - p[0]) / o.tau, m, acc, tmp);
-  for (std::size_t t = 1; t < terms.size(); ++t)
-    if (mask[t]) add_pair_force(st, terms[t].i, terms[t].j, -weight * p[t] / o.tau, m, acc, tmp);
+  if (o.info_count) {
+    // information share of this softmax, 1 - H(p) / ln k over the unmasked entries (StepOptions::info_count)
+    std::size_t k = 0;
+    double h = 0.0;
+    for (std::size_t t = 0; t < p.size(); ++t)
+      if (mask[t]) {
+        ++k;
+        if (p[t] > 0.0) h -= p[t] * std::log(p[t]);
+      }
+    stats.info = k < 2 ? 1.0 : std::max(0.0, 1.0 - h / std::log(static_cast<double>(k)));
+  }
+  add_pair_force_known(st, ex.a, ex.b, weight * (1.0 - p[0]) / o.tau, m, n_a, n_b, s_ab, acc);
+  for (std::size_t t = 1; t < ti.size(); ++t)
+    if (mask[t]) add_pair_force_known(st, ti[t], tj[t], -weight * p[t] / o.tau, m, tni[t], tnj[t], s[t], acc);
   return -std::log(std::max(p[0], 1e-300));
 }
 
 /// Applies the accumulated forces through the natural-gradient step, then MDL shrinkage.
-inline void apply_natural_step(ItemStore& st, const DeltaAcc& acc, const StepOptions& o) {
+/// step is a d-long work buffer (resized here); every entry is written before it is read.
+inline void apply_natural_step(ItemStore& st, const DeltaAcc& acc, const StepOptions& o, std::vector<double>& step) {
   const int d = st.d;
+  step.resize(static_cast<std::size_t>(d));
   for (std::size_t k = 0; k < acc.ids.size(); ++k) {
     const int i = acc.ids[k];
     float* m = st.mean(i);
     const float* v = st.variance(i);
     const double denom = static_cast<double>(st.n[static_cast<std::size_t>(i)]) + o.kappa0;
-    std::vector<double> step(static_cast<std::size_t>(d));
     for (int j = 0; j < d; ++j) step[static_cast<std::size_t>(j)] = o.eta * (v[j] / denom) * acc.g[k][static_cast<std::size_t>(j)];
     // the diagonal preconditioner is not isotropic, so the step is projected back onto the tangent
     const double mm = dot(m, m, d);
@@ -485,6 +579,11 @@ inline void apply_natural_step(ItemStore& st, const DeltaAcc& acc, const StepOpt
   }
 }
 
+inline void apply_natural_step(ItemStore& st, const DeltaAcc& acc, const StepOptions& o) {
+  std::vector<double> step;
+  apply_natural_step(st, acc, o, step);
+}
+
 /// Online diagonal variance about the pre-update mean, Sigma <- Sigma + rate (r^2 - Sigma),
 /// rate = max(floor, w / (n + kappa0)) after n += w: the Bayesian running mean with Sigma0 at weight kappa0.
 inline void observe(ItemStore& st, int i, const std::vector<double>& r2, double w, const StepOptions& o) {
@@ -496,8 +595,8 @@ inline void observe(ItemStore& st, int i, const std::vector<double>& r2, double 
     v[j] = std::max(o.var_floor, static_cast<float>(v[j] + rate * (r2[static_cast<std::size_t>(j)] - v[j])));
 }
 
-inline std::vector<double> residual2(const ItemStore& st, int i, int target) {
-  std::vector<double> r(static_cast<std::size_t>(st.d));
+inline void residual2_into(const ItemStore& st, int i, int target, std::vector<double>& r) {
+  r.resize(static_cast<std::size_t>(st.d));
   const float* a = st.mean(i);
   const float* b = st.mean(target);
   const double nb = norm(b, st.d);
@@ -505,6 +604,11 @@ inline std::vector<double> residual2(const ItemStore& st, int i, int target) {
     const double e = (nb > 0.0 ? b[j] / nb : 0.0) - a[j];
     r[static_cast<std::size_t>(j)] = e * e;
   }
+}
+
+inline std::vector<double> residual2(const ItemStore& st, int i, int target) {
+  std::vector<double> r;
+  residual2_into(st, i, target, r);
   return r;
 }
 
@@ -519,17 +623,18 @@ inline std::vector<double> residual2(const ItemStore& st, int i, int target) {
 inline StepStats pull_push_step(ItemStore& st, const PullPushExample& ex, const StepOptions& o,
                                 const ParaphraseSet* para = nullptr) {
   StepStats stats;
-  const std::vector<int> pref = detail::resolve_prefixes(o, st.d);
-  const double w = 1.0 / static_cast<double>(pref.size());
-  detail::DeltaAcc acc;
-  acc.d = st.d;
-  std::vector<double> tmp;
-  for (int m : pref) stats.loss += w * detail::infonce_forces(st, ex, o, para, m, w, acc, tmp, stats);
-  const std::vector<double> ra = detail::residual2(st, ex.a, ex.b);
-  const std::vector<double> rb = detail::residual2(st, ex.b, ex.a);
-  detail::apply_natural_step(st, acc, o);
-  detail::observe(st, ex.a, ra, 1.0, o);
-  detail::observe(st, ex.b, rb, 1.0, o);
+  detail::StepScratch& sc = detail::step_scratch();
+  detail::resolve_prefixes_into(o, st.d, sc.pref);
+  const double w = 1.0 / static_cast<double>(sc.pref.size());
+  detail::DeltaAcc& acc = sc.acc;
+  acc.reset(st.d);
+  for (int m : sc.pref) stats.loss += w * detail::infonce_forces(st, ex, o, para, m, w, acc, sc.tmp, stats, sc);
+  detail::residual2_into(st, ex.a, ex.b, sc.ra);
+  detail::residual2_into(st, ex.b, ex.a, sc.rb);
+  detail::apply_natural_step(st, acc, o, sc.step);
+  const double ev = o.info_count ? stats.info : 1.0;
+  detail::observe(st, ex.a, sc.ra, ev, o);
+  detail::observe(st, ex.b, sc.rb, ev, o);
   return stats;
 }
 
@@ -550,39 +655,44 @@ inline StepStats distill_step(ItemStore& st, const DistillExample& ex, const Ste
                               const ParaphraseSet* para = nullptr) {
   if (ex.teacher_sims.size() != ex.cands.size()) throw std::invalid_argument("distill_step: one teacher similarity per candidate");
   StepStats stats;
-  const std::vector<int> pref = detail::resolve_prefixes(o, st.d);
-  const double w = 1.0 / static_cast<double>(pref.size());
+  detail::StepScratch& sc = detail::step_scratch();
+  detail::resolve_prefixes_into(o, st.d, sc.pref);
+  const double w = 1.0 / static_cast<double>(sc.pref.size());
   const bool nce = o.alpha < 1.0 && ex.positive >= 0;
   const double alpha = nce ? o.alpha : 1.0;
-  std::vector<double> sT(ex.teacher_sims.begin(), ex.teacher_sims.end());
-  const std::vector<double> pT = masked_softmax(sT, o.tau_T);
-  detail::DeltaAcc acc;
-  acc.d = st.d;
-  std::vector<double> tmp;
-  for (int m : pref) {
-    std::vector<double> sS(ex.cands.size());
+  std::vector<double>& sT = sc.sT;
+  sT.assign(ex.teacher_sims.begin(), ex.teacher_sims.end());
+  std::vector<double>& pT = sc.pT;
+  masked_softmax_into(sT, o.tau_T, {}, pT);
+  detail::DeltaAcc& acc = sc.acc;
+  acc.reset(st.d);
+  std::vector<double>& sS = sc.sS;
+  std::vector<double>& pS = sc.pS;
+  for (int m : sc.pref) {
+    sS.resize(ex.cands.size());
     for (std::size_t c = 0; c < ex.cands.size(); ++c) sS[c] = cosine(st.mean(ex.a), st.mean(ex.cands[c]), m);
-    const std::vector<double> pS = masked_softmax(sS, o.tau_S);
+    masked_softmax_into(sS, o.tau_S, {}, pS);
     stats.loss += w * alpha * kl_divergence(pT, pS);
     for (std::size_t c = 0; c < ex.cands.size(); ++c)
       if (ex.cands[c] != ex.a)
-        detail::add_pair_force(st, ex.a, ex.cands[c], w * alpha * (pT[c] - pS[c]) / o.tau_S, m, acc, tmp);
+        detail::add_pair_force(st, ex.a, ex.cands[c], w * alpha * (pT[c] - pS[c]) / o.tau_S, m, acc, sc.tmp);
     if (nce) {
       PullPushExample pp;
       pp.a = ex.a;
       pp.b = ex.positive;
       for (int c : ex.cands)
         if (c != ex.positive) pp.cands.push_back(c);
-      stats.loss += w * (1.0 - alpha) * detail::infonce_forces(st, pp, o, para, m, w * (1.0 - alpha), acc, tmp, stats);
+      stats.loss += w * (1.0 - alpha) * detail::infonce_forces(st, pp, o, para, m, w * (1.0 - alpha), acc, sc.tmp, stats, sc);
     }
   }
-  std::vector<double> r(static_cast<std::size_t>(st.d), 0.0);
+  std::vector<double>& r = sc.r;
+  r.assign(static_cast<std::size_t>(st.d), 0.0);
   for (std::size_t c = 0; c < ex.cands.size(); ++c) {
     if (pT[c] <= 0.0 || ex.cands[c] == ex.a) continue;
-    const std::vector<double> rc = detail::residual2(st, ex.a, ex.cands[c]);
-    for (int j = 0; j < st.d; ++j) r[static_cast<std::size_t>(j)] += pT[c] * rc[static_cast<std::size_t>(j)];
+    detail::residual2_into(st, ex.a, ex.cands[c], sc.rc);
+    for (int j = 0; j < st.d; ++j) r[static_cast<std::size_t>(j)] += pT[c] * sc.rc[static_cast<std::size_t>(j)];
   }
-  detail::apply_natural_step(st, acc, o);
+  detail::apply_natural_step(st, acc, o, sc.step);
   detail::observe(st, ex.a, r, 1.0, o);
   return stats;
 }

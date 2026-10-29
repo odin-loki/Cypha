@@ -41,6 +41,8 @@
 //   cypha_word_classes distill <teacher.npy> --out PREFIX [--init student.npy] --items 10000 --epochs 60
 //   cypha_word_classes eval <ws> <simlex> <men> <wordnet_yaml_dir> <a.npy> ... <reference.npy> [--top N] [--dev]
 //   cypha_word_classes export <vectors.npy> --out DIR [--texts FILE] [--kmeans 256,1024]
+//   cypha_word_classes prior <enwik8> --vectors TABLE.npy --out PREFIX --prior world|context --lambdas 0,10,100
+//       (S-1c: count-dependent MDL shrinkage toward a prior; train --method pullpush also takes --info-count)
 //   <wordnet_yaml_dir> holds src/yaml/noun.*.yaml from github.com/globalwordnet/english-wordnet.
 //
 // Build (from the repo root, against the core library built by `cmake --build <dir> --target cypha_core`):
@@ -1717,6 +1719,7 @@ struct TrainOpts {
     int vocab = 50000, dim = 256, window = 5, neg = 5, epochs = 1, seed = 1, inbatch = 4, hard = 2, pool = 20;
     double sample = 1e-4, var0 = 0.025, tau = 0.1, eta = 10, kappa0 = 10;
     std::string init;  // pullpush: start from an sgns run, PREFIX.npy (words) and PREFIX_wc.npy (words + contexts)
+    bool info_count = false;  // pullpush: geometry.hpp StepOptions::info_count (S-1c)
 };
 
 // One epoch's stream with frequent words dropped by word2vec's rule, keep = (sqrt(f / (t N)) + 1) t N / f.
@@ -1821,6 +1824,7 @@ void train_pullpush(const std::vector<uint16_t>& tok, const Vocab& voc, const Tr
     so.tau = O.tau;
     so.eta = O.eta;
     so.kappa0 = O.kappa0;
+    so.info_count = O.info_count;
     Rng g((uint64_t)O.seed);
     const std::vector<uint16_t> table = unigram_table(voc, V);
     std::vector<int> recent;
@@ -2299,7 +2303,7 @@ static bool parse_opts(int argc, char** argv, int first, std::unordered_map<std:
         const std::string k = argv[a];
         if (k.rfind("--", 0) != 0) {
             pos.push_back(k);
-        } else if (k == "--dev" || k == "--fp16") {
+        } else if (k == "--dev" || k == "--fp16" || k == "--info-count") {
             kv[k] = "1";
         } else if (a + 1 < argc) {
             kv[k] = argv[++a];
@@ -2329,7 +2333,7 @@ int cmd_train(int argc, char** argv) {
     if (!parse_opts(argc, argv, 1, kv, pos) || pos.size() != 1 || !kv.count("--out")) {
         std::fprintf(stderr, "usage: %s <enwik8> --out PREFIX [--method sgns|pullpush] [--epochs 1] [--dim 256] [--vocab 50000] [--window 5] "
                              "[--neg 5] [--sample 1e-4] [--seed 1] [--var0 0.025 (sgns)] [--tau 0.1 --eta 10 --kappa0 10 --inbatch 4 --hard 2 "
-                             "--pool 20 --init SGNS_PREFIX (pullpush)]\n", argv[0]);
+                             "--pool 20 --init SGNS_PREFIX --info-count (pullpush)]\n", argv[0]);
         return 2;
     }
     TrainOpts O;
@@ -2340,6 +2344,7 @@ int cmd_train(int argc, char** argv) {
     num("--seed", O.seed), num("--inbatch", O.inbatch), num("--hard", O.hard), num("--pool", O.pool), num("--sample", O.sample);
     num("--var0", O.var0), num("--tau", O.tau), num("--eta", O.eta), num("--kappa0", O.kappa0);
     O.init = opts(kv, "--init");
+    O.info_count = kv.count("--info-count") > 0;
     Stream st;
     if (!load_stream(pos[0], O.vocab, st)) return 2;
     const int V = (int)st.voc.words.size(), d = O.dim;
@@ -2625,12 +2630,190 @@ int cmd_export(int argc, char** argv) {
     return 0;
 }
 
+// prior (S-1c): MDL shrinkage of a word table toward a prior, with a count-dependent weight (SEMANTICS 2: "rare words
+// stay near the prior"). mu <- mu + min(1, lambda / (n_w + 1)) (theta0_w - mu), then unit length (geometry.hpp
+// mdl_shrink), n_w the word's corpus count. --prior world: theta0 = the normalised mean of the unit word vectors.
+// --prior context: theta0_w = A cbar_w normalised, cbar_w the mean over every occurrence of w (no subsampling) of
+// the table's vectors of the words within +-window on the same line, A the least-squares map (ridge 1e-6 x the mean
+// diagonal) from cbar_w to w's unit vector over the words with n_w >= --min-fit ("a la carte", Khodak et al. 2018).
+// --theta-out writes theta0 (context) once; --theta reads it back, so a lambda grid does not repeat the pass.
+int cmd_prior(int argc, char** argv) {
+    std::unordered_map<std::string, std::string> kv;
+    std::vector<std::string> pos;
+    if (!parse_opts(argc, argv, 1, kv, pos) || pos.size() != 1 || !kv.count("--vectors") || (!kv.count("--out") && !kv.count("--theta-out"))) {
+        std::fprintf(stderr, "usage: %s <enwik8> --vectors TABLE.npy [--out PREFIX] [--prior world|context] [--lambda 10] "
+                             "[--lambdas 0,1,3] [--window 5] [--min-fit 500] [--theta-out PREFIX | --theta THETA.npy]\n", argv[0]);
+        return 2;
+    }
+    VecSet T;
+    if (!load_vecset(kv["--vectors"], "", T)) return 2;
+    const int d = T.d, W = (int)optd(kv, "--window", 5);
+    const double lambda = optd(kv, "--lambda", 10), min_fit = optd(kv, "--min-fit", 500);
+    const std::string prior = opts(kv, "--prior", "context");
+    Stream st;
+    if (!load_stream(pos[0], T.n, st)) return 2;
+    const int V = (int)st.voc.words.size();
+    std::vector<int> row(V, -1);  // stream rank -> table row
+    int matched = 0;
+    for (int r = 0; r < V; ++r) {
+        const auto it = T.row.find(st.voc.words[r]);
+        if (it != T.row.end()) row[r] = it->second, ++matched;
+    }
+    say("prior: table %s (%d x %d), stream %d words, %d matched", T.name.c_str(), T.n, d, V, matched);
+    std::vector<float> U((size_t)V * d, 0.f);  // unit vectors by stream rank
+    for (int r = 0; r < V; ++r)
+        if (row[r] >= 0) {
+            std::copy(T.at(row[r]), T.at(row[r]) + d, &U[(size_t)r * d]);
+            geo::detail::normalise(&U[(size_t)r * d], d);
+        }
+    geo::ItemStore S(V, d, 0.f);
+    S.mu = U;
+    for (int r = 0; r < V; ++r) S.n[(size_t)r] = (float)st.voc.freq[(size_t)r];
+    if (prior == "world") {
+        S.set_world_prior_to_mean();
+    } else if (prior == "context") {
+        std::vector<float> theta;
+        if (kv.count("--theta")) {
+            int n = 0, dd = 0;
+            if (!npy_read(kv["--theta"], theta, n, dd) || n != V || dd != d) {
+                std::fprintf(stderr, "bad --theta %s\n", kv["--theta"].c_str());
+                return 2;
+            }
+        } else {
+            // cbar_w over the stream: every occurrence, contexts within +-W on the same line, the raw table vectors
+            std::vector<double> sum((size_t)V * d, 0.0);
+            std::vector<double> cnt(V, 0.0);
+            const auto& tok = st.tok;
+            for (size_t i = 0; i < tok.size(); ++i) {
+                if (tok[i] == kSep || row[tok[i]] < 0) continue;
+                double* acc = &sum[(size_t)tok[i] * d];
+                for (int side = -1; side <= 1; side += 2)
+                    for (int k = 1; k <= W; ++k) {
+                        const long long j = (long long)i + side * k;
+                        if (j < 0 || j >= (long long)tok.size() || tok[(size_t)j] == kSep) break;
+                        const int c = tok[(size_t)j];
+                        if (row[c] < 0) continue;
+                        const float* x = T.at(row[c]);
+                        for (int q = 0; q < d; ++q) acc[q] += x[q];
+                        cnt[tok[i]] += 1.0;
+                    }
+            }
+            // A: least squares from cbar to the unit vector over the words with n_w >= min_fit (normal equations, ridge)
+            std::vector<double> G((size_t)d * d, 0.0), B((size_t)d * d, 0.0), z(d);
+            int nfit = 0;
+            for (int r = 0; r < V; ++r) {
+                if ((double)st.voc.freq[(size_t)r] < min_fit || cnt[r] <= 0 || row[r] < 0) continue;
+                for (int q = 0; q < d; ++q) z[q] = sum[(size_t)r * d + q] / cnt[r];
+                const float* y = &U[(size_t)r * d];
+                for (int a = 0; a < d; ++a) {
+                    for (int b = 0; b < d; ++b) G[(size_t)a * d + b] += z[a] * z[b];
+                    for (int b = 0; b < d; ++b) B[(size_t)a * d + b] += z[a] * y[b];
+                }
+                ++nfit;
+            }
+            double md = 0;
+            for (int a = 0; a < d; ++a) md += G[(size_t)a * d + a];
+            md /= d;
+            for (int a = 0; a < d; ++a) G[(size_t)a * d + a] += 1e-6 * md;
+            // Cholesky G = L L^T, then solve G At = B for At (d x d): A = At^T
+            std::vector<double> L((size_t)d * d, 0.0);
+            for (int i2 = 0; i2 < d; ++i2)
+                for (int j2 = 0; j2 <= i2; ++j2) {
+                    double v = G[(size_t)i2 * d + j2];
+                    for (int k2 = 0; k2 < j2; ++k2) v -= L[(size_t)i2 * d + k2] * L[(size_t)j2 * d + k2];
+                    if (i2 == j2) {
+                        if (v <= 0) {
+                            std::fprintf(stderr, "prior: normal equations not positive definite at %d\n", i2);
+                            return 1;
+                        }
+                        L[(size_t)i2 * d + i2] = std::sqrt(v);
+                    } else {
+                        L[(size_t)i2 * d + j2] = v / L[(size_t)j2 * d + j2];
+                    }
+                }
+            std::vector<double> At((size_t)d * d, 0.0), yv(d);
+            for (int b = 0; b < d; ++b) {
+                for (int i2 = 0; i2 < d; ++i2) {  // forward
+                    double v = B[(size_t)i2 * d + b];
+                    for (int k2 = 0; k2 < i2; ++k2) v -= L[(size_t)i2 * d + k2] * yv[k2];
+                    yv[i2] = v / L[(size_t)i2 * d + i2];
+                }
+                for (int i2 = d - 1; i2 >= 0; --i2) {  // backward
+                    double v = yv[i2];
+                    for (int k2 = i2 + 1; k2 < d; ++k2) v -= L[(size_t)k2 * d + i2] * At[(size_t)k2 * d + b];
+                    At[(size_t)i2 * d + b] = v / L[(size_t)i2 * d + i2];
+                }
+            }
+            // fit quality: mean cosine of A cbar_w with w's unit vector, on the fit words and on the rest
+            theta.assign((size_t)V * d, 0.f);
+            double cos_fit = 0, cos_rest = 0;
+            int n_fit = 0, n_rest = 0, n_none = 0;
+            std::vector<double> t(d);
+            for (int r = 0; r < V; ++r) {
+                if (cnt[r] <= 0 || row[r] < 0) {
+                    ++n_none;
+                    continue;
+                }
+                for (int q = 0; q < d; ++q) z[q] = sum[(size_t)r * d + q] / cnt[r];
+                for (int b = 0; b < d; ++b) {
+                    double v = 0;
+                    for (int a = 0; a < d; ++a) v += z[a] * At[(size_t)a * d + b];
+                    t[b] = v;
+                }
+                float* th = &theta[(size_t)r * d];
+                for (int b = 0; b < d; ++b) th[b] = (float)t[b];
+                geo::detail::normalise(th, d);
+                double c = 0;
+                for (int b = 0; b < d; ++b) c += (double)th[b] * U[(size_t)r * d + b];
+                if ((double)st.voc.freq[(size_t)r] >= min_fit) cos_fit += c, ++n_fit;
+                else cos_rest += c, ++n_rest;
+            }
+            say("prior: A fitted on %d words (n >= %g); mean cos(theta, own vector) %.4f on them, %.4f on the %d others; %d words without contexts",
+                nfit, min_fit, cos_fit / std::max(1, n_fit), cos_rest / std::max(1, n_rest), n_rest, n_none);
+            if (kv.count("--theta-out")) {
+                save_words(kv["--theta-out"], theta.data(), nullptr, V, d, st.voc);
+                if (!kv.count("--out")) return 0;
+            }
+        }
+        for (int r = 0; r < V; ++r) {
+            bool any = false;
+            for (int q = 0; q < d; ++q) any = any || theta[(size_t)r * d + q] != 0.f;
+            if (any) S.set_item_prior(r, &theta[(size_t)r * d]);
+            else S.set_item_prior(r, S.mean(r));  // no contexts: the word is its own prior (no change)
+        }
+    } else {
+        std::fprintf(stderr, "unknown --prior %s\n", prior.c_str());
+        return 2;
+    }
+    // --lambdas L1,L2,...: one output per lambda, PREFIX_l<L>.npy; otherwise --lambda to PREFIX.npy
+    std::vector<double> lams;
+    if (kv.count("--lambdas")) {
+        std::stringstream ss(kv["--lambdas"]);
+        for (std::string x; std::getline(ss, x, ',');) lams.push_back(std::atof(x.c_str()));
+    } else {
+        lams.push_back(lambda);
+    }
+    const std::vector<float> start = S.mu;
+    for (double lam : lams) {
+        S.mu = start;
+        if (lam > 0)
+            for (int r = 0; r < V; ++r) geo::mdl_shrink(S, r, lam, true);
+        char tag[64];
+        std::snprintf(tag, sizeof tag, "_l%g", lam);
+        const std::string out = kv.count("--lambdas") ? kv["--out"] + tag : kv["--out"];
+        say("prior %s, lambda %g: applied to %d words", prior.c_str(), lam, V);
+        save_words(out, S.mu.data(), nullptr, V, d, st.voc);
+    }
+    say("done: %.1fs, peak RAM %ld MB", elapsed(), peak_rss_mb());
+    return 0;
+}
+
 int main(int argc, char** argv) {
     struct Sub {
         const char* name;
         int (*fn)(int, char**);
     };
-    static const Sub subs[] = {{"s1", cmd_s1}, {"train", cmd_train}, {"distill", cmd_distill}, {"eval", cmd_eval}, {"export", cmd_export}};
+    static const Sub subs[] = {{"s1", cmd_s1}, {"train", cmd_train}, {"distill", cmd_distill}, {"eval", cmd_eval}, {"export", cmd_export}, {"prior", cmd_prior}};
     if (argc >= 2)
         for (const Sub& s : subs)
             if (std::strcmp(argv[1], s.name) == 0) return s.fn(argc - 1, argv + 1);
