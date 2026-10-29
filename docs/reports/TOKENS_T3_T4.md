@@ -74,6 +74,63 @@ The truth must be known exactly, so the test builds it.
   - P-T6 (answers unchanged or better with token experts in the mixture) belongs to T10 and is not read here.
 - **B6:** the byte model's invented-word rate is above 10%.
 
+### T4 registration (2026-10-29, written and committed before any T4 run)
+
+GEN-A's harness and benchmark are ready (`bench/eval/gen_prompts_{dev,test}.tsv`, `scripts/gen_eval.sh`; [GEN_TRACK](GEN_TRACK.md)). TOK-A's choice is final (`TOKENIZERS_READY`).
+
+**The two tokenizers.** UNI 4,096 (dev 1.9039 bits per byte) and BPE-W 4,096 (1.9048), the two best at the registered sizes, within 0.005 of each other ([T0–T2](TOKENS_T0_T2.md)). Files: `t-uni-4096.tok` and `t-bpe-4096.tok` in TOK-A's run directory. The smaller vocabularies (1,024 and 2,048) and byte Kneser–Ney are not arms here. TOK-A named them for later work; adding them now would be a choice made without a rule.
+
+**The token model.** TOK-A's: modified Kneser–Ney, orders 1–5, mixed with the ∞-gram over token IDs (match cap 64), λ per bucket fitted on the holdout's first half. Built on the training slice [0, 7,340,032), as in T3's bias read.
+
+**The sampler** (`cyphalm_tok_gen gen`, unchanged since T3). The prompt is healed by the bridge: one cover reaching past its end is drawn by weight. Then whole tokens are drawn from the renormalised model at temperature T. There is no nucleus cut and no repeat ban. Each sample runs until it has at least 600 bytes, so it may end up to one token past 600. Seeds: `1000003 (k+1) + 7919 t` for prompt k and temperature index t.
+
+**Known differences from the byte sampler**, recorded and not changed:
+- `sample` keeps the top 0.9 of the mass (nucleus) and bans some repeats. The token sampler does neither.
+- Its random generator is a 32-bit mix of the same seed.
+- So loops and rare tokens are more likely at the token level. SCRIBE's integrity axis D_I is reported, so loops show.
+
+**One fix before any run (measurement only).** The token tool's copy share now uses GEN-A's reference: 32-byte spans of the training bytes [0, 7 MiB), raw **or cleaned by SCRIBE** (`clean_wiki_documents`). Before, it used the raw bytes only. Now both tools measure the copy share the same way.
+
+**Commands.**
+
+```
+B=/root/work/tokb/build/cyphalm_tok_gen; TK=/root/work/toka/runs/tok; E=/root/cdata/enwik8
+SC=/root/work/gena/runs/scribe_gena; O=/root/work/tokb/runs/t4
+# for L in TU (t-uni-4096) and TB (t-bpe-4096), split dev:
+$B gen $E $TK/t-uni-4096.tok $O/dev/TU.gen.txt --prompts-file bench/eval/gen_prompts_dev.tsv > $O/dev/TU.sample.out
+$SC ladder --pack enwik:$E:16:48 --ref enwik:$E:48:56 --test enwik:$E:56:64 --vectors /root/work/scribe/vec32 \
+   --profile v2 --seed 20261027 --gen-trie $O/dev/TU.gen.txt --label TU > $O/dev/TU.scribe.md
+python3 -I scripts/gen_eval_summary.py $O/dev TU dev
+python3 -I scripts/gen_eval_summary.py --pair $O/dev D0 TU      # with GEN-A's D0 files copied in, read only
+$B words $E $O/dev/TU.gen.txt /root/work/gena/runs/dev/D0.gen.txt   # the invented-word rate
+```
+
+**The byte baseline.** Today's default `sample` (similar-context expert, then copy), through `scripts/gen_eval.sh` with GEN-A's binary `cyphalm_trie_91827e1`. On dev it is GEN-A's D0, read as it stands (not re-run). On test it is read once, as part of this change, with the same command and the label B0.
+
+**The dev choice.**
+1. Each arm is a tokenizer at one temperature: 2 × 3 = 6 arms. SCRIBE v2 is read per temperature, from the ladder's per-temperature rungs.
+2. **The byte comparator** is the byte default at its own best dev temperature, chosen the same way: D0's highest per-temperature SCRIBE, T 0.6 (0.101 [0.072, 0.135]; copy share 0.0586). So each model is compared at its own best setting. Pooled numbers for both are reported alongside; they do not decide.
+3. **Eligible:** an arm's dev copy share is at most the comparator's dev copy share + 0.02, that is at most 0.0786.
+4. **Chosen:** the eligible arm with the highest dev SCRIBE. Within 0.005, the lower copy share wins.
+5. **No eligible arm:** T4 stops on dev. There is no test read, and the next design is written down, not run.
+6. **No dev gain:** if the chosen arm's dev SCRIBE point estimate is not above the comparator's (0.101), there is no test read either. Dev already shows no gain.
+
+**The test read (once).** The chosen arm at its temperature (`--temps T`) and the byte default B0 (all three temperatures, as `gen_eval.sh` runs it), both on `gen_prompts_test.tsv`. **Gate:** the token arm's SCRIBE is above the byte comparator's (B0 at T 0.6), with disjoint 95% intervals, and its copy share is at most B0's at T 0.6 + 0.02. The read is logged in GEN_TRACK's Reads table. A pass makes the token sampler a candidate for `sample`'s default. The switch itself is a later integration step (T10's mixture, P-T6), not part of this change.
+
+**Reported together**, for every arm: SCRIBE v2 [95%] with surface S [95%] alongside, D_I, the samples SCRIBE keeps and their mean length, continuation bits per byte through the bridge [95%] (and paired with D0), the copy share, the invented-word rate, and five samples.
+
+**Predictions** (P-T2 and B6 are carried from above and scored too):
+
+| # | Prediction | Falsified if |
+|---|---|---|
+| Q1 | For both tokenizers the copy share falls as T rises: T 0.6 > T 0.8 > T 1.0 | Any step goes the other way |
+| Q2 | At T 0.6 both tokenizers copy more than 0.30 of their bytes (T3's smoke: 0.94 on two prompts) | Either is at most 0.30 |
+| Q3 | Only T 1.0 can be eligible, and at least one tokenizer's T 1.0 is eligible. About even odds | An eligible arm at T 0.6 or 0.8, or no eligible arm |
+| Q4 | Continuation bits per byte through the bridge are below D0's 2.134 for both tokenizers, by 0.10 to 0.25, paired interval below 0 | A difference outside [−0.25, −0.10], or an interval touching 0 |
+| Q5 | The chosen arm's dev SCRIBE is between 0.06 and 0.15. Whole tokens fix invented words, not sentence form (D_S) | Outside [0.06, 0.15] |
+| Q6 | The token arms' invented-word rate is below the byte default's at every temperature | Any token arm at or above D0's at the same temperature |
+| Q7 | D_I is above 0 for both tokenizers at T 0.6 (loops, with no repeat ban) | D_I is 0 for either |
+
 ## T3 results (2026-10-29)
 
 Code: `native/include/cypha/cyphalm/token_bridge.hpp` and the CTest `native_token_bridge_test` (`native/tools/token_bridge_test.cpp`), commit 41bf8ee; stable hints added in b1fb8d3 (the numbers below are unchanged by it). The CTest runs in about 17 s on the loaded machine and makes 9,352 checks.
@@ -157,10 +214,117 @@ Tool: `cyphalm_tok_gen bias` (commit b1fb8d3), with TOK-A's BPE 4,096 tokenizer 
 
 **Prediction B5, scored: miss.** The predicted gap was 0.005–0.05 bits per byte; the measured gap is 0.0017. Its direction holds: renormalisation dominates, and the end-of-text cover gain is negligible.
 
+### T4 dev results (2026-10-29, before the test read)
+
+Tool: `cyphalm_tok_gen` at dd9a704 (main 8ee4373 and `wip/gena` merged). Labels TU (UNI 4,096) and TB (BPE-W 4,096). Wall times under load about 22: TU 1,943 s, TB 1,331 s (generation and continuation scoring), ladder 22–36 s. Peak resident about 380 MB each. D0 is GEN-A's dev run, read as it stands.
+
+| Arm | SCRIBE v2 [95%] | Surface S [95%] | D_I | Kept / mean bytes | Copy share | Invented words |
+|---|---|---|---|---|---|---|
+| D0 byte, T 0.6 (comparator) | 0.101 [0.072, 0.135] | 0.900 [0.892, 0.908] | 0.00 | 213 / 328 | 0.0586 | 0.0251 |
+| D0 byte, T 0.8 | 0.088 [0.059, 0.119] | 0.879 [0.872, 0.887] | 0.00 | 200 / 318 | 0.0389 | 0.0461 |
+| D0 byte, T 1.0 | 0.047 [0.031, 0.065] | 0.785 [0.774, 0.796] | 0.00 | 205 / 285 | 0.0267 | 0.1017 |
+| D0 byte, pooled | 0.079 [0.064, 0.096] | 0.855 [0.848, 0.862] | 0.00 | 618 / 311 | 0.0414 | 0.0569 |
+| TU, T 0.6 | 0.424 [0.379, 0.472] | 0.871 [0.856, 0.882] | 0.60 | 203 / 270 | 0.7296 | 0.0075 |
+| TU, T 0.8 | 0.226 [0.188, 0.262] | 0.842 [0.831, 0.853] | 0.00 | 192 / 272 | 0.2766 | 0.0386 |
+| TU, T 1.0 | 0.084 [0.063, 0.108] | 0.762 [0.753, 0.772] | 0.00 | 208 / 301 | **0.0730** | 0.0993 |
+| TU, pooled | 0.244 [0.218, 0.267] | 0.824 [0.817, 0.831] | 0.20 | 603 / 281 | 0.3597 | 0.0497 |
+| TB, T 0.6 | 0.423 [0.375, 0.468] | 0.868 [0.851, 0.881] | 0.67 | 194 / 269 | 0.7755 | 0.0053 |
+| TB, T 0.8 | 0.299 [0.262, 0.341] | 0.847 [0.834, 0.860] | 0.51 | 200 / 263 | 0.2982 | 0.0346 |
+| **TB, T 1.0** | **0.110 [0.084, 0.139]** | 0.757 [0.747, 0.766] | 0.00 | 208 / 298 | **0.0769** | 0.1044 |
+| TB, pooled | 0.274 [0.249, 0.298] | 0.823 [0.814, 0.830] | 0.39 | 602 / 277 | 0.3834 | 0.0492 |
+
+**Continuation bits per byte** (the 250 human continuations, exact through the bridge; paired with D0 over prompts):
+
+| Model | Bits per byte [95%] | Minus D0, paired [95%] |
+|---|---|---|
+| D0 byte default | 2.1339 [2.1016, 2.1659] | |
+| TU | 2.0292 [1.9975, 2.0605] | −0.1047 [−0.1161, −0.0922] |
+| TB | 2.0260 [1.9954, 2.0556] | −0.1079 [−0.1193, −0.0955] |
+
+TB minus TU: −0.0032 [−0.0077, +0.0012].
+
+**The dev choice, by the registered steps.**
+1. Eligible (copy share at most 0.0786): TU at T 1.0 (0.0730) and TB at T 1.0 (0.0769). Every arm at T 0.6 and 0.8 copies far more (0.28 to 0.78).
+2. Chosen: **TB at T 1.0**, SCRIBE 0.110 against TU's 0.084 (more than 0.005 apart).
+3. Its point estimate is above the comparator's 0.101, so the test read is made. The dev intervals overlap almost fully ([0.084, 0.139] against [0.072, 0.135]), so a pass on test (disjoint intervals) is unlikely.
+
+**What dev shows.**
+- **SCRIBE's high scores at T 0.6 are copying.** Three quarters of those bytes lie in 32-byte runs of the training text. The token ∞-gram follows long matches, and at low temperature it rarely leaves them. SCRIBE does not penalise copying from the training slice (its D_I counts only the pack), so the copy rule is what keeps this out.
+- **At T 1.0 the token arms are as broken as the byte model.** Invented words are 10% for both (D0 at T 1.0: 10.2%). The samples are list markup, interwiki links and fragments.
+- **Whole-token sampling still makes invented words.** A word spelled from two subword pieces that never met in training is invented, so 4,096 tokens do not stop it.
+- **The bits are better.** Both token models predict the human prose 0.105 bits per byte better than the byte default, paired. That is in line with T0–T2 (TOK-A's 1.904 against 2.073 on the dev holdout).
+
+### T4 test read (2026-10-29, read once)
+
+Commands: `cyphalm_tok_gen gen … t-bpe-4096.tok runs/t4/test/TB.gen.txt --prompts-file bench/eval/gen_prompts_test.tsv --temps 1.0`, then SCRIBE's ladder and the summary as on dev. B0: `scripts/gen_eval.sh test B0 runs/t4/test` with GEN-A's `cyphalm_trie_91827e1` (today's default, no flags). Wall times: TB 353 s, B0 1,174 s.
+
+| Arm | SCRIBE v2 [95%] | Surface S [95%] | D_I | Kept / mean bytes | Copy share | Invented words |
+|---|---|---|---|---|---|---|
+| **TB, T 1.0** (chosen on dev) | **0.112 [0.086, 0.137]** | 0.766 [0.755, 0.777] | 0.00 | 197 / 272 | **0.0746** | 0.1018 |
+| **B0 byte, T 0.6** (comparator) | **0.106 [0.078, 0.135]** | 0.901 [0.893, 0.909] | 0.00 | 206 / 334 | **0.0561** | 0.0243 |
+| B0 byte, T 0.8 | 0.064 [0.045, 0.086] | 0.883 [0.876, 0.891] | 0.00 | 207 / 321 | 0.0369 | 0.0453 |
+| B0 byte, T 1.0 | 0.046 [0.027, 0.065] | 0.797 [0.787, 0.806] | 0.00 | 204 / 290 | 0.0227 | 0.0991 |
+| B0 byte, pooled | 0.072 [0.059, 0.085] | 0.861 [0.855, 0.866] | 0.00 | 617 / 315 | 0.0386 | 0.0557 |
+
+**Continuation bits per byte:** TB 2.0263 [1.9921, 2.0620], B0 2.1296 [2.0956, 2.1659]. TB minus B0, paired: **−0.1033 [−0.1142, −0.0927]**.
+
+**The gate, as registered.**
+- SCRIBE: TB 0.112 against B0 at T 0.6 0.106. The intervals overlap. **Not met.**
+- Copy share: 0.0746 against 0.0561 + 0.02 = 0.0761. Met, narrowly.
+
+**Decision: the token sampler is not adopted.** `sample`'s default stays the byte model. `cyphalm_tok_gen` stays a measuring tool. No default of any tool changed.
+
+**Reported, not deciding.**
+- At the same temperature the token model is far ahead. At T 1.0, TB scores 0.112 against B0's 0.046, with disjoint intervals. Against B0's pooled 0.072 [0.059, 0.085] it is also disjoint. But the registered comparator is each model at its own best dev temperature, and the byte model at T 0.6 is as good.
+- Surface S is lower for TB (0.766 against 0.901). The T 1.0 token samples are more often list markup, interwiki links and broken fragments.
+- Test agrees with dev in direction and size (dev 0.110 against 0.101).
+
+**Samples** (test, the first prompts; TB at T 1.0, B0 at T 0.6):
+
+- Prompt: "The military has dominated Algerian politics up to today. …"
+  - TB: "N) argued in that alreadyagefer from [[Buty]] [[da:Attila]] [[de:Analyy come</title> <id>1331</id> …"
+  - B0: "The Anglican Alps in the early [[Middle Ages and [[Alfred perform of a certain theoretical of the [[Trans-Mississippi Theater …"
+- Prompt: "Guy de Maupassant is buried in the Cimetière du Montparnasse, Paris. …"
+  - TB: "1906 as 1996 the [[semiconductor]] that serial killer (d. [[1838]]) *Tindouchi]], he later adopted the ideas …"
+  - B0: "==Events ''[[The cartoon first company, Iowa.html Arthur Einstein]] [[Category:Alternative deaths|Karpov, Anatoly]] …"
+- Prompt: "It was apparent to ancient humans that offspring resembled their parents. …"
+  - TB: "{{ref|4500 ft/s) and bring him form investigations (i.e.php |mer]] and [[liquid of knowledge and oftenons telem …"
+  - B0: "The [[Republican of the [[Marxist]] and [[John Williams Reinholt]], and in and a single in the sense of the [[Middle century]] …"
+- Prompt: "As of 2004, 45 of the 96 GSSPs required have been approved. …"
+  - TB: "alone might song. ==Comraventional|U.S. House of Commander 2 hours and to him was dismant territorials== …"
+  - B0: "The last [[Carthus as a result, Arabic speaking language|Hebrew]] and are usually a simple of an action of army …"
+- Prompt: "Application program functions such as termination, page-up, page-down, or help …"
+  - TB: "By the end of the [[PHistidine]] (CH&lt;sub&gt;3&lt;/sub&gt;4&lt;/sup&gt;213 |[[Haspreserve Einstein and fossils …"
+  - B0: "Also, when considered the of science of space the of screen a stralian character points to be found to be a common …"
+
+### T4 predictions, scored
+
+| # | Prediction | Result |
+|---|---|---|
+| P-T2 | Token samples score SCRIBE v2 ≥ 0.15, and the invented-word rate falls below 1% | **Miss.** The chosen arm scores 0.112 on test with 10.2% invented words. T 0.6 reaches 0.42 with under 1%, but by copying three quarters of its bytes |
+| B6 | The byte model's invented-word rate is above 10% | **Miss.** 5.7% pooled on dev (5.6% on test). Only T 1.0 reaches 10% (10.2% dev, 9.9% test) |
+| Q1 | Copy share falls as T rises, both tokenizers | **Hit:** TU 0.730 > 0.277 > 0.073; TB 0.776 > 0.298 > 0.077 |
+| Q2 | Both copy more than 0.30 at T 0.6 | **Hit:** 0.730 and 0.776 |
+| Q3 | Only T 1.0 eligible, at least one tokenizer | **Hit:** both T 1.0 arms eligible, no other |
+| Q4 | Continuation bits per byte 0.10–0.25 below D0, paired interval below 0 | **Hit:** −0.105 and −0.108 on dev (−0.103 on test), intervals below 0 |
+| Q5 | Chosen arm's dev SCRIBE in [0.06, 0.15] | **Hit:** 0.110 |
+| Q6 | Token invented-word rate below D0's at every temperature | **Miss:** TB at T 1.0 is 0.1044 against D0's 0.1017. TU is below at every temperature |
+| Q7 | D_I above 0 for both at T 0.6 | **Hit:** 0.60 and 0.67 |
+
+6 hits, 3 misses.
+
 ### T4 status
 
-Not run. GEN-A's frozen generation benchmark and `scripts/gen_eval.sh` exist in GEN-A's working tree, but GEN-A has not marked them ready, and TOK-A's best-two choice is provisional. The token sampler is ready and checked:
-- `cyphalm_tok_gen gen <enwik8> <TOK> <OUT> --prompts-file bench/eval/gen_prompts_{dev,test}.tsv` writes GEN-A's outputs for the token model: PROMPT and GEN lines (kinds `trie_T0.6/0.8/1.0`, so SCRIBE's per-temperature rungs read them), `OUT.cont.tsv` (each human continuation's bits through the bridge) and GEN_EVAL lines (continuation bits per byte, the 32-byte copy share). Then SCRIBE's ladder and GEN-A's summary run unchanged.
-- `cyphalm_tok_gen words <enwik8> <files>` gives the invented-word rate.
-- A two-prompt smoke run on the dev prompts: 600 bytes a sample in about 20 s a prompt under load; a cache for frequent contexts gives byte-identical output.
-- **A risk for T4's copy rule.** At T = 0.6 the token model's samples copied 94% of their bytes in 32-byte spans from the training text (two prompts; T = 0.8: 27%, T = 1.0: 9%). The ∞-gram over tokens follows long matches. T4's dev choice of temperature, and the copy rule (+0.02 at most over the byte model), will decide.
+**Done (2026-10-29). Not adopted.** Whole-token sampling from TOK-A's model does not beat the byte model at each model's best temperature. Its SCRIBE is high only where it copies the training text. Where it copies no more than the byte model, it is as broken as the byte model, with the same rate of invented words.
+
+What T4 does show:
+- **The token model predicts prose better.** About 0.10 bits per byte better than the byte default, exact through the bridge, on dev and on test.
+- **The ∞-gram drives copying.** At T 0.6 and 0.8 the token sampler copies 28–78% of its bytes. The byte default copies 2–6%, because its nucleus cut and repeat ban keep it from following one long match.
+
+**Next design (written down, not run).** The ∞-gram's weight at long matches is what makes the low temperatures copy. Two changes, each to be registered and read on GEN-A's dev split first:
+1. **Cap the token ∞-gram** in sampling: a match-length cap (for example 8 tokens) or a λ ceiling at long matches. Then a lower temperature, where SCRIBE is higher, could meet the copy rule.
+2. **Use the byte sampler's nucleus cut (0.9) and repeat ban at the token level**, so the two samplers differ only in what they sample.
+
+The word-level gap (sentence form, D_S) remains. Tokens fix spelling at low temperature, not grammar.
+
+**Cost.** About 380 MB peak resident per run, about 30 minutes per dev arm under load (three temperatures and the continuation bits), 6 minutes for the single-temperature test arm.
