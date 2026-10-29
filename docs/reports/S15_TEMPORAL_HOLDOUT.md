@@ -199,6 +199,7 @@ Every read of `temporal_holdout_test.tsv` by a generator is logged here, with it
 | 2026-10-29 | S10 curiosity scheduler (P2's allocator over G2 and G6/G7) | read once on a fresh set built on test's bit-17 half (commit dc2e632); bit 17 = 0 untouched. Whether a scheduler's read counts under rule 3 is open (HANDOFF §5.18) | [S10_CURIOSITY_SCHEDULER.md](S10_CURIOSITY_SCHEDULER.md) |
 | 2026-10-29 | G9 concept formation and G11 open relations (S11a) | read once (commit 913d2a7): G9's promotion read on test's bit 17 = 0 half (slots only: it made no hypotheses, so no label was used), and G11's 38 proposals graded on test subjects' rows | [S11A_CONCEPTS_AND_OPEN_RELATIONS.md](S11A_CONCEPTS_AND_OPEN_RELATIONS.md) |
 | 2026-10-29 | G12 literature-based discovery, Swanson's ABC (S11b) | read once, the setting chosen on dev (PPMI, hub cap 200; commit 0230741): open-form precision@k and the closed form on S15 test's subjects, and promotion of its typed pool | [S11B_ABC_DISCOVERY.md](S11B_ABC_DISCOVERY.md) |
+| 2026-10-29 | G3, G4, G5 (S11c) | read once with the settings chosen on dev (commit 804d77c): G4 and G5's ranks of `b` and `c` facts on the 2006-text store (all of test), and the promotions of G3, G4 and G5 on a fresh set built on test's bit-17 = 0 half (pool hashes committed first) | [S11C_ANALOGY_ANOMALY_ABDUCTION.md](S11C_ANALOGY_ANOMALY_ABDUCTION.md) |
 
 ## How to rebuild
 

@@ -121,6 +121,13 @@
 //   (a pool for --sources --fresh and S10), and G11's unparsed phrase clusters graded against S15's properties.
 //   Cypha's own hypotheses only.
 //
+// S11c (2026-10-29, docs/reports/S11C_ANALOGY_ANOMALY_ABDUCTION.md; gen_analogy.hpp):
+//   --gen-anomaly ENWIK8 SEEDS FACTS_F2 WD_VALUES PATTERNS S15_DIR OUT [--read-test] [--fresh-dev | --fresh-test]: G13 on
+//   planted corruptions of store K and on store T's own anomalies (graded by Wikidata); G3 on planted deletions; pools.
+//   --gen-analogy ENWIK8 SEEDS FACTS_F2 WD_VALUES PATTERNS S15_DIR VEC_PREFIX SIMVEC OUT [--read-test] [--fresh-dev |
+//   --fresh-test]: G4 and G5 on S8a's R1 random hide and S15's temporal read; pools. --pool-grade s15|wd FILE HALF HYPS
+//   SRC_FRESH grades a pool after S8d's source stage. Hypotheses for Cypha's own store only: it answers nothing.
+//
 // Build: g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp -o pattern_learn
 // Usage: pattern_learn <enwik8> <outdir> [--cv] [--folds K] [--min-train N] [--base-rate A] [--sample N] [--seed S]
 //          [--wikidata FILE [--wikidata-gold-only]] [--phi FILE] [--shard FILE --dev DEV --test TEST [--slice-end B] [--holdout-from B]]
@@ -140,6 +147,7 @@
 #include "cypha/eval/epistemic.hpp"
 #include "cypha/eval/gap_map.hpp"
 #include "cypha/eval/gen_concepts.hpp"
+#include "cypha/eval/gen_analogy.hpp"
 #include "cypha/eval/gen_links.hpp"
 #include "cypha/eval/gen_rules.hpp"
 #include "cypha/eval/sources.hpp"
@@ -167,6 +175,7 @@
 #include <set>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -10230,6 +10239,1307 @@ int run(int argc, char** argv) {
 
 }  // namespace s11a
 
+// ============================================================ S11c: G13 anomalies, G3 abduction, G4 and G5 analogy
+// (docs/reports/S11C_ANALOGY_ANOMALY_ABDUCTION.md; native/include/cypha/eval/gen_analogy.hpp)
+//
+// pattern_learn --gen-anomaly ENWIK8 SEEDS.tsv FACTS_F2.tsv WD_VALUES.tsv PATTERNS.tsv S15_DIR OUT_PREFIX [--read-test] [--fresh-dev | --fresh-test]
+//   G13 on planted corruptions of store K and on store T's own anomalies (graded by Wikidata); G3 on planted deletions
+//   from store K; with --fresh-*, G3's and G13's hypothesis pools.
+// pattern_learn --gen-analogy ENWIK8 SEEDS.tsv FACTS_F2.tsv WD_VALUES.tsv PATTERNS.tsv S15_DIR VEC_PREFIX SIMVEC OUT_PREFIX [--read-test] [--fresh-dev | --fresh-test]
+//   G4 and G5 on S8a's R1 random hide of store K (base rate and G2 beside them), the S15 temporal read on store T, and
+//   with --fresh-* their hypothesis pools.
+// pattern_learn --pool-grade s15|wd FILE HALF HYPS SRC_FRESH
+//   grades a pool after S8d's source stage (`--sources … --fresh HYPS EMPTY`): S8c's grader on one half of an S15 file
+//   (HALF 0 or 1 by bit 17; -1 all), or Wikidata values.
+// Pools (--fresh-dev: S15 dev's bit-17 = 1 slots, S8d's; --fresh-test: S15 test's bit-17 = 0 slots) are written in
+// S8d's format so S10's replay can read them. Nothing here answers a question (rule 10).
+namespace s11c {
+namespace an = cypha::eval::analogy;
+using ecs::TestOutcome;
+constexpr TestOutcome kPos = TestOutcome::Positive, kNeg = TestOutcome::Negative, kInc = TestOutcome::Inconclusive;
+using Facts = s8a::Facts;
+
+bool year_of(const string& v, int& y) {
+    const Date D = parse_date_str(v);
+    if (!D.ok()) return false;
+    y = D.y;
+    return true;
+}
+
+// Stores K and T as S8a reads them, with each triple's source rows (K: every seed row; T: S8a's t_sources).
+struct Stores {
+    Facts kby, tby;
+    std::set<string> wd_src;
+    std::map<string, double> k_sources, t_sources;  // s r o -> rows
+};
+string key3(const string& s, const string& r, const string& o) { return s + '\x1f' + r + '\x1f' + o; }
+bool load_stores(const char* seeds, const char* facts, Stores& S) {
+    std::set<string> kseen, tseen;
+    std::ifstream f(seeds);
+    if (!f) return false;
+    string l;
+    std::getline(f, l);
+    while (std::getline(f, l)) {
+        const auto c = split(l, '\t');
+        if (c.size() != 6 || rel_index(c[1]) < 0 || c[0].empty() || c[2].empty()) continue;
+        const string k = key3(c[0], c[1], c[2]);
+        if (c[3] == "wikidata") S.wd_src.insert(c[0] + '\x1f' + c[1]);
+        S.k_sources[k] += 1;
+        if (kseen.insert(k).second) S.kby[c[0]].push_back({c[1], c[2]});
+        if (c[3] == "wikidata") continue;
+        S.t_sources[k] += 1;
+        if (tseen.insert(k).second) S.tby[c[0]].push_back({c[1], c[2]});
+    }
+    std::ifstream g(facts);
+    if (!g) return false;
+    std::getline(g, l);
+    while (std::getline(g, l)) {
+        const auto c = split(l, '\t');
+        if (c.size() < 3 || rel_index(c[1]) < 0 || c[0].empty() || c[2].empty()) continue;
+        const string k = key3(c[0], c[1], c[2]);
+        S.t_sources[k] += 1;
+        if (tseen.insert(k).second) S.tby[c[0]].push_back({c[1], c[2]});
+    }
+    for (auto* by : {&S.kby, &S.tby})
+        for (auto& [s, fs] : *by) std::sort(fs.begin(), fs.end());
+    return true;
+}
+
+bool dev_subject(const string& s) { return ((fnv(s) >> 11) & 1) == 0; }  // S8a's R1 split
+int half17(const string& s) { return static_cast<int>((fnv(s) >> 17) & 1); }
+
+// "outer contains inner": a located_in or country chain of length <= 3 from inner reaches outer (registered for G13).
+bool contains_chain(const ecs::TripleStore& st, const string& outer, const string& inner) {
+    std::set<string> seen{inner};
+    vector<string> fr{inner};
+    for (int d = 0; d < 3 && !fr.empty(); ++d) {
+        vector<string> nx;
+        for (const auto& n : fr)
+            for (const auto& f : st.facts_of(n)) {
+                if (f.r != "located_in" && f.r != "country") continue;
+                if (f.o == outer) return true;
+                if (seen.insert(f.o).second) nx.push_back(f.o);
+            }
+        fr.swap(nx);
+    }
+    return false;
+}
+
+// The names that have a page "name (...)" besides them.
+std::unordered_set<string> ambiguous_names(const vector<PageRef>& pages) {
+    std::unordered_set<string> out;
+    for (const PageRef& pg : pages) {
+        const auto p = pg.title.find(" (");
+        if (p != string::npos && p > 0 && pg.title.back() == ')') out.insert(pg.title.substr(0, p));
+    }
+    return out;
+}
+
+// T4 on the subject's page for one fact: +1 positive, -1 negative, 0 inconclusive (S7's pattern-or-co-mention).
+struct PageReader {
+    const s8b::Corpus* C = nullptr;
+    std::map<string, s7::PageScan> scans;
+    int says(const an::FactRef& f) {
+        const int ri = rel_index(f.r);
+        const auto pit = C->page_of.find(f.s);
+        if (ri < 0 || pit == C->page_of.end()) return 0;
+        const string k = f.s + '\x1f' + f.r;
+        auto it = scans.find(k);
+        if (it == scans.end()) it = scans.emplace(k, s7::scan_rel(C->data, C->pages[static_cast<std::size_t>(pit->second)], ri)).first;
+        TestOutcome o[2];
+        s7::t4(it->second, ri, f.o, o);
+        return o[1] == kPos ? 1 : o[1] == kNeg ? -1 : 0;
+    }
+};
+
+// Wikidata's grade of a fact: 1 it lists the value, 0 it lists other values only, -1 nothing for (s, r).
+int wd_grade(const s7::WdObjs& wd, const an::FactRef& f) {
+    const auto it = wd.find(f.s + '\x1f' + f.r);
+    const int ri = rel_index(f.r);
+    if (it == wd.end() || ri < 0 || it->second.empty()) return -1;
+    return s7::wd_match(ri, f.o, it->second) ? 1 : 0;
+}
+
+std::pair<double, double> boot_diff(const vector<double>& a, const vector<double>& b, std::uint64_t seed = 20261029) {
+    // 95% bootstrap interval of mean(a - b), paired by index
+    if (a.empty() || a.size() != b.size()) return {0, 0};
+    std::mt19937_64 rng(seed);
+    vector<double> m;
+    for (int it = 0; it < 2000; ++it) {
+        double s = 0;
+        for (std::size_t i = 0; i < a.size(); ++i) {
+            const std::size_t j = rng() % a.size();
+            s += a[j] - b[j];
+        }
+        m.push_back(s / static_cast<double>(a.size()));
+    }
+    std::sort(m.begin(), m.end());
+    return {m[49], m[1949]};
+}
+string wilson(double k, double n) {
+    char b[96];
+    std::snprintf(b, sizeof b, "%.0f/%.0f = %.3f [%.3f, %.3f]", k, n, n > 0 ? k / n : 0.0, ecs::wilson_lower(k, n), ecs::wilson_upper(k, n));
+    return b;
+}
+
+// ---- the generator loop for pools (S8b's: T1, T6, T4 with S7's dev point estimates), with the generator's own name
+struct PoolItem {
+    string s, r, o, gen, explain;
+    double score = 0, prior = 0.5, post = 0;
+    TestOutcome out[3] = {kInc, kInc, kInc};
+    string state;
+    bool promoted = false, skip_loop = false;  // skip_loop: G13's hypotheses go straight to the source stage
+};
+void pool_loop(vector<PoolItem>& items, const ecs::TripleStore& st, const s8b::Corpus& C, const string& log_path) {
+    const ecs::LinkPredictor lp(st, ecs::LinkPredictor::Config{});
+    ecs::HypothesisStore hs;
+    ecs::PreregLog log;
+    vector<std::size_t> idx;
+    for (std::size_t i = 0; i < items.size(); ++i) {
+        PoolItem& x = items[i];
+        if (x.skip_loop) {
+            x.post = x.prior, x.state = "queued";
+            continue;
+        }
+        s8b::LoopItem li;
+        li.s = x.s, li.r = x.r, li.o = x.o;
+        s8b::run_tests(li, st, lp, C);
+        for (int k = 0; k < 3; ++k) x.out[k] = li.out[k];
+        ecs::Hypothesis h;
+        h.id = "S11c-" + std::to_string(i);
+        h.key = x.r + '|' + x.s + '|' + x.o;
+        h.statement = x.s + " " + x.r + " " + x.o;
+        h.generator = x.gen;
+        for (const s8b::TestKind& K : s8b::kKinds) {
+            ecs::HypTest t;
+            t.kind = K.name, t.source = K.source, t.predicted = "positive", t.refuted_if = "negative";
+            t.disconfirmation = K.disconfirmation, t.independent = K.independent, t.sensitivity = K.s, t.specificity = K.c;
+            h.tests.push_back(t);
+        }
+        hs.propose(h);
+        hs.score(h.id, x.prior);
+        hs.transition(h.id, ecs::HypState::Queued, "scored");
+        if (!log.register_plan(*hs.find(h.id))) continue;
+        for (std::size_t k = 0; k < 3; ++k) {
+            if (hs.find(h.id)->state != ecs::HypState::Queued) break;
+            hs.transition(h.id, ecs::HypState::UnderTest, "next test");
+            hs.record_outcome(h.id, k, x.out[k], &log);
+        }
+        const auto* hh = hs.find(h.id);
+        x.post = hh->posterior, x.state = ecs::hyp_state_name(hh->state);
+        idx.push_back(i);
+    }
+    std::ofstream(log_path) << log.serialize();
+}
+void write_pool(const string& path, const vector<PoolItem>& items) {
+    std::ofstream f(path);
+    f << "split\tsubject\trelation\tobject\tgenerator\tscore\tP0\tT1\tT6\tT4\tposterior\tstate\tpromoted\texplain\n";
+    for (const PoolItem& x : items)
+        f << "fresh\t" << x.s << '\t' << x.r << '\t' << x.o << '\t' << x.gen << '\t' << x.score << '\t' << x.prior << '\t' << ecs::test_outcome_name(x.out[0])
+          << '\t' << ecs::test_outcome_name(x.out[1]) << '\t' << ecs::test_outcome_name(x.out[2]) << '\t' << x.post << '\t' << x.state << '\t'
+          << (x.promoted ? 1 : 0) << '\t' << x.explain << '\n';
+}
+void pool_states(const string& tag, const vector<PoolItem>& items) {
+    std::map<string, std::size_t> st;
+    for (const auto& x : items) ++st[x.state];
+    string l = tag + " states (no grade read):";
+    for (const auto& [s, n] : st) l += " " + s + " " + std::to_string(n);
+    std::cout << l << " | hypotheses " << items.size() << "\n";
+}
+
+// The slots of a pool: S15 dev's bit-17 = 1 half (--fresh-dev, S8d's slots) or S15 test's bit-17 = 0 half (--fresh-test).
+std::set<std::pair<string, string>> pool_slots(const string& s15dir, bool test) {
+    std::set<std::pair<string, string>> out;
+    for (const auto& R : s8a::load_s15(s15dir + (test ? "/temporal_holdout_test.tsv" : "/temporal_holdout_dev.tsv")))
+        if (half17(R.s) == (test ? 0 : 1) && rel_index(R.r) >= 0) out.insert({R.s, R.r});
+    return out;
+}
+
+// ============================================================ G13 and G3: --gen-anomaly
+struct Planted {
+    int type = 0;  // 1..7: C1 century, C2 transposition, C3 BC sign, C4 swap, C5 capital, C6 spouse, C7 founder
+    string subject;
+    vector<an::FactRef> before, after;  // C4 changes two facts
+};
+const char* const kCorrName[8] = {"", "C1_century", "C2_transposition", "C3_bc_sign", "C4_swap", "C5_capital", "C6_spouse", "C7_founder"};
+
+// A year written back into a value of the same form: "YYYY-MM-DD", plain digits, or "N BC". "" when it cannot be.
+string with_year(const string& v, int y) {
+    if (y == 0) return "";
+    auto dig = [](char c) { return c >= '0' && c <= '9'; };
+    const bool iso = v.size() == 10 && v[4] == '-' && v[7] == '-' && std::all_of(v.begin(), v.begin() + 4, dig);
+    if (iso) return y >= 1000 && y <= 9999 ? std::to_string(y) + v.substr(4) : "";
+    const bool digits = !v.empty() && v.size() <= 4 && std::all_of(v.begin(), v.end(), dig);
+    const bool bc = v.size() > 3 && v.compare(v.size() - 3, 3, " BC") == 0 && std::all_of(v.begin(), v.end() - 3, dig);
+    if (!digits && !bc) return "";
+    return y > 0 ? std::to_string(y) : std::to_string(-y) + " BC";
+}
+int transpose_year(int y) {
+    const int a = std::abs(y);
+    if (a < 10) return 0;
+    const int d1 = a % 10, d2 = (a / 10) % 10;
+    if (d1 == d2) return 0;
+    const int t = a - d1 - 10 * d2 + 10 * d1 + d2;
+    return y < 0 ? -t : t;
+}
+
+vector<Planted> plant(const Facts& kby, const ecs::TripleStore& K, bool want_dev, std::mt19937_64& rng) {
+    vector<Planted> out;
+    std::set<string> used;
+    std::set<string> taken;  // triples already changed
+    vector<string> persons, capitals;
+    {
+        std::set<string> cap;
+        for (const auto& [s, fs] : kby)
+            for (const auto& [r, o] : fs) {
+                if (r == "capital") cap.insert(o);
+            }
+        capitals.assign(cap.begin(), cap.end());
+        for (const auto& [s, fs] : kby) {
+            bool p = false;
+            for (const auto& [r, o] : fs) p = p || r == "birth_year" || r == "birth_date";
+            if (p) persons.push_back(s);
+        }
+    }
+    auto is_date = [](const string& r) { return r == "birth_year" || r == "death_year" || r == "birth_date" || r == "death_date"; };
+    for (int type = 1; type <= 7; ++type) {
+        vector<Planted> cand;
+        for (const auto& [s, fs] : kby) {
+            if (dev_subject(s) != want_dev) continue;
+            if (type == 4) {
+                string by, dy;
+                for (const auto& [r, o] : fs) {
+                    if (r == "birth_year" && by.empty()) by = o;
+                    if (r == "death_year" && dy.empty()) dy = o;
+                }
+                int yb = 0, yd = 0;
+                if (by.empty() || dy.empty() || by == dy || !year_of(by, yb) || !year_of(dy, yd) || yb == yd) continue;
+                Planted P;
+                P.type = 4, P.subject = s;
+                P.before = {{s, "birth_year", by}, {s, "death_year", dy}};
+                P.after = {{s, "birth_year", dy}, {s, "death_year", by}};
+                cand.push_back(P);
+                continue;
+            }
+            for (const auto& [r, o] : fs) {
+                Planted P;
+                P.type = type, P.subject = s;
+                P.before = {{s, r, o}};
+                string nv;
+                int y = 0;
+                if (type <= 3) {
+                    if (!is_date(r) || !year_of(o, y)) continue;
+                    if (type == 1) nv = with_year(o, y + ((fnv(key3(s, r, o)) & 1) ? 100 : -100));
+                    else if (type == 2) nv = with_year(o, transpose_year(y));
+                    else nv = y < 0 ? with_year(o, -y) : "";
+                } else if (type == 5) {
+                    if (r != "capital" || capitals.size() < 2) continue;
+                    for (int t = 0; t < 20 && nv.empty(); ++t) {
+                        const string& c = capitals[rng() % capitals.size()];
+                        if (c != o && c != s) nv = c;
+                    }
+                } else {
+                    if (r != (type == 6 ? "spouse" : "founder") || persons.size() < 2) continue;
+                    for (int t = 0; t < 20 && nv.empty(); ++t) {
+                        const string& c = persons[rng() % persons.size()];
+                        if (c != o && c != s) nv = c;
+                    }
+                }
+                if (nv.empty() || nv == o || K.has(s, r, nv)) continue;
+                P.after = {{s, r, nv}};
+                cand.push_back(P);
+            }
+        }
+        for (std::size_t i = cand.size(); i > 1; --i) std::swap(cand[i - 1], cand[rng() % i]);
+        int n = 0;
+        for (const Planted& P : cand) {
+            if (n >= 100) break;
+            if (used.count(P.subject)) continue;
+            bool clash = false;
+            for (const auto& f : P.before) clash = clash || taken.count(f.key());
+            if (clash) continue;
+            used.insert(P.subject);
+            for (const auto& f : P.before) taken.insert(f.key());
+            out.push_back(P), ++n;
+        }
+    }
+    return out;
+}
+
+// Whether a planted change could be seen at all: the subject holds the fact its anomaly kind compares it with.
+bool detectable(const Planted& P, const ecs::TripleStore& Kp) {
+    const string& s = P.subject;
+    auto has_rel = [&](const string& x, std::initializer_list<const char*> rs) {
+        for (const auto& f : Kp.facts_of(x))
+            for (const char* r : rs)
+                if (f.r == r) return true;
+        return false;
+    };
+    switch (P.type) {
+        case 1:
+        case 2:
+        case 3: {
+            const string& r = P.before[0].r;
+            const bool birth = r == "birth_year" || r == "birth_date";
+            const bool other_kind = birth ? has_rel(s, {"death_year", "death_date"}) : has_rel(s, {"birth_year", "birth_date"});
+            const bool sibling = has_rel(s, {r == "birth_year" ? "birth_date" : r == "birth_date" ? "birth_year" : r == "death_year" ? "death_date" : "death_year"});
+            return other_kind || sibling;
+        }
+        case 4: return true;
+        case 5: return has_rel(P.after[0].o, {"country"});
+        case 6: return has_rel(s, {"birth_year", "birth_date"}) && has_rel(P.after[0].o, {"birth_year", "birth_date"});
+        case 7: return has_rel(s, {"founded"}) && has_rel(P.after[0].o, {"birth_year", "birth_date", "death_year", "death_date"});
+    }
+    return false;
+}
+
+an::AnomalyEvidence evidence_for(const ecs::TripleStore& st, const std::map<string, double>& sources, PageReader& page,
+                                 const std::unordered_set<string>& amb) {
+    an::AnomalyEvidence ev;
+    ev.year_of = year_of;
+    ev.sources = [&sources](const an::FactRef& f) {
+        const auto it = sources.find(f.key());
+        return it == sources.end() ? 0.0 : it->second;
+    };
+    ev.page = [&page](const an::FactRef& f) { return page.says(f); };
+    ev.contains = [&st](const string& a, const string& b) { return contains_chain(st, a, b); };
+    ev.ambiguous = [&amb](const string& n) { return amb.count(n) > 0; };
+    return ev;
+}
+
+// G13-P: planted corruptions of store K (one split).
+void g13_planted(const Stores& S, const s8b::Corpus& C, const std::unordered_set<string>& amb, bool dev, const string& out) {
+    const string tag = dev ? "DEV G13-P" : "TEST G13-P";
+    const ecs::TripleStore K = s8a::make_store(S.kby);
+    std::mt19937_64 rng(20261101);
+    const vector<Planted> P = plant(S.kby, K, dev, rng);
+    // the corrupted store and its source counts (a changed fact keeps the original's)
+    std::set<string> drop;
+    std::map<string, double> src = S.k_sources;
+    std::map<string, std::pair<int, std::size_t>> changed;  // new triple -> (type, event)
+    for (std::size_t e = 0; e < P.size(); ++e)
+        for (std::size_t j = 0; j < P[e].before.size(); ++j) {
+            drop.insert(P[e].before[j].key());
+            src[P[e].after[j].key()] = S.k_sources.count(P[e].before[j].key()) ? S.k_sources.at(P[e].before[j].key()) : 1.0;
+            changed[P[e].after[j].key()] = {P[e].type, e};
+        }
+    Facts kp;
+    for (const auto& [s, fs] : S.kby)
+        for (const auto& [r, o] : fs)
+            if (!drop.count(key3(s, r, o))) kp[s].push_back({r, o});
+    for (const auto& Pl : P)
+        for (const auto& f : Pl.after) kp[f.s].push_back({f.r, f.o});
+    const ecs::TripleStore Kp = s8a::make_store(kp);
+    PageReader page;
+    page.C = &C;
+    const an::AnomalyEvidence ev = evidence_for(Kp, src, page, amb);
+    const auto A = an::find_anomalies(Kp, year_of);
+    // per event: the first anomaly that involves one of its changed facts
+    vector<int> first(P.size(), -1);
+    std::size_t clean_flags = 0;
+    for (std::size_t i = 0; i < A.size(); ++i) {
+        bool any = false;
+        for (const auto& f : A[i].facts) {
+            const auto it = changed.find(f.key());
+            if (it == changed.end()) continue;
+            any = true;
+            if (first[it->second.second] < 0) first[it->second.second] = static_cast<int>(i);
+        }
+        if (!any) ++clean_flags;
+    }
+    std::mt19937_64 brng(20261103);
+    std::array<double, 8> n{}, det{}, nd{}, dd{}, named{}, base{};
+    vector<double> acc_g13, acc_base;
+    std::ofstream f(out + (dev ? ".g13p_dev.tsv" : ".g13p_test.tsv"));
+    f << "type\tsubject\tbefore\tafter\tdetectable\tdetected\tkind\tverdict\tnamed\tnamed_ok\tbaseline_ok\n";
+    for (std::size_t e = 0; e < P.size(); ++e) {
+        const Planted& Pl = P[e];
+        const bool can = detectable(Pl, Kp);
+        const bool got = first[e] >= 0;
+        n[Pl.type] += 1, nd[Pl.type] += can;
+        det[Pl.type] += got, dd[Pl.type] += got && can;
+        string kind = "-", verdict = "-", nm = "-";
+        int ok = -1, bok = -1;
+        if (got) {
+            const an::Anomaly& a = A[static_cast<std::size_t>(first[e])];
+            const auto x = an::explain_anomaly(a, ev);
+            kind = an::anomaly_kind_name(a.kind), verdict = an::verdict_name(x.verdict);
+            auto is_changed = [&](int i) {
+                if (i < 0) return false;
+                for (const auto& g : Pl.after)
+                    if (g == a.facts[static_cast<std::size_t>(i)]) return true;
+                return false;
+            };
+            ok = is_changed(x.wrong);
+            if (x.wrong >= 0) nm = a.facts[static_cast<std::size_t>(x.wrong)].r + "=" + a.facts[static_cast<std::size_t>(x.wrong)].o;
+            // the baseline: fewer sources, then at random
+            vector<double> sv;
+            for (const auto& g : a.facts) sv.push_back(ev.sources(g));
+            const double mn = *std::min_element(sv.begin(), sv.end());
+            vector<int> low;
+            for (std::size_t i = 0; i < sv.size(); ++i)
+                if (sv[i] == mn) low.push_back(static_cast<int>(i));
+            bok = is_changed(low[brng() % low.size()]);
+            named[Pl.type] += ok, base[Pl.type] += bok;
+            acc_g13.push_back(ok), acc_base.push_back(bok);
+        }
+        f << kCorrName[Pl.type] << '\t' << Pl.subject << '\t' << Pl.before[0].r << "=" << Pl.before[0].o << '\t' << Pl.after[0].r << "=" << Pl.after[0].o << '\t'
+          << can << '\t' << got << '\t' << kind << '\t' << verdict << '\t' << nm << '\t' << ok << '\t' << bok << '\n';
+    }
+    char b[512];
+    double tn = 0, td = 0, tnd = 0, tdd = 0;
+    for (int t = 1; t <= 7; ++t) {
+        tn += n[t], td += det[t], tnd += nd[t], tdd += dd[t];
+        std::snprintf(b, sizeof b, "%s %-17s planted %3.0f | recall %s | detectable %3.0f, recall among them %s | named right %s | baseline %s", tag.c_str(),
+                      kCorrName[t], n[t], wilson(det[t], n[t]).c_str(), nd[t], wilson(dd[t], nd[t]).c_str(), wilson(named[t], det[t]).c_str(),
+                      wilson(base[t], det[t]).c_str());
+        std::cout << b << "\n";
+    }
+    double sn = 0, sb = 0;
+    for (std::size_t i = 0; i < acc_g13.size(); ++i) sn += acc_g13[i], sb += acc_base[i];
+    const auto di = boot_diff(acc_g13, acc_base);
+    std::snprintf(b, sizeof b, "%s ALL planted %.0f | recall %s | detectable %.0f, recall among them %s | named right %s | baseline %s | difference %+.3f [%+.3f, %+.3f]",
+                  tag.c_str(), tn, wilson(td, tn).c_str(), tnd, wilson(tdd, tnd).c_str(), wilson(sn, td).c_str(), wilson(sb, td).c_str(),
+                  td > 0 ? (sn - sb) / td : 0.0, di.first, di.second);
+    std::cout << b << "\n";
+    std::snprintf(b, sizeof b, "%s anomalies on the corrupted store %zu, of which involve no planted fact %zu", tag.c_str(), A.size(), clean_flags);
+    std::cout << b << "\n";
+    std::map<string, std::size_t> kinds;
+    for (const auto& a : A) ++kinds[an::anomaly_kind_name(a.kind)];
+    string kl;
+    for (const auto& [k, c] : kinds) kl += " " + k + " " + std::to_string(c);
+    std::cout << tag << " anomalies by kind:" << kl << "\n";
+}
+
+// G13-R: store T's own anomalies, graded by Wikidata. Returns the G13 pool hypotheses of the split when asked.
+void g13_real(const Stores& S, const s8b::Corpus& C, const std::unordered_set<string>& amb, const s7::WdObjs& wd, bool read_test, const string& out,
+              int pool_split, vector<PoolItem>* pool) {
+    const ecs::TripleStore T = s8a::make_store(S.tby);
+    PageReader page;
+    page.C = &C;
+    const an::AnomalyEvidence ev = evidence_for(T, S.t_sources, page, amb);
+    const auto A = an::find_anomalies(T, year_of);
+    struct Acc {
+        double n = 0, err = 0, err_g = 0, err_ok = 0, base_g = 0, base_ok = 0, other = 0, other_g = 0, other_ok = 0;
+    };
+    std::map<string, Acc> by_kind[2];
+    Acc all[2];
+    std::map<string, std::size_t> verdicts[2];
+    std::ofstream f(out + ".g13r.tsv");
+    f << "split\tkind\tfacts\tverdict\twrong\tbits\twhy\tgrades\tverdict_ok\tbaseline_ok\n";
+    std::mt19937_64 brng(20261103);
+    std::map<string, double> pool_p0;  // fact -> P0 (G13's pool)
+    std::map<string, an::FactRef> pool_fact;
+    for (const auto& a : A) {
+        const int sp = dev_subject(a.facts[0].s) ? 0 : 1;
+        const auto x = an::explain_anomaly(a, ev);
+        if (pool && sp == pool_split)
+            for (std::size_t i = 0; i < a.facts.size(); ++i) {
+                const double p0 = static_cast<int>(i) == x.wrong ? 0.2 : 0.8;
+                const string k = a.facts[i].key();
+                auto it = pool_p0.find(k);
+                if (it == pool_p0.end()) pool_p0[k] = p0, pool_fact[k] = a.facts[i];
+                else it->second = std::min(it->second, p0);
+            }
+        if (sp == 1 && !read_test) continue;
+        vector<int> g;
+        string gs, fs;
+        for (const auto& fr : a.facts) g.push_back(wd_grade(wd, fr)), gs += (gs.empty() ? "" : ",") + std::to_string(g.back()), fs += (fs.empty() ? "" : " | ") + fr.r + "=" + fr.o;
+        int ok = -1, bok = -1;
+        Acc& k = by_kind[sp][an::anomaly_kind_name(a.kind)];
+        k.n += 1, all[sp].n += 1;
+        ++verdicts[sp][an::verdict_name(x.verdict)];
+        if (x.verdict == an::Verdict::Error || x.verdict == an::Verdict::DifferentEntity || (x.verdict == an::Verdict::Qualifier && x.wrong >= 0)) {
+            k.err += 1, all[sp].err += 1;
+            const int gw = g[static_cast<std::size_t>(x.wrong)];
+            if (gw >= 0) ok = gw == 0, k.err_g += 1, k.err_ok += ok, all[sp].err_g += 1, all[sp].err_ok += ok;
+            // the baseline: fewer sources, then at random
+            vector<double> sv;
+            for (const auto& fr : a.facts) sv.push_back(ev.sources(fr));
+            const double mn = *std::min_element(sv.begin(), sv.end());
+            vector<int> low;
+            for (std::size_t i = 0; i < sv.size(); ++i)
+                if (sv[i] == mn) low.push_back(static_cast<int>(i));
+            const int bw = low[brng() % low.size()];
+            const int gb = g[static_cast<std::size_t>(bw)];
+            if (gb >= 0) bok = gb == 0, k.base_g += 1, k.base_ok += bok, all[sp].base_g += 1, all[sp].base_ok += bok;
+        } else {
+            k.other += 1, all[sp].other += 1;
+            bool any = false, right = true;
+            for (int v : g)
+                if (v >= 0) any = true, right = right && v == 1;
+            if (any) ok = right, k.other_g += 1, k.other_ok += ok, all[sp].other_g += 1, all[sp].other_ok += ok;
+        }
+        f << (sp ? "test" : "dev") << '\t' << an::anomaly_kind_name(a.kind) << '\t' << fs << '\t' << an::verdict_name(x.verdict) << '\t'
+          << (x.wrong >= 0 ? a.facts[static_cast<std::size_t>(x.wrong)].r : "-") << '\t' << x.bits << '\t' << x.why << '\t' << gs << '\t' << ok << '\t' << bok << '\n';
+    }
+    char b[512];
+    for (int sp = 0; sp < (read_test ? 2 : 1); ++sp) {
+        const string tag = sp ? "TEST G13-R" : "DEV G13-R";
+        for (const auto& [kname, k] : by_kind[sp]) {
+            std::snprintf(b, sizeof b, "%s %-22s anomalies %4.0f | error verdicts %4.0f, graded %3.0f, right %s | baseline %s | other verdicts %3.0f, graded %3.0f, right %s",
+                          tag.c_str(), kname.c_str(), k.n, k.err, k.err_g, wilson(k.err_ok, k.err_g).c_str(), wilson(k.base_ok, k.base_g).c_str(), k.other, k.other_g,
+                          wilson(k.other_ok, k.other_g).c_str());
+            std::cout << b << "\n";
+        }
+        string vl;
+        for (const auto& [v, c] : verdicts[sp]) vl += " " + v + " " + std::to_string(c);
+        const Acc& a = all[sp];
+        std::snprintf(b, sizeof b, "%s ALL anomalies %.0f (verdicts:%s) | error verdicts graded %.0f, right %s | baseline %s | other verdicts graded %.0f, right %s",
+                      tag.c_str(), a.n, vl.c_str(), a.err_g, wilson(a.err_ok, a.err_g).c_str(), wilson(a.base_ok, a.base_g).c_str(), a.other_g,
+                      wilson(a.other_ok, a.other_g).c_str());
+        std::cout << b << "\n";
+        if (sp == 1) {
+            const bool g2 = a.err_g >= 10 && a.err_ok / a.err_g >= 0.9;
+            std::snprintf(b, sizeof b, "TEST G13-R RULE part 2 (error-verdict precision >= 0.9 with >= 10 graded): %s", g2 ? "MET" : "NOT MET");
+            std::cout << b << "\n";
+        }
+    }
+    if (pool)
+        for (const auto& [k, p0] : pool_p0) {
+            PoolItem x;
+            const auto& fr = pool_fact[k];
+            x.s = fr.s, x.r = fr.r, x.o = fr.o, x.gen = "G13", x.prior = p0, x.score = 1 - p0, x.skip_loop = true;
+            x.explain = p0 < 0.5 ? "named wrong" : "questioned";
+            pool->push_back(x);
+        }
+}
+
+// ---- G3: abduction
+struct G3Case {
+    an::FactRef O, B;
+    int rule = -1;
+};
+// A derivation of O = (x, r, y) in the store by a kept rule through one body fact: the highest-PCA rule (then rule
+// order); for a path rule atom 2 when fnv(O) is even, else atom 1 (the first join node in sorted order).
+bool derivation(const ecs::RuleIndex& ix, const ecs::RuleSet& rs, const an::FactRef& O, an::FactRef& B, int& rule) {
+    const auto& R = rs.rules();
+    double best = -1;
+    bool found = false;
+    const ecs::TripleStore& st = ix.store();
+    for (std::size_t i = 0; i < R.size(); ++i) {
+        const ecs::Rule& Q = R[i];
+        if (Q.head != O.r || Q.pca_conf() <= best) continue;
+        an::FactRef b;
+        bool ok = false;
+        if (Q.kind == ecs::RuleKind::Const) ok = Q.head_o == O.o && st.has(O.s, Q.r1, Q.c1), b = {O.s, Q.r1, Q.c1};
+        else if (Q.kind == ecs::RuleKind::Same) ok = st.has(O.s, Q.r1, O.o), b = {O.s, Q.r1, O.o};
+        else if (Q.kind == ecs::RuleKind::Inverse) ok = st.has(O.o, Q.r1, O.s), b = {O.o, Q.r1, O.s};
+        else {
+            auto z1 = an::detail::vals_or_in(ix, O.s, Q.r1, !Q.inv1);
+            std::sort(z1.begin(), z1.end());
+            for (const auto& z : z1) {
+                if (z == O.s || z == O.o) continue;
+                const an::FactRef a2 = Q.inv2 ? an::FactRef{O.o, Q.r2, z} : an::FactRef{z, Q.r2, O.o};
+                if (!st.has(a2.s, a2.r, a2.o)) continue;
+                const an::FactRef a1 = Q.inv1 ? an::FactRef{z, Q.r1, O.s} : an::FactRef{O.s, Q.r1, z};
+                b = (fnv(O.key()) & 1) == 0 ? a2 : a1, ok = true;
+                break;
+            }
+        }
+        if (ok && !(b == O)) best = Q.pca_conf(), B = b, rule = static_cast<int>(i), found = true;
+    }
+    return found;
+}
+
+double fact_bits(const ecs::LinkPredictor& lp, const an::FactRef& f) { return -std::log2(std::max(1e-12, lp.prob(f.s, f.r, f.o))); }
+
+struct G3Read {
+    vector<double> r1, r5, r10, rnd1, rnd5, rnd10, lp1, lp5, lp10, pca1, pca5, pca10;
+    vector<std::pair<double, int>> calib;  // (bits, is the deleted fact) for every ranked candidate fact, for the prior
+    std::size_t drawn = 0, explained = 0, no_cand = 0, lost_rule = 0;
+};
+G3Read g3_planted(const Facts& kby, bool dev) {
+    G3Read out;
+    const ecs::TripleStore K = s8a::make_store(kby);
+    const ecs::RuleIndex ix(K);
+    const ecs::RuleSet rs(ix, ecs::mine_rules(ix), true);
+    vector<G3Case> cand;
+    for (const auto& [s, fs] : kby) {
+        if (dev_subject(s) != dev) continue;
+        for (const auto& [r, o] : fs) {
+            G3Case c;
+            c.O = {s, r, o};
+            if (derivation(ix, rs, c.O, c.B, c.rule)) cand.push_back(c);
+        }
+    }
+    std::mt19937_64 rng(20261102);
+    for (std::size_t i = cand.size(); i > 1; --i) std::swap(cand[i - 1], cand[rng() % i]);
+    vector<G3Case> cases;
+    std::set<string> Bs, Os;
+    for (const auto& c : cand) {
+        if (cases.size() >= 500) break;
+        if (Bs.count(c.B.key()) || Os.count(c.B.key()) || Bs.count(c.O.key())) continue;
+        cases.push_back(c), Bs.insert(c.B.key()), Os.insert(c.O.key());
+    }
+    out.drawn = cases.size();
+    // amendment 2 (dev): each case on its own, its B alone deleted and the rules mined again (3 threads; cases are
+    // independent, so the order of the results does not depend on the threads)
+    struct One {
+        bool explained = false, none = false;
+        std::size_t rank = 0, n = 0, rl = 0, rp = 0;
+        vector<std::pair<double, int>> calib;
+        string no_rule;
+    };
+    vector<One> res(cases.size());
+    auto work = [&](std::size_t from, std::size_t step) {
+        for (std::size_t ci = from; ci < cases.size(); ci += step) {
+            const G3Case& c = cases[ci];
+            One& R = res[ci];
+            Facts red;
+            for (const auto& [s, fs] : kby)
+                for (const auto& [r, o] : fs)
+                    if (!(s == c.B.s && r == c.B.r && o == c.B.o)) red[s].push_back({r, o});
+            const ecs::TripleStore st = s8a::make_store(red);
+            const ecs::RuleIndex ix2(st);
+            const ecs::RuleSet rs2(ix2, ecs::mine_rules(ix2), true);
+            if (an::derivable(rs2, c.O.s, c.O.r, c.O.o)) {
+                R.explained = true;
+                continue;
+            }
+            const ecs::LinkPredictor lp(st, ecs::LinkPredictor::Config{});
+            auto bits = [&](const an::FactRef& f) { return fact_bits(lp, f); };
+            const auto ex = an::abduce(ix2, rs2, c.O.s, c.O.r, c.O.o, bits);
+            const auto rf = an::ranked_facts(ex);
+            if (rf.empty()) {
+                R.none = true;
+                const string rt = rs.rules()[static_cast<std::size_t>(c.rule)].text();
+                bool kept = false;
+                for (const auto& q : rs2.rules()) kept = kept || q.text() == rt;
+                if (!kept) R.no_rule = rt;
+                continue;
+            }
+            for (std::size_t i = 0; i < rf.size(); ++i) {
+                const bool hit = rf[i].first == c.B;
+                R.calib.push_back({rf[i].second, hit});
+                if (hit && !R.rank) R.rank = i + 1;
+            }
+            R.n = rf.size();
+            // the link predictor alone, and the rule's PCA alone, on the same candidate facts
+            struct C2 {
+                an::FactRef f;
+                double lpb, pcab, sup;
+            };
+            std::map<an::FactRef, C2> m;
+            for (const auto& e : ex) {
+                const auto& f = e.add.front();
+                const double pb = -std::log2(std::max(1e-12, rs2.rules()[static_cast<std::size_t>(e.rule)].pca_conf()));
+                auto it = m.find(f);
+                if (it == m.end()) m[f] = {f, bits(f), pb, e.support};
+                else if (pb < it->second.pcab || (pb == it->second.pcab && e.support > it->second.sup)) it->second.pcab = pb, it->second.sup = e.support;
+            }
+            vector<C2> v;
+            for (auto& [k, x] : m) v.push_back(x);
+            auto rank_by = [&](auto key) {
+                std::sort(v.begin(), v.end(), [&](const C2& a, const C2& b) {
+                    const double ka = key(a), kb = key(b);
+                    if (ka != kb) return ka < kb;
+                    if (a.sup != b.sup) return a.sup > b.sup;
+                    return a.f < b.f;
+                });
+                for (std::size_t i = 0; i < v.size(); ++i)
+                    if (v[i].f == c.B) return i + 1;
+                return std::size_t{0};
+            };
+            R.rl = rank_by([](const C2& a) { return a.lpb; }), R.rp = rank_by([](const C2& a) { return a.pcab; });
+        }
+    };
+    {
+        vector<std::thread> th;
+        for (std::size_t t = 0; t < 3; ++t) th.emplace_back(work, t, 3);
+        for (auto& t : th) t.join();
+    }
+    std::map<string, std::size_t> lost;
+    for (const One& R : res) {
+        if (R.explained) {
+            ++out.explained;
+            continue;
+        }
+        if (R.none) {
+            ++out.no_cand;
+            if (!R.no_rule.empty()) ++lost[R.no_rule];
+            for (auto* v : {&out.r1, &out.r5, &out.r10, &out.rnd1, &out.rnd5, &out.rnd10, &out.lp1, &out.lp5, &out.lp10, &out.pca1, &out.pca5, &out.pca10}) v->push_back(0);
+            continue;
+        }
+        out.calib.insert(out.calib.end(), R.calib.begin(), R.calib.end());
+        const double n = static_cast<double>(R.n);
+        const std::size_t rank = R.rank, rl = R.rl, rp = R.rp;
+        out.r1.push_back(rank && rank <= 1), out.r5.push_back(rank && rank <= 5), out.r10.push_back(rank && rank <= 10);
+        out.rnd1.push_back(rank ? std::min(1.0, 1.0 / n) : 0.0), out.rnd5.push_back(rank ? std::min(1.0, 5.0 / n) : 0.0), out.rnd10.push_back(rank ? std::min(1.0, 10.0 / n) : 0.0);
+        out.lp1.push_back(rl && rl <= 1), out.lp5.push_back(rl && rl <= 5), out.lp10.push_back(rl && rl <= 10);
+        out.pca1.push_back(rp && rp <= 1), out.pca5.push_back(rp && rp <= 5), out.pca10.push_back(rp && rp <= 10);
+    }
+    out.lost_rule = 0;
+    for (const auto& [k, c] : lost) out.lost_rule += c;
+    return out;
+}
+void print_g3(const string& tag, const G3Read& R) {
+    char b[768];
+    std::snprintf(b, sizeof b, "%s cases drawn %zu | still explained after the deletion %zu | read %zu (no candidate %zu, of which the rule was no longer kept %zu)",
+                  tag.c_str(), R.drawn, R.explained, R.r1.size(), R.no_cand, R.lost_rule);
+    std::cout << b << "\n";
+    auto row = [&](const char* what, const vector<double>& a1, const vector<double>& a5, const vector<double>& a10) {
+        const auto c1 = s8a::boot_mean(a1), c5 = s8a::boot_mean(a5), c10 = s8a::boot_mean(a10);
+        std::snprintf(b, sizeof b, "%s RECALL %-22s @1 %.3f [%.3f, %.3f] @5 %.3f [%.3f, %.3f] @10 %.3f [%.3f, %.3f]", tag.c_str(), what, s8a::mean(a1), c1.first,
+                      c1.second, s8a::mean(a5), c5.first, c5.second, s8a::mean(a10), c10.first, c10.second);
+        std::cout << b << "\n";
+    };
+    row("G3 (bits)", R.r1, R.r5, R.r10);
+    row("random order", R.rnd1, R.rnd5, R.rnd10);
+    row("link predictor alone", R.lp1, R.lp5, R.lp10);
+    row("rule PCA alone", R.pca1, R.pca5, R.pca10);
+    const auto d10 = boot_diff(R.r10, R.rnd10), d1l = boot_diff(R.r1, R.lp1), d1p = boot_diff(R.r1, R.pca1);
+    std::snprintf(b, sizeof b, "%s DIFF recall@10 G3 - random %+.3f [%+.3f, %+.3f] | recall@1 G3 - LP alone %+.3f [%+.3f, %+.3f] | G3 - PCA alone %+.3f [%+.3f, %+.3f]",
+                  tag.c_str(), s8a::mean(R.r10) - s8a::mean(R.rnd10), d10.first, d10.second, s8a::mean(R.r1) - s8a::mean(R.lp1), d1l.first, d1l.second,
+                  s8a::mean(R.r1) - s8a::mean(R.pca1), d1p.first, d1p.second);
+    std::cout << b << "\n";
+}
+
+// G3's pool: the unexplained observations of the store with the pool's slots hidden; each distinct added fact that
+// falls in a hidden slot, at its best explanation.
+void g3_pool(const Facts& kby, const std::set<std::pair<string, string>>& slots, const G3Read& dev_read, vector<PoolItem>& pool, std::size_t& held,
+             std::size_t& observations) {
+    Facts red;
+    held = 0;
+    for (const auto& [s, fs] : kby)
+        for (const auto& [r, o] : fs) {
+            if (slots.count({s, r})) ++held;
+            else red[s].push_back({r, o});
+        }
+    const ecs::TripleStore st = s8a::make_store(red);
+    const ecs::RuleIndex ix(st);
+    const ecs::RuleSet rs(ix, ecs::mine_rules(ix), true);
+    const ecs::LinkPredictor lp(st, ecs::LinkPredictor::Config{});
+    // only facts in hidden slots are kept, so others need no bits
+    auto bits = [&](const an::FactRef& f) { return slots.count({f.s, f.r}) ? fact_bits(lp, f) : 1e9; };
+    std::map<an::FactRef, std::pair<double, string>> best;
+    observations = 0;
+    for (const auto& [s, fs] : red)
+        for (const auto& [r, o] : fs) {
+            if (an::derivable(rs, s, r, o)) continue;
+            ++observations;
+            for (const auto& e : an::abduce(ix, rs, s, r, o, bits)) {
+                const auto& f = e.add.front();
+                if (!slots.count({f.s, f.r})) continue;
+                auto it = best.find(f);
+                const string why = "explains " + r + "(" + s + ", " + o + ") by " + rs.rules()[static_cast<std::size_t>(e.rule)].text();
+                if (it == best.end() || e.bits < it->second.first) best[f] = {e.bits, why};
+            }
+        }
+    // the prior: an isotonic map from bits to P(the added fact is the deleted one), fitted on G3-P's dev cases
+    vector<double> p;
+    vector<int> y;
+    for (const auto& [bt, hit] : dev_read.calib) p.push_back(-bt), y.push_back(hit);
+    ecs::IsotonicCalibrator cal;
+    cal.fit(p, y);
+    for (const auto& [f, bw] : best) {
+        PoolItem x;
+        x.s = f.s, x.r = f.r, x.o = f.o, x.gen = "G3", x.score = bw.first, x.explain = bw.second;
+        x.prior = std::min(0.98, std::max(0.02, cal.predict(-bw.first)));
+        pool.push_back(x);
+    }
+}
+
+int run_anomaly(int argc, char** argv) {
+    if (argc < 9) {
+        std::fprintf(stderr, "usage: pattern_learn --gen-anomaly ENWIK8 SEEDS.tsv FACTS_F2.tsv WD_VALUES.tsv PATTERNS.tsv S15_DIR OUT_PREFIX [--read-test] [--fresh-dev | --fresh-test]\n");
+        return 2;
+    }
+    const double t0 = now_s();
+    const string out = argv[8], s15dir = argv[7];
+    bool read_test = false, fresh_dev = false, fresh_test = false;
+    for (int i = 9; i < argc; ++i) {
+        const string a = argv[i];
+        if (a == "--read-test") read_test = true;
+        else if (a == "--fresh-dev") fresh_dev = true;
+        else if (a == "--fresh-test") fresh_test = true;
+        else {
+            std::fprintf(stderr, "unknown option %s\n", argv[i]);
+            return 2;
+        }
+    }
+    s8b::Corpus C;
+    if (!s8b::load_corpus(argv[2], argv[5], argv[6], C)) return 1;
+    Stores S;
+    if (!load_stores(argv[3], argv[4], S)) {
+        std::fprintf(stderr, "cannot read %s or %s\n", argv[3], argv[4]);
+        return 1;
+    }
+    const s7::WdObjs wd = s7::load_wd_objs(argv[5]);
+    const auto amb = ambiguous_names(C.pages);
+    char b[512];
+    std::snprintf(b, sizeof b, "S11C STORES K %zu subjects | T %zu subjects | ambiguous names %zu", S.kby.size(), S.tby.size(), amb.size());
+    std::cout << b << "\n";
+    // ---- G13
+    for (int sp = 0; sp < (read_test ? 2 : 1); ++sp) g13_planted(S, C, amb, sp == 0, out);
+    vector<PoolItem> g13pool;
+    g13_real(S, C, amb, wd, read_test, out, fresh_test ? 1 : 0, (fresh_dev || fresh_test) ? &g13pool : nullptr);
+    // ---- G3
+    const G3Read dev3 = g3_planted(S.kby, true);
+    print_g3("DEV G3-P", dev3);
+    if (read_test) {
+        const G3Read t3 = g3_planted(S.kby, false);
+        print_g3("TEST G3-P", t3);
+        const double r10 = s8a::mean(t3.r10);
+        const auto d = boot_diff(t3.r10, t3.rnd10);
+        std::snprintf(b, sizeof b, "TEST G3 RULE (recall@10 >= 0.6 and above random order): recall@10 %.3f, difference [%+.3f, %+.3f] -> %s", r10, d.first, d.second,
+                      r10 >= 0.6 && d.first > 0 ? "KEPT" : "NOT KEPT");
+        std::cout << b << "\n";
+    }
+    // ---- pools
+    if (fresh_dev || fresh_test) {
+        const auto slots = pool_slots(s15dir, fresh_test);
+        const string ptag = fresh_test ? "S11C POOL test (S15 test, bit 17 = 0)" : "S11C POOL dev (S15 dev, bit 17 = 1)";
+        vector<PoolItem> g3pool;
+        std::size_t held = 0, obs = 0;
+        g3_pool(S.kby, slots, dev3, g3pool, held, obs);
+        Facts red;
+        for (const auto& [s, fs] : S.kby)
+            for (const auto& [r, o] : fs)
+                if (!slots.count({s, r})) red[s].push_back({r, o});
+        const ecs::TripleStore st = s8a::make_store(red);
+        pool_loop(g3pool, st, C, out + ".fresh_g3.prereg.tsv");
+        std::snprintf(b, sizeof b, "%s G3 slots %zu | store facts hidden %zu | unexplained observations %zu | hypotheses %zu", ptag.c_str(), slots.size(), held, obs,
+                      g3pool.size());
+        std::cout << b << "\n";
+        pool_states(ptag + " G3", g3pool);
+        write_pool(out + ".fresh_g3.hyps.tsv", g3pool);
+        const ecs::TripleStore T = s8a::make_store(S.tby);
+        pool_loop(g13pool, T, C, out + ".fresh_g13.prereg.tsv");
+        pool_states(ptag + " G13 (store T, " + (fresh_test ? "test" : "dev") + " subjects by bit 11)", g13pool);
+        write_pool(out + ".fresh_g13.hyps.tsv", g13pool);
+    }
+    std::snprintf(b, sizeof b, "S11C --gen-anomaly done in %.1f s", now_s() - t0);
+    std::cout << b << "\n";
+    return 0;
+}
+
+// ============================================================ G4 and G5: --gen-analogy
+struct SlotRank {
+    vector<ecs::RuleSet::Cand> rc;  // the generator's candidates with scores (rank_value's M_RULES order)
+};
+vector<ecs::RuleSet::Cand> as_cands(const vector<std::pair<string, double>>& v) {
+    vector<ecs::RuleSet::Cand> out;
+    for (const auto& [o, s] : v) {
+        ecs::RuleSet::Cand c;
+        c.o = o, c.score = s;
+        out.push_back(c);
+    }
+    return out;
+}
+
+// G5's candidates for (s, r): every object of r with a vector, scored cosine + 2 (so they rank above the unscored).
+vector<ecs::RuleSet::Cand> g5_cands(const an::VectorAnalogy& va, const string& s, const string& r, const vector<string>& objs) {
+    vector<ecs::RuleSet::Cand> out;
+    const auto q = va.query(s, r);
+    if (q.empty()) return out;
+    for (const auto& o : objs) {
+        double c = 0;
+        if (o == s || !va.score(q, o, c)) continue;
+        ecs::RuleSet::Cand x;
+        x.o = o, x.score = c + 2.0;
+        out.push_back(x);
+    }
+    std::sort(out.begin(), out.end(), [](const auto& a, const auto& b) { return a.score != b.score ? a.score > b.score : a.o < b.o; });
+    return out;
+}
+
+struct QueryRow {
+    string s, r, o;
+    bool dev = true;
+    std::size_t rank_base = 0, rank_g2 = 0, rank_g4[3] = {0, 0, 0}, rank_g5[2] = {0, 0};
+    double top_g4[3] = {0, 0, 0}, top_g5[2] = {0, 0};
+    string top_g4o[3], top_g5o[2];
+    bool scored_g4[3] = {false, false, false}, scored_g5[2] = {false, false};
+};
+const double kLambda[3] = {0.0, 0.25, 1.0};
+
+double rr(std::size_t k) { return k ? 1.0 / static_cast<double>(k) : 0.0; }
+
+int run_analogy(int argc, char** argv) {
+    if (argc < 11) {
+        std::fprintf(stderr, "usage: pattern_learn --gen-analogy ENWIK8 SEEDS.tsv FACTS_F2.tsv WD_VALUES.tsv PATTERNS.tsv S15_DIR VEC_PREFIX SIMVEC OUT_PREFIX "
+                             "[--read-test] [--fresh-dev | --fresh-test]\n");
+        return 2;
+    }
+    const double t0 = now_s();
+    const string s15dir = argv[7], vecp = argv[8], simvec = argv[9], out = argv[10];
+    bool read_test = false, fresh_dev = false, fresh_test = false;
+    for (int i = 11; i < argc; ++i) {
+        const string a = argv[i];
+        if (a == "--read-test") read_test = true;
+        else if (a == "--fresh-dev") fresh_dev = true;
+        else if (a == "--fresh-test") fresh_test = true;
+        else {
+            std::fprintf(stderr, "unknown option %s\n", argv[i]);
+            return 2;
+        }
+    }
+    s8b::Corpus C;
+    if (!s8b::load_corpus(argv[2], argv[5], argv[6], C)) return 1;
+    Stores S;
+    if (!load_stores(argv[3], argv[4], S)) return 1;
+    an::WordVectors wv[2];
+    {
+        string err;
+        if (!wv[0].load_f32(vecp + ".vectors.f32", vecp + ".vocab.tsv", err) || !wv[1].load_projected(simvec, err)) {
+            std::fprintf(stderr, "vectors: %s\n", err.c_str());
+            return 1;
+        }
+    }
+    char b[768];
+    std::snprintf(b, sizeof b, "S11C VECTORS %zu words x %d (PPMI-SVD) | %zu words x %d (simvec)", wv[0].size(), wv[0].dim(), wv[1].size(), wv[1].dim());
+    std::cout << b << "\n";
+    // ---- read 1: S8a's R1 random hide of store K
+    vector<std::array<string, 3>> trip;
+    for (const auto& [s, fs] : S.kby)
+        for (const auto& [r, o] : fs) trip.push_back({s, r, o});
+    const ecs::TripleStore K = s8a::make_store(S.kby);
+    vector<std::size_t> h(trip.size());
+    for (std::size_t i = 0; i < h.size(); ++i) h[i] = i;
+    {
+        std::mt19937_64 rng(20261029);
+        for (std::size_t i = h.size(); i > 1; --i) std::swap(h[i - 1], h[rng() % i]);
+    }
+    const std::set<std::size_t> hidden(h.begin(), h.begin() + static_cast<std::ptrdiff_t>(trip.size() / 10));
+    Facts red;
+    for (std::size_t i = 0; i < trip.size(); ++i)
+        if (!hidden.count(i)) red[trip[i][0]].push_back({trip[i][1], trip[i][2]});
+    const ecs::TripleStore st = s8a::make_store(red);
+    const ecs::RuleIndex ix(st);
+    const ecs::RuleSet rs(ix, ecs::mine_rules(ix), true);
+    const auto objs = s8a::objects_by_rel(st, red);
+    const an::VectorAnalogy va0(st, wv[0]), va1(st, wv[1]);
+    const an::VectorAnalogy* va[2] = {&va0, &va1};
+    static const vector<string> none;
+    vector<QueryRow> Q;
+    std::map<std::pair<string, string>, vector<an::Analog>> analog_cache;
+    const double tq = now_s();
+    for (std::size_t i : hidden) {
+        const auto& [s, r, o] = trip[i];
+        QueryRow q;
+        q.s = s, q.r = r, q.o = o, q.dev = dev_subject(s);
+        if (!q.dev && !read_test) continue;
+        const int ri = rel_index(r);
+        auto filt = [&](const string& c) {
+            for (const auto& f : K.facts_of(s))
+                if (f.r == r && s8a::same_value(ri, f.o, c)) return true;
+            return false;
+        };
+        const auto it = objs.find(r);
+        const vector<string>& ob = it == objs.end() ? none : it->second;
+        q.rank_base = s8a::rank_value(st, ri, s, o, ob, {}, nullptr, s8a::M_BASE, filt);
+        q.rank_g2 = s8a::rank_value(st, ri, s, o, ob, rs.candidates(s, r), nullptr, s8a::M_RULES, filt);
+        auto ait = analog_cache.find({s, r});
+        if (ait == analog_cache.end()) ait = analog_cache.emplace(std::make_pair(s, r), an::find_analogs(st, s, r)).first;
+        for (int l = 0; l < 3; ++l) {
+            const auto tr = an::transfer(st, ait->second, s, r, kLambda[l]);
+            q.scored_g4[l] = !tr.empty();
+            if (!tr.empty()) q.top_g4[l] = tr.front().second, q.top_g4o[l] = tr.front().first;
+            q.rank_g4[l] = s8a::rank_value(st, ri, s, o, ob, as_cands(tr), nullptr, s8a::M_RULES, filt);
+        }
+        for (int v = 0; v < 2; ++v) {
+            const auto gc = g5_cands(*va[v], s, r, ob);
+            q.scored_g5[v] = !gc.empty();
+            if (!gc.empty()) q.top_g5[v] = gc.front().score - 2.0, q.top_g5o[v] = gc.front().o;
+            q.rank_g5[v] = s8a::rank_value(st, ri, s, o, ob, gc, nullptr, s8a::M_RULES, filt);
+        }
+        Q.push_back(std::move(q));
+    }
+    std::snprintf(b, sizeof b, "S11C R1 hidden %zu, reduced store %zu, queries read %zu in %.1f s", hidden.size(), st.size(), Q.size(), now_s() - tq);
+    std::cout << b << "\n";
+    // G5's per-relation calibration on dev: on only where its dev MRR beats the base rate's (interval above 0, >= 20 queries)
+    std::set<string> g5_on[2];
+    for (int v = 0; v < 2; ++v) {
+        std::map<string, std::pair<vector<double>, vector<double>>> per;
+        for (const auto& q : Q)
+            if (q.dev) per[q.r].first.push_back(rr(q.rank_g5[v])), per[q.r].second.push_back(rr(q.rank_base));
+        for (const auto& [r, p] : per) {
+            if (p.first.size() < 20) continue;
+            const auto d = boot_diff(p.first, p.second);
+            const bool on = d.first > 0;
+            if (on) g5_on[v].insert(r);
+            std::snprintf(b, sizeof b, "DEV G5 CALIBRATION %s %-13s queries %3zu MRR G5 %.3f base %.3f difference [%+.3f, %+.3f] -> %s", v == 0 ? "ppmi300" : "simvec32",
+                          r.c_str(), p.first.size(), s8a::mean(p.first), s8a::mean(p.second), d.first, d.second, on ? "ON" : "off");
+            std::cout << b << "\n";
+        }
+    }
+    auto g5_rank = [&](const QueryRow& q, int v) { return g5_on[v].count(q.r) ? q.rank_g5[v] : q.rank_base; };
+    // the reads
+    auto read_line = [&](const string& tag, const string& what, const vector<double>& h1, const vector<double>& h10, const vector<double>& mrr,
+                         const vector<double>& base_mrr, double scored) {
+        const auto c1 = s8a::boot_mean(h1), c10 = s8a::boot_mean(h10), cm = s8a::boot_mean(mrr);
+        const auto d = boot_diff(mrr, base_mrr);
+        std::snprintf(b, sizeof b, "%s R1 RANK %-16s n %4zu Hits@1 %.3f [%.3f, %.3f] Hits@10 %.3f [%.3f, %.3f] MRR %.3f [%.3f, %.3f] | MRR - base %+.3f [%+.3f, %+.3f] | scored %.3f",
+                      tag.c_str(), what.c_str(), mrr.size(), s8a::mean(h1), c1.first, c1.second, s8a::mean(h10), c10.first, c10.second, s8a::mean(mrr), cm.first,
+                      cm.second, s8a::mean(mrr) - s8a::mean(base_mrr), d.first, d.second, scored);
+        std::cout << b << "\n";
+        return d;
+    };
+    int lam = 0, vec = 0;
+    std::pair<double, double> test_d4, test_d5;
+    for (int sp = 0; sp < (read_test ? 2 : 1); ++sp) {
+        const string tag = sp ? "TEST" : "DEV";
+        auto collect = [&](const std::function<std::size_t(const QueryRow&)>& rk, const std::function<bool(const QueryRow&)>& sc, vector<double>& h1, vector<double>& h10,
+                           vector<double>& m, vector<double>& bm, double& scored) {
+            double n = 0, k = 0;
+            for (const auto& q : Q) {
+                if (q.dev != (sp == 0)) continue;
+                const std::size_t r = rk(q);
+                h1.push_back(r == 1), h10.push_back(r >= 1 && r <= 10), m.push_back(rr(r)), bm.push_back(rr(q.rank_base));
+                n += 1, k += sc(q);
+            }
+            scored = n > 0 ? k / n : 0;
+        };
+        vector<double> h1, h10, m, bm;
+        double scd = 0;
+        collect([](const QueryRow& q) { return q.rank_base; }, [](const QueryRow&) { return true; }, h1, h10, m, bm, scd);
+        read_line(tag, "base_rate", h1, h10, m, bm, scd);
+        h1.clear(), h10.clear(), m.clear(), bm.clear();
+        collect([](const QueryRow& q) { return q.rank_g2; }, [](const QueryRow&) { return true; }, h1, h10, m, bm, scd);
+        read_line(tag, "G2_rules", h1, h10, m, bm, scd);
+        double best = -1;
+        for (int l = 0; l < 3; ++l) {
+            h1.clear(), h10.clear(), m.clear(), bm.clear();
+            collect([l](const QueryRow& q) { return q.rank_g4[l]; }, [l](const QueryRow& q) { return q.scored_g4[l]; }, h1, h10, m, bm, scd);
+            char w[48];
+            std::snprintf(w, sizeof w, "G4_lambda_%.2f", kLambda[l]);
+            const auto d = read_line(tag, w, h1, h10, m, bm, scd);
+            if (sp == 0 && s8a::mean(m) > best) best = s8a::mean(m), lam = l;
+            if (sp == 1 && l == lam) test_d4 = d;
+        }
+        best = -1;
+        for (int v = 0; v < 2; ++v) {
+            h1.clear(), h10.clear(), m.clear(), bm.clear();
+            collect([&, v](const QueryRow& q) { return g5_rank(q, v); }, [&, v](const QueryRow& q) { return q.scored_g5[v] && g5_on[v].count(q.r) > 0; }, h1, h10, m, bm, scd);
+            const auto d = read_line(tag, v == 0 ? "G5_ppmi300" : "G5_simvec32", h1, h10, m, bm, scd);
+            if (sp == 0 && s8a::mean(m) > best) best = s8a::mean(m), vec = v;
+            if (sp == 1 && v == vec) test_d5 = d;
+        }
+        if (sp == 0) {
+            std::snprintf(b, sizeof b, "S11C CHOICE (dev MRR): G4 lambda %.2f | G5 vectors %s (on for %zu relations)", kLambda[lam], vec == 0 ? "ppmi300" : "simvec32",
+                          g5_on[vec].size());
+            std::cout << b << "\n";
+        }
+    }
+    if (read_test) {
+        std::snprintf(b, sizeof b, "TEST RULE (MRR beats the base rate, interval above 0): G4 [%+.3f, %+.3f] -> %s | G5 [%+.3f, %+.3f] -> %s", test_d4.first, test_d4.second,
+                      test_d4.first > 0 ? "EARNS ITS PLACE" : "DOES NOT", test_d5.first, test_d5.second, test_d5.first > 0 ? "EARNS ITS PLACE" : "DOES NOT");
+        std::cout << b << "\n";
+    }
+    {
+        std::ofstream f(out + ".r1_queries.tsv");
+        f << "split\tsubject\trelation\tobject\trank_base\trank_g2\trank_g4\trank_g5\ttop_g4\ttop_g5\n";
+        for (const auto& q : Q)
+            f << (q.dev ? "dev" : "test") << '\t' << q.s << '\t' << q.r << '\t' << q.o << '\t' << q.rank_base << '\t' << q.rank_g2 << '\t' << q.rank_g4[lam] << '\t'
+              << g5_rank(q, vec) << '\t' << q.top_g4o[lam] << '\t' << q.top_g5o[vec] << '\n';
+    }
+    // ---- read 2: S15's temporal holdout on store T (b and c facts), as S8a's R2
+    {
+        const ecs::TripleStore T = s8a::make_store(S.tby);
+        const ecs::RuleIndex ixT(T);
+        const ecs::RuleSet rsT(ixT, ecs::mine_rules(ixT), true);
+        const auto objsT = s8a::objects_by_rel(T, S.tby);
+        const an::VectorAnalogy vaT(T, wv[vec]);
+        for (int sp = 0; sp < (read_test ? 2 : 1); ++sp) {
+            const string tag = string(sp ? "TEST" : "DEV") + " R2";
+            const auto rows = s8a::load_s15(s15dir + (sp ? "/temporal_holdout_test.tsv" : "/temporal_holdout_dev.tsv"));
+            std::map<string, vector<const s8a::S15Row*>> slot;
+            for (const auto& R : rows) slot[R.s + '\x1f' + R.r].push_back(&R);
+            s8a::RankAcc acc[4][2];  // base, G2, G4, G5 x b, c
+            for (const auto& R : rows) {
+                if (R.label != 1 || (R.cat != "b" && R.cat != "c")) continue;
+                const int ri = rel_index(R.r);
+                if (ri < 0 || T.facts_of(R.s).empty() || s8a::holds_value(ixT, R.s, R.r, R.v)) continue;
+                const auto& sl = slot[R.s + '\x1f' + R.r];
+                auto filt = [&](const string& c) {
+                    if (s8a::holds_value(ixT, R.s, R.r, c)) return true;
+                    for (const auto* o2 : sl)
+                        if (o2->label == 1 && s8a::same_value(ri, o2->v, c)) return true;
+                    return false;
+                };
+                const auto it = objsT.find(R.r);
+                const vector<string>& ob = it == objsT.end() ? none : it->second;
+                const int c = R.cat == "b" ? 0 : 1;
+                s8a::rank_add(acc[0][c], s8a::rank_value(T, ri, R.s, R.v, ob, {}, nullptr, s8a::M_BASE, filt), false);
+                s8a::rank_add(acc[1][c], s8a::rank_value(T, ri, R.s, R.v, ob, rsT.candidates(R.s, R.r), nullptr, s8a::M_RULES, filt), false);
+                const auto tr = an::transfer(T, an::find_analogs(T, R.s, R.r), R.s, R.r, kLambda[lam]);
+                s8a::rank_add(acc[2][c], s8a::rank_value(T, ri, R.s, R.v, ob, as_cands(tr), nullptr, s8a::M_RULES, filt), !tr.empty());
+                const auto gc = g5_on[vec].count(R.r) ? g5_cands(vaT, R.s, R.r, ob) : vector<ecs::RuleSet::Cand>{};
+                s8a::rank_add(acc[3][c], s8a::rank_value(T, ri, R.s, R.v, ob, gc, nullptr, s8a::M_RULES, filt), !gc.empty());
+            }
+            const char* const nm[4] = {"base_rate", "G2_rules", "G4", "G5"};
+            for (int g = 0; g < 4; ++g) {
+                s8a::print_rank(tag + " RANK b(unstated) " + nm[g], acc[g][0]);
+                s8a::print_rank(tag + " RANK c(future) " + nm[g], acc[g][1]);
+            }
+        }
+    }
+    // ---- pools: the top candidate per slot with the pool's slots hidden
+    if (fresh_dev || fresh_test) {
+        // priors: isotonic from score to P(true) on read 1's dev hidden slots (truth: store K holds the top candidate)
+        ecs::IsotonicCalibrator cal[2];
+        {
+            vector<double> p[2];
+            vector<int> y[2];
+            std::set<std::pair<string, string>> seen;
+            for (const auto& q : Q) {
+                if (!q.dev || !seen.insert({q.s, q.r}).second) continue;
+                const int ri = rel_index(q.r);
+                auto holds = [&](const string& o) {
+                    for (const auto& f : K.facts_of(q.s))
+                        if (f.r == q.r && s8a::same_value(ri, f.o, o)) return true;
+                    return false;
+                };
+                if (q.scored_g4[lam]) p[0].push_back(q.top_g4[lam]), y[0].push_back(holds(q.top_g4o[lam]));
+                if (q.scored_g5[vec] && g5_on[vec].count(q.r)) p[1].push_back(q.top_g5[vec]), y[1].push_back(holds(q.top_g5o[vec]));
+            }
+            for (int g = 0; g < 2; ++g) cal[g].fit(p[g], y[g]);
+        }
+        const auto slots = pool_slots(s15dir, fresh_test);
+        Facts fred;
+        std::size_t held = 0;
+        for (const auto& [s, fs] : S.kby)
+            for (const auto& [r, o] : fs) {
+                if (slots.count({s, r})) ++held;
+                else fred[s].push_back({r, o});
+            }
+        const ecs::TripleStore fst = s8a::make_store(fred);
+        const auto fobjs = s8a::objects_by_rel(fst, fred);
+        const an::VectorAnalogy fva(fst, wv[vec]);
+        vector<PoolItem> pool[2];
+        std::size_t in_store = 0;
+        for (const auto& [s, r] : slots) {
+            if (fst.facts_of(s).empty()) continue;
+            ++in_store;
+            const auto tr = an::transfer(fst, an::find_analogs(fst, s, r), s, r, kLambda[lam]);
+            if (!tr.empty()) {
+                PoolItem x;
+                x.s = s, x.r = r, x.o = tr.front().first, x.gen = "G4", x.score = tr.front().second;
+                x.prior = std::min(0.98, std::max(0.02, cal[0].predict(x.score)));
+                x.explain = "analog transfer";
+                pool[0].push_back(x);
+            }
+            if (g5_on[vec].count(r)) {
+                const auto it = fobjs.find(r);
+                const auto gc = g5_cands(fva, s, r, it == fobjs.end() ? none : it->second);
+                if (!gc.empty()) {
+                    PoolItem x;
+                    x.s = s, x.r = r, x.o = gc.front().o, x.gen = "G5", x.score = gc.front().score - 2.0;
+                    x.prior = std::min(0.98, std::max(0.02, cal[1].predict(x.score)));
+                    x.explain = "vector offset";
+                    pool[1].push_back(x);
+                }
+            }
+        }
+        const string ptag = fresh_test ? "S11C POOL test (S15 test, bit 17 = 0)" : "S11C POOL dev (S15 dev, bit 17 = 1)";
+        std::snprintf(b, sizeof b, "%s slots %zu | store facts hidden %zu | slots whose subject is in the store %zu | G4 hypotheses %zu | G5 hypotheses %zu", ptag.c_str(),
+                      slots.size(), held, in_store, pool[0].size(), pool[1].size());
+        std::cout << b << "\n";
+        for (int g = 0; g < 2; ++g) {
+            const string gn = g == 0 ? "g4" : "g5";
+            pool_loop(pool[g], fst, C, out + ".fresh_" + gn + ".prereg.tsv");
+            pool_states(ptag + (g == 0 ? " G4" : " G5"), pool[g]);
+            write_pool(out + ".fresh_" + gn + ".hyps.tsv", pool[g]);
+        }
+    }
+    std::snprintf(b, sizeof b, "S11C --gen-analogy done in %.1f s", now_s() - t0);
+    std::cout << b << "\n";
+    return 0;
+}
+
+// ============================================================ --pool-grade: a pool after S8d's source stage
+int run_grade(int argc, char** argv) {
+    if (argc < 7) {
+        std::fprintf(stderr, "usage: pattern_learn --pool-grade s15|wd FILE HALF HYPS SRC_FRESH\n");
+        return 2;
+    }
+    const string kind = argv[2], file = argv[3];
+    const int half = std::atoi(argv[4]);
+    s8c::Grader G;
+    s7::WdObjs wd;
+    if (kind == "s15") {
+        for (const auto& R : s8c::load_s15(file))
+            if (half < 0 || half17(R.s) == half) G.add(R);
+    } else if (kind == "wd") {
+        wd = s7::load_wd_objs(file);
+    } else {
+        std::fprintf(stderr, "grader must be s15 or wd\n");
+        return 2;
+    }
+    // the pool's rows and the source stage's rows, in the same order
+    auto rows_of = [](const string& path) {
+        vector<vector<string>> out;
+        std::ifstream f(path);
+        string l;
+        std::getline(f, l);
+        out.push_back(split(l, '\t'));
+        while (std::getline(f, l)) out.push_back(split(l, '\t'));
+        return out;
+    };
+    const auto H = rows_of(argv[5]), Z = rows_of(argv[6]);
+    if (H.empty() || Z.empty()) return 1;
+    auto col = [](const vector<string>& h, const char* n) { return static_cast<std::size_t>(std::find(h.begin(), h.end(), string(n)) - h.begin()); };
+    const std::size_t hs = col(H[0], "subject"), hr = col(H[0], "relation"), ho = col(H[0], "object"), hg = col(H[0], "generator"), hst = col(H[0], "state");
+    const std::size_t zs = col(Z[0], "subject"), zr = col(Z[0], "relation"), zo = col(Z[0], "object"), zsup = col(Z[0], "supported"), zref = col(Z[0], "refuted"),
+                      zby = col(Z[0], "by");
+    struct Acc {
+        double n = 0, g = 0, t = 0, sup = 0, sg = 0, st = 0, ref = 0, rg = 0, rf = 0, lsup = 0, lsg = 0, lst = 0;
+    };
+    std::map<string, Acc> by_gen, by_grp, by_rel, by_src;
+    Acc all;
+    std::set<string> seen;
+    std::size_t mismatched = 0, dup = 0;
+    for (std::size_t i = 1, j = 1; i < H.size() && j < Z.size(); ++i, ++j) {
+        const auto& h = H[i];
+        const auto& z = Z[j];
+        if (h.size() <= std::max({hs, hr, ho}) || z.size() <= std::max({zs, zr, zo, zsup})) continue;
+        if (h[hs] != z[zs] || h[hr] != z[zr] || h[ho] != z[zo]) {
+            ++mismatched;
+            continue;
+        }
+        const string k = cypha::eval::sources::norm_subject(h[hs]) + '\x1f' + h[hr] + '\x1f' + cypha::eval::sources::norm_name(h[ho]);
+        if (!seen.insert(k).second) {
+            ++dup;
+            continue;
+        }
+        int g = -1;
+        if (kind == "s15") g = G.grade(h[hs], h[hr], cypha::eval::sources::make_value(h[ho]));
+        else g = wd_grade(wd, {h[hs], h[hr], h[ho]});
+        const bool sup = z[zsup] == "1", ref = z[zref] == "1";
+        const bool lsup = hst < h.size() && (h[hst] == "supported" || h[hst] == "Supported");
+        const string gen = hg < h.size() ? h[hg] : "?";
+        auto add = [&](Acc& a) {
+            a.n += 1;
+            if (g >= 0) a.g += 1, a.t += g == 1;
+            if (sup) a.sup += 1, a.sg += g >= 0, a.st += g == 1;
+            if (ref) a.ref += 1, a.rg += g >= 0, a.rf += g == 0;
+            if (lsup) a.lsup += 1, a.lsg += g >= 0, a.lst += g == 1;
+        };
+        add(all), add(by_gen[gen]), add(by_grp[s8c::group_of(h[hr])]), add(by_rel[h[hr]]);
+        if (sup) add(by_src[zby < z.size() ? z[zby] : "?"]);
+    }
+    char b[768];
+    auto line = [&](const string& what, const Acc& a) {
+        std::snprintf(b, sizeof b, "POOL-GRADE %-28s hyps %5.0f graded %5.0f (true %.3f) | promoted (supported after sources) %4.0f, graded %3.0f, precision %s | "
+                                   "refuted %4.0f, graded %4.0f, false %s | supported by the generator loop %4.0f, graded %3.0f, precision %s",
+                      what.c_str(), a.n, a.g, a.g > 0 ? a.t / a.g : 0.0, a.sup, a.sg, wilson(a.st, a.sg).c_str(), a.ref, a.rg, wilson(a.rf, a.rg).c_str(), a.lsup,
+                      a.lsg, wilson(a.lst, a.lsg).c_str());
+        std::cout << b << "\n";
+    };
+    line("all (each distinct once)", all);
+    for (const auto& [k, a] : by_gen) line("generator " + k, a);
+    for (const auto& [k, a] : by_grp) line("group " + k, a);
+    for (const auto& [k, a] : by_src) line("positive from " + k, a);
+    for (const auto& [k, a] : by_rel)
+        if (a.sup > 0) line("relation " + k, a);
+    std::snprintf(b, sizeof b, "POOL-GRADE grader %s %s half %d | rows that did not line up %zu | duplicates %zu", kind.c_str(), file.c_str(), half, mismatched, dup);
+    std::cout << b << "\n";
+    return 0;
+}
+
+}  // namespace s11c
+
 int main(int argc, char** argv) {
     if (argc >= 2 && string(argv[1]) == "--score-planted") return s6::run(argc, argv);  // S6 (hypothesis scoring)
     if (argc >= 2 && string(argv[1]) == "--test-kinds") return s7::run(argc, argv);  // S7 (testing hypotheses)
@@ -10239,6 +11549,9 @@ int main(int argc, char** argv) {
     if (argc >= 2 && string(argv[1]) == "--worlds") return s9::run(argc, argv);  // S9 (possible worlds, T2, fragility)
     if (argc >= 2 && string(argv[1]) == "--schedule") return s10::run(argc, argv);  // S10 (the curiosity scheduler)
     if (argc >= 2 && string(argv[1]) == "--gen-concepts") return s11a::run(argc, argv);  // S11a (G9 concepts, G11 open relations)
+    if (argc >= 2 && string(argv[1]) == "--gen-anomaly") return s11c::run_anomaly(argc, argv);  // S11c (G13 anomalies, G3 abduction)
+    if (argc >= 2 && string(argv[1]) == "--gen-analogy") return s11c::run_analogy(argc, argv);  // S11c (G4 and G5 analogy)
+    if (argc >= 2 && string(argv[1]) == "--pool-grade") return s11c::run_grade(argc, argv);  // S11c (a pool after the source stage)
     if (argc >= 4 && string(argv[1]) == "--wilson") {
         double k = std::atof(argv[2]), n = std::atof(argv[3]);
         std::printf("%.0f/%.0f = %.3f  Wilson95 [%.3f, %.3f]\n", k, n, n > 0 ? k / n : 0.0, ecs::wilson_lower(k, n), ecs::wilson_upper(k, n));
