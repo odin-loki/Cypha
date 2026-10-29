@@ -244,6 +244,11 @@ class Cypha {
   void apply_default_hparams();
   bool load_ff_json(const std::string& path, int d, int fd, std::vector<double>& out) const;
   static std::string mode_name(SampleMode m);
+  /// Save format 2: state ``predict`` / ``update`` read that the older keys do not hold (``cypha_save_state``).
+  CNode export_save_state(const CyphaInferModel& synced) const;
+  void import_save_state(const CNode& st);
+  void import_save_hparams(const CNode& st);
+  void import_regression_state(const CNode& reg);
 
   std::unique_ptr<CyphaInferModel> infer_;
   std::unique_ptr<CyphaDifMemoryState> mem_;

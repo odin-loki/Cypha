@@ -94,6 +94,10 @@ enum class LandmarkSamplingKind {
 
   const std::map<std::string, std::vector<double>>& weights() const { return weights_; }
 
+  /// Reservoir RNG (``Cypha::save`` / ``Cypha::load`` keep it so learning continues the same way).
+  std::mt19937& rng_engine() { return rng_; }
+  const std::mt19937& rng_engine() const { return rng_; }
+
  private:
   void reservoir_update(const double* h, std::optional<int> fixed_j);
   void recompute_nystrom();

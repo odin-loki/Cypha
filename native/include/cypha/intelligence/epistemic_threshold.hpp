@@ -15,6 +15,10 @@ class EpistemicThreshold {
   /// Lower threshold when correction helped; raise when it was a false positive.
   void update(double r_eu, bool correction_helped);
 
+  /// The learned posterior (for ``Cypha::save`` / ``Cypha::load``).
+  const NigStatisticState& state() const { return nig_; }
+  NigStatisticState& state() { return nig_; }
+
  private:
   NigStatisticState nig_;
 };
