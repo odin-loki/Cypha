@@ -18,7 +18,9 @@
 // The text: train [0, 7,340,032), holdout [7,340,032, 8,388,608) of enwik8 (packed_trie.hpp Config). Mixture weights
 // on the holdout's first half; every number on its second half. The fresh text [8 MiB, 9 MiB) is not read.
 
+#ifndef _WIN32
 #include <sys/resource.h>
+#endif
 
 #include <chrono>
 #include <cmath>
@@ -49,10 +51,14 @@ double now_s() {
     using namespace std::chrono;
     return duration<double>(steady_clock::now().time_since_epoch()).count();
 }
-double peak_mb() {
+double peak_mb() {  // 0 on Windows (no getrusage); the reports are measured on Linux
+#ifndef _WIN32
     rusage ru{};
     getrusage(RUSAGE_SELF, &ru);
     return static_cast<double>(ru.ru_maxrss) / 1024.0;
+#else
+    return 0.0;
+#endif
 }
 
 int g_checks = 0, g_failed = 0;

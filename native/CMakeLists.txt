@@ -2521,3 +2521,20 @@ add_test(NAME native_class_context_test COMMAND "$<TARGET_FILE:class_context_tes
 set_tests_properties(native_class_context_test PROPERTIES TIMEOUT 120)
 # --- end M10 block ---------------------------------------------------------------------------------
 
+# --- TOKENS T3: the exact byte-token bridge (docs/reports/TOKENS_T3_T4.md) ------------------------
+add_executable(token_bridge_test tools/token_bridge_test.cpp)
+target_include_directories(token_bridge_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
+cypha_mingw_apply_exe_link_options(token_bridge_test)
+add_test(NAME native_token_bridge_test COMMAND "$<TARGET_FILE:token_bridge_test>")
+set_tests_properties(native_token_bridge_test PROPERTIES TIMEOUT 300)
+# cyphalm_tok_gen reads TOK-A's token model through the bridge (bias, gen, words). It needs TOK-A's tokenizer.hpp and
+# token_model.hpp (docs/reports/TOKENS_T0_T2.md); built only when they are present.
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/include/cypha/cyphalm/tokenizer.hpp"
+   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/include/cypha/cyphalm/token_model.hpp")
+  add_executable(cyphalm_tok_gen tools/cyphalm_tok_gen.cpp third_party/libsais/libsais.c)
+  target_include_directories(cyphalm_tok_gen PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/third_party/libsais")
+  cypha_mingw_apply_exe_link_options(cyphalm_tok_gen)
+endif()
+
