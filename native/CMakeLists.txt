@@ -2450,6 +2450,30 @@ add_test(NAME native_thought_test
 set_tests_properties(native_thought_test PROPERTIES TIMEOUT 300)
 # --- end K2/K3 block ----------------------------------------------------------------------------------
 
+# --- K4: thought primitives bound to Cypha's libraries (docs/reports/K4_K5_THOUGHT_BINDINGS.md) -------------
+# Header-only bindings (include/cypha/thought/bindings.hpp); the test also builds the FM-index for recall_case.
+add_executable(thought_bindings_test
+  tools/thought_bindings_test.cpp
+  src/cyphalm/fm_infinigram.cpp
+  third_party/libsais/libsais.c)
+target_include_directories(thought_bindings_test PRIVATE
+  "${CMAKE_CURRENT_SOURCE_DIR}/include"
+  "${CMAKE_CURRENT_SOURCE_DIR}/third_party"
+  "${CMAKE_CURRENT_SOURCE_DIR}/third_party/libsais")
+cypha_mingw_apply_exe_link_options(thought_bindings_test)
+add_test(NAME native_thought_bindings_test
+  COMMAND "$<TARGET_FILE:thought_bindings_test>" "${CMAKE_CURRENT_SOURCE_DIR}/../docs/thought/processes.json")
+set_tests_properties(native_thought_bindings_test PROPERTIES TIMEOUT 300)
+# K5: the first processes on their benchmarks and the DIF applicability comparison (links cypha_core for the
+# Cypha classifier). Run by hand; see the report for the commands.
+add_executable(thought_k5 tools/thought_k5.cpp)
+target_include_directories(thought_k5 PRIVATE
+  "${CMAKE_CURRENT_SOURCE_DIR}/include"
+  "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
+target_link_libraries(thought_k5 PRIVATE cypha_core)
+cypha_mingw_apply_exe_link_options(thought_k5)
+# --- end K4 block -------------------------------------------------------------------------------------
+
 # --- QE geometry: Cypha-side embedding geometry library (docs/EMBEDDING_GEOMETRY.md sections 4.2, 4.5, 5.1, 7.1, 9.3) ----
 # Header-only (include/cypha/semantics/geometry.hpp, which includes eval/ecs.hpp); the test needs no link against
 # cypha_core. Synthetic data only: planted 400-item teacher, mask, confidence steps, CSLS, MRL, confidence check.

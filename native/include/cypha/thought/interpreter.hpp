@@ -12,9 +12,10 @@
 //                 the reward R (3.2-3.8). solve() selects among applicable processes by Thompson
 //                 sampling (3.5) and returns IMPASSE when none applies.
 //
-// Not here yet: the DIF applicability classifier (3.1) - applicability is a Beta per
-// (process, task class) for now; bindings of primitives to Cypha's real tools (K4); chunking (K6);
-// mining (K7). The TraceSink hook is where traces go to the experiment DB.
+// Applicability (3.1) is a Beta per (process, task class) unless an ApplicabilityModel is set
+// (K5: the Cypha DIF classifier, bindings_cypha.hpp). Primitives are bound to Cypha's libraries in
+// bindings.hpp (K4). Not here yet: chunking (K6), mining (K7). The TraceSink hook is where traces go
+// to the experiment DB.
 //
 // Author: Odin Loch
 #pragma once
@@ -346,6 +347,22 @@ struct Config {
 using RewardFn = std::function<double(const RunTrace&, WorkingMemory&)>;
 using TraceSink = std::function<void(const RunTrace&)>;
 
+/// K4/K5 (THOUGHT 3.1): an applicability model that replaces the per-(process, task class) Beta when set. query()
+/// gives P(applicable) and an OOD flag for the situation in working memory (for example a "situation" feature
+/// vector); label() is told each top-level outcome the Beta would have learned from (positive: R >= the useful
+/// threshold; negative: the run ended in IMPASSE). Unset (the default), the interpreter uses the Beta and runs as in K2.
+struct ApplicabilityQuery {
+  double p = 0.5;
+  bool ood = false;
+};
+
+class ApplicabilityModel {
+ public:
+  virtual ~ApplicabilityModel() = default;
+  virtual ApplicabilityQuery query(const std::string& pid, const std::string& task_class, const WorkingMemory& wm) = 0;
+  virtual void label(const std::string& pid, const std::string& task_class, const WorkingMemory& wm, bool positive) = 0;
+};
+
 struct RunOptions {
   double budget = 100.0;
   double G = 1.0;       // value of the goal, in cost units (3.4)
@@ -398,8 +415,12 @@ class Interpreter {
   /// Register a callback. `key` is a primitive op name ("test"), or "<process>.<step>" for one
   /// step of one process; the step-specific binding wins.
   void bind(const std::string& key, Primitive fn) { prims_[key] = std::move(fn); }
+  bool bound(const std::string& key) const { return prims_.count(key) != 0; }
   void reseed(std::uint64_t seed) { rng_.seed(seed); }
   void set_trace_sink(TraceSink s) { sink_ = std::move(s); }
+  /// K5 (3.1): replace the applicability Beta with a model (nullptr restores the Beta).
+  void set_applicability(std::shared_ptr<ApplicabilityModel> m) { app_ = std::move(m); }
+  ApplicabilityModel* applicability() const { return app_.get(); }
 
   const Library& library() const { return *lib_; }
   const Config& config() const { return cfg_; }
@@ -433,7 +454,15 @@ class Interpreter {
       return res;
     }
     ProcStats& ps = proc_stats(pid, task_class);
-    if (ps.applicable.mean() < cfg_.theta) {  // not applicable here: IMPASSE, no run
+    if (app_) {  // K5: the applicability model decides; OOD routes to IMPASSE (3.1)
+      const ApplicabilityQuery q = app_->query(pid, task_class, wm);
+      if (q.ood || q.p < cfg_.theta) {
+        res.trace = blank(pid, task_class, 0, opt.budget);
+        res.trace.outcome = Outcome::Impasse;
+        res.trace.note = q.ood ? "ood" : "not applicable";
+        return res;
+      }
+    } else if (ps.applicable.mean() < cfg_.theta) {  // not applicable here: IMPASSE, no run
       res.trace = blank(pid, task_class, 0, opt.budget);
       res.trace.outcome = Outcome::Impasse;
       res.trace.note = "not applicable";
@@ -444,6 +473,10 @@ class Interpreter {
     res.reward = opt.reward ? opt.reward(res.trace, wm) : default_reward(res.trace, wm);
     res.reward = std::min(1.0, std::max(0.0, res.reward));
     learn(res.trace, res.reward, 1.0, true, opt);
+    if (app_) {
+      if (res.trace.outcome == Outcome::Impasse) app_->label(pid, task_class, wm, false);
+      else if (res.reward >= cfg_.useful_threshold) app_->label(pid, task_class, wm, true);
+    }
     if (sink_) sink_(res.trace);
     return res;
   }
@@ -454,7 +487,12 @@ class Interpreter {
     SolveResult out;
     for (const std::string& pid : goal.candidates) {
       if (!lib_->find(pid)) continue;
-      if (proc_stats(pid, goal.task_class).applicable.mean() >= cfg_.theta) out.applicable.push_back(pid);
+      if (app_) {
+        const ApplicabilityQuery q = app_->query(pid, goal.task_class, wm);
+        if (!q.ood && q.p >= cfg_.theta) out.applicable.push_back(pid);
+      } else if (proc_stats(pid, goal.task_class).applicable.mean() >= cfg_.theta) {
+        out.applicable.push_back(pid);
+      }
     }
     if (out.applicable.empty()) {
       out.impasse = true;
@@ -706,6 +744,7 @@ class Interpreter {
   std::map<std::string, Primitive> prims_;
   Learners L_;
   TraceSink sink_;
+  std::shared_ptr<ApplicabilityModel> app_;
 };
 
 }  // namespace cypha::thought
