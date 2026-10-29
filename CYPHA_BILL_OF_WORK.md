@@ -37,7 +37,7 @@ Living checklist only. Completed July 2026 continuum / optimality / RPSM / cell-
 - [ ] **B7**: REMOVED 2026-10-27. `chat_index` answered without CyphaLM ([record](docs/reports/REMOVED_NON_CYPHALM_QA.md)). Fuzzy question handling is to be redone in CyphaLM (PLAN rule 10).
 - [ ] **C0–C1**: fair TF-IDF baselines with `W_enc` frozen, then PPMI-SVD and random-indexing vectors.
   - **C1 vectors done (2026-10-27):** `native/tools/ppmi_svd.cpp`, [report](docs/reports/C1_PPMI_SVD_VECTORS.md). PPMI-SVD on enwik8 (11.2M tokens, 152 s, 640 MB) scores WordSim-353 0.672, SimLex-999 0.255 and MEN 0.637. WS353 is inside the published range; SimLex is below it. Random indexing scores 0.404 / 0.131 / 0.374.
-  - **Still open:** the C0 baselines and the 20 Newsgroups gate.
+  - **C0 and C7 done 2026-10-29** ([report](docs/reports/C0_C7_BASELINES_AND_ROUTING.md)): T-topic gate met (0.613 at 2k); TF-IDF + logistic regression 0.718; not adopted into Branch A (LCI 0.5, calibration). Open (Odin): a temperature for Cypha's confidence; the label-context prior for routing. `Cypha::save` / `load` bug found (CSAVE).
 - [ ] **F2**: pattern learning by distant supervision ([report](docs/reports/F2_PATTERN_LEARNING.md), `native/tools/pattern_learn.cpp`).
   - On all of enwik8 the fact store grows from 8,148 to 8,980 facts. The new ones are almost all birth and death dates and birth places.
   - Precision is 49/49 verifiable in a 50-fact sample (Wilson lower bound 0.927), and 35/37 for birth places.

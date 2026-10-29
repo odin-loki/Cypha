@@ -362,6 +362,14 @@ add_executable(cypha_forecast_run tools/cypha_forecast_run.cpp)
 target_link_libraries(cypha_forecast_run PRIVATE cypha_core cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cypha_forecast_run)
 
+# C0/C7 (PLAN Track C; docs/reports/C0_C7_BASELINES_AND_ROUTING.md): topic classification baselines and
+# PPMI-SVD vectors for Branch A routing. The data runs need downloaded 20 Newsgroups / AG News files.
+add_executable(topic_bench tools/topic_bench.cpp)
+target_link_libraries(topic_bench PRIVATE cypha_core)
+cypha_mingw_apply_exe_link_options(topic_bench)
+add_test(NAME native_topic_bench_selftest COMMAND "$<TARGET_FILE:topic_bench>" selftest)
+set_tests_properties(native_topic_bench_selftest PROPERTIES TIMEOUT 60)
+
 add_executable(orf_encoder_bench tools/orf_encoder_bench.cpp)
 target_link_libraries(orf_encoder_bench PRIVATE cypha_core)
 cypha_mingw_apply_exe_link_options(orf_encoder_bench)
