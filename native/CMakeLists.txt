@@ -2443,6 +2443,13 @@ target_include_directories(epistemic_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/i
 cypha_mingw_apply_exe_link_options(epistemic_test)
 add_test(NAME native_epistemic_test COMMAND "$<TARGET_FILE:epistemic_test>")
 set_tests_properties(native_epistemic_test PROPERTIES TIMEOUT 120)
+
+# E1: a part-of-speech tagger whose decisions the Cypha classifier makes (docs/reports/E1_CYPHA_TAGGER.md).
+add_executable(cypha_tagger tools/cypha_tagger.cpp)
+target_link_libraries(cypha_tagger PRIVATE cypha_core cypha_lm_native)
+cypha_mingw_apply_exe_link_options(cypha_tagger)
+add_test(NAME native_cypha_tagger_selftest COMMAND "$<TARGET_FILE:cypha_tagger>" selftest)
+set_tests_properties(native_cypha_tagger_selftest PROPERTIES TIMEOUT 60)
 # --- end S2 block -------------------------------------------------------------------------------
 
 # --- K2/K3: thought-process interpreter and standard learners (docs/THOUGHT.md sections 1.3, 3, 5, 12) ----
