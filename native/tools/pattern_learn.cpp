@@ -127,6 +127,7 @@
 #include "cypha/eval/gen_links.hpp"
 #include "cypha/eval/gen_rules.hpp"
 #include "cypha/eval/sources.hpp"
+#include "cypha/eval/unknown_signals.hpp"
 #include "cypha/eval/worlds.hpp"
 
 #include <sys/resource.h>
@@ -3218,6 +3219,331 @@ void write_frontier(const FrontierOpt& F, const GapOpt& G, const string& data, c
     }
 }
 
+// ============================================================ S4b: unknown-unknown signals (docs/reports/S4_UNSEEN_AND_FRONTIER.md, "S4b")
+//
+// --signals DIR [--signals-dolly PAGES.xml] [--surprise SCORES.tsv,...] [--signals-gaps FILE], after the normal passes
+// (it needs the kept patterns). DISCOVERY §3.4's signals under unknown_signals.hpp's alarm rule, on the registered
+// streams (C, S) and planted pools (D: Dolly pages from scripts/s4b_dolly_pages.py; L: the "List of" and disambiguation
+// pages the store's reader skips):
+//   U (unparsed, a coverage gap): per page, n sentences with >= 2 entity mentions (links or the page's subject), x of them
+//     parsed by a kept pattern; the score -ln P(X <= x | n, q_type), q_type the parse rate of the page's type over C;
+//   V (vocabulary, a lexical gap): CyphaLM's view (S4); ln((v + 0.5) / (e + 0.5)), v the page's words new to the reader,
+//     e Heaps' expectation for its tokens;
+//   Σ (surprise, a prediction gap): cyphalm_trie surprise's bits per byte (--surprise).
+// Writes DIR/units.tsv and the SIGNAL lines; each alarm of the unshifted stream (running reference) opens a gap in S3's
+// form in --signals-gaps FILE, and the first detection of each planted pool in FILE.planted.tsv. Rule 10: Cypha's
+// self-assessment only; nothing here answers a question or changes a fact, and S3's files are not touched.
+struct SignalOpt { string dir, dolly, gaps; vector<string> surprise; };
+
+namespace s4b {
+
+struct Page {
+    const string* src = nullptr;
+    PageRef ref;
+    int type = 3;  // write_gaps' rule: country 0, person 1, place 2, other 3
+};
+enum { kC = 0, kS = 1, kD = 2, kL = 3 };
+const char* const kSetName[4] = {"C", "S", "D", "L"};
+
+struct Signal {
+    string name, gap_kind;
+    vector<string> strata;
+    vector<ecs::SignalUnit> u[4];
+    vector<const Page*> pg[4];
+    vector<string> detail[4];
+};
+
+// U: (eligible sentences, parsed ones) of a page.
+std::pair<int, int> unparsed_counts(const Page& p) {
+    PageCtx px;
+    load_page(*p.src, p.ref, px);
+    int n = 0, x = 0;
+    vector<Cand> cands;
+    for (const Sent& s : px.sents) {
+        const auto spans = find_subject(s, px.forms);
+        std::set<string> ents;
+        for (const Lnk& L : s.l)
+            if (string k = norm_ent(L.target); !k.empty() && k != px.forms.title_key) ents.insert(k);
+        if (ents.size() + (spans.empty() ? 0 : 1) < 2) continue;
+        ++n;
+        if (spans.empty()) continue;
+        gen_cands(s, cands);
+        bool fired = false;
+        apply_patterns(s, spans, cands, px.forms.title_key, [&](int, const Cand&, const Span&) { fired = true; });
+        x += fired;
+    }
+    return {n, x};
+}
+
+// V: reads a page's words (S4's: maximal runs of ASCII letters, lower-cased) into the vocabulary; (tokens, new words).
+std::pair<double, double> read_words(const Page& p, std::unordered_set<string>& vocab) {
+    const string& d = *p.src;
+    double tok = 0, fresh = 0;
+    string w;
+    auto letter = [](unsigned char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'); };
+    for (std::size_t i = p.ref.tb; i < p.ref.te;) {
+        if (!letter(static_cast<unsigned char>(d[i]))) { ++i; continue; }
+        w.clear();
+        while (i < p.ref.te && letter(static_cast<unsigned char>(d[i]))) w += static_cast<char>(std::tolower(static_cast<unsigned char>(d[i++])));
+        ++tok;
+        fresh += vocab.insert(w).second ? 1 : 0;
+    }
+    return {tok, fresh};
+}
+
+void gap_row(std::ostream& o, const Signal& g, const Page& p, int stratum, double share, const string& note) {
+    char b[160];
+    std::snprintf(b, sizeof b, "\t-\t-1.0000\t-1.0000\t-1.0000\t%.4f\t0.0000\t0\t0.0000\t", share);
+    o << ecs::gap_id(p.ref.title, "-") << '\t' << g.gap_kind << "\topen\t" << p.ref.title << '\t' << g.strata[static_cast<std::size_t>(stratum)] << b << note << '\n';
+}
+
+void analyse(const Signal& g, std::ofstream& gaps, std::ofstream& planted, const std::function<void(const string&)>& say) {
+    const ecs::SignalRule rule;
+    const int K = static_cast<int>(g.strata.size());
+    char b[700];
+    string per;
+    for (int k = 0; k < K; ++k) {
+        std::size_t c = 0, s = 0;
+        for (const auto& u : g.u[kC]) c += u.stratum == k;
+        for (const auto& u : g.u[kS]) s += u.stratum == k;
+        per += " " + g.strata[static_cast<std::size_t>(k)] + " " + std::to_string(c) + "/" + std::to_string(s);
+    }
+    std::snprintf(b, sizeof b, "\nSIGNAL %s units C %zu S %zu D %zu L %zu | strata (C/S):%s", g.name.c_str(), g.u[kC].size(), g.u[kS].size(), g.u[kD].size(),
+                  g.u[kL].size(), per.c_str());
+    say(b);
+    if (g.u[kS].size() < 300 || g.u[kC].size() < 100) { say("  too few units for the rule"); return; }
+    const ecs::SignalRun run[2] = {ecs::signal_run(g.u[kC], g.u[kS], K, true, rule), ecs::signal_run(g.u[kC], g.u[kS], K, false, rule)};
+    const char* ref_name[2] = {"running", "fixed"};
+    for (int r = 0; r < 2; ++r) {
+        const ecs::SignalRun& R = run[r];
+        std::size_t ca = 0, sa = 0;
+        for (const auto& a : R.alarms) (a.in_test ? sa : ca) += 1;
+        const double perm = r == 1 ? ecs::signal_perm_alarms_per_k(R, rule, 200, 20261029) : -1.0;
+        std::snprintf(b, sizeof b, "  SIGNAL_FA %s %-7s | C scored %zu events %.4f alarms %zu | S scored %zu events %zu rate %.4f alarms %zu (per 1,000 %.3f)%s",
+                      g.name.c_str(), ref_name[r], R.c_scored, R.c_scored ? static_cast<double>(R.c_events) / static_cast<double>(R.c_scored) : 0.0, ca, R.s_scored,
+                      R.s_events, R.s_scored ? static_cast<double>(R.s_events) / static_cast<double>(R.s_scored) : 0.0, sa,
+                      R.s_scored ? 1000.0 * static_cast<double>(sa) / static_cast<double>(R.s_scored) : 0.0,
+                      perm >= 0 ? (" | 200 random orders: " + std::to_string(perm).substr(0, 6) + " alarms per 1,000").c_str() : "");
+        say(b);
+        for (const auto& a : R.alarms) {
+            const Page& p = *g.pg[a.in_test ? kS : kC][a.pos];
+            std::snprintf(b, sizeof b, "    ALARM %s %s %s unit %zu %s | R %.0f events %zu/%zu since the last restart", g.name.c_str(), ref_name[r], a.in_test ? "S" : "C", a.pos,
+                          p.ref.title.c_str(), a.R, a.events, a.units);
+            say(b);
+            if (r == 0)
+                gap_row(gaps, g, p, g.u[a.in_test ? kS : kC][a.pos].stratum, static_cast<double>(a.events) / static_cast<double>(a.units),
+                        "S4b " + g.name + " (running reference): alarm at " + (a.in_test ? "S" : "C") + " unit " + std::to_string(a.pos) + ", R " +
+                            std::to_string(static_cast<long long>(a.R)) + ", events " + std::to_string(a.events) + " of the last " + std::to_string(a.units) + " units");
+        }
+    }
+    // The planted pools' events against the fixed reference (C): the event rate a shift brings.
+    for (int set : {kD, kL}) {
+        ecs::SignalRef ref(K, false, rule);
+        ref.fill(g.u[kC]);
+        std::size_t n = 0, e = 0;
+        for (const auto& u : g.u[set])
+            if (ref.ready(u.stratum)) ++n, e += ref.p(u) < rule.alpha;
+        std::snprintf(b, sizeof b, "  SIGNAL_POOL %s %s units %zu scored %zu events %zu rate %.4f (fixed reference)", g.name.c_str(), kSetName[set], g.u[set].size(), n, e,
+                      n ? static_cast<double>(e) / static_cast<double>(n) : 0.0);
+        say(b);
+    }
+    // Planted shifts: 200 replicates per (pool, pi, reference); t0 uniform over S's units [100, |S| - 200].
+    const std::size_t W = 200, reps = 200, nS = g.u[kS].size();
+    for (int set : {kD, kL}) {
+        if (g.u[set].empty()) continue;
+        bool demo = false;
+        for (double pi : {1.0, 0.5, 0.2})
+            for (int r = 0; r < 2; ++r) {
+                std::mt19937_64 rng(20261029ull ^ ecs::signal_unit_id(g.name + kSetName[set] + ref_name[r], static_cast<std::size_t>(pi * 10)));
+                std::uniform_int_distribution<std::size_t> T(100, nS - W);
+                vector<int> delays;
+                std::size_t plant_alarms = 0;
+                for (std::size_t rep = 0; rep < reps; ++rep) {
+                    const std::size_t t0 = T(rng);
+                    const ecs::SignalDetection d = ecs::signal_planted(g.u[kC], g.u[kS], g.u[set], K, r == 0, rule, run[r], t0, pi, W, rng);
+                    delays.push_back(d.delay);
+                    plant_alarms += d.delay > 0 && d.plant;
+                    if (d.delay > 0 && !demo && r == 0 && pi == 1.0) {
+                        demo = true;
+                        const Page& p = *(d.plant ? g.pg[set] : g.pg[kS])[d.index];
+                        gap_row(planted, g, p, (d.plant ? g.u[set] : g.u[kS])[d.index].stratum, static_cast<double>(d.events) / static_cast<double>(d.units),
+                                "S4b " + g.name + " (running reference), planted pool " + kSetName[set] + " at S unit " + std::to_string(t0) + ": alarm after " +
+                                    std::to_string(d.delay) + " units, R " + std::to_string(static_cast<long long>(d.R)) + ", events " + std::to_string(d.events) +
+                                    " of the last " + std::to_string(d.units) + " units");
+                    }
+                }
+                const ecs::SignalDelayStats st = ecs::signal_delay_stats(delays, W);
+                std::snprintf(b, sizeof b, "  SIGNAL_DETECT %s pool %s pi %.1f %-7s | within 50 %3zu/%zu within 200 %3zu/%zu | delay median %s p90 %s | alarm on a plant %zu",
+                              g.name.c_str(), kSetName[set], pi, ref_name[r], st.within50, st.reps, st.within_window, st.reps,
+                              st.median > W ? ">200" : std::to_string(static_cast<int>(st.median)).c_str(), st.p90 > W ? ">200" : std::to_string(static_cast<int>(st.p90)).c_str(),
+                              plant_alarms);
+                say(b);
+            }
+    }
+}
+
+}  // namespace s4b
+
+void write_signals(const SignalOpt& O, const string& data, const vector<PageRef>& pages, const std::function<void(const string&)>& say) {
+    using namespace s4b;
+    string dolly;
+    if (!O.dolly.empty() && !read_file(O.dolly, dolly)) { say("S4b: cannot read " + O.dolly); return; }
+    auto type_of = [](const string& title) {
+        const string nk = norm_ent(title);
+        return g_country.count(nk) ? 0 : g_person.count(nk) ? 1 : g_place.count(nk) ? 2 : 3;
+    };
+    std::deque<Page> store;  // stable addresses
+    vector<const Page*> set[4], reader;
+    for (const PageRef& pg : pages) {
+        store.push_back({&data, pg, type_of(pg.title)});
+        const Page* p = &store.back();
+        const bool skip = ecs::signal_store_skips(pg.title);
+        if (pg.tb < ecs::kSignalReaderTo) reader.push_back(p);
+        if (skip && pg.tb >= ecs::kSignalCalibFrom) set[kL].push_back(p);
+        else if (!skip && pg.tb >= ecs::kSignalCalibFrom && pg.tb < ecs::kSignalSplit) set[kC].push_back(p);
+        else if (!skip && pg.tb >= ecs::kSignalSplit && pg.tb < ecs::kSignalTestTo) set[kS].push_back(p);
+    }
+    if (!dolly.empty()) {
+        long tot = 0, red = 0;
+        for (const PageRef& pg : list_pages(dolly, tot, red)) {
+            store.push_back({&dolly, pg, type_of(pg.title)});
+            set[kD].push_back(&store.back());
+        }
+    }
+    char b[600];
+    std::snprintf(b, sizeof b, "\nS4b SIGNALS pages: reader (before %zu) %zu, C %zu, S %zu, D %zu, L %zu", ecs::kSignalReaderTo, reader.size(), set[kC].size(), set[kS].size(),
+                  set[kD].size(), set[kL].size());
+    say(b);
+    std::ofstream units(O.dir + "/units.tsv");
+    units << "signal\tset\tbody_offset\ttitle\tstratum\tscore\tdetail\n";
+    vector<Signal> sig;
+
+    // U: the unparsed rate per page type.
+    {
+        Signal g{"unparsed", "coverage", {"country", "person", "place", "other"}, {}, {}, {}};
+        vector<std::pair<int, int>> cnt[4];
+        double sn[4] = {0, 0, 0, 0}, sx[4] = {0, 0, 0, 0};
+        std::size_t pages_t[4] = {0, 0, 0, 0}, with[4] = {0, 0, 0, 0};
+        for (int s = 0; s < 4; ++s)
+            for (const Page* p : set[s]) {
+                cnt[s].push_back(unparsed_counts(*p));
+                if (s == kC) sn[p->type] += cnt[s].back().first, sx[p->type] += cnt[s].back().second, ++pages_t[p->type], with[p->type] += cnt[s].back().first >= 3;
+            }
+        double q[4];
+        for (int t = 0; t < 4; ++t) {
+            q[t] = sn[t] > 0 ? sx[t] / sn[t] : 0.0;
+            std::snprintf(b, sizeof b, "  SIGNAL_U_RATE C %-7s pages %zu units (n >= 3) %zu | eligible sentences %.0f parsed %.0f | unparsed rate %.4f", g.strata[static_cast<std::size_t>(t)].c_str(),
+                          pages_t[t], with[t], sn[t], sx[t], sn[t] > 0 ? 1.0 - q[t] : 0.0);
+            say(b);
+        }
+        for (int s = 0; s < 4; ++s) {
+            double n_all = 0, x_all = 0;
+            for (std::size_t i = 0; i < set[s].size(); ++i) {
+                const auto [n, x] = cnt[s][i];
+                n_all += n, x_all += x;
+                if (n < 3) continue;
+                const Page* p = set[s][i];
+                g.u[s].push_back({ecs::binom_lower_tail_score(static_cast<std::size_t>(n), static_cast<std::size_t>(x), q[p->type]), p->type,
+                                  ecs::signal_unit_id(kSetName[s], p->ref.tb)});
+                g.pg[s].push_back(p);
+                g.detail[s].push_back("n " + std::to_string(n) + " parsed " + std::to_string(x));
+            }
+            std::snprintf(b, sizeof b, "  SIGNAL_U_SET %s pages %zu units %zu | eligible sentences %.0f parsed %.0f unparsed rate %.4f", kSetName[s], set[s].size(), g.u[s].size(), n_all,
+                          x_all, n_all > 0 ? 1.0 - x_all / n_all : 0.0);
+            say(b);
+        }
+        sig.push_back(std::move(g));
+    }
+    // V: new words against Heaps, CyphaLM's view.
+    {
+        Signal g{"vocabulary", "lexical", {"tok50-299", "tok300-1499", "tok1500+"}, {}, {}, {}};
+        std::unordered_set<string> vocab;
+        vector<double> Np, Vp;
+        double N = 0;
+        for (std::size_t k = 0; k < reader.size(); ++k) {
+            N += read_words(*reader[k], vocab).first;
+            if ((k + 1) % 25 == 0) Np.push_back(N), Vp.push_back(static_cast<double>(vocab.size()));
+        }
+        Np.push_back(N), Vp.push_back(static_cast<double>(vocab.size()));
+        const ecs::HeapsFit f = ecs::fit_heaps(Np, Vp);
+        std::snprintf(b, sizeof b, "  SIGNAL_V_HEAPS reader pages %zu tokens %.0f vocabulary %zu | K %.3f beta %.4f r2 %.5f points %zu", reader.size(), N, vocab.size(), f.K, f.beta, f.r2, f.n);
+        say(b);
+        auto score = [&](int s, std::unordered_set<string>& V, double& n_read) {
+            double sv = 0, se = 0;
+            for (const Page* p : set[s]) {
+                const auto [n, v] = read_words(*p, V);
+                const double e = ecs::heaps_vocab(f, n_read + n) - ecs::heaps_vocab(f, n_read);
+                n_read += n;
+                sv += v, se += e;
+                if (n < 50) continue;
+                g.u[s].push_back({std::log((v + 0.5) / (e + 0.5)), n < 300 ? 0 : n < 1500 ? 1 : 2, ecs::signal_unit_id(kSetName[s], p->ref.tb)});
+                g.pg[s].push_back(p);
+                char d[96];
+                std::snprintf(d, sizeof d, "tokens %.0f new %.0f expected %.2f", n, v, e);
+                g.detail[s].push_back(d);
+            }
+            std::snprintf(b, sizeof b, "  SIGNAL_V_SET %s pages %zu units %zu | new words %.0f expected %.1f ratio %.4f | tokens read after %.0f", kSetName[s], set[s].size(), g.u[s].size(),
+                          sv, se, se > 0 ? sv / se : 0.0, n_read);
+            say(b);
+        };
+        score(kC, vocab, N);
+        const std::unordered_set<string> at_s = vocab;
+        const double n_at_s = N;
+        score(kS, vocab, N);
+        for (int s : {kD, kL}) {
+            std::unordered_set<string> V = at_s;
+            double n = n_at_s;
+            score(s, V, n);
+        }
+        sig.push_back(std::move(g));
+    }
+    // Σ: CyphaLM's surprise, from cyphalm_trie surprise.
+    if (!O.surprise.empty()) {
+        Signal g{"surprise", "prediction", {"bytes256-1023", "bytes1024-2047", "bytes2048"}, {}, {}, {}};
+        std::map<std::pair<string, std::size_t>, std::pair<std::size_t, double>> sc;
+        for (const string& path : O.surprise) {
+            std::ifstream f(path);
+            string line;
+            std::getline(f, line);
+            while (std::getline(f, line)) {
+                const auto c = split(line, '\t');
+                if (c.size() >= 7) sc[{c[0], std::strtoull(c[1].c_str(), nullptr, 10)}] = {std::strtoull(c[4].c_str(), nullptr, 10), std::atof(c[6].c_str())};
+            }
+        }
+        for (int s = 0; s < 4; ++s) {
+            std::size_t want = 0;
+            for (const Page* p : set[s]) {
+                want += p->ref.te - p->ref.tb >= 256;
+                auto it = sc.find({kSetName[s], p->ref.tb});
+                if (it == sc.end()) continue;
+                const auto [n, bpb] = it->second;
+                g.u[s].push_back({bpb, n < 1024 ? 0 : n < 2048 ? 1 : 2, ecs::signal_unit_id(kSetName[s], p->ref.tb)});
+                g.pg[s].push_back(p);
+                g.detail[s].push_back("scored_bytes " + std::to_string(n));
+            }
+            double m = 0;
+            for (const auto& u : g.u[s]) m += u.score;
+            std::snprintf(b, sizeof b, "  SIGNAL_S_SET %s pages with >= 256 body bytes %zu, scored %zu | mean bits per byte %.4f", kSetName[s], want, g.u[s].size(),
+                          g.u[s].empty() ? 0.0 : m / static_cast<double>(g.u[s].size()));
+            say(b);
+        }
+        sig.push_back(std::move(g));
+    }
+    for (const Signal& g : sig)
+        for (int s = 0; s < 4; ++s)
+            for (std::size_t i = 0; i < g.u[s].size(); ++i) {
+                char v[32];
+                std::snprintf(v, sizeof v, "%.6f", g.u[s][i].score);
+                units << g.name << '\t' << kSetName[s] << '\t' << g.pg[s][i]->ref.tb << '\t' << g.pg[s][i]->ref.title << '\t'
+                      << g.strata[static_cast<std::size_t>(g.u[s][i].stratum)] << '\t' << v << '\t' << g.detail[s][i] << '\n';
+            }
+    const string gap_path = O.gaps.empty() ? O.dir + "/signal_gaps.tsv" : O.gaps;
+    std::ofstream gaps(gap_path), planted(gap_path + ".planted.tsv");
+    for (std::ofstream* o : {&gaps, &planted}) *o << "gap_id\tkind\tstatus\tentity\ttype\trelation\tp_exists\tf_store\tf_wd\tp\teig_bits\tdemand\tvoi\tnote\n";
+    for (const Signal& g : sig) analyse(g, gaps, planted, say);
+    say("S4b: units " + O.dir + "/units.tsv, gaps " + gap_path + " (and .planted.tsv); Rule 10: self-assessment only");
+}
+
 struct Args {
     string enwik, outdir;
     int folds = 5;
@@ -3232,6 +3558,7 @@ struct Args {
     string reach;               // F2R: the E1 parse file for --reach (with --dev)
     GapOpt gaps;                // S3: --gaps FILE [--demand ROWS,...] [--parse PARSE] [--gap-floor F]
     FrontierOpt frontier;       // S4: --frontier FILE [--frontier-test] [--frontier-split B] (with --gaps)
+    SignalOpt signals;          // S4b: --signals DIR [--signals-dolly PAGES.xml] [--surprise SCORES.tsv,...] [--signals-gaps FILE]
 };
 
 }  // namespace
@@ -8634,6 +8961,7 @@ int main(int argc, char** argv) {
                              "         [--wikidata FILE [--wikidata-gold-only]] [--phi FILE] [--shard FILE --dev DEV --test TEST [--slice-end B] [--holdout-from B]]\n"
                              "         [--raw] [--join FACTS] [--reach PARSE] [--gaps FILE [--demand ROWS,...] [--parse PARSE] [--gap-floor F] [--demand-weight W]]\n"
                              "         [--frontier FILE [--frontier-test] [--frontier-split B]]\n"
+                             "         [--signals DIR [--signals-dolly PAGES.xml] [--surprise SCORES.tsv,...] [--signals-gaps FILE]]\n"
                              "       pattern_learn --wilson K N\n");
         return 2;
     }
@@ -8670,6 +8998,10 @@ int main(int argc, char** argv) {
         else if (a == "--frontier" && i + 1 < argc) A.frontier.path = argv[++i];
         else if (a == "--frontier-test") A.frontier.test = true;
         else if (a == "--frontier-split" && i + 1 < argc) A.frontier.split = static_cast<std::size_t>(std::atoll(argv[++i]));
+        else if (a == "--signals" && i + 1 < argc) A.signals.dir = argv[++i];
+        else if (a == "--signals-dolly" && i + 1 < argc) A.signals.dolly = argv[++i];
+        else if (a == "--surprise" && i + 1 < argc) A.signals.surprise = split(argv[++i], ',');
+        else if (a == "--signals-gaps" && i + 1 < argc) A.signals.gaps = argv[++i];
     }
     if (!A.reach.empty() && A.shard.dev.empty()) { std::fprintf(stderr, "--reach needs --dev\n"); return 2; }
     if (!A.frontier.path.empty() && A.gaps.path.empty()) { std::fprintf(stderr, "--frontier needs --gaps\n"); return 2; }
@@ -8917,6 +9249,7 @@ int main(int argc, char** argv) {
     if (!A.reach.empty()) reach_report(cand_all, data, A.shard.holdout_from, A.shard.dev, A.reach, shard_text, say);
     if (!A.gaps.path.empty()) write_gaps(A.gaps, A.shard.dev, pages, fused, say);
     if (!A.frontier.path.empty()) write_frontier(A.frontier, A.gaps, data, pages, fused, say);
+    if (!A.signals.dir.empty()) write_signals(A.signals, data, pages, say);  // S4b
     std::snprintf(buf, sizeof buf, "\nrun time %.1f s, peak RAM %.0f MB, facts written %s/facts_f2.tsv", now_s() - t0, peak_mb(), A.outdir.c_str());
     say(buf);
     std::ofstream(A.outdir + "/stats.txt") << rep.str();

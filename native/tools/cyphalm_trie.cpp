@@ -220,6 +220,7 @@
 #include "cypha/cyphalm/similar_context.hpp"
 #include "cypha/eval/lci.hpp"
 #include "cypha/eval/scribe.hpp"
+#include "cypha/eval/unknown_signals.hpp"
 
 #include <cctype>
 #include <chrono>
@@ -274,6 +275,7 @@ struct Args {
     bool no_sim = false;                          // A4: the similar-context expert off where it is a default
     std::string cards;                            // S1: qa's evidence cards and reason codes (--cards FILE)
     bool no_cls = false, no_copy = false;         // B4C: the class and copy experts off where they are defaults
+    std::string plant, part;                      // S4b surprise: the planted pages (D), --part K/N
 };
 
 std::string env_or(const char* name, const char* fallback) {
@@ -327,6 +329,8 @@ Args parse(int argc, char** argv, int from) {
         else if (s == "--save") a.save = next();
         else if (s == "--mention") a.mention = true;
         else if (s == "--cards") a.cards = next();
+        else if (s == "--plant") a.plant = next();
+        else if (s == "--part") a.part = next();
         else if (s.rfind("--", 0) == 0) {
             std::cerr << "unknown option " << s << "\n";
             a.ok = false;
@@ -4498,9 +4502,211 @@ int cmd_selftest() {
     return 0;
 }
 
+// ---------------------------------------------------------------- surprise (S4b)
+
+// surprise <wiki> --out SCORES.tsv [--plant PAGES.xml] [--part K/N] (docs/reports/S4_UNSEEN_AND_FRONTIER.md, "S4b"):
+// CyphaLM's surprise per page, for Cypha's unknown-unknown signals (Rule 10: it watches what Cypha reads; nothing here
+// answers a question). The default expert stack trained on the wiki train bytes only (no chat): the packed trie,
+// InfiniGram (cap 8,192), the class expert, the similar-context expert and copy (m = --copy-min), each one's lambdas
+// fit on the whole holdout [train, sample) in qa's order. Each page is read in a fresh context (only the dump's
+// `<text xml:space="preserve">` before it); its first <= 2,048 body bytes are scored. Pages (pattern_learn's list_pages
+// rule: main namespace, not a redirect, body >= 256 bytes): C = bodies in [9,437,184, 30,000,000) and S = [30,000,000,
+// 50,000,000) without the "List of" and disambiguation pages, L = those pages from 9,437,184 on, D = every page of
+// --plant. --part K/N scores every N-th page from the K-th. Rows: set, body offset, title, body bytes, scored bytes,
+// bits, bits per byte.
+struct SignalPage {
+    std::string set, title;
+    std::size_t tb = 0, te = 0;
+    const std::string* src = nullptr;
+};
+void signal_pages(const std::string& d, bool plant, std::vector<SignalPage>& out) {
+    for (std::size_t pos = 0;;) {
+        const std::size_t pb = d.find("<page>", pos);
+        if (pb == std::string::npos) break;
+        const std::size_t pe = d.find("</page>", pb);
+        if (pe == std::string::npos) break;
+        pos = pe + 7;
+        const std::size_t tb = d.find("<title>", pb), te = d.find("</title>", tb);
+        if (tb == std::string::npos || te == std::string::npos || te > pe) continue;
+        const std::string title = d.substr(tb + 7, te - tb - 7);
+        const std::size_t xb = d.find("<text", te);
+        if (xb == std::string::npos || xb > pe) continue;
+        const std::size_t xg = d.find('>', xb);
+        if (xg == std::string::npos || xg > pe || d[xg - 1] == '/') continue;
+        const std::size_t xe = d.find("</text>", xg);
+        if (xe == std::string::npos || xe > pe) continue;
+        std::string head = d.substr(xg + 1, std::min<std::size_t>(40, xe - xg - 1));
+        head.erase(0, head.find_first_not_of(" \t\r\n"));
+        if (lowered(head.substr(0, 9)) == "#redirect") continue;
+        const std::size_t colon = title.find(':');
+        if (colon != std::string::npos && colon + 1 < title.size() && title[colon + 1] != ' ') continue;  // namespace page
+        if (xe - (xg + 1) < 256) continue;
+        const std::size_t b = xg + 1;
+        const bool skip = cypha::eval::signal_store_skips(title);
+        std::string set = plant ? "D"
+                          : skip ? (b >= cypha::eval::kSignalCalibFrom ? "L" : "")
+                          : b >= cypha::eval::kSignalCalibFrom && b < cypha::eval::kSignalSplit ? "C"
+                          : b >= cypha::eval::kSignalSplit && b < cypha::eval::kSignalTestTo ? "S" : "";
+        if (!set.empty()) out.push_back({set, title, b, xe, &d});
+    }
+}
+
+int cmd_surprise(const Args& a) {
+    const Config& cfg = a.cfg;
+    int part_k = 0, part_n = 1;
+    if (a.out.empty() || (!a.part.empty() && (std::sscanf(a.part.c_str(), "%d/%d", &part_k, &part_n) != 2 || part_n < 1 ||
+                                               part_k < 0 || part_k >= part_n))) {
+        std::cerr << "usage: cyphalm_trie surprise <wiki> --out SCORES.tsv [--plant PAGES.xml] [--part K/N]\n";
+        return 2;
+    }
+    std::string wiki, plant;
+    auto slurp = [](const std::string& p, std::string& s) {
+        std::ifstream f(p, std::ios::binary);
+        if (!f) return false;
+        s.assign(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
+        return true;
+    };
+    if (!slurp(a.wiki, wiki) || (!a.plant.empty() && !slurp(a.plant, plant))) {
+        std::cerr << "cannot read " << a.wiki << (a.plant.empty() ? "" : " or " + a.plant) << "\n";
+        return 1;
+    }
+    std::vector<SignalPage> pages;
+    signal_pages(wiki, false, pages);
+    if (!a.plant.empty()) signal_pages(plant, true, pages);
+    std::map<std::string, int> per_set;
+    for (const auto& p : pages) ++per_set[p.set];
+    for (const auto& [s, n] : per_set) std::cerr << "surprise pages " << s << " " << n << "\n";
+
+    std::vector<std::uint8_t> data;
+    if (!load_wiki(a, data)) return 1;
+    Model model;
+    model.data = data.data();
+    model.init(cfg);
+    double w[6];
+    init_weights(w, cfg);
+    train_span(model, data, w, 0, cfg.train, cfg);
+    model.compact_match();
+    const PackedModel pm = pack(model);  // M4
+    model.release();
+    const FmInfiniGram ig(data.data(), cfg.train);
+    int rc = 0;
+    const std::unique_ptr<ClassContext> cc = default_cls(a, data.data(), cfg.train, rc);
+    if (rc) return rc;
+    const std::unique_ptr<SimilarContext> sc = default_sim(a, data.data(), cfg.train, rc);
+    if (rc) return rc;
+
+    // The lambdas, on the whole holdout read as one stream (qa's order: InfiniGram, class, similar-context, copy).
+    const std::size_t H = cfg.sample - cfg.train;
+    std::vector<double> pt(H), pi(H);
+    std::vector<int> bi(H);
+    {
+        FmInfiniGram::Cursor cur;
+        int prev = -1;
+        for (std::size_t k = 0; k < H; ++k) {
+            const std::size_t i = cfg.train + k;
+            double e[5][256], M[256];
+            bool em = false;
+            unsigned pred = 0;
+            pm.fill_experts(data.data(), i, cfg.train, Mode::Synth, e, em, pred, false);
+            mix_dist(w, e, em, pred, M);
+            pt[k] = M[data[i]];
+            const std::size_t len = std::min<std::size_t>(i, 8192);
+            const auto r = ig.query(data.data() + (i - len), len, 8192, prev < 0 ? -1 : std::min(prev + 1, 8192), 1, cur);
+            prev = r.n;
+            pi[k] = r.total ? static_cast<double>(r.count[data[i]]) / static_cast<double>(r.total) : 0.0;
+            bi[k] = bucket(r.n, r.total);
+        }
+    }
+    double lig[kBuckets];
+    fit_lambdas(pi, pt, bi, H, kBuckets, lig);
+    std::vector<double> base(H);
+    for (std::size_t k = 0; k < H; ++k) base[k] = lig[bi[k]] * pi[k] + (1 - lig[bi[k]]) * pt[k];
+    auto line = [&](const char* name) {
+        double bits = 0;
+        for (double p : base) bits -= std::log2(p);
+        std::cout << "surprise_holdout_" << name << "_bpc " << bits / static_cast<double>(H) << "  (lambdas fit on it)\n";
+    };
+    line("trie_ig");
+    std::vector<double> lcl, lsm, lcp;
+    if (cc) lcl = mix_cls_into(*cc, data.data(), cfg.train, H, base), line("cls");
+    if (sc) {
+        std::vector<double> ps(H);
+        std::vector<int> sb(H);
+        for (std::size_t k = 0; k < H; ++k) {
+            double P[256];
+            sb[k] = SimilarContext::bucket(sc->predict(data.data(), cfg.train + k, P));
+            ps[k] = P[data[cfg.train + k]];
+        }
+        lsm = mix_into(ps, sb, H, SimilarContext::kBuckets, base);
+        line("sim");
+    }
+    if (!a.no_copy) lcp = mix_copy_into(data.data(), cfg.train, H, a.copy_min, base), line("copy");
+    std::cout.flush();
+
+    std::ofstream out(a.out);
+    if (!out) {
+        std::cerr << "cannot write " << a.out << "\n";
+        return 1;
+    }
+    out << "set\tbody_offset\ttitle\tbody_bytes\tscored_bytes\tbits\tbpb\n";
+    static const std::string kPrefix = "<text xml:space=\"preserve\">";
+    std::size_t scored = 0, bytes = 0;
+    const auto t0 = std::chrono::steady_clock::now();
+    for (std::size_t u = static_cast<std::size_t>(part_k); u < pages.size(); u += static_cast<std::size_t>(part_n)) {
+        const SignalPage& pg = pages[u];
+        const std::size_t n = std::min<std::size_t>(pg.te - pg.tb, 2048);
+        std::vector<std::uint8_t> buf(kPrefix.begin(), kPrefix.end());
+        buf.insert(buf.end(), pg.src->begin() + static_cast<std::ptrdiff_t>(pg.tb),
+                   pg.src->begin() + static_cast<std::ptrdiff_t>(pg.tb + n));
+        FmInfiniGram::Cursor cur;
+        int prev = -1;
+        double bits = 0;
+        for (std::size_t i = kPrefix.size(); i < buf.size(); ++i) {
+            const std::uint8_t y = buf[i];
+            double e[5][256], M[256], P[256];
+            bool em = false;
+            unsigned pred = 0;
+            pm.fill_experts(buf.data(), i, cfg.train, Mode::Synth, e, em, pred, false);
+            mix_dist(w, e, em, pred, M);
+            double p = M[y];
+            const std::size_t len = std::min<std::size_t>(i, 8192);
+            const auto r = ig.query(buf.data() + (i - len), len, 8192, prev < 0 ? -1 : std::min(prev + 1, 8192), 1, cur);
+            prev = r.n;
+            const int b = bucket(r.n, r.total);
+            p = lig[b] * (r.total ? static_cast<double>(r.count[y]) / static_cast<double>(r.total) : 0.0) + (1 - lig[b]) * p;
+            if (cc) {
+                const auto c = static_cast<std::size_t>(ClassContext::bucket(cc->predict(buf.data(), i, P)));
+                p = lcl[c] * P[y] + (1 - lcl[c]) * p;
+            }
+            if (sc) {
+                const auto s = static_cast<std::size_t>(SimilarContext::bucket(sc->predict(buf.data(), i, P)));
+                p = lsm[s] * P[y] + (1 - lsm[s]) * p;
+            }
+            if (!a.no_copy) {
+                int m = 0;
+                const double pc = copy_pred(buf.data(), i, m) == y ? 1.0 : 0.0;
+                const auto c = static_cast<std::size_t>(copy_bucket(m));
+                p = lcp[c] * pc + (1 - lcp[c]) * p;
+            }
+            bits -= std::log2(p);
+        }
+        char row[96];
+        std::snprintf(row, sizeof row, "\t%zu\t%zu\t%.3f\t%.6f\n", pg.te - pg.tb, n, bits, bits / static_cast<double>(n));
+        out << pg.set << '\t' << pg.tb << '\t' << pg.title << row;
+        ++scored, bytes += n;
+        if (scored % 200 == 0) {
+            out.flush();
+            std::cerr << "surprise scored " << scored << " pages " << bytes << " bytes "
+                      << std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count() << " s\n";
+        }
+    }
+    std::cout << "surprise pages_scored " << scored << " bytes " << bytes << " part " << part_k << "/" << part_n << "\n";
+    return 0;
+}
+
 void usage() {
     std::fprintf(stderr,
-                 "usage: cyphalm_trie <bpc|chat|probe|context8k|sample|cls|qa|dktext|simvec|selftest> [wiki] [dolly] [options]\n"
+                 "usage: cyphalm_trie <bpc|chat|probe|context8k|sample|cls|qa|dktext|simvec|surprise|selftest> [wiki] [dolly] [options]\n"
                  "  bpc [wiki] [--negative] [--no-guard]\n"
                  "  chat [wiki] [dolly] [--prompt TEXT] [--no-repeat] [--save FILE | --model FILE]\n"
                  "  probe [wiki] [dolly]\n"
@@ -4517,6 +4723,7 @@ void usage() {
                  "     (class, similar-context and copy experts are defaults, off inside answers: --no-cls --no-sim --no-copy)\n"
                  "  dktext [wiki] [dolly] --dev DEV.tsv --test TEST.tsv --out DK.tsv [--from 8388608] [--max-rows N] [--mention]\n"
                  "  simvec [wiki] --sim SPEC --out FILE\n"
+                 "  surprise <wiki> --out SCORES.tsv [--plant PAGES.xml] [--part K/N]   (S4b: per-page bits per byte)\n"
                  "  selftest\n"
                  "  options: --wiki P --dolly P --train N --sample N; qa, sample, context8k: --sim SPEC | --no-sim,\n"
                  "           --cls SPEC | --no-cls (sample: no class expert unless --cls), --copy-min N (default 8) | --no-copy\n"
@@ -4540,7 +4747,7 @@ int main(int argc, char** argv) {
         return 2;
     }
     if (cmd != "bpc" && cmd != "chat" && cmd != "probe" && cmd != "context8k" && cmd != "sample" && cmd != "qa" &&
-        cmd != "dktext" && cmd != "cls" && cmd != "simvec") {
+        cmd != "dktext" && cmd != "cls" && cmd != "simvec" && cmd != "surprise") {
         usage();
         return 2;
     }
@@ -4549,7 +4756,7 @@ int main(int argc, char** argv) {
         return 2;
     }
     if (!self_test()) return 1;
-    if ((cmd == "qa" || cmd == "sample" || cmd == "context8k") && !a.no_sim) {  // A4: find the vectors before any work
+    if ((cmd == "qa" || cmd == "sample" || cmd == "context8k" || cmd == "surprise") && !a.no_sim) {  // A4: find the vectors first
         const SimSpec ss = parse_sim(a.sims.empty() ? "default" : a.sims[0]);
         if (!ss.ok || !(std::ifstream(ss.vec, std::ios::binary) || std::ifstream(ss.vec + ".vectors.f32", std::ios::binary))) {
             std::cerr << "similar-context expert: no vectors at " << ss.vec
@@ -4557,7 +4764,7 @@ int main(int argc, char** argv) {
             return 1;
         }
     }
-    if (cmd == "qa" || cmd == "sample" || cmd == "context8k") {  // B4C: the class spec is read before any work
+    if (cmd == "qa" || cmd == "sample" || cmd == "context8k" || cmd == "surprise") {  // B4C: the class spec is read first
         if (a.no_cls && !a.cls.empty()) {
             std::cerr << "--cls and --no-cls together\n";
             return 2;
@@ -4573,6 +4780,7 @@ int main(int argc, char** argv) {
     else if (cmd == "sample") rc = cmd_sample(a);
     else if (cmd == "cls") rc = cmd_cls(a);
     else if (cmd == "simvec") rc = cmd_simvec(a);
+    else if (cmd == "surprise") rc = cmd_surprise(a);  // S4b
     else if (cmd == "qa") {
         if (a.dev.empty() || (a.fam != "none" && a.fam != "before" && a.fam != "after") || a.dk_ratio < 0 ||
             a.dk_ratio >= 1 || (a.fam_train != "stat" && a.fam_train != "outcome" && a.fam_train != "low")) {

@@ -9,6 +9,7 @@
 #include "cypha/eval/gen_rules.hpp"
 #include "cypha/eval/hypothesis.hpp"
 #include "cypha/eval/sources.hpp"
+#include "cypha/eval/unknown_signals.hpp"
 #include "cypha/eval/worlds.hpp"
 
 #include <cmath>
@@ -2130,6 +2131,134 @@ static void test_decide_S8d() {
 }
 
 // ---------------------------------------------------------------------------
+// S4b: unknown-unknown signals and their alarm rule (unknown_signals.hpp)
+// ---------------------------------------------------------------------------
+
+static void test_signals_S4b() {
+  // The conformal p-value, ties randomised by v.
+  const std::vector<double> ref = {1, 2, 3, 4};
+  CHECK_NEAR(conformal_p(ref, 5.0, 0.5), 0.1, 1e-15);
+  CHECK_NEAR(conformal_p(ref, 0.0, 0.5), 0.9, 1e-15);
+  CHECK_NEAR(conformal_p(ref, 3.0, 0.0), 0.2, 1e-15);  // one greater, the tie not counted
+  CHECK_NEAR(conformal_p(std::vector<double>{1, 1, 1}, 1.0, 0.5), 0.5, 1e-15);
+  // All-tied scores (U's many zero scores): p = v, so the event rate stays alpha.
+  {
+    const std::vector<double> flat(300, 0.0);
+    int ev = 0;
+    for (int i = 0; i < 20000; ++i) ev += conformal_p(flat, 0.0, signal_uniform(signal_unit_id("t", static_cast<std::size_t>(i)))) < 0.05;
+    CHECK_NEAR(ev / 20000.0, 0.05, 0.006);
+  }
+  // Exchangeable continuous scores: P(p < 0.05) = 0.05.
+  {
+    std::mt19937_64 rng(7);
+    std::normal_distribution<double> N(0.0, 1.0);
+    std::vector<double> w(499);
+    int ev = 0;
+    for (int r = 0; r < 4000; ++r) {
+      for (double& x : w) x = N(rng);
+      ev += conformal_p(w, N(rng), signal_uniform(static_cast<std::uint64_t>(r))) < 0.05;
+    }
+    CHECK_NEAR(ev / 4000.0, 0.05, 0.012);
+  }
+  // Shiryaev–Roberts: E[L] = 1 under p0 (the martingale), the known path of an all-event stream, a flat stream silent.
+  SignalRule rule;
+  CHECK_NEAR(rule.alpha * (rule.p1 / rule.alpha) + (1 - rule.alpha) * ((1 - rule.p1) / (1 - rule.alpha)), 1.0, 1e-15);
+  {
+    SRDetector sr(rule);
+    int at = 0;
+    for (int t = 1; t <= 10 && !at; ++t)
+      if (sr.step(true)) at = t;
+    CHECK(at == 7);  // R: 5, 30, 155, 780, 3905, 19530, 97655 >= 20000
+    CHECK_NEAR(sr.alarm_R, 97655.0, 1e-6);
+    CHECK(sr.alarm_units == 7 && sr.alarm_events == 7 && sr.R == 0.0);
+    SRDetector flat(rule);
+    int alarms = 0;
+    for (int t = 0; t < 100000; ++t) alarms += flat.step(false);
+    CHECK(alarms == 0);
+    const double q = 0.75 / 0.95;
+    CHECK_NEAR(flat.R, q / (1 - q), 1e-9);  // the fixed point, 3.75, far below A
+  }
+  // P(an alarm within L units) <= L / A with independent events at p0: 2,000 streams of 1,000 units, bound 0.05.
+  {
+    std::mt19937_64 rng(11);
+    std::bernoulli_distribution B(0.05);
+    int with = 0;
+    for (int s = 0; s < 2000; ++s) {
+      SRDetector sr(rule);
+      bool any = false;
+      for (int t = 0; t < 1000; ++t) any |= sr.step(B(rng));
+      with += any;
+    }
+    CHECK(with / 2000.0 <= 0.06);
+  }
+  // Streams with two strata: stratum 0 ~ N(5, 1), stratum 1 ~ N(0, 1). The unshifted stream stays near alpha and
+  // (almost) silent; a planted step change of stratum-1 units at 3 (inside stratum 0's range) is detected fast.
+  std::mt19937_64 rng(20261029);
+  std::normal_distribution<double> N(0.0, 1.0);
+  auto make = [&](std::size_t n, const std::string& set, double shift1) {
+    std::vector<SignalUnit> v;
+    for (std::size_t i = 0; i < n; ++i) {
+      const int k = static_cast<int>(i % 2);
+      v.push_back({(k == 0 ? 5.0 : shift1) + N(rng), k, signal_unit_id(set, i)});
+    }
+    return v;
+  };
+  const auto C = make(2000, "C", 0.0), S = make(1500, "S", 0.0);
+  std::vector<SignalUnit> pool;
+  for (std::size_t i = 0; i < 400; ++i) pool.push_back({3.0 + N(rng), 1, signal_unit_id("P", i)});
+  for (bool running : {true, false}) {
+    const SignalRun run = signal_run(C, S, 2, running, rule);
+    CHECK(run.s_scored == S.size() && run.r_before.size() == S.size() && run.s_event.size() == S.size());
+    CHECK(running ? run.c_scored == C.size() - 2 * rule.min_ref : run.c_scored == 0);  // the warm-up: 100 per stratum
+    const double rate = static_cast<double>(run.s_events) / static_cast<double>(run.s_scored);
+    CHECK(rate > 0.03 && rate < 0.07);
+    std::size_t s_alarms = 0;
+    for (const auto& a : run.alarms) s_alarms += a.in_test;
+    CHECK(s_alarms <= 1);
+    std::vector<int> delays, delays_half, none;
+    std::mt19937_64 r2(5);
+    for (int rep = 0; rep < 100; ++rep) {
+      const std::size_t t0 = 100 + static_cast<std::size_t>(rep) * 12;
+      delays.push_back(signal_planted(C, S, pool, 2, running, rule, run, t0, 1.0, 200, r2).delay);
+      delays_half.push_back(signal_planted(C, S, pool, 2, running, rule, run, t0, 0.5, 200, r2).delay);
+      none.push_back(signal_planted(C, S, S, 2, running, rule, run, t0, 1.0, 200, r2).delay);  // "plants" from S itself
+    }
+    const auto st = signal_delay_stats(delays, 200), sh = signal_delay_stats(delays_half, 200), sn = signal_delay_stats(none, 200);
+    CHECK(st.within50 == 100 && st.median >= 6 && st.median <= 12);  // P(event) ~ 0.9: about 7-8 units
+    CHECK(sh.within_window == 100 && sh.median > st.median);
+    CHECK(sn.within_window <= 10);  // no shift: an alarm within 200 units at most rarely (bound 200 / A = 0.01 each)
+    CHECK(signal_perm_alarms_per_k(run, rule, 200, 3) <= 0.1);
+  }
+  // The running reference a shift meets is the last cap units of each stratum read before it.
+  {
+    SignalRule r = rule;
+    r.cap = 50;
+    const SignalRef at = signal_ref_at(C, S, 2, true, r, 10);
+    CHECK(at.w[0].size() == 50 && at.w[1].size() == 50);
+    CHECK(at.w[0].back() == S[8].score && at.w[1].back() == S[9].score && at.w[1].front() == C[C.size() - 89].score);
+    CHECK(signal_ref_at(C, S, 2, false, r, 10).w[0].size() == 1000);  // fixed: all of C's stratum
+  }
+  // Delay statistics: misses count as window + 1.
+  {
+    const auto s = signal_delay_stats({1, 10, 0, 60}, 200);
+    CHECK(s.reps == 4 && s.within50 == 2 && s.within_window == 3);
+    CHECK_NEAR(s.median, 60.0, 0);
+    CHECK_NEAR(s.p90, 201.0, 0);
+  }
+  // U's score: -ln P(X <= x), X ~ Binomial(n, q).
+  CHECK_NEAR(binom_lower_tail_score(10, 0, 0.1), -10 * std::log(0.9), 1e-12);
+  CHECK_NEAR(binom_lower_tail_score(3, 1, 0.5), std::log(2.0), 1e-12);
+  CHECK_NEAR(binom_lower_tail_score(40, 3, 0.2), -std::log(0.02846209445974458), 1e-10);  // P(X <= 3)
+  CHECK_NEAR(binom_lower_tail_score(5, 5, 0.3), 0.0, 0);
+  CHECK_NEAR(binom_lower_tail_score(5, 0, 0.0), 0.0, 0);
+  CHECK(binom_lower_tail_score(20, 0, 0.3) > binom_lower_tail_score(10, 0, 0.3));
+  // The page types the store's reader skips (pool L).
+  CHECK(signal_store_skips("List of cities in Japan") && signal_store_skips("Mercury (disambiguation)"));
+  CHECK(!signal_store_skips("Listening") && !signal_store_skips("Lists of rivers") && !signal_store_skips("Aristotle"));
+  CHECK(signal_unit_id("C", 1) != signal_unit_id("S", 1) && signal_unit_id("C", 1) == signal_unit_id("C", 1));
+}
+
+// ---------------------------------------------------------------------------
 // S8c: evidence sources and their reliability (sources.hpp)
 // ---------------------------------------------------------------------------
 
@@ -2316,6 +2445,7 @@ int main() {
   test_s7c();
   test_worlds_S9();
   test_decide_S8d();
+  test_signals_S4b();
   test_sources_S8c();
   test_gap_map();
   std::printf("epistemic_test: %d checks, %d failed\n", g_checks, g_failed);
