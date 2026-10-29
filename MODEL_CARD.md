@@ -55,7 +55,7 @@ Removed light/champ hp SKUs: [`docs/history/REMOVED_HP_SKUS.md`](docs/history/RE
 
 ## Intended use
 
-- Research / competition: online classification and regression on vector features, **byte-level language modelling and text generation** (CyphaLM), event-forecasting benches (GDELT / VIEWS / MID).
+- Research / competition: online classification and regression on vector features, **byte-level language modelling and text generation** (CyphaLM). Event forecasting (GDELT / VIEWS / MID) is a scaffold under repair and has no results yet ([FC0](docs/reports/FC0_FORECAST_AUDIT.md), [plan](docs/FORECAST_PLAN.md)).
 - Not a drop-in transformer replacement. Proof surface is CTest parity + **gate24 BPC (~1.61 enwik)** + generation smokes — not a public LLM leaderboard.
 
 ## Production sequence algorithm (living)
@@ -107,7 +107,7 @@ Details and the corpus plan: [`docs/CURRENT.md`](docs/CURRENT.md). Question answ
 ## Training data
 
 - Sequence lock: WikiText-2 (scripts: `scripts/download_wikitext2.ps1`). Gutenberg fallback when WikiText is absent.
-- Forecast benches: sample CSVs under `bench/data/forecast/`; optional bulk via `scripts/fetch_forecast_data.ps1`.
+- Forecast benches: placeholder CSVs under `bench/data/forecast/`, not drawn from the named datasets, and six of seven are UTF-16, which the loaders cannot read. Real extracts with a provenance manifest come with FORECAST_PLAN FC3. Do not use `scripts/fetch_forecast_data.ps1 -Bulk` output for results until then ([FC0](docs/reports/FC0_FORECAST_AUDIT.md) §1 G).
 - Classification benches: synthetic goldens + sklearn-style sets documented in `docs/RESEARCH_STATUS.md`.
 
 ## History / superseded (not current product)

@@ -11,6 +11,7 @@ Living checklist only. Completed July 2026 continuum / optimality / RPSM / cell-
 | Historical BoW (2026-07-18) | [`docs/archive/reports/CYPHA_BILL_OF_WORK_2026-07-18.md`](docs/archive/reports/CYPHA_BILL_OF_WORK_2026-07-18.md) |
 | Historical optimality plan | [`docs/archive/plans/CYPHA_OPTIMALITY_PLAN_2026-07-18.md`](docs/archive/plans/CYPHA_OPTIMALITY_PLAN_2026-07-18.md) |
 | Historical forecasting design | [`docs/archive/plans/CYPHA_FORECASTING_PLAN_2026-08-08.md`](docs/archive/plans/CYPHA_FORECASTING_PLAN_2026-08-08.md) |
+| Forecasting to parity (Track FC) | [`docs/FORECAST_PLAN.md`](docs/FORECAST_PLAN.md) |
 
 **D17 bench lock:** Hybrid L2 + Wave2 BPTT **2.664 BPC** @ 300k (`bench/BASELINE_LOCK.json`). That is the overnight classifier/sequence pin, not the language model. The language model being taken forward is the packed trie. hp gate24 is the comparison baseline. [`docs/CURRENT.md`](docs/CURRENT.md). Prior L1 2.873 / SGD L2 2.816 are historical.
 
@@ -103,6 +104,14 @@ Living checklist only. Completed July 2026 continuum / optimality / RPSM / cell-
 - [ ] **Generation track** (Odin, 2026-10-29: coherent text is the aim; PLAN ledger 72): GEN-A frozen generation benchmark and clean training text; GEN-B sentence gate; GEN-E content-plan expert (the fact store steers through a next-byte expert; off inside answers); then word and topic experts (B3, B5). SCRIBE v2 today 0.063 (shuffled sentences 0.344, human 0.923).
 - [ ] **CyphaLM over tokens** ([`docs/TOKENS_PLAN.md`](docs/TOKENS_PLAN.md), PLAN ledger 73–74, started 2026-10-29: TOK-A tokenizers and token models, TOK-B byte–token bridge): T0–T12, from tokenizers learned by counting to superwords, phrase drafts and a run on Odin's PC.
   - **T0–T3 done 2026-10-29** ([T0–T2](docs/reports/TOKENS_T0_T2.md), [T3](docs/reports/TOKENS_T3_T4.md)): `cyphalm_tok`, `token_bridge.hpp`; Unigram and BPE 4k best (1.904 against the byte model's 2.073); byte-level Kneser–Ney matches small vocabularies; the bridge is exact. Next: T4 generation (waits for GEN-A's harness); watch the copy share at low temperature.
+- [ ] **Forecasting to parity** ([`docs/FORECAST_PLAN.md`](docs/FORECAST_PLAN.md), PLAN ledger 75; Track FC, new ids, so the closed Phases 1–9 stay closed): FC0–FC16, from a data layer that fails closed to VIEWS-protocol forecasts, a scenario tree with intervals, a saved bundle, a REST contract, fixtures, pins and the PR gate. Design: [ARCHITECTURE](docs/research/forecasting/ARCHITECTURE.md), [DATA](docs/research/forecasting/DATA.md), [EVALUATION](docs/research/forecasting/EVALUATION.md).
+  - [x] **FC0 audit done 2026-10-29** ([report](docs/reports/FC0_FORECAST_AUDIT.md)):
+    - No row of the committed CSVs was ever read (six of seven are UTF-16).
+    - On readable data, the sequence model throws (9 of 13 event ids ≥ 256).
+    - The VIEWS `cypha_holdout` reads the holdout, and `crps()` gives 100 where the exact value is 470.
+    - The drift test cannot fail.
+  - [x] **FC1 status corrected 2026-10-29:** RESEARCH_STATUS, README, MODEL_CARD, the forecasting README and the 2026-08-08 plan's banner say "under repair"; the numbers made on placeholder rows are retracted.
+  - **Next:** FC2 (it needs no decision). Open (Odin): the nine calls in FORECAST_PLAN §9, HANDOFF §5.24.
 - [ ] **How CyphaLM answers by itself** ([`docs/CYPHALM_ANSWERING.md`](docs/CYPHALM_ANSWERING.md), proposal): three routes (question-form training text, generalising experts, statement checking), an answer loop and steps A0–A5. **Agreed 2026-10-28** (§5): R1 + R3 first, teacher text as a separate low-trust shard, frames from the parse and learned patterns. **A2 and A3 run 2026-10-28** ([report](docs/reports/A2_A3_FACT_TEXT_AND_STATEMENT_SCORING.md)): the fact shard gives 2 right / 0 wrong out of fold on dev (coverage 1.5%) and nothing on the test; R3 statement scoring gives 0% at 2% wrong. Teacher-shard runs are for Odin's PC. **Next:** A4 (R2 experts) after S-1b; F2 patterns learned on raw bytes so R3 frames match what CyphaLM read.
 - [ ] **Embedding geometry QE0–QE9** ([`docs/EMBEDDING_GEOMETRY.md`](docs/EMBEDDING_GEOMETRY.md)): copy Qwen3-Embedding-8B's geometry into Cypha.
   - Needs Odin's machine: the GGUF downloads (Qwen3-Embedding 0.6B and 8B, Qwen3-8B, Qwen3.5-9B) and the teacher passes.
