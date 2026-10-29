@@ -188,6 +188,8 @@ What it doesn't know it doesn't know can't be listed, but it leaves traces. Thes
 
 A rising rate means a region of ignorance has been found, and a new gap is opened for it.
 
+S4b (2026-10-29) built surprise, unexplained text and vocabulary under one alarm rule: each page's score is compared with recent pages of its own type, and an alarm opens a gap in S3's form. Only vocabulary passes, for page types the store never reads (95.5% of planted shifts within 50 pages). No signal sees an unseen domain written in plain prose; that needs a content-level out-of-scope signal ([report](reports/S4_UNSEEN_AND_FRONTIER.md), S4b).
+
 ### 3.5 The "don't know" message and tag
 
 When Cypha does not know, it says so in two parts. This is not a refusal: it is saying it lacks the knowledge, not that it won't share it (PLAN rule 9).
@@ -364,7 +366,7 @@ Cheapest and most automatic come first. Each kind has measured sensitivity and s
    - S7b (2026-10-29): each test's three-way likelihoods give every result's BF, an inconclusive one included (a corpus search that finds nothing is weak evidence against); an inconclusive result is never independent evidence.
    - For streams of evidence, the e-process in `lci.hpp` gives anytime-valid decisions.
 5. **Decide.**
-   - **Supported:** the posterior is above 0.9 and at least one piece of evidence is independent of the generator. It then goes to ECS.
+   - **Supported:** the posterior is above 0.9 and at least one piece of evidence independent of the generator says yes. An independent no still lowers the posterior, but it is not support (S8d, 2026-10-29). It then goes to ECS.
    - **Refuted:** the posterior is below 0.05.
    - **Irreducible:** K = 5 tests have moved the posterior by less than 0.05 in total.
    - Otherwise it waits in the queue.
@@ -686,11 +688,11 @@ These are written as CTests and checked on every build:
 | S1 | Reason codes and evidence cards on CyphaLM's answers (every "I don't know" says why; every answer shows its evidence). The non-CyphaLM Q/A tools were removed under PLAN rule 10 | Reason-code accuracy ≥ 90% on 100 hand-checked; I3 CTest. **Run 2026-10-28:** 82% dev, 84.5% test; I3 check passes; `qa --cards` gives evidence cards. The 90% gate is missed and Odin closed S1 there: codes describe what CyphaLM has read, and where the data isn't there, saying so is right ([report](reports/S1_REASON_CODES_AND_EVIDENCE.md)) |
 | S2 | Epistemic states on top of `ecs.hpp`: Known / Believed / Contested / Ignorant / Vacuous, the DC conflict measure, and the two kinds of uncertainty | Known-answer CTests |
 | S3 | Gap map: schema expectations f(T,R), demand log, contested and fragile lists | Gaps listed with VOI on the F1 fact store |
-| S4 | Unseen estimates (Good–Turing, Chao1, capture–recapture, Heaps) and the frontier report | Missing-mass validity within ±25% on a held-out source  **Run 2026-10-28:** gate met; Good–Turing with the page as the unit is within 4% on held-out pages (n₁/N undercounts by 20–50%); `pattern_learn --frontier` writes the frontier report ([report](reports/S4_UNSEEN_AND_FRONTIER.md)) |
+| S4 | Unseen estimates (Good–Turing, Chao1, capture–recapture, Heaps) and the frontier report | Missing-mass validity within ±25% on a held-out source  **Run 2026-10-28:** gate met; Good–Turing with the page as the unit is within 4% on held-out pages (n₁/N undercounts by 20–50%); `pattern_learn --frontier` writes the frontier report ([report](reports/S4_UNSEEN_AND_FRONTIER.md))  **S4b 2026-10-29:** §3.4's signals under one alarm rule; the vocabulary signal passes for new page types (95.5% within 50 pages); surprise and unparsed do not; no signal sees an unseen domain in plain prose |
 | S5 | Hypothesis store, taint, lifecycle, firewall | I1, I4, I7, I8 CTests |
 | S6 | Scoring: plausibility, novelty, impact, compression gain, EIG and priority | Ranks known-true above known-false hypotheses (AUROC ≥ 0.75) on a planted set  **Run 2026-10-28:** P0 0.738 [0.717, 0.758] on a fresh planted set, gate missed; the terms are in `hypothesis.hpp` ([report](reports/S6_HYPOTHESIS_SCORING.md)) |
 | S7 | Tests T1–T6 with measured sensitivity and specificity, pre-registration in the experiment DB, Bayes-factor and e-value updating | I5, I6 CTests; s and c measured  **Run 2026-10-28:** I5 and I6 CTests pass; s and c measured on test for T1, T3, T4, T5 and T6; T2 cut (no consequence rule fired); the loop supports 56 of 56 correctly ([report](reports/S7_HYPOTHESIS_TESTS.md)) |
-| S8 | Generators batch 1: G2 rule induction, G6 and G7 link prediction, G14 contradiction resolution, G16 teacher | Rediscovery Hits@10 reported; promotion precision ≥ 0.9  **Runs 2026-10-29:** G2 and G14 ([S8a](reports/S8A_RULES_AND_CONTRADICTIONS.md)): Hits@10 0.230 test, promotions 0.818 on 11 graded, the gate cannot be read on the 2006-text store, G14 parked. G6 and G7 ([S8b](reports/S8B_LINK_PREDICTION.md)): Hits@10 0.334 test, no promotion under BH. G16 runs on Odin's PC |
+| S8 | Generators batch 1: G2 rule induction, G6 and G7 link prediction, G14 contradiction resolution, G16 teacher | Rediscovery Hits@10 reported; promotion precision ≥ 0.9  **Runs 2026-10-29:** G2 and G14 ([S8a](reports/S8A_RULES_AND_CONTRADICTIONS.md)): Hits@10 0.230 test, promotions 0.818 on 11 graded, the gate cannot be read on the 2006-text store, G14 parked. G6 and G7 ([S8b](reports/S8B_LINK_PREDICTION.md)): Hits@10 0.334 test, no promotion under BH. G16 runs on Odin's PC  **S8d 2026-10-29:** `decide` needs an independent yes; sources promote only where LR+ ≥ 10 on the generators' errors; a fresh confirm-half read gives 25 graded at 0.880 [0.700, 0.958]: the gate is not met ([report](reports/S8D_PROMOTION.md)) |
 | S9 | Possible-worlds sandbox and the hypothetical card; fragility analysis | I9 CTest; consequence tests pass  **Run 2026-10-29:** I9 met (43,409 worlds, no store changed); consequence tests: known-answer checks pass and the confirm direction holds, but T2 does not earn its place (never negative on this store); fragility: 76.9% single points of failure ([report](reports/S9_WORLDS_AND_FRAGILITY.md)) |
 | S10 | Curiosity scheduler (Thompson sampling, learning progress, floors, retirement) | Beats a uniform scheduler on confirmed value per cost, via LCI |
 | S11 | Generators batch 2: G9 concept formation, G11 open relations, G12 ABC, G13 anomalies, G3 abduction, G4 and G5 analogy | Rediscovery of a class; ABC precision@k |
@@ -703,10 +705,10 @@ These are written as CTests and checked on every build:
 1. S1 → S2 → S5 → S3. Honesty first: reason codes, states and the firewall, on the stores that exist now.
    - S1 done 2026-10-28 at 82% (Odin closed the 90% gate); S5 done 2026-10-28 (I1, I4, I7, I8 CTests); S3 done 2026-10-28 (gaps with VOI on the v2 fact store). [Report](reports/S3_S5_GAP_MAP_AND_HYPOTHESES.md).
 2. S4 → S6 → S7. Measurement of the unknown, then the hypothesis machinery.
-   - S4 done 2026-10-28 (gate met); S6 done 2026-10-28 (gate missed at 0.738; its next change needs S15 or another fresh source); S7 done 2026-10-28 (gates met); S15 built 2026-10-28, ahead of S8.
+   - S4 done 2026-10-28 (gate met), S4b 2026-10-29 (the vocabulary alarm passes; surprise and unparsed do not); S6 done 2026-10-28 (gate missed at 0.738; its next change needs S15 or another fresh source); S7 done 2026-10-28 (gates met); S15 built 2026-10-28, ahead of S8.
 3. S8 → S9 → S10. The first generators, worlds and the scheduler.
    - S8 run 2026-10-29 (G2, G6, G7, G14): rediscovery works; the promotion gate waits for a stronger independent test. S7b calibrated the loop the same day.
-   - S7c (2026-10-29) put a guarantee on the batch step (the two-tier hybrid, confirmed on a fresh set at 0.954); S8c measured sources other than Wikidata (DBpedia reliable; the gate still not passed); S9 built worlds and fragility (I9 met).
+   - S7c (2026-10-29) put a guarantee on the batch step (the two-tier hybrid, confirmed on a fresh set at 0.954); S8c measured sources other than Wikidata (DBpedia reliable; the gate still not passed); S9 built worlds and fragility (I9 met); S8d made `decide` need an independent yes and calibrated sources on the generators' errors (0.880 on a fresh read; the gate not met).
 4. S11 → S12 → S13 → S14, with S15 built alongside S8 so discovery has a fair test from the start.
 
 **Dependencies on other tracks**

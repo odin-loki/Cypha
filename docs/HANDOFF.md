@@ -1,6 +1,6 @@
 # Handoff for Claude Code: Cypha / CyphaLM
 
-**Odin Loch** · rewritten 2026-10-28 at the end of the second working session of the day; updated the same day for B4c, S1, RAM M10–M15, S4, S6 and A4c · repo `odin-loki/Cypha` (branch `main`)
+**Odin Loch** · rewritten 2026-10-28 at the end of the second working session of the day; updated the same day for B4c, S1, RAM M10–M15, S4, S6 and A4c, and on 2026-10-29 for S7–S9, S15, A4d, M16, M17, S4b and S8d · repo `odin-loki/Cypha` (branch `main`)
 
 Read this first. Then read the documents in §3 for whatever you are working on. The goal, the rules and Odin's standing instructions are in §1–§2 and are not optional.
 
@@ -107,6 +107,9 @@ Cypha is Odin Loch's own C++ AI. **CyphaLM** is its language model: a packed byt
 | **M16 FM index in place** | Built `qa` A0 132, defaults 170, C1L + defaults 185 MB (was 175 / 194 / 235); `context8k` 202; lossless | `RAM_PROFILE.md` |
 | **A4d similar-context recall, online keys** | Probe 128 (recall 0.94) and keys from the text being read: fresh −0.145, SCRIBE not falling, answers unchanged, 1.87× scoring time; `qa` holdout 1.8269 → **1.7895** | `A4_SIMILAR_CONTEXT_EXPERT.md` |
 | **hp-wrapper fixes** (Odin: "fix both") | Forecast rollouts read the trained model (8 min → 6 s); vocabularies other than 256 rejected; `cypha_slow` 56 / 56 | `SLOW_TEST_TRIAGE.md` |
+| **S8d promotion** (decided by measurement, ledger 71) | `decide` needs an independent yes; sources promote only where LR+ ≥ 10 on the generators' errors (DBpedia dates, places, links; GeoNames places); a fresh read: 25 graded at 0.880 [0.700, 0.958], gate (0.9) not met; the 3 misses are S15 name or grain mismatches | `S8D_PROMOTION.md` |
+| **S4b unknown-unknown signals** | One alarm rule; the vocabulary signal alarms on new page types (95.5% within 50 pages); surprise and unparsed do not pass; nothing sees an unseen domain in plain prose | `S4_UNSEEN_AND_FRONTIER.md` |
+| **M17 lowered index freed after `--save`** | C1L + defaults with `--save` 204.5 → 186.7 MB; lossless | `RAM_PROFILE.md` |
 | Tool profile P2–P4 | Tagger and word-vector class tables cut from the class expert (the tagger stays as the question parser); `cypha_gate` deleted; `pattern_learn` fails the Q/A cut, flagged for Odin | `TOOL_PROFILE_P2_GRID.md` |
 | S-1b learned contexts | Cypha's own learner reaches PPMI-SVD's level (0.683 / 0.246 / 0.669); gates failed on rare words | `S1B_LEARNED_CONTEXTS.md` |
 | S5 hypothesis store, S3 gap map | `hypothesis.hpp` (I1, I4, I7, I8), `gap_map.hpp`, `pattern_learn --gaps`: 27,842 gaps with VOI. CyphaLM's dev tags name their question's slot 0 / 750 | `S3_S5_GAP_MAP_AND_HYPOTHESES.md` |
@@ -146,11 +149,11 @@ Odin asked on 2026-10-28 to reduce CyphaLM's RAM. Every cut was measured against
 
 - Every printed number of `cyphalm_trie` is unchanged by M9 (bpc, chat, sample, context8k, dktext, cls, qa, the `--sim` paths).
 - **Served `qa` is under 200 MB** in every configuration (M10–M14). With B4c's defaults (C1L, class + similar-context + copy): built 264–275 MB and about 705 s; served **189 MB and 229 s**, the same rows (checked on the merged tool, 2026-10-28). A served model refuses the token statistics that read the wiki-stage trie (`question_lp`, `ent_lp`), `--sim src=all` and `--cards`.
-- **Building** (M15, M16): built `qa` peaks at 132 MB (A0), 170 MB (defaults) and 185 MB (C1L + defaults), repeating within 0.2 MB; `context8k` 202 MB. The index builds in place, and the class table is built after it from `FmInfiniGram::text()`. With `--save`, C1L + defaults peaks at 205 MB, because the lowered index stays resident until the end.
+- **Building** (M15, M16): built `qa` peaks at 132 MB (A0), 170 MB (defaults) and 185 MB (C1L + defaults), repeating within 0.2 MB; `context8k` 202 MB. The index builds in place, and the class table is built after it from `FmInfiniGram::text()`. With `--save`, C1L + defaults peaks at 187 MB (M17: the lowered index is freed once the store is written; it was 205).
 
 ### 4.4 CTests
 
-Run these on every change: `native_cyphalm_trie_selftest`, `native_fm_infinigram_test`, `native_epistemic_test`, `native_thought_test`, `native_geometry_test`, `native_ecs_lci_test`, `native_scribe_selftest`, `native_cyphalm_neural_smoke`, `native_class_context_test`. `native_fm_infinigram_test` runs 191,885 checks (locate included), `native_epistemic_test` 975 (S4, S6, S7, S7b, S7c, S8a, S8b, S8c, S9), `native_class_context_test` 1,043 (M15). `pattern_learn` builds with `g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp`; its S3 `--gaps` run must stay byte-identical.
+Run these on every change: `native_cyphalm_trie_selftest`, `native_fm_infinigram_test`, `native_epistemic_test`, `native_thought_test`, `native_geometry_test`, `native_ecs_lci_test`, `native_scribe_selftest`, `native_cyphalm_neural_smoke`, `native_class_context_test`. `native_fm_infinigram_test` runs 191,885 checks (locate included), `native_epistemic_test` 1,073 (S4, S4b, S6, S7, S7b, S7c, S8a, S8b, S8c, S8d, S9), `native_class_context_test` 1,043 (M15). `pattern_learn` builds with `g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp`; its S3 `--gaps` run must stay byte-identical. `pattern_learn --signals DIR` (S4b) runs after S3's passes; without it the run is byte-identical.
 
 ### 4.5 CI
 
@@ -173,18 +176,24 @@ Run these on every change: `native_cyphalm_trie_selftest`, `native_fm_infinigram
 10. ~~hp wrapper semantics.~~ **Fixed 2026-10-29** (PLAN ledger 69). New: forecast's event vocabulary has 842 ids, but hp reads bytes, so an event id ≥ 256 (any theater after Taiwan) throws during training. Map events onto bytes, or give forecast a model that is not byte-level?
 11. **S15 defaults, open to Odin's veto:** the Wikidata response cache (2.35 MB) is committed for audit; D4's T-QA exclusion is kept, so the benchmark is thin on CyphaLM's own 8 MiB slice (105 train subjects).
 12. **S7c's choice, open to Odin's veto** (PLAN ledger 70, answering ledger 68): the Known tier is null-model BH (K4), chosen over conformal selection (K3) by the registered tie order; they promoted the same sets on every read. K3's guarantee needs no model, only a labelled calibration set drawn like the batch; K4's rests on the null likelihoods, which run high for plausible false hypotheses. Switch to K3? Should fusion also use the store's φ (S7b)?
-13. **S8's promotion gate** (ledger 67; S8c done): DBpedia infobox facts are the one reliable independent source; the gate is still not passed (15 graded at 0.667). Open: grade on both dev halves or generate more confirm-half hypotheses; should `decide` require at least one independent source saying yes (all 5 wrong promotions were "capital = largest city", which DBpedia rejected)? Keep DBpedia as a test kind, stop Wikipedia leads from promoting, calibrate every source on the generators' own wrong values? Keep `data/s8c/` (DBpedia, CC BY-SA 3.0, attributed)?
+13. **S8's promotion gate** (ledger 67, 71; S8c and S8d done). `decide` now needs an independent yes, and a source promotes only where its LR+ on the generators' own errors is at least 10 (decided by measurement, open to veto). A fresh confirm-half set, read once: 25 graded at 0.880 [0.700, 0.958], so the gate (0.9) is not met. The 3 misses are S15 name or grain mismatches: Brussels for City of Brussels, Los Angeles for Century City, Chicago for Edgewater Hospital. Open:
+    - Accept the miss, or register a grader that knows Wikidata's names and places inside places, then read a new set?
+    - Read the gate on Supported (as now) or on Known (empty at this calibration size)?
+    - Should a source need at least 10 graded positives before it may promote? GeoNames passed on 2.
+    - Grade more DBpedia occupations and genres? They failed on 29 wrong values.
+    - DBpedia's data licence.
 14. **S9's questions:** DISCOVERY §4.4 use 1 (answering Odin's what-if questions) breaks rule 10, so nothing answers; drop it, or keep cards as data only? May a confirm-only test (T2: LR 3.35 dev, 10.5 S15) enter the loop by its three-way LR? Count Wikidata as one source or per claim (its 62% blast radius)? Merge S9's single points of failure into S3's gap map (it changes S3's output)?
 15. **When the 1 TB run ends:** move `trie_stream_train.cpp` onto `packed_trie.hpp` (and `pack()`, M4).
+16. **S4b's alarm threshold:** runs of pages on one topic raise false alarms (taxonomy pages for vocabulary, American football pages for surprise; 1 each in about 1,600 pages). Should such runs open gaps? A threshold of 100,000 instead of 20,000 silences both, at about 5 more pages of delay for the vocabulary signal.
 
 ---
 
 ## 6. Next work, in order
 
-1. **S8, promotion:** after Odin's calls (§5.13): `decide` requiring an independent yes, DBpedia as a test kind, more confirm-half hypotheses; then S9's consequence tests need confident rules into single-valued slots (a larger store); then S10 (the curiosity scheduler). (S7b, S7c, S8a, S8b, S8c, S9, M16, A4d, the hp fixes and the slow-test cut were done 2026-10-29; S1, S4, S6, S7, S15, the echo fix, A4c, M15 and serving from stored files 2026-10-28.)
-2. **RAM:** free the lowered index once `qa --save` has written it (C1L + defaults with `--save` 205 → about 180 MB). Lower still would need a blockwise BWT; not needed now.
+1. **S8, promotion:** after Odin's calls (§5.13): a grader that knows Wikidata's names and places inside places, then a new fresh read; then S9's consequence tests need confident rules into single-valued slots (a larger store); then S10 (the curiosity scheduler). (S8d, S4b, M17, S7b, S7c, S8a, S8b, S8c, S9, M16, A4d, the hp fixes and the slow-test cut were done 2026-10-29; S1, S4, S6, S7, S15, the echo fix, A4c, M15 and serving from stored files 2026-10-28.)
+2. **RAM:** nothing open. Every built and served `qa` configuration is under 190 MB (M17). A blockwise BWT only if a larger corpus needs it.
 3. **Forecast's event vocabulary** on a byte model (§5.10), after Odin's call.
-4. **Similar-context expert:** a cap or window on online keys before streams pass a few MiB (they cost 5.3 MB per MiB read). **S4:** the §3.4 unknown-unknown signals other than vocabulary (no producers yet).
+4. **Similar-context expert:** a cap or window on online keys before streams pass a few MiB (they cost 5.3 MB per MiB read). **S4b:** a content-level out-of-domain signal (no signal sees an unseen domain written in plain prose); source-trust shifts once source reliability is refit over time (§5.16 first).
 5. **On Odin's PC:** the 8B QE0 gate and timing, QE2 probe vectors, QE3, QE4 `pairs`, teacher Q/A text (QWEN3_EMBEDDING_DISSECTION §9).
 6. **Bill of work upkeep** with every commit.
 

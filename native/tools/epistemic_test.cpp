@@ -9,6 +9,7 @@
 #include "cypha/eval/gen_rules.hpp"
 #include "cypha/eval/hypothesis.hpp"
 #include "cypha/eval/sources.hpp"
+#include "cypha/eval/unknown_signals.hpp"
 #include "cypha/eval/worlds.hpp"
 
 #include <cmath>
@@ -2030,6 +2031,234 @@ static void test_worlds_S9() {
 }
 
 // ---------------------------------------------------------------------------
+// S8d: support needs a positive independent result; sources calibrated on generator errors (docs/reports/S8D_PROMOTION.md)
+// ---------------------------------------------------------------------------
+
+static void test_decide_S8d() {
+  namespace src = cypha::eval::sources;
+  // Two source tests with three-way likelihoods: positive BF 30, negative BF 0.2, inconclusive BF 0.65 / 0.74.
+  auto hyp = [](const std::string& id) {
+    Hypothesis h;
+    h.id = id, h.key = "capital|" + id + "|X", h.statement = id + " capital X", h.generator = "G2";
+    for (const char* k : {"DB-IB", "GN"}) {
+      HypTest t;
+      t.kind = std::string("S8d ") + k, t.source = k, t.independent = true, t.disconfirmation = true;
+      t.likelihoods.t[0] = 0.30, t.likelihoods.t[1] = 0.05, t.likelihoods.t[2] = 0.65;
+      t.likelihoods.f[0] = 0.01, t.likelihoods.f[1] = 0.25, t.likelihoods.f[2] = 0.74;
+      h.tests.push_back(t);
+    }
+    return h;
+  };
+  HypothesisStore hs;
+  auto start = [&](const Hypothesis& h, double p0) {
+    CHECK(hs.propose(h));
+    CHECK(hs.score(h.id, p0));
+    CHECK(hs.transition(h.id, HypState::Queued, "scored"));
+    CHECK(hs.transition(h.id, HypState::UnderTest, "test"));
+  };
+  // 1. Negative independent results only: never supported, even with the posterior above 0.9 (S8c's India capital Mumbai).
+  start(hyp("h-neg"), 0.999);
+  auto r = hs.record_outcome("h-neg", 0, TestOutcome::Negative);
+  CHECK(r.has_value() && *r == HypState::Queued);
+  const Hypothesis* hn = hs.find("h-neg");
+  CHECK_NEAR(hn->posterior, 199.8 / 200.8, 1e-12);  // odds 999 x 0.2
+  CHECK(has_independent_evidence(*hn));               // the negative is independent evidence ...
+  CHECK(!has_supporting_independent_evidence(*hn));   // ... but not evidence for h
+  CHECK(decide(*hn) == HypState::Queued);
+  CHECK(hs.transition("h-neg", HypState::UnderTest, "test"));
+  r = hs.record_outcome("h-neg", 1, TestOutcome::Negative);
+  CHECK(r.has_value() && *r == HypState::Queued);
+  CHECK_NEAR(hs.find("h-neg")->posterior, 39.96 / 40.96, 1e-12);
+  // 2. A positive independent result supports.
+  start(hyp("h-pos"), 0.5);
+  r = hs.record_outcome("h-pos", 0, TestOutcome::Positive);
+  CHECK(r.has_value() && *r == HypState::Supported);
+  CHECK(has_supporting_independent_evidence(*hs.find("h-pos")));
+  // 3. Negative, then positive: supported once the positive comes and the posterior is above 0.9 (odds 9 x 0.2 x 30 = 54).
+  start(hyp("h-np"), 0.9);
+  r = hs.record_outcome("h-np", 0, TestOutcome::Negative);
+  CHECK(r.has_value() && *r == HypState::Queued);
+  CHECK(hs.transition("h-np", HypState::UnderTest, "test"));
+  r = hs.record_outcome("h-np", 1, TestOutcome::Positive);
+  CHECK(r.has_value() && *r == HypState::Supported);
+  CHECK_NEAR(hs.find("h-np")->posterior, 54.0 / 55.0, 1e-12);
+  const Hypothesis* hnp = hs.find("h-np");
+  CHECK(independent_evidence(*hnp, hnp->tests[0]) && !hnp->tests[0].positive);  // the negative still counts for ECS (Oppose)
+  // 4. A positive from the generator's own source is not independent (I4).
+  Hypothesis g = hyp("h-gen");
+  g.generator = "DB-IB";
+  start(g, 0.5);
+  r = hs.record_outcome("h-gen", 0, TestOutcome::Positive);
+  CHECK(r.has_value() && *r == HypState::Queued && hs.find("h-gen")->posterior > 0.9);
+  // 5. A positive from a test not marked independent (a source under S8d's calibration bar) never supports.
+  Hypothesis w = hyp("h-weak");
+  w.tests[0].independent = false;
+  start(w, 0.5);
+  r = hs.record_outcome("h-weak", 0, TestOutcome::Positive);
+  CHECK(r.has_value() && *r == HypState::Queued && hs.find("h-weak")->posterior > 0.9);
+  CHECK(hs.transition("h-weak", HypState::UnderTest, "test"));
+  r = hs.record_outcome("h-weak", 1, TestOutcome::Positive);  // then an independent one
+  CHECK(r.has_value() && *r == HypState::Supported);
+  // 6. An inconclusive result never supports.
+  start(hyp("h-inc"), 0.95);
+  r = hs.record_outcome("h-inc", 0, TestOutcome::Inconclusive);
+  CHECK(r.has_value() && *r == HypState::Queued && hs.find("h-inc")->posterior > 0.9);
+  CHECK(!has_supporting_independent_evidence(*hs.find("h-inc")));
+  // 7. The null model's walk stops as decide does: after a negative it goes on. From 0.999 with e_obs = 6 (negative then
+  // positive), P(e >= 6 | false) = P(pos) + P(neg) P(pos) + P(inc) P(pos) = 0.01 + 0.0025 + 0.0074. Before S8d the walk
+  // stopped at the negative (posterior 0.995 with "independent evidence"), and the middle path was missing (0.0174).
+  const Hypothesis plan_h = hyp("h-plan");
+  CHECK_NEAR(null_model_pvalue(plan_h.tests, 0.999, 6.0), 0.0199, 1e-12);
+  CHECK_NEAR(null_model_pvalue(plan_h.tests, 0.999, 30.0), 0.01, 1e-12);  // only the first positive reaches 30
+  // 8. Calibration helpers (sources.hpp): a cell under 10 graded true or false uses the pooled tally.
+  TestTally small, big, pooled;
+  small.t_pos = 5, small.t_inc = 4, small.f_neg = 20, small.f_inc = 30;  // 9 true
+  big.t_pos = 30, big.t_inc = 106, big.f_pos = 1, big.f_neg = 100, big.f_inc = 164;  // DB-IB-like: 30 of 31 positives true
+  pooled = big;
+  bool own = true;
+  const OutcomeLikelihoods Ls = src::calibrated_likelihoods(small, pooled, 10.0, &own);
+  CHECK(!own && Ls.t[0] == likelihoods_from(pooled).t[0] && Ls.f[0] == likelihoods_from(pooled).f[0]);
+  const OutcomeLikelihoods Lb = src::calibrated_likelihoods(big, small, 10.0, &own);
+  CHECK(own);
+  CHECK_NEAR(src::positive_lr(Lb), (31.0 / 139.0) / (2.0 / 268.0), 1e-12);
+  CHECK(src::may_carry_promotion(Lb));
+  TestTally lead;  // WP-LEAD-like: positive on 25 of 136 true and 18 of 265 false, never negative
+  lead.t_pos = 25, lead.t_inc = 111, lead.f_pos = 18, lead.f_inc = 247;
+  const OutcomeLikelihoods Ll = likelihoods_from(lead);
+  CHECK_NEAR(src::positive_lr(Ll), (26.0 / 139.0) / (19.0 / 268.0), 1e-12);  // 2.64
+  CHECK(!src::may_carry_promotion(Ll));
+  CHECK(src::positive_lr(OutcomeLikelihoods{}) == 0.0 && !src::may_carry_promotion(OutcomeLikelihoods{}));
+}
+
+// ---------------------------------------------------------------------------
+// S4b: unknown-unknown signals and their alarm rule (unknown_signals.hpp)
+// ---------------------------------------------------------------------------
+
+static void test_signals_S4b() {
+  // The conformal p-value, ties randomised by v.
+  const std::vector<double> ref = {1, 2, 3, 4};
+  CHECK_NEAR(conformal_p(ref, 5.0, 0.5), 0.1, 1e-15);
+  CHECK_NEAR(conformal_p(ref, 0.0, 0.5), 0.9, 1e-15);
+  CHECK_NEAR(conformal_p(ref, 3.0, 0.0), 0.2, 1e-15);  // one greater, the tie not counted
+  CHECK_NEAR(conformal_p(std::vector<double>{1, 1, 1}, 1.0, 0.5), 0.5, 1e-15);
+  // All-tied scores (U's many zero scores): p = v, so the event rate stays alpha.
+  {
+    const std::vector<double> flat(300, 0.0);
+    int ev = 0;
+    for (int i = 0; i < 20000; ++i) ev += conformal_p(flat, 0.0, signal_uniform(signal_unit_id("t", static_cast<std::size_t>(i)))) < 0.05;
+    CHECK_NEAR(ev / 20000.0, 0.05, 0.006);
+  }
+  // Exchangeable continuous scores: P(p < 0.05) = 0.05.
+  {
+    std::mt19937_64 rng(7);
+    std::normal_distribution<double> N(0.0, 1.0);
+    std::vector<double> w(499);
+    int ev = 0;
+    for (int r = 0; r < 4000; ++r) {
+      for (double& x : w) x = N(rng);
+      ev += conformal_p(w, N(rng), signal_uniform(static_cast<std::uint64_t>(r))) < 0.05;
+    }
+    CHECK_NEAR(ev / 4000.0, 0.05, 0.012);
+  }
+  // Shiryaev–Roberts: E[L] = 1 under p0 (the martingale), the known path of an all-event stream, a flat stream silent.
+  SignalRule rule;
+  CHECK_NEAR(rule.alpha * (rule.p1 / rule.alpha) + (1 - rule.alpha) * ((1 - rule.p1) / (1 - rule.alpha)), 1.0, 1e-15);
+  {
+    SRDetector sr(rule);
+    int at = 0;
+    for (int t = 1; t <= 10 && !at; ++t)
+      if (sr.step(true)) at = t;
+    CHECK(at == 7);  // R: 5, 30, 155, 780, 3905, 19530, 97655 >= 20000
+    CHECK_NEAR(sr.alarm_R, 97655.0, 1e-6);
+    CHECK(sr.alarm_units == 7 && sr.alarm_events == 7 && sr.R == 0.0);
+    SRDetector flat(rule);
+    int alarms = 0;
+    for (int t = 0; t < 100000; ++t) alarms += flat.step(false);
+    CHECK(alarms == 0);
+    const double q = 0.75 / 0.95;
+    CHECK_NEAR(flat.R, q / (1 - q), 1e-9);  // the fixed point, 3.75, far below A
+  }
+  // P(an alarm within L units) <= L / A with independent events at p0: 2,000 streams of 1,000 units, bound 0.05.
+  {
+    std::mt19937_64 rng(11);
+    std::bernoulli_distribution B(0.05);
+    int with = 0;
+    for (int s = 0; s < 2000; ++s) {
+      SRDetector sr(rule);
+      bool any = false;
+      for (int t = 0; t < 1000; ++t) any |= sr.step(B(rng));
+      with += any;
+    }
+    CHECK(with / 2000.0 <= 0.06);
+  }
+  // Streams with two strata: stratum 0 ~ N(5, 1), stratum 1 ~ N(0, 1). The unshifted stream stays near alpha and
+  // (almost) silent; a planted step change of stratum-1 units at 3 (inside stratum 0's range) is detected fast.
+  std::mt19937_64 rng(20261029);
+  std::normal_distribution<double> N(0.0, 1.0);
+  auto make = [&](std::size_t n, const std::string& set, double shift1) {
+    std::vector<SignalUnit> v;
+    for (std::size_t i = 0; i < n; ++i) {
+      const int k = static_cast<int>(i % 2);
+      v.push_back({(k == 0 ? 5.0 : shift1) + N(rng), k, signal_unit_id(set, i)});
+    }
+    return v;
+  };
+  const auto C = make(2000, "C", 0.0), S = make(1500, "S", 0.0);
+  std::vector<SignalUnit> pool;
+  for (std::size_t i = 0; i < 400; ++i) pool.push_back({3.0 + N(rng), 1, signal_unit_id("P", i)});
+  for (bool running : {true, false}) {
+    const SignalRun run = signal_run(C, S, 2, running, rule);
+    CHECK(run.s_scored == S.size() && run.r_before.size() == S.size() && run.s_event.size() == S.size());
+    CHECK(running ? run.c_scored == C.size() - 2 * rule.min_ref : run.c_scored == 0);  // the warm-up: 100 per stratum
+    const double rate = static_cast<double>(run.s_events) / static_cast<double>(run.s_scored);
+    CHECK(rate > 0.03 && rate < 0.07);
+    std::size_t s_alarms = 0;
+    for (const auto& a : run.alarms) s_alarms += a.in_test;
+    CHECK(s_alarms <= 1);
+    std::vector<int> delays, delays_half, none;
+    std::mt19937_64 r2(5);
+    for (int rep = 0; rep < 100; ++rep) {
+      const std::size_t t0 = 100 + static_cast<std::size_t>(rep) * 12;
+      delays.push_back(signal_planted(C, S, pool, 2, running, rule, run, t0, 1.0, 200, r2).delay);
+      delays_half.push_back(signal_planted(C, S, pool, 2, running, rule, run, t0, 0.5, 200, r2).delay);
+      none.push_back(signal_planted(C, S, S, 2, running, rule, run, t0, 1.0, 200, r2).delay);  // "plants" from S itself
+    }
+    const auto st = signal_delay_stats(delays, 200), sh = signal_delay_stats(delays_half, 200), sn = signal_delay_stats(none, 200);
+    CHECK(st.within50 == 100 && st.median >= 6 && st.median <= 12);  // P(event) ~ 0.9: about 7-8 units
+    CHECK(sh.within_window == 100 && sh.median > st.median);
+    CHECK(sn.within_window <= 10);  // no shift: an alarm within 200 units at most rarely (bound 200 / A = 0.01 each)
+    CHECK(signal_perm_alarms_per_k(run, rule, 200, 3) <= 0.1);
+  }
+  // The running reference a shift meets is the last cap units of each stratum read before it.
+  {
+    SignalRule r = rule;
+    r.cap = 50;
+    const SignalRef at = signal_ref_at(C, S, 2, true, r, 10);
+    CHECK(at.w[0].size() == 50 && at.w[1].size() == 50);
+    CHECK(at.w[0].back() == S[8].score && at.w[1].back() == S[9].score && at.w[1].front() == C[C.size() - 89].score);
+    CHECK(signal_ref_at(C, S, 2, false, r, 10).w[0].size() == 1000);  // fixed: all of C's stratum
+  }
+  // Delay statistics: misses count as window + 1.
+  {
+    const auto s = signal_delay_stats({1, 10, 0, 60}, 200);
+    CHECK(s.reps == 4 && s.within50 == 2 && s.within_window == 3);
+    CHECK_NEAR(s.median, 60.0, 0);
+    CHECK_NEAR(s.p90, 201.0, 0);
+  }
+  // U's score: -ln P(X <= x), X ~ Binomial(n, q).
+  CHECK_NEAR(binom_lower_tail_score(10, 0, 0.1), -10 * std::log(0.9), 1e-12);
+  CHECK_NEAR(binom_lower_tail_score(3, 1, 0.5), std::log(2.0), 1e-12);
+  CHECK_NEAR(binom_lower_tail_score(40, 3, 0.2), -std::log(0.02846209445974458), 1e-10);  // P(X <= 3)
+  CHECK_NEAR(binom_lower_tail_score(5, 5, 0.3), 0.0, 0);
+  CHECK_NEAR(binom_lower_tail_score(5, 0, 0.0), 0.0, 0);
+  CHECK(binom_lower_tail_score(20, 0, 0.3) > binom_lower_tail_score(10, 0, 0.3));
+  // The page types the store's reader skips (pool L).
+  CHECK(signal_store_skips("List of cities in Japan") && signal_store_skips("Mercury (disambiguation)"));
+  CHECK(!signal_store_skips("Listening") && !signal_store_skips("Lists of rivers") && !signal_store_skips("Aristotle"));
+  CHECK(signal_unit_id("C", 1) != signal_unit_id("S", 1) && signal_unit_id("C", 1) == signal_unit_id("C", 1));
+}
+
+// ---------------------------------------------------------------------------
 // S8c: evidence sources and their reliability (sources.hpp)
 // ---------------------------------------------------------------------------
 
@@ -2215,6 +2444,8 @@ int main() {
   test_gen_rules_S8a();
   test_s7c();
   test_worlds_S9();
+  test_decide_S8d();
+  test_signals_S4b();
   test_sources_S8c();
   test_gap_map();
   std::printf("epistemic_test: %d checks, %d failed\n", g_checks, g_failed);

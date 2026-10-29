@@ -96,6 +96,12 @@
 //   reliability on S15's choose half and by Dawid-Skene, and S8's dev promotions with the accepted ones, graded on S15's
 //   confirm half. Cypha's own evidence only.
 //
+// S8d (2026-10-29, docs/reports/S8D_PROMOTION.md): `decide` needs a positive independent result (hypothesis.hpp).
+//   --sources ... [--calibrate | --fresh FRESH_G2 FRESH_LINKS]: each source re-measured on the generators' choose-half dev
+//   hypotheses (a source carries a promotion only if LR+ >= 10 there), and the fresh confirm-half set read once.
+//   --gen-rules ... --fresh-confirm and --gen-links ... --fresh-confirm write that set: G2 and G6/G7 on S15 dev's
+//   confirm-half slots with their facts hidden. No S15 label is read to make it.
+//
 // S9 (2026-10-29, docs/reports/S9_WORLDS_AND_FRAGILITY.md):
 //   --worlds ENWIK8 SEEDS WD_VALUES FACTS_F2 S15_DEV OUT [--read-confirm]: possible worlds (worlds.hpp). T2 through worlds
 //   on S7's dev set and, once, on S15 dev's choose half; fragility of the v2 store (single points of failure, blast radius
@@ -121,6 +127,7 @@
 #include "cypha/eval/gen_links.hpp"
 #include "cypha/eval/gen_rules.hpp"
 #include "cypha/eval/sources.hpp"
+#include "cypha/eval/unknown_signals.hpp"
 #include "cypha/eval/worlds.hpp"
 
 #include <sys/resource.h>
@@ -3212,6 +3219,331 @@ void write_frontier(const FrontierOpt& F, const GapOpt& G, const string& data, c
     }
 }
 
+// ============================================================ S4b: unknown-unknown signals (docs/reports/S4_UNSEEN_AND_FRONTIER.md, "S4b")
+//
+// --signals DIR [--signals-dolly PAGES.xml] [--surprise SCORES.tsv,...] [--signals-gaps FILE], after the normal passes
+// (it needs the kept patterns). DISCOVERY §3.4's signals under unknown_signals.hpp's alarm rule, on the registered
+// streams (C, S) and planted pools (D: Dolly pages from scripts/s4b_dolly_pages.py; L: the "List of" and disambiguation
+// pages the store's reader skips):
+//   U (unparsed, a coverage gap): per page, n sentences with >= 2 entity mentions (links or the page's subject), x of them
+//     parsed by a kept pattern; the score -ln P(X <= x | n, q_type), q_type the parse rate of the page's type over C;
+//   V (vocabulary, a lexical gap): CyphaLM's view (S4); ln((v + 0.5) / (e + 0.5)), v the page's words new to the reader,
+//     e Heaps' expectation for its tokens;
+//   Σ (surprise, a prediction gap): cyphalm_trie surprise's bits per byte (--surprise).
+// Writes DIR/units.tsv and the SIGNAL lines; each alarm of the unshifted stream (running reference) opens a gap in S3's
+// form in --signals-gaps FILE, and the first detection of each planted pool in FILE.planted.tsv. Rule 10: Cypha's
+// self-assessment only; nothing here answers a question or changes a fact, and S3's files are not touched.
+struct SignalOpt { string dir, dolly, gaps; vector<string> surprise; };
+
+namespace s4b {
+
+struct Page {
+    const string* src = nullptr;
+    PageRef ref;
+    int type = 3;  // write_gaps' rule: country 0, person 1, place 2, other 3
+};
+enum { kC = 0, kS = 1, kD = 2, kL = 3 };
+const char* const kSetName[4] = {"C", "S", "D", "L"};
+
+struct Signal {
+    string name, gap_kind;
+    vector<string> strata;
+    vector<ecs::SignalUnit> u[4];
+    vector<const Page*> pg[4];
+    vector<string> detail[4];
+};
+
+// U: (eligible sentences, parsed ones) of a page.
+std::pair<int, int> unparsed_counts(const Page& p) {
+    PageCtx px;
+    load_page(*p.src, p.ref, px);
+    int n = 0, x = 0;
+    vector<Cand> cands;
+    for (const Sent& s : px.sents) {
+        const auto spans = find_subject(s, px.forms);
+        std::set<string> ents;
+        for (const Lnk& L : s.l)
+            if (string k = norm_ent(L.target); !k.empty() && k != px.forms.title_key) ents.insert(k);
+        if (ents.size() + (spans.empty() ? 0 : 1) < 2) continue;
+        ++n;
+        if (spans.empty()) continue;
+        gen_cands(s, cands);
+        bool fired = false;
+        apply_patterns(s, spans, cands, px.forms.title_key, [&](int, const Cand&, const Span&) { fired = true; });
+        x += fired;
+    }
+    return {n, x};
+}
+
+// V: reads a page's words (S4's: maximal runs of ASCII letters, lower-cased) into the vocabulary; (tokens, new words).
+std::pair<double, double> read_words(const Page& p, std::unordered_set<string>& vocab) {
+    const string& d = *p.src;
+    double tok = 0, fresh = 0;
+    string w;
+    auto letter = [](unsigned char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'); };
+    for (std::size_t i = p.ref.tb; i < p.ref.te;) {
+        if (!letter(static_cast<unsigned char>(d[i]))) { ++i; continue; }
+        w.clear();
+        while (i < p.ref.te && letter(static_cast<unsigned char>(d[i]))) w += static_cast<char>(std::tolower(static_cast<unsigned char>(d[i++])));
+        ++tok;
+        fresh += vocab.insert(w).second ? 1 : 0;
+    }
+    return {tok, fresh};
+}
+
+void gap_row(std::ostream& o, const Signal& g, const Page& p, int stratum, double share, const string& note) {
+    char b[160];
+    std::snprintf(b, sizeof b, "\t-\t-1.0000\t-1.0000\t-1.0000\t%.4f\t0.0000\t0\t0.0000\t", share);
+    o << ecs::gap_id(p.ref.title, "-") << '\t' << g.gap_kind << "\topen\t" << p.ref.title << '\t' << g.strata[static_cast<std::size_t>(stratum)] << b << note << '\n';
+}
+
+void analyse(const Signal& g, std::ofstream& gaps, std::ofstream& planted, const std::function<void(const string&)>& say) {
+    const ecs::SignalRule rule;
+    const int K = static_cast<int>(g.strata.size());
+    char b[700];
+    string per;
+    for (int k = 0; k < K; ++k) {
+        std::size_t c = 0, s = 0;
+        for (const auto& u : g.u[kC]) c += u.stratum == k;
+        for (const auto& u : g.u[kS]) s += u.stratum == k;
+        per += " " + g.strata[static_cast<std::size_t>(k)] + " " + std::to_string(c) + "/" + std::to_string(s);
+    }
+    std::snprintf(b, sizeof b, "\nSIGNAL %s units C %zu S %zu D %zu L %zu | strata (C/S):%s", g.name.c_str(), g.u[kC].size(), g.u[kS].size(), g.u[kD].size(),
+                  g.u[kL].size(), per.c_str());
+    say(b);
+    if (g.u[kS].size() < 300 || g.u[kC].size() < 100) { say("  too few units for the rule"); return; }
+    const ecs::SignalRun run[2] = {ecs::signal_run(g.u[kC], g.u[kS], K, true, rule), ecs::signal_run(g.u[kC], g.u[kS], K, false, rule)};
+    const char* ref_name[2] = {"running", "fixed"};
+    for (int r = 0; r < 2; ++r) {
+        const ecs::SignalRun& R = run[r];
+        std::size_t ca = 0, sa = 0;
+        for (const auto& a : R.alarms) (a.in_test ? sa : ca) += 1;
+        const double perm = r == 1 ? ecs::signal_perm_alarms_per_k(R, rule, 200, 20261029) : -1.0;
+        std::snprintf(b, sizeof b, "  SIGNAL_FA %s %-7s | C scored %zu events %.4f alarms %zu | S scored %zu events %zu rate %.4f alarms %zu (per 1,000 %.3f)%s",
+                      g.name.c_str(), ref_name[r], R.c_scored, R.c_scored ? static_cast<double>(R.c_events) / static_cast<double>(R.c_scored) : 0.0, ca, R.s_scored,
+                      R.s_events, R.s_scored ? static_cast<double>(R.s_events) / static_cast<double>(R.s_scored) : 0.0, sa,
+                      R.s_scored ? 1000.0 * static_cast<double>(sa) / static_cast<double>(R.s_scored) : 0.0,
+                      perm >= 0 ? (" | 200 random orders: " + std::to_string(perm).substr(0, 6) + " alarms per 1,000").c_str() : "");
+        say(b);
+        for (const auto& a : R.alarms) {
+            const Page& p = *g.pg[a.in_test ? kS : kC][a.pos];
+            std::snprintf(b, sizeof b, "    ALARM %s %s %s unit %zu %s | R %.0f events %zu/%zu since the last restart", g.name.c_str(), ref_name[r], a.in_test ? "S" : "C", a.pos,
+                          p.ref.title.c_str(), a.R, a.events, a.units);
+            say(b);
+            if (r == 0)
+                gap_row(gaps, g, p, g.u[a.in_test ? kS : kC][a.pos].stratum, static_cast<double>(a.events) / static_cast<double>(a.units),
+                        "S4b " + g.name + " (running reference): alarm at " + (a.in_test ? "S" : "C") + " unit " + std::to_string(a.pos) + ", R " +
+                            std::to_string(static_cast<long long>(a.R)) + ", events " + std::to_string(a.events) + " of the last " + std::to_string(a.units) + " units");
+        }
+    }
+    // The planted pools' events against the fixed reference (C): the event rate a shift brings.
+    for (int set : {kD, kL}) {
+        ecs::SignalRef ref(K, false, rule);
+        ref.fill(g.u[kC]);
+        std::size_t n = 0, e = 0;
+        for (const auto& u : g.u[set])
+            if (ref.ready(u.stratum)) ++n, e += ref.p(u) < rule.alpha;
+        std::snprintf(b, sizeof b, "  SIGNAL_POOL %s %s units %zu scored %zu events %zu rate %.4f (fixed reference)", g.name.c_str(), kSetName[set], g.u[set].size(), n, e,
+                      n ? static_cast<double>(e) / static_cast<double>(n) : 0.0);
+        say(b);
+    }
+    // Planted shifts: 200 replicates per (pool, pi, reference); t0 uniform over S's units [100, |S| - 200].
+    const std::size_t W = 200, reps = 200, nS = g.u[kS].size();
+    for (int set : {kD, kL}) {
+        if (g.u[set].empty()) continue;
+        bool demo = false;
+        for (double pi : {1.0, 0.5, 0.2})
+            for (int r = 0; r < 2; ++r) {
+                std::mt19937_64 rng(20261029ull ^ ecs::signal_unit_id(g.name + kSetName[set] + ref_name[r], static_cast<std::size_t>(pi * 10)));
+                std::uniform_int_distribution<std::size_t> T(100, nS - W);
+                vector<int> delays;
+                std::size_t plant_alarms = 0;
+                for (std::size_t rep = 0; rep < reps; ++rep) {
+                    const std::size_t t0 = T(rng);
+                    const ecs::SignalDetection d = ecs::signal_planted(g.u[kC], g.u[kS], g.u[set], K, r == 0, rule, run[r], t0, pi, W, rng);
+                    delays.push_back(d.delay);
+                    plant_alarms += d.delay > 0 && d.plant;
+                    if (d.delay > 0 && !demo && r == 0 && pi == 1.0) {
+                        demo = true;
+                        const Page& p = *(d.plant ? g.pg[set] : g.pg[kS])[d.index];
+                        gap_row(planted, g, p, (d.plant ? g.u[set] : g.u[kS])[d.index].stratum, static_cast<double>(d.events) / static_cast<double>(d.units),
+                                "S4b " + g.name + " (running reference), planted pool " + kSetName[set] + " at S unit " + std::to_string(t0) + ": alarm after " +
+                                    std::to_string(d.delay) + " units, R " + std::to_string(static_cast<long long>(d.R)) + ", events " + std::to_string(d.events) +
+                                    " of the last " + std::to_string(d.units) + " units");
+                    }
+                }
+                const ecs::SignalDelayStats st = ecs::signal_delay_stats(delays, W);
+                std::snprintf(b, sizeof b, "  SIGNAL_DETECT %s pool %s pi %.1f %-7s | within 50 %3zu/%zu within 200 %3zu/%zu | delay median %s p90 %s | alarm on a plant %zu",
+                              g.name.c_str(), kSetName[set], pi, ref_name[r], st.within50, st.reps, st.within_window, st.reps,
+                              st.median > W ? ">200" : std::to_string(static_cast<int>(st.median)).c_str(), st.p90 > W ? ">200" : std::to_string(static_cast<int>(st.p90)).c_str(),
+                              plant_alarms);
+                say(b);
+            }
+    }
+}
+
+}  // namespace s4b
+
+void write_signals(const SignalOpt& O, const string& data, const vector<PageRef>& pages, const std::function<void(const string&)>& say) {
+    using namespace s4b;
+    string dolly;
+    if (!O.dolly.empty() && !read_file(O.dolly, dolly)) { say("S4b: cannot read " + O.dolly); return; }
+    auto type_of = [](const string& title) {
+        const string nk = norm_ent(title);
+        return g_country.count(nk) ? 0 : g_person.count(nk) ? 1 : g_place.count(nk) ? 2 : 3;
+    };
+    std::deque<Page> store;  // stable addresses
+    vector<const Page*> set[4], reader;
+    for (const PageRef& pg : pages) {
+        store.push_back({&data, pg, type_of(pg.title)});
+        const Page* p = &store.back();
+        const bool skip = ecs::signal_store_skips(pg.title);
+        if (pg.tb < ecs::kSignalReaderTo) reader.push_back(p);
+        if (skip && pg.tb >= ecs::kSignalCalibFrom) set[kL].push_back(p);
+        else if (!skip && pg.tb >= ecs::kSignalCalibFrom && pg.tb < ecs::kSignalSplit) set[kC].push_back(p);
+        else if (!skip && pg.tb >= ecs::kSignalSplit && pg.tb < ecs::kSignalTestTo) set[kS].push_back(p);
+    }
+    if (!dolly.empty()) {
+        long tot = 0, red = 0;
+        for (const PageRef& pg : list_pages(dolly, tot, red)) {
+            store.push_back({&dolly, pg, type_of(pg.title)});
+            set[kD].push_back(&store.back());
+        }
+    }
+    char b[600];
+    std::snprintf(b, sizeof b, "\nS4b SIGNALS pages: reader (before %zu) %zu, C %zu, S %zu, D %zu, L %zu", ecs::kSignalReaderTo, reader.size(), set[kC].size(), set[kS].size(),
+                  set[kD].size(), set[kL].size());
+    say(b);
+    std::ofstream units(O.dir + "/units.tsv");
+    units << "signal\tset\tbody_offset\ttitle\tstratum\tscore\tdetail\n";
+    vector<Signal> sig;
+
+    // U: the unparsed rate per page type.
+    {
+        Signal g{"unparsed", "coverage", {"country", "person", "place", "other"}, {}, {}, {}};
+        vector<std::pair<int, int>> cnt[4];
+        double sn[4] = {0, 0, 0, 0}, sx[4] = {0, 0, 0, 0};
+        std::size_t pages_t[4] = {0, 0, 0, 0}, with[4] = {0, 0, 0, 0};
+        for (int s = 0; s < 4; ++s)
+            for (const Page* p : set[s]) {
+                cnt[s].push_back(unparsed_counts(*p));
+                if (s == kC) sn[p->type] += cnt[s].back().first, sx[p->type] += cnt[s].back().second, ++pages_t[p->type], with[p->type] += cnt[s].back().first >= 3;
+            }
+        double q[4];
+        for (int t = 0; t < 4; ++t) {
+            q[t] = sn[t] > 0 ? sx[t] / sn[t] : 0.0;
+            std::snprintf(b, sizeof b, "  SIGNAL_U_RATE C %-7s pages %zu units (n >= 3) %zu | eligible sentences %.0f parsed %.0f | unparsed rate %.4f", g.strata[static_cast<std::size_t>(t)].c_str(),
+                          pages_t[t], with[t], sn[t], sx[t], sn[t] > 0 ? 1.0 - q[t] : 0.0);
+            say(b);
+        }
+        for (int s = 0; s < 4; ++s) {
+            double n_all = 0, x_all = 0;
+            for (std::size_t i = 0; i < set[s].size(); ++i) {
+                const auto [n, x] = cnt[s][i];
+                n_all += n, x_all += x;
+                if (n < 3) continue;
+                const Page* p = set[s][i];
+                g.u[s].push_back({ecs::binom_lower_tail_score(static_cast<std::size_t>(n), static_cast<std::size_t>(x), q[p->type]), p->type,
+                                  ecs::signal_unit_id(kSetName[s], p->ref.tb)});
+                g.pg[s].push_back(p);
+                g.detail[s].push_back("n " + std::to_string(n) + " parsed " + std::to_string(x));
+            }
+            std::snprintf(b, sizeof b, "  SIGNAL_U_SET %s pages %zu units %zu | eligible sentences %.0f parsed %.0f unparsed rate %.4f", kSetName[s], set[s].size(), g.u[s].size(), n_all,
+                          x_all, n_all > 0 ? 1.0 - x_all / n_all : 0.0);
+            say(b);
+        }
+        sig.push_back(std::move(g));
+    }
+    // V: new words against Heaps, CyphaLM's view.
+    {
+        Signal g{"vocabulary", "lexical", {"tok50-299", "tok300-1499", "tok1500+"}, {}, {}, {}};
+        std::unordered_set<string> vocab;
+        vector<double> Np, Vp;
+        double N = 0;
+        for (std::size_t k = 0; k < reader.size(); ++k) {
+            N += read_words(*reader[k], vocab).first;
+            if ((k + 1) % 25 == 0) Np.push_back(N), Vp.push_back(static_cast<double>(vocab.size()));
+        }
+        Np.push_back(N), Vp.push_back(static_cast<double>(vocab.size()));
+        const ecs::HeapsFit f = ecs::fit_heaps(Np, Vp);
+        std::snprintf(b, sizeof b, "  SIGNAL_V_HEAPS reader pages %zu tokens %.0f vocabulary %zu | K %.3f beta %.4f r2 %.5f points %zu", reader.size(), N, vocab.size(), f.K, f.beta, f.r2, f.n);
+        say(b);
+        auto score = [&](int s, std::unordered_set<string>& V, double& n_read) {
+            double sv = 0, se = 0;
+            for (const Page* p : set[s]) {
+                const auto [n, v] = read_words(*p, V);
+                const double e = ecs::heaps_vocab(f, n_read + n) - ecs::heaps_vocab(f, n_read);
+                n_read += n;
+                sv += v, se += e;
+                if (n < 50) continue;
+                g.u[s].push_back({std::log((v + 0.5) / (e + 0.5)), n < 300 ? 0 : n < 1500 ? 1 : 2, ecs::signal_unit_id(kSetName[s], p->ref.tb)});
+                g.pg[s].push_back(p);
+                char d[96];
+                std::snprintf(d, sizeof d, "tokens %.0f new %.0f expected %.2f", n, v, e);
+                g.detail[s].push_back(d);
+            }
+            std::snprintf(b, sizeof b, "  SIGNAL_V_SET %s pages %zu units %zu | new words %.0f expected %.1f ratio %.4f | tokens read after %.0f", kSetName[s], set[s].size(), g.u[s].size(),
+                          sv, se, se > 0 ? sv / se : 0.0, n_read);
+            say(b);
+        };
+        score(kC, vocab, N);
+        const std::unordered_set<string> at_s = vocab;
+        const double n_at_s = N;
+        score(kS, vocab, N);
+        for (int s : {kD, kL}) {
+            std::unordered_set<string> V = at_s;
+            double n = n_at_s;
+            score(s, V, n);
+        }
+        sig.push_back(std::move(g));
+    }
+    // Σ: CyphaLM's surprise, from cyphalm_trie surprise.
+    if (!O.surprise.empty()) {
+        Signal g{"surprise", "prediction", {"bytes256-1023", "bytes1024-2047", "bytes2048"}, {}, {}, {}};
+        std::map<std::pair<string, std::size_t>, std::pair<std::size_t, double>> sc;
+        for (const string& path : O.surprise) {
+            std::ifstream f(path);
+            string line;
+            std::getline(f, line);
+            while (std::getline(f, line)) {
+                const auto c = split(line, '\t');
+                if (c.size() >= 7) sc[{c[0], std::strtoull(c[1].c_str(), nullptr, 10)}] = {std::strtoull(c[4].c_str(), nullptr, 10), std::atof(c[6].c_str())};
+            }
+        }
+        for (int s = 0; s < 4; ++s) {
+            std::size_t want = 0;
+            for (const Page* p : set[s]) {
+                want += p->ref.te - p->ref.tb >= 256;
+                auto it = sc.find({kSetName[s], p->ref.tb});
+                if (it == sc.end()) continue;
+                const auto [n, bpb] = it->second;
+                g.u[s].push_back({bpb, n < 1024 ? 0 : n < 2048 ? 1 : 2, ecs::signal_unit_id(kSetName[s], p->ref.tb)});
+                g.pg[s].push_back(p);
+                g.detail[s].push_back("scored_bytes " + std::to_string(n));
+            }
+            double m = 0;
+            for (const auto& u : g.u[s]) m += u.score;
+            std::snprintf(b, sizeof b, "  SIGNAL_S_SET %s pages with >= 256 body bytes %zu, scored %zu | mean bits per byte %.4f", kSetName[s], want, g.u[s].size(),
+                          g.u[s].empty() ? 0.0 : m / static_cast<double>(g.u[s].size()));
+            say(b);
+        }
+        sig.push_back(std::move(g));
+    }
+    for (const Signal& g : sig)
+        for (int s = 0; s < 4; ++s)
+            for (std::size_t i = 0; i < g.u[s].size(); ++i) {
+                char v[32];
+                std::snprintf(v, sizeof v, "%.6f", g.u[s][i].score);
+                units << g.name << '\t' << kSetName[s] << '\t' << g.pg[s][i]->ref.tb << '\t' << g.pg[s][i]->ref.title << '\t'
+                      << g.strata[static_cast<std::size_t>(g.u[s][i].stratum)] << '\t' << v << '\t' << g.detail[s][i] << '\n';
+            }
+    const string gap_path = O.gaps.empty() ? O.dir + "/signal_gaps.tsv" : O.gaps;
+    std::ofstream gaps(gap_path), planted(gap_path + ".planted.tsv");
+    for (std::ofstream* o : {&gaps, &planted}) *o << "gap_id\tkind\tstatus\tentity\ttype\trelation\tp_exists\tf_store\tf_wd\tp\teig_bits\tdemand\tvoi\tnote\n";
+    for (const Signal& g : sig) analyse(g, gaps, planted, say);
+    say("S4b: units " + O.dir + "/units.tsv, gaps " + gap_path + " (and .planted.tsv); Rule 10: self-assessment only");
+}
+
 struct Args {
     string enwik, outdir;
     int folds = 5;
@@ -3226,6 +3558,7 @@ struct Args {
     string reach;               // F2R: the E1 parse file for --reach (with --dev)
     GapOpt gaps;                // S3: --gaps FILE [--demand ROWS,...] [--parse PARSE] [--gap-floor F]
     FrontierOpt frontier;       // S4: --frontier FILE [--frontier-test] [--frontier-split B] (with --gaps)
+    SignalOpt signals;          // S4b: --signals DIR [--signals-dolly PAGES.xml] [--surprise SCORES.tsv,...] [--signals-gaps FILE]
 };
 
 }  // namespace
@@ -4168,7 +4501,7 @@ LoopRes s7c_sim_one(std::mt19937_64& g, double p0, bool truth, const vector<ecs:
         const int o = u < pr[0] ? 0 : u < pr[0] + pr[1] ? 1 : 2;
         const ecs::TestOutcome out = o == 0 ? kPos : o == 1 ? kNeg : kInc;
         const double bf = ecs::bayes_factor(out, t);
-        post = ecs::update_posterior(post, bf), e *= bf, indep = indep || (t.independent && o != 2), ++done;
+        post = ecs::update_posterior(post, bf), e *= bf, indep = indep || (t.independent && o == 0), ++done;  // a positive one (S8d)
         moved += std::fabs(post - last), last = post;
         if (post > cfg.supported_p && indep) { r.sup = true; break; }
         if (post < cfg.refuted_p) { r.ref = true; break; }
@@ -5534,14 +5867,15 @@ vector<S15Row> load_s15(const string& path) {
 
 int run(int argc, char** argv) {
     if (argc < 9) {
-        std::fprintf(stderr, "usage: pattern_learn --gen-links ENWIK8 SEEDS.tsv FACTS_F2.tsv WD_VALUES.tsv PATTERNS.tsv S15_DIR OUT_PREFIX [--read-test]\n");
+        std::fprintf(stderr, "usage: pattern_learn --gen-links ENWIK8 SEEDS.tsv FACTS_F2.tsv WD_VALUES.tsv PATTERNS.tsv S15_DIR OUT_PREFIX [--read-test] [--fresh-confirm]\n");
         return 2;
     }
     const double t0 = now_s();
     const string out = argv[8];
-    bool read_test = false;
+    bool read_test = false, fresh_confirm = false;  // --fresh-confirm: S8d's fresh G6/G7 set (docs/reports/S8D_PROMOTION.md)
     for (int i = 9; i < argc; ++i) {
         if (string(argv[i]) == "--read-test") read_test = true;
+        else if (string(argv[i]) == "--fresh-confirm") fresh_confirm = true;
         else { std::fprintf(stderr, "unknown option %s\n", argv[i]); return 2; }
     }
     char b[1024];
@@ -5805,6 +6139,60 @@ int run(int argc, char** argv) {
             f << (h.dev ? "dev" : "test") << '\t' << h.s << '\t' << h.r << '\t' << h.o << '\t' << h.score << '\t' << h.prior << '\t' << ecs::test_outcome_name(h.out[0])
               << '\t' << ecs::test_outcome_name(h.out[1]) << '\t' << ecs::test_outcome_name(h.out[2]) << '\t' << h.post << '\t' << h.state << '\t' << h.promoted << '\t'
               << h.truth << '\t' << h.explain << "\n";
+        }
+        // ---- S8d: the chosen generator on S15 dev's confirm-half slots with their facts hidden (docs/reports/S8D_PROMOTION.md).
+        // S15's labels are not read. Priors by PROMO's isotonic map (fitted on its dev items only); tests T1, T6, T4.
+        if (fresh_confirm) {
+            std::set<std::pair<string, string>> cslots;
+            for (const S15Row& x : load_s15(string(argv[7]) + "/temporal_holdout_dev.tsv"))
+                if (((fnv(x.s) >> 17) & 1) == 1 && rel_index(x.r) >= 0) cslots.insert({x.s, x.r});
+            ecs::TripleStore fst;
+            std::size_t held = 0;
+            for (const auto& t : triples) {
+                if (cslots.count({t[0], t[1]})) ++held;
+                else fst.add(t[0], t[1], t[2]);
+            }
+            const auto fobjs = objects_by_rel(fst);
+            const ecs::RelGraph fg(fst);
+            ecs::PathRanker fpr(fst, fg, ecs::PathRanker::Config{});
+            const ecs::LinkScorer fls(fst, {});
+            const ecs::LinkPredictor flp(fst, ecs::LinkPredictor::Config{});
+            vector<LoopItem> fit = items;  // set_priors fits on the dev items with a truth, so on PROMO's alone
+            const std::size_t n0 = fit.size();
+            std::size_t in_store = 0;
+            for (const auto& [s, r] : cslots) {
+                if (fst.facts_of(s).empty()) continue;
+                ++in_store;
+                Query q;
+                q.s = s, q.r = r, q.dev = false;
+                q.cands = candidates(fst, fobjs, s, r);
+                if (q.cands.empty()) continue;
+                q.truth.assign(q.cands.size(), 0);
+                score_query(q, fst, fls, fpr);
+                const auto p = primary(q, chosen, &combo);
+                const int top = top_of(q, p);
+                if (top < 0) continue;
+                LoopItem h;
+                h.s = s, h.r = r, h.o = q.cands[static_cast<std::size_t>(top)], h.dev = false, h.score = p[static_cast<std::size_t>(top)];
+                h.explain = explain(q, top, fpr);
+                fit.push_back(h);
+            }
+            set_priors(fit);
+            vector<LoopItem> fh(fit.begin() + static_cast<std::ptrdiff_t>(n0), fit.end());
+            for (LoopItem& h : fh) run_tests(h, fst, flp, C);
+            vector<LoopItem*> batch;
+            for (LoopItem& h : fh) batch.push_back(&h);
+            const LoopRead R = run_loop(batch, out + ".fresh_links.prereg.tsv");
+            std::snprintf(b, sizeof b, "S8D FRESH G6/G7 (generator %s) confirm-half slots %zu | store facts hidden %zu, reduced store %zu | slots whose subject is in "
+                          "the store %zu | hypotheses %zu | supported %.0f, promoted after BH %.0f, refuted %.0f (no grade read) | log %zu entries verify %s",
+                          kGenName[chosen], cslots.size(), held, fst.size(), in_store, fh.size(), R.sup, R.pro, R.ref, R.log_entries, R.log_ok ? "ok" : "BROKEN");
+            std::cout << b << "\n";
+            std::ofstream ff(out + ".fresh_links.hyps.tsv");
+            ff << "split\tsubject\trelation\tobject\tscore\tprior\tT1\tT6\tT4\tposterior\tstate\tpromoted\tpath\n";
+            for (const LoopItem& h : fh)
+                ff << "fresh\t" << h.s << '\t' << h.r << '\t' << h.o << '\t' << h.score << '\t' << h.prior << '\t' << ecs::test_outcome_name(h.out[0]) << '\t'
+                   << ecs::test_outcome_name(h.out[1]) << '\t' << ecs::test_outcome_name(h.out[2]) << '\t' << h.post << '\t' << h.state << '\t' << h.promoted << '\t'
+                   << h.explain << "\n";
         }
     }
 
@@ -6509,15 +6897,16 @@ long days_of(const Date& D) {  // days from civil (proleptic Gregorian), for the
 
 int run(int argc, char** argv) {
     if (argc < 9) {
-        std::fprintf(stderr, "usage: pattern_learn --gen-rules ENWIK8 SEEDS.tsv FACTS_F2.tsv WD_VALUES.tsv PATTERNS.tsv S15_DIR OUT_PREFIX [--read-test]\n");
+        std::fprintf(stderr, "usage: pattern_learn --gen-rules ENWIK8 SEEDS.tsv FACTS_F2.tsv WD_VALUES.tsv PATTERNS.tsv S15_DIR OUT_PREFIX [--read-test] [--fresh-confirm]\n");
         return 2;
     }
     const double t0 = now_s();
     const string out = argv[8], s15dir = argv[7];
-    bool read_test = false;
+    bool read_test = false, fresh_confirm = false;  // --fresh-confirm: S8d's fresh G2 set (docs/reports/S8D_PROMOTION.md)
     int t4_variant = 1;
     for (int i = 9; i < argc; ++i) {
         if (string(argv[i]) == "--read-test") read_test = true;
+        else if (string(argv[i]) == "--fresh-confirm") fresh_confirm = true;
         else if (string(argv[i]) == "--t4-pattern") t4_variant = 0;
         else {
             std::fprintf(stderr, "unknown option %s\n", argv[i]);
@@ -6770,6 +7159,61 @@ int run(int argc, char** argv) {
             f << "subject\trelation\tobject\tlabel\tlabel_s15\tP0\tposterior\tstate\tpromoted\tT1\tT2\tT3\tT6\tT5\tT4\n";
             for (const Item& x : hyps)
                 f << x.s << '\t' << x.r << '\t' << x.o << '\t' << x.label << '\t' << x.label2 << '\t' << x.p0 << '\t' << x.post << '\t' << x.state << '\t' << x.promoted73 << '\t'
+                  << ecs::test_outcome_name(x.T.t[0]) << '\t' << ecs::test_outcome_name(x.T.t[1]) << '\t' << ecs::test_outcome_name(x.T.t[2]) << '\t'
+                  << ecs::test_outcome_name(x.T.t[3]) << '\t' << ecs::test_outcome_name(x.T.t[4]) << '\t' << ecs::test_outcome_name(x.T.t[5]) << '\n';
+        }
+        // ---- S8d: G2 on S15 dev's confirm-half slots with their facts hidden (docs/reports/S8D_PROMOTION.md). S15's labels
+        // are not read; R1's plan and combination rule; T5 left out (Wikidata is what S15 grades against).
+        if (fresh_confirm) {
+            std::set<std::pair<string, string>> cslots;
+            for (const auto& R : load_s15(s15dir + "/temporal_holdout_dev.tsv"))
+                if (((fnv(R.s) >> 17) & 1) == 1 && rel_index(R.r) >= 0) cslots.insert({R.s, R.r});
+            Facts fred;
+            std::size_t held = 0;
+            for (const auto& [s, fs] : kby)
+                for (const auto& [r, o] : fs) {
+                    if (cslots.count({s, r})) ++held;
+                    else fred[s].push_back({r, o});
+                }
+            const ecs::TripleStore fst = make_store(fred);
+            const ecs::RuleIndex fix(fst);
+            const vector<ecs::Rule> frules = ecs::mine_rules(fix);
+            const ecs::RuleSet frs(fix, frules, noisy_or);
+            const ecs::LinkPredictor flp(fst, {});
+            Ctx fcx;
+            fcx.data = &data, fcx.pages = &pages, fcx.page_of = &page_of, fcx.wd = &wd, fcx.t4_variant = t4_variant;
+            vector<Item> fh;
+            std::size_t in_store = 0, with_cand = 0;
+            for (const auto& [s, r] : cslots) {
+                if (fst.facts_of(s).empty()) continue;
+                ++in_store;
+                const auto rc = frs.candidates(s, r);
+                if (rc.empty()) continue;
+                ++with_cand;
+                const int ri = rel_index(r);
+                for (const auto& c : rc) {
+                    if (holds_value(fix, s, r, c.o)) continue;
+                    Item x;
+                    x.s = s, x.r = r, x.o = c.o;
+                    x.T = run_tests(fcx, fst, fix, frs, flp, rc, s, r, c.o, false);
+                    x.p0 = std::min(0.98, std::max(0.02, c.score * s6::hard_constraint(fst, s, ri, c.o)));
+                    fh.push_back(std::move(x));
+                }
+            }
+            std::snprintf(b, sizeof b, "S8D FRESH G2 confirm-half slots %zu | store facts hidden %zu, reduced store %zu | slots whose subject is in the store %zu, "
+                          "with a rule candidate %zu | hypotheses %zu", cslots.size(), held, fst.size(), in_store, with_cand, fh.size());
+            std::cout << b << "\n";
+            run_loop(fh, PL, "S8D FRESH G2", out + ".fresh_g2.prereg.tsv");
+            std::map<string, std::size_t> states;
+            std::size_t promoted = 0;
+            for (const Item& x : fh) ++states[x.state], promoted += x.promoted73;
+            string line = "S8D FRESH G2 states (no grade read):";
+            for (const auto& [s, n] : states) line += " " + s + " " + std::to_string(n);
+            std::cout << line << " | promoted (BH among supported) " << promoted << "\n";
+            std::ofstream f(out + ".fresh_g2.hyps.tsv");
+            f << "split\tsubject\trelation\tobject\tP0\tposterior\tstate\tpromoted\tT1\tT2\tT3\tT6\tT5\tT4\n";
+            for (const Item& x : fh)
+                f << "fresh\t" << x.s << '\t' << x.r << '\t' << x.o << '\t' << x.p0 << '\t' << x.post << '\t' << x.state << '\t' << x.promoted73 << '\t'
                   << ecs::test_outcome_name(x.T.t[0]) << '\t' << ecs::test_outcome_name(x.T.t[1]) << '\t' << ecs::test_outcome_name(x.T.t[2]) << '\t'
                   << ecs::test_outcome_name(x.T.t[3]) << '\t' << ecs::test_outcome_name(x.T.t[4]) << '\t' << ecs::test_outcome_name(x.T.t[5]) << '\n';
         }
@@ -7915,7 +8359,7 @@ struct Hyp {
     bool promoted = false;
 };
 
-vector<Hyp> load_hyps(const string& path, const string& gen) {
+vector<Hyp> load_hyps(const string& path, const string& gen, const string& want_split = "dev") {
     vector<Hyp> out;
     std::ifstream f(path);
     string l;
@@ -7929,7 +8373,7 @@ vector<Hyp> load_hyps(const string& path, const string& gen) {
     while (std::getline(f, l)) {
         const auto c = split(l, '\t');
         if (c.size() < h.size()) continue;
-        if (csp < h.size() && c[csp] != "dev") continue;
+        if (csp < h.size() && c[csp] != want_split) continue;
         Hyp x;
         x.gen = gen, x.s = c[cs], x.r = c[cr], x.o = c[co];
         x.p0 = std::atof(c[cp0].c_str()), x.post = std::atof(c[cpr].c_str());
@@ -7965,13 +8409,246 @@ double odds(double p) {
     return p / (1.0 - p);
 }
 
+// ============================================================ S8d (docs/reports/S8D_PROMOTION.md)
+// Calibration: each accepted (source, group) re-measured on the generators' own dev hypotheses graded by S15's choose half
+// (each distinct one once); a source carries a promotion only where its calibrated LR+ >= 10. The source stage: a
+// hypothesis starts from its generator's posterior, the accepted sources follow as tests (DB-IB, WP-LEAD, GN) with the
+// calibrated likelihoods, and HypothesisStore's decide (a positive independent result, S8d) stops it; Known = row 70's K4
+// on the source tests. Read on S8c's dev set (the confirm half, already read) and, with --fresh, once on the fresh set.
+using Accepted = std::map<std::pair<int, string>, ecs::OutcomeLikelihoods>;
+
+string item_key(const Hyp& h) { return src::norm_subject(h.s) + '\x1f' + h.r + '\x1f' + src::norm_name(h.o); }
+
+struct Stage {
+    double p0 = 0, post = 0, e = 1;
+    bool sup = false, ref = false;
+    int known = 0, graded = -1;
+    string by;
+    TestOutcome o[kNSrc] = {TestOutcome::Inconclusive, TestOutcome::Inconclusive, TestOutcome::Inconclusive, TestOutcome::Inconclusive,
+                            TestOutcome::Inconclusive};
+    vector<ecs::HypTest> plan;
+};
+
+vector<Stage> source_stage(const Sources& S, const vector<Hyp>& H, const Accepted& cal, const std::map<std::pair<int, string>, bool>& carry,
+                           const Grader& G) {
+    vector<Stage> st(H.size());
+    for (std::size_t i = 0; i < H.size(); ++i) {
+        const Hyp& h = H[i];
+        Stage& z = st[i];
+        const string grp = group_of(h.r);
+        const src::Value v = src::make_value(h.o);
+        for (int k = 0; k < kNSrc; ++k) z.o[k] = S.answer(k, h.s, h.r, v);
+        ecs::Hypothesis x;
+        x.id = "S8d-" + std::to_string(i);
+        x.key = h.r + '|' + h.s + '|' + h.o;
+        x.statement = h.s + " " + h.r + " " + h.o;
+        x.generator = h.gen;
+        vector<TestOutcome> outs;
+        for (int k = 1; k < kNSrc; ++k) {
+            const auto it = cal.find({k, grp});
+            if (it == cal.end()) continue;
+            ecs::HypTest t;
+            t.kind = string("S8d ") + kSrcName[k], t.source = kSrcName[k], t.predicted = "positive", t.refuted_if = "negative";
+            t.disconfirmation = true;
+            t.independent = carry.at({k, grp});  // a source under the bar never carries a promotion
+            t.likelihoods = it->second;
+            x.tests.push_back(t), outs.push_back(z.o[k]);
+        }
+        z.plan = x.tests;
+        z.p0 = std::min(1.0 - 1e-6, std::max(1e-6, h.post));
+        ecs::HypothesisStore hs;
+        hs.propose(x);
+        hs.score(x.id, z.p0);
+        hs.transition(x.id, ecs::HypState::Queued, "scored");
+        for (std::size_t k = 0; k < outs.size(); ++k) {
+            if (hs.find(x.id)->state != ecs::HypState::Queued) break;
+            hs.transition(x.id, ecs::HypState::UnderTest, "next source");
+            hs.record_outcome(x.id, k, outs[k]);
+        }
+        const ecs::Hypothesis* hh = hs.find(x.id);
+        z.post = hh->posterior, z.e = ecs::e_value(*hh);
+        z.sup = hh->state == ecs::HypState::Supported, z.ref = hh->state == ecs::HypState::Refuted;
+        for (const ecs::HypTest& t : hh->tests)
+            if (ecs::independent_evidence(*hh, t) && t.positive) z.by += string(z.by.empty() ? "" : "+") + t.source;
+        z.graded = G.grade(h.s, h.r, v);
+    }
+    vector<vector<ecs::HypTest>> plans;
+    vector<double> pri, ev;
+    vector<bool> sp;
+    for (const Stage& z : st) plans.push_back(z.plan), pri.push_back(z.p0), ev.push_back(z.e), sp.push_back(z.sup);
+    const vector<int> tiers = ecs::hybrid_null_model_tiers(plans, pri, ev, sp, 0.1);
+    for (std::size_t i = 0; i < st.size(); ++i) st[i].known = tiers[i];
+    return st;
+}
+
+// Precision lines of one read: per generator (rows), then each distinct hypothesis once (supported or Known when any copy
+// is), by the source that gave the positive, by relation group and by relation. Returns {graded, true} of the supported.
+std::pair<double, double> stage_report(const string& tag, const vector<Hyp>& H, const vector<Stage>& st, const string& tsv) {
+    char b[1024];
+    struct Acc {
+        double n = 0, g = 0, sup = 0, sg = 0, stt = 0, kn = 0, kg = 0, kt = 0, ref = 0, rg = 0, rf = 0;
+    };
+    auto line = [&](const string& what, const Acc& a) {
+        std::snprintf(b, sizeof b,
+                      "S8D %s %-26s hyps %5.0f graded %5.0f | supported %4.0f, graded %4.0f, true %4.0f, precision %.3f [%.3f, %.3f] | Known %4.0f, "
+                      "graded %4.0f, precision %.3f [%.3f, %.3f] | refuted %4.0f, graded %4.0f, false %.3f",
+                      tag.c_str(), what.c_str(), a.n, a.g, a.sup, a.sg, a.stt, a.sg ? a.stt / a.sg : 0.0, ecs::wilson_lower(a.stt, a.sg),
+                      ecs::wilson_upper(a.stt, a.sg), a.kn, a.kg, a.kg ? a.kt / a.kg : 0.0, ecs::wilson_lower(a.kt, a.kg), ecs::wilson_upper(a.kt, a.kg),
+                      a.ref, a.rg, a.rg ? a.rf / a.rg : 0.0);
+        std::cout << b << "\n";
+    };
+    auto add = [](Acc& a, int g, bool sup, bool known, bool ref) {
+        a.n += 1;
+        if (g >= 0) a.g += 1;
+        if (sup) a.sup += 1, a.sg += g >= 0, a.stt += g == 1;
+        if (known) a.kn += 1, a.kg += g >= 0, a.kt += g == 1;
+        if (ref) a.ref += 1, a.rg += g >= 0, a.rf += g == 0;
+    };
+    std::map<string, Acc> gen;
+    for (std::size_t i = 0; i < H.size(); ++i) add(gen[H[i].gen], st[i].graded, st[i].sup, st[i].known == 2, st[i].ref);
+    for (const auto& [g, a] : gen) line("generator " + g, a);
+    // each distinct hypothesis once
+    struct D {
+        std::size_t first = 0;
+        int graded = -1;
+        bool sup = false, known = false, ref = false;
+        string by;
+    };
+    std::map<string, D> dist;
+    vector<string> order;
+    for (std::size_t i = 0; i < H.size(); ++i) {
+        const string k = item_key(H[i]);
+        auto it = dist.find(k);
+        if (it == dist.end()) {
+            D d;
+            d.first = i, d.graded = st[i].graded;
+            it = dist.emplace(k, d).first, order.push_back(k);
+        }
+        D& d = it->second;
+        if (st[i].sup && !d.sup) d.by = st[i].by;
+        d.sup = d.sup || st[i].sup, d.known = d.known || st[i].known == 2, d.ref = d.ref || st[i].ref;
+    }
+    Acc all;
+    std::map<string, Acc> by_src, by_grp, by_rel;
+    for (const string& k : order) {
+        const D& d = dist[k];
+        const bool ref = d.ref && !d.sup;
+        const Hyp& h = H[d.first];
+        add(all, d.graded, d.sup, d.known, ref);
+        add(by_grp[group_of(h.r)], d.graded, d.sup, d.known, ref);
+        add(by_rel[h.r], d.graded, d.sup, d.known, ref);
+        if (d.sup) add(by_src[d.by], d.graded, true, d.known, false);
+    }
+    line("all (each distinct once)", all);
+    for (const auto& [s, a] : by_src) line("positive from " + s, a);
+    for (const auto& [g, a] : by_grp) line("group " + g, a);
+    for (const auto& [r, a] : by_rel)
+        if (a.sup > 0) line("relation " + r, a);
+    std::ofstream f(tsv);
+    f << "generator\tsubject\trelation\tobject\tposterior_gen\tDB-IB\tWP-LEAD\tGN\tposterior_src\te_src\tsupported\tknown\trefuted\tby\tgraded\n";
+    for (std::size_t i = 0; i < H.size(); ++i) {
+        const Stage& z = st[i];
+        std::snprintf(b, sizeof b, "%s\t%s\t%s\t%s\t%.6f\t%s\t%s\t%s\t%.6f\t%.6g\t%d\t%d\t%d\t%s\t%d\n", H[i].gen.c_str(), H[i].s.c_str(), H[i].r.c_str(),
+                      H[i].o.c_str(), z.p0, ecs::test_outcome_name(z.o[1]), ecs::test_outcome_name(z.o[2]), ecs::test_outcome_name(z.o[3]), z.post, z.e,
+                      z.sup ? 1 : 0, z.known == 2 ? 1 : 0, z.ref ? 1 : 0, z.by.c_str(), z.graded);
+        f << b;
+    }
+    return {all.sg, all.stt};
+}
+
+void s8d(const Sources& S, const vector<Hyp>& hyps, const Accepted& accepted, const Grader& conf, const Grader& choose, const string& fresh_g2,
+         const string& fresh_links, const string& out) {
+    char b[1024];
+    // ---- calibration: the generators' dev hypotheses on S15's choose half, each distinct one once
+    std::map<std::pair<int, string>, ecs::TestTally> cell;
+    std::map<int, ecs::TestTally> pooled;
+    {
+        std::set<string> seen;
+        double n = 0, nt = 0;
+        for (const Hyp& h : hyps) {
+            if (!choose_half(h.s) || !seen.insert(item_key(h)).second) continue;
+            const src::Value v = src::make_value(h.o);
+            const int g = choose.grade(h.s, h.r, v);
+            if (g < 0) continue;
+            n += 1, nt += g;
+            for (const auto& [kg, L] : accepted) {
+                if (kg.second != group_of(h.r)) continue;
+                const TestOutcome o = S.answer(kg.first, h.s, h.r, v);
+                cell[kg].add(g == 1, o), pooled[kg.first].add(g == 1, o);
+            }
+        }
+        std::snprintf(b, sizeof b, "S8D CALIBRATION set: %.0f distinct dev hypotheses of S8a-R1, S8a-R2 and S8b graded on S15's choose half, %.0f true (%.3f)",
+                      n, nt, n > 0 ? nt / n : 0.0);
+        std::cout << b << "\n";
+    }
+    Accepted cal;
+    std::map<std::pair<int, string>, bool> carry;
+    std::cout << "S8D CALIBRATION (add-one; a cell with < 10 graded true or false uses the source's pooled cell; carries a promotion only if LR+ >= 10):\n";
+    auto tl = [&](const ecs::TestTally& t) {
+        std::snprintf(b, sizeof b, "true %3.0f (pos %3.0f neg %3.0f inc %3.0f) false %3.0f (pos %3.0f neg %3.0f inc %3.0f) | pos then true %3.0f/%-3.0f",
+                      t.t_pos + t.t_neg + t.t_inc, t.t_pos, t.t_neg, t.t_inc, t.f_pos + t.f_neg + t.f_inc, t.f_pos, t.f_neg, t.f_inc, t.t_pos,
+                      t.t_pos + t.f_pos);
+        return string(b);
+    };
+    for (const auto& [k, t] : pooled) {
+        const ecs::OutcomeLikelihoods L = ecs::likelihoods_from(t);
+        std::snprintf(b, sizeof b, "  %-7s pooled   %s | LR+ %7.2f", kSrcName[k], tl(t).c_str(), src::positive_lr(L));
+        std::cout << b << "\n";
+    }
+    for (const auto& [kg, L1] : accepted) {
+        bool own = false;
+        const ecs::OutcomeLikelihoods L = src::calibrated_likelihoods(cell[kg], pooled[kg.first], 10.0, &own);
+        cal[kg] = L, carry[kg] = src::may_carry_promotion(L);
+        std::snprintf(b, sizeof b, "  %-7s %-8s %s | uses %-6s LR+ %7.2f BF(neg) %.3f BF(inc) %.3f | read 1 LR+ %7.2f -> %s", kSrcName[kg.first],
+                      kg.second.c_str(), tl(cell[kg]).c_str(), own ? "own" : "pooled", src::positive_lr(L), L.t[1] / L.f[1], L.t[2] / L.f[2],
+                      src::positive_lr(L1), carry[kg] ? "MAY CARRY" : "may not carry");
+        std::cout << b << "\n";
+    }
+    // ---- S8c's dev set again, with the fix and the calibrated sources (the confirm half was read before; nothing is chosen here)
+    {
+        const vector<Stage> st = source_stage(S, hyps, cal, carry, conf);
+        stage_report("DEV-CONFIRM(already read)", hyps, st, out + ".s8d_dev_confirm.tsv");
+        const vector<Stage> sc = source_stage(S, hyps, cal, carry, choose);
+        stage_report("DEV-CHOOSE(calibration set, in-sample)", hyps, sc, out + ".s8d_dev_choose.tsv");
+    }
+    if (fresh_g2.empty()) return;
+    // ---- the fresh set: read once
+    vector<Hyp> fresh;
+    for (const auto& [path, gen] : {std::pair<string, string>{fresh_g2, "G2-fresh"}, {fresh_links, "G6G7-fresh"}}) {
+        auto v = load_hyps(path, gen, "fresh");
+        fresh.insert(fresh.end(), v.begin(), v.end());
+    }
+    std::size_t off_half = 0;
+    for (const Hyp& h : fresh) off_half += choose_half(h.s);
+    std::snprintf(b, sizeof b, "S8D FRESH set: %zu hypotheses (%s, %s), subjects outside the confirm half %zu", fresh.size(), fresh_g2.c_str(),
+                  fresh_links.c_str(), off_half);
+    std::cout << b << "\n";
+    const vector<Stage> st = source_stage(S, fresh, cal, carry, conf);
+    const auto [g, t] = stage_report("FRESH", fresh, st, out + ".s8d_fresh.tsv");
+    std::snprintf(b, sizeof b, "S8D GATE (fresh, supported, each distinct once): graded %.0f, precision %.3f [%.3f, %.3f] -> %s", g, g > 0 ? t / g : 0.0,
+                  ecs::wilson_lower(t, g), ecs::wilson_upper(t, g), g >= 20 && t / g >= 0.9 ? "MET" : "NOT MET");
+    std::cout << b << "\n";
+}
+
 int run(int argc, char** argv) {
     if (argc < 11) {
-        std::fprintf(stderr, "usage: pattern_learn --sources S15_DEV TABLES WD_VALUES SEEDS FACTS_F2 OUT_PREFIX S8A_R1 S8A_R2 S8B_PROMO\n");
+        std::fprintf(stderr, "usage: pattern_learn --sources S15_DEV TABLES WD_VALUES SEEDS FACTS_F2 OUT_PREFIX S8A_R1 S8A_R2 S8B_PROMO "
+                             "[--calibrate | --fresh FRESH_G2 FRESH_LINKS]\n");
         return 2;
     }
     const double t0 = now_s();
     const string s15p = argv[2], tables = argv[3], out = argv[7];
+    bool calibrate = false;  // S8d: calibration on the generators' choose-half hypotheses, and S8c's dev set again
+    string fresh_g2, fresh_links;  // S8d: the fresh confirm-half set, read once
+    for (int i = 11; i < argc; ++i) {
+        const string a = argv[i];
+        if (a == "--calibrate") calibrate = true;
+        else if (a == "--fresh" && i + 2 < argc) fresh_g2 = argv[i + 1], fresh_links = argv[i + 2], i += 2, calibrate = true;
+        else {
+            std::fprintf(stderr, "unknown option %s\n", argv[i]);
+            return 2;
+        }
+    }
     char b[1024];
     // ---- the sources
     Sources S;
@@ -8203,7 +8880,7 @@ int run(int argc, char** argv) {
             const int oi = src::outcome_index(R.o[k]);
             const double bf = std::max(1e-6, it->second.t[oi]) / std::max(1e-6, it->second.f[oi]);
             o *= bf, R.e *= bf;
-            if (R.o[k] != TestOutcome::Inconclusive) R.indep = true, R.by += string(R.by.empty() ? "" : "+") + kSrcName[k];
+            if (R.o[k] == TestOutcome::Positive) R.indep = true, R.by += string(R.by.empty() ? "" : "+") + kSrcName[k];  // S8d: a positive one
         }
         R.post2 = o / (1.0 + o);
         R.supported = R.post2 > 0.9 && R.indep;
@@ -8258,6 +8935,7 @@ int run(int argc, char** argv) {
         for (int k = 0; k < kNSrc; ++k) std::cout << " " << kSrcName[k] << " " << ecs::test_outcome_name(S.answer(k, "India", "capital", v));
         std::cout << "\n";
     }
+    if (calibrate) s8d(S, hyps, accepted, conf, choose, fresh_g2, fresh_links, out);  // S8d (docs/reports/S8D_PROMOTION.md)
     std::snprintf(b, sizeof b, "S8C seconds %.1f", now_s() - t0);
     std::cout << b << "\n";
     return 0;
@@ -8283,6 +8961,7 @@ int main(int argc, char** argv) {
                              "         [--wikidata FILE [--wikidata-gold-only]] [--phi FILE] [--shard FILE --dev DEV --test TEST [--slice-end B] [--holdout-from B]]\n"
                              "         [--raw] [--join FACTS] [--reach PARSE] [--gaps FILE [--demand ROWS,...] [--parse PARSE] [--gap-floor F] [--demand-weight W]]\n"
                              "         [--frontier FILE [--frontier-test] [--frontier-split B]]\n"
+                             "         [--signals DIR [--signals-dolly PAGES.xml] [--surprise SCORES.tsv,...] [--signals-gaps FILE]]\n"
                              "       pattern_learn --wilson K N\n");
         return 2;
     }
@@ -8319,6 +8998,10 @@ int main(int argc, char** argv) {
         else if (a == "--frontier" && i + 1 < argc) A.frontier.path = argv[++i];
         else if (a == "--frontier-test") A.frontier.test = true;
         else if (a == "--frontier-split" && i + 1 < argc) A.frontier.split = static_cast<std::size_t>(std::atoll(argv[++i]));
+        else if (a == "--signals" && i + 1 < argc) A.signals.dir = argv[++i];
+        else if (a == "--signals-dolly" && i + 1 < argc) A.signals.dolly = argv[++i];
+        else if (a == "--surprise" && i + 1 < argc) A.signals.surprise = split(argv[++i], ',');
+        else if (a == "--signals-gaps" && i + 1 < argc) A.signals.gaps = argv[++i];
     }
     if (!A.reach.empty() && A.shard.dev.empty()) { std::fprintf(stderr, "--reach needs --dev\n"); return 2; }
     if (!A.frontier.path.empty() && A.gaps.path.empty()) { std::fprintf(stderr, "--frontier needs --gaps\n"); return 2; }
@@ -8566,6 +9249,7 @@ int main(int argc, char** argv) {
     if (!A.reach.empty()) reach_report(cand_all, data, A.shard.holdout_from, A.shard.dev, A.reach, shard_text, say);
     if (!A.gaps.path.empty()) write_gaps(A.gaps, A.shard.dev, pages, fused, say);
     if (!A.frontier.path.empty()) write_frontier(A.frontier, A.gaps, data, pages, fused, say);
+    if (!A.signals.dir.empty()) write_signals(A.signals, data, pages, say);  // S4b
     std::snprintf(buf, sizeof buf, "\nrun time %.1f s, peak RAM %.0f MB, facts written %s/facts_f2.tsv", now_s() - t0, peak_mb(), A.outdir.c_str());
     say(buf);
     std::ofstream(A.outdir + "/stats.txt") << rep.str();

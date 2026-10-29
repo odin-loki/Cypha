@@ -796,3 +796,46 @@ With the C library's mmap threshold fixed by environment variable (test runs onl
 **Still open.**
 - **`--save` keeps the lowered index** (26 MB) to the end of the run, so C1L+E with `--save` peaks at 204.5 MB. Freeing it once the store is written would take that under 200 (M14's rule; not done here).
 - **The libsais scratch** (4 bytes a text byte) is now the index build's whole cost above its text and one tree. Lower would need a blockwise BWT with a merge; at 185 MB built and under 200 served, it is not needed now.
+
+## M17: the lowered index freed once the store is written (registered 2026-10-29, before any run)
+
+**Odin Loch** · 2026-10-29 · follows M14 and M16's "Still open"
+
+**Question.** With `qa --save`, M14 keeps the lowered index (A1c's FM index over the lowered training bytes, about 26 MB) resident, because the store writes it. It then stays to the end of the run, so C1L + defaults with `--save` peaks at 204.5 MB (M16), after the store is written. Can it be freed as soon as `save_qa` has written it?
+
+**The change.** One line after `save_qa`: when `--save` is set, the token carries an entity statistic (`fam_k > 0`) and `--cards` is not set, free the lowered index. That is M14's own condition with `--save` now handled; M14's argument holds unchanged (every dev and test entity was chosen before and is kept in `chosen`, and nothing after the token step reads the index; `--cards` reads it, so it is kept there).
+
+**Decision rule.**
+- Lossless: the stores (every file), the rows file and stdout (timing masked) byte-identical to the unchanged tool, for C1L + defaults and for the defaults alone, both with `--save`.
+- Adopted if lossless and C1L + defaults with `--save` falls by more than the 0.2 MB repeat spread; time within 10%.
+
+**Predictions.**
+
+| # | Prediction |
+|---|---|
+| M17a | C1L + defaults with `--save` peaks at 186 MB or less (unchanged tool: about 204.5); the new peak is the lowered index's build, as without `--save` (about 184.6) |
+| M17b | The defaults alone with `--save` (no `--parse`, so no lowered index) are unchanged within 0.5 MB (about 170) |
+| M17c | Every store file, the rows and stdout (timing masked) are byte-identical in both configurations |
+
+### Results: M17 (2026-10-29)
+
+Peaks are VmHWM in MB (kB / 1000); the unchanged tool is main aca60a5, the new one adds the one line. All runs with `--save`.
+
+| Configuration | Unchanged tool | M17 | Time (s), unchanged / M17 |
+|---|---:|---:|---|
+| C1L + defaults | 204.5 | **186.7 / 186.7** (two runs) | 614 / 700, 578 |
+| Defaults alone (no `--parse`: no lowered index) | 170.1 | 170.1 | 558 / 687 |
+
+- **Lossless.** In both configurations every store file (`model.pk`, `ig.fm`, `low.fm`, `cls.cc`, `qa.meta`), the rows file and stdout (timing masked) are byte-identical to the unchanged tool's.
+- **Time.** The machine was shared with other runs. The defaults alone, where the new line never runs, slowed by as much as C1L did on its first run (558 → 687 s), and the repeat C1L run was faster than the unchanged one (578 against 614 s). Freeing an index cannot add work, so these are load, not the change.
+- **Where the peak is now.** 186.7 MB is about 2 MB above the same run without `--save` (184.6, M16), whose peak is the lowered index's build; the store's writing sits near it. The 26 MB the lowered index held after the store are gone.
+
+#### Predictions, scored
+
+| # | Prediction | Result |
+|---|---|---|
+| M17a | C1L + defaults with `--save` 186 MB or less | **Miss, by 0.7 MB:** 186.7 (from 204.5, −17.8) |
+| M17b | The defaults alone unchanged within 0.5 MB | **Hit:** 170.1 / 170.1 |
+| M17c | Stores, rows and stdout byte-identical | **Hit**, both configurations |
+
+**Decision.** Lossless, and C1L + defaults with `--save` falls 17.8 MB, far beyond the 0.2 MB repeat spread (two runs 0.05 MB apart): M17 is adopted. Every built and served `qa` configuration is now under 190 MB.

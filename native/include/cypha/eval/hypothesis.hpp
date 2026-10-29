@@ -448,6 +448,14 @@ inline bool has_independent_evidence(const Hypothesis& h) {
   return false;
 }
 
+/// 7.2 (S8d): support needs independent evidence *for* h: a positive independent result. A negative one is evidence
+/// against; it moves the posterior and enters ECS as Oppose, but it never lets `decide` support.
+inline bool has_supporting_independent_evidence(const Hypothesis& h) {
+  for (const HypTest& t : h.tests)
+    if (independent_evidence(h, t) && t.positive) return true;
+  return false;
+}
+
 // ---------------------------------------------------------------------------
 // 7.2 Updating and deciding
 // ---------------------------------------------------------------------------
@@ -481,7 +489,7 @@ struct HypothesisConfig {
 
 /// 7.2 step 5 for a hypothesis under test.
 inline HypState decide(const Hypothesis& h, const HypothesisConfig& cfg = {}) {
-  if (h.posterior > cfg.supported_p && has_independent_evidence(h)) return HypState::Supported;
+  if (h.posterior > cfg.supported_p && has_supporting_independent_evidence(h)) return HypState::Supported;
   if (h.posterior < cfg.refuted_p) return HypState::Refuted;
   int done = 0;
   double moved = 0.0, last = h.prior;
@@ -627,7 +635,7 @@ inline double null_model_pvalue(const std::vector<HypTest>& plan, double prior, 
           const TestOutcome out = o == 0 ? TestOutcome::Positive : o == 1 ? TestOutcome::Negative : TestOutcome::Inconclusive;
           const double bf = bayes_factor(out, t);
           const double np = update_posterior(post, bf);
-          const bool ni = indep || (t.independent && out != TestOutcome::Inconclusive);
+          const bool ni = indep || (t.independent && out == TestOutcome::Positive);  // as decide: a positive one (S8d)
           const double nm = moved + std::fabs(np - last);
           const bool stop = (np > cfg.supported_p && ni) || np < cfg.refuted_p || (done + 1 >= cfg.irreducible_k && nm < cfg.irreducible_move);
           if (stop) {
