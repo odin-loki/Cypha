@@ -15,7 +15,8 @@
 // Pruning (from order m on): contexts with n(c) below a floor are dropped (the walk backs off), and children seen once
 // are dropped with their value added to gamma, so every stored context still sums to one.
 //
-// The build goes order by order and, inside an order, group by group, so it holds one group's pairs at a time.
+// The build goes order by order, group by group and, inside a group, part by part (contexts split by key range), so it
+// holds one part's distinct entries at a time (BKN2: bounded scratch; the tables are the same as one part per group).
 // Rule 10 (PLAN): an expert inside CyphaLM. It answers nothing.
 #pragma once
 
@@ -67,20 +68,23 @@ class ByteKN {
     int order() const { return K_; }
     const Order& table(int k) const { return ord_.at(static_cast<std::size_t>(k)); }
 
-    void build(const std::uint8_t* t, std::size_t n, int K, const Prune& pr = Prune{}) {
+    // part: the most entries a part of a group and a slice of a part hold (BKN2); the tables do not depend on it.
+    void build(const std::uint8_t* t, std::size_t n, int K, const Prune& pr = Prune{}, std::uint32_t part = kPart) {
         if (K < 1 || K > 32) throw std::runtime_error("ByteKN: order must be in 1..32");
         if (n > 0xffffffffULL) throw std::runtime_error("ByteKN: text over 4 GiB");
+        if (part == 0) throw std::runtime_error("ByteKN: the part size must be positive");
         K_ = K;
         ord_.assign(static_cast<std::size_t>(K) + 1, Order{});
-        // Positions grouped by the byte before them, gathered a chunk of groups at a time (at most kChunk positions,
-        // or one group), so the build never holds a position for every byte: pos[gs[b] - base .. gs[b + 1] - base)
-        // hold every i >= 1 with t[i - 1] == b, for the groups of the current chunk.
+        // Positions grouped by the byte before them: group b holds every i >= 1 with t[i - 1] == b. Groups of at most
+        // kChunk positions are gathered a chunk of groups at a time (pos[gs[b] - base .. gs[b + 1] - base)); a bigger
+        // group is never gathered, its positions are found by scanning the text (BKN2: no array as long as a group).
         std::vector<std::uint32_t> gs(257, 0), pos;
         for (std::size_t i = 1; i < n; ++i) ++gs[t[i - 1] + 1u];
         for (int b = 0; b < 256; ++b) gs[b + 1] += gs[b];
+        auto size_of = [&](int g) { return gs[static_cast<std::size_t>(g) + 1] - gs[static_cast<std::size_t>(g)]; };
         std::uint32_t base = 0;
         int chunk_lo = -1, chunk_hi = -1;  // groups [chunk_lo, chunk_hi) are in pos
-        auto load = [&](int g) {  // make sure group g is in pos
+        auto load = [&](int g) {  // make sure group g (at most kChunk positions) is in pos
             if (g >= chunk_lo && g < chunk_hi) return;
             chunk_lo = g;
             chunk_hi = g + 1;
@@ -93,52 +97,77 @@ class ByteKN {
                 if (b >= chunk_lo && b < chunk_hi) pos[fill[static_cast<std::size_t>(b - chunk_lo)]++ - base] = static_cast<std::uint32_t>(i);
             }
         };
+        auto each = [&](int g, auto&& f) {  // f(i) for every position i of group g
+            if (size_of(g) > kChunk) {
+                for (std::size_t i = 1; i < n; ++i)
+                    if (t[i - 1] == g) f(i);
+                return;
+            }
+            load(g);
+            for (std::uint32_t q = gs[static_cast<std::size_t>(g)]; q < gs[static_cast<std::size_t>(g) + 1]; ++q) f(std::size_t{pos[q - base]});
+        };
+        auto parts = [&](int k, int g) -> std::uint32_t {  // a group's parts: contexts split by key range
+            return k == 1 ? 1u : std::max<std::uint32_t>(1u, static_cast<std::uint32_t>((std::uint64_t{size_of(g)} + part - 1) / part));
+        };
         for (int k = 1; k <= K; ++k) {
             Order& o = ord_[static_cast<std::size_t>(k)];
             const int groups = k == 1 ? 1 : 256;
-            // Pass 1: the count of counts (for the discounts) and the sizes before pruning.
-            for (int g = 0; g < groups; ++g) {
-                if (k > 1) load(g);
-                const std::vector<Pair> v = group_pairs(t, n, gs, pos, base, k, K, g);
-                for (std::size_t a = 0; a < v.size(); ++a) {
-                    if (v[a].c <= 4) ++o.nc[v[a].c];
-                    if (a == 0 || v[a].ctx != v[a - 1].ctx) ++o.ctx_before;
-                }
-                o.child_before += v.size();
-            }
-            set_discounts(o);
-            // Pass 2: values, gamma and pruning, group by group, straight into the packed arrays.
             const Prune use = k >= pr.from_order ? pr : Prune{};
+            // Pass 1: the count of counts (for the discounts), the sizes before pruning, and what pruning keeps (so pass
+            // 2 writes into arrays of their final size).
+            std::size_t keep_ctx = 0, keep_child = 0;
+            for (int g = 0; g < groups; ++g)
+                for (std::uint32_t p = 0, P = parts(k, g); p < P; ++p) {
+                    const std::vector<Pair> v = part_pairs(t, n, k, K, g, p, P, part, size_of(g), each);
+                    for (std::size_t a = 0; a < v.size();) {
+                        std::size_t b = a;
+                        std::uint64_t s = 0, kept = 0;
+                        for (; b < v.size() && v[b].ctx == v[a].ctx; ++b) {
+                            if (v[b].c <= 4) ++o.nc[v[b].c];
+                            s += v[b].c;
+                            kept += !(use.drop_singletons && v[b].c == 1);
+                        }
+                        ++o.ctx_before;
+                        if (s >= use.min_ctx) ++keep_ctx, keep_child += kept;
+                        a = b;
+                    }
+                    o.child_before += v.size();
+                }
+            set_discounts(o);
+            o.key.reserve(keep_ctx), o.off.reserve(keep_ctx + 1), o.gamma.reserve(keep_ctx), o.band.reserve(keep_ctx);
+            o.sym.reserve(keep_child), o.val.reserve(keep_child);
+            // Pass 2: values, gamma and pruning, part by part (in key order), straight into the packed arrays.
             for (int g = 0; g < groups; ++g) {
                 o.group[g] = static_cast<std::uint32_t>(o.key.size());
-                if (k > 1) load(g);
-                const std::vector<Pair> v = group_pairs(t, n, gs, pos, base, k, K, g);
-                for (std::size_t a = 0; a < v.size();) {
-                    std::size_t b = a;
-                    std::uint64_t s = 0;
-                    while (b < v.size() && v[b].ctx == v[a].ctx) s += v[b++].c;
-                    if (s >= use.min_ctx) {
-                        const double nn = static_cast<double>(s);
-                        double gm = 0;
-                        const std::uint32_t first = static_cast<std::uint32_t>(o.sym.size());
-                        for (std::size_t j = a; j < b; ++j) {
-                            const std::uint32_t x = v[j].c;
-                            const double D = o.D[std::min<std::uint32_t>(x, 3)];
-                            gm += D;
-                            const double val = std::max(static_cast<double>(x) - D, 0.0);
-                            if (use.drop_singletons && x == 1) {
-                                gm += val;  // its value moves into gamma
-                                continue;
+                for (std::uint32_t p = 0, P = parts(k, g); p < P; ++p) {
+                    const std::vector<Pair> v = part_pairs(t, n, k, K, g, p, P, part, size_of(g), each);
+                    for (std::size_t a = 0; a < v.size();) {
+                        std::size_t b = a;
+                        std::uint64_t s = 0;
+                        while (b < v.size() && v[b].ctx == v[a].ctx) s += v[b++].c;
+                        if (s >= use.min_ctx) {
+                            const double nn = static_cast<double>(s);
+                            double gm = 0;
+                            const std::uint32_t first = static_cast<std::uint32_t>(o.sym.size());
+                            for (std::size_t j = a; j < b; ++j) {
+                                const std::uint32_t x = v[j].c;
+                                const double D = o.D[std::min<std::uint32_t>(x, 3)];
+                                gm += D;
+                                const double val = std::max(static_cast<double>(x) - D, 0.0);
+                                if (use.drop_singletons && x == 1) {
+                                    gm += val;  // its value moves into gamma
+                                    continue;
+                                }
+                                o.sym.push_back(static_cast<std::uint8_t>(v[j].sym));
+                                o.val.push_back(static_cast<float>(val / nn));
                             }
-                            o.sym.push_back(static_cast<std::uint8_t>(v[j].sym));
-                            o.val.push_back(static_cast<float>(val / nn));
+                            o.key.push_back(v[a].ctx);
+                            o.off.push_back(first);
+                            o.gamma.push_back(static_cast<float>(gm / nn));
+                            o.band.push_back(static_cast<std::uint8_t>(s < 4 ? 0 : s < 64 ? 1 : 2));
                         }
-                        o.key.push_back(v[a].ctx);
-                        o.off.push_back(first);
-                        o.gamma.push_back(static_cast<float>(gm / nn));
-                        o.band.push_back(static_cast<std::uint8_t>(s < 4 ? 0 : s < 64 ? 1 : 2));
+                        a = b;
                     }
-                    a = b;
                 }
             }
             for (int g = groups; g <= 256; ++g) o.group[g] = static_cast<std::uint32_t>(o.key.size());
@@ -146,6 +175,18 @@ class ByteKN {
             o.key.shrink_to_fit(), o.off.shrink_to_fit(), o.gamma.shrink_to_fit(), o.band.shrink_to_fit();
             o.sym.shrink_to_fit(), o.val.shrink_to_fit();
         }
+    }
+
+    // The same tables (orders, discounts, groups, every array).
+    bool same(const ByteKN& b) const {
+        if (K_ != b.K_ || ord_.size() != b.ord_.size()) return false;
+        for (std::size_t k = 1; k < ord_.size(); ++k) {
+            const Order &x = ord_[k], &y = b.ord_[k];
+            if (std::memcmp(x.D, y.D, sizeof x.D) != 0 || std::memcmp(x.group, y.group, sizeof x.group) != 0 || x.key != y.key ||
+                x.off != y.off || x.gamma != y.gamma || x.band != y.band || x.sym != y.sym || x.val != y.val)
+                return false;
+        }
+        return true;
     }
 
     // The stored file (qa --save / --model): "CYPHABKN 1", K, then per order its discounts, groups and arrays, then an
@@ -308,7 +349,8 @@ class ByteKN {
     }
 
     static constexpr std::uint32_t kNone = 0xffffffffu;
-    static constexpr std::uint32_t kChunk = 4u << 20;  // positions gathered at a time (16 MB)
+    static constexpr std::uint32_t kChunk = 1u << 20;  // positions gathered at a time (4 MB); a bigger group is scanned
+    static constexpr std::uint32_t kPart = 1u << 19;   // entries in a part of a group, and in a slice of a part (BKN2)
 
  private:
     static double value(const Order& o, std::uint32_t c, unsigned w) {
@@ -331,48 +373,24 @@ class ByteKN {
         std::uint64_t ctx;
         std::uint32_t sym, c;
     };
-    // The (context, byte, count) triples of order k, group g, sorted by (context, byte): raw counts at the top order,
-    // continuation counts (distinct left extensions) below it.
-    static std::vector<Pair> group_pairs(const std::uint8_t* t, std::size_t n, const std::vector<std::uint32_t>& gs,
-                                         const std::vector<std::uint32_t>& pos, std::uint32_t base, int k, int K, int g) {
-        const std::size_t L = static_cast<std::size_t>(k - 1);
-        auto key_of = [&](std::size_t i) {  // key(t_{i-L} .. t_{i-1})
-            std::uint64_t h = kEmptyCtx;
-            for (std::size_t d = 1; d <= L; ++d) h = step(h, t[i - d]);
-            return h;
-        };
+    // The (context, byte, count) triples of order k, group g, part p of P, sorted by (context, byte): raw counts at the
+    // top order, continuation counts (distinct left extensions) below it. Part p holds the contexts whose key lies in
+    // the p-th of P equal key ranges, so parts in order give the group's contexts in key order, none split.
+    // The positions are read in slices of `part`; each slice is sorted, made distinct and merged into the part's set,
+    // so a part holds its distinct entries, not one per position (BKN2).
+    template <class Each>
+    static std::vector<Pair> part_pairs(const std::uint8_t* t, std::size_t n, int k, int K, int g, std::uint32_t p,
+                                        std::uint32_t P, std::uint32_t part, std::size_t group_size, Each& each) {
         std::vector<Pair> v;
-        if (k == K) {
-            if (k == 1) {
+        if (k == 1) {
+            if (K == 1) {  // raw counts of single bytes
                 std::uint32_t c1[256] = {};
                 for (std::size_t i = 0; i < n; ++i) ++c1[t[i]];
                 for (int s = 0; s < 256; ++s)
                     if (c1[s]) v.push_back({kEmptyCtx, static_cast<std::uint32_t>(s), c1[s]});
                 return v;
             }
-            v.reserve(gs[static_cast<std::size_t>(g) + 1] - gs[static_cast<std::size_t>(g)]);
-            for (std::uint32_t q = gs[static_cast<std::size_t>(g)]; q < gs[static_cast<std::size_t>(g) + 1]; ++q) {
-                const std::size_t i = pos[q - base];
-                if (i >= L) v.push_back({key_of(i), t[i], 1});
-            }
-            std::sort(v.begin(), v.end(), [](const Pair& x, const Pair& y) { return x.ctx != y.ctx ? x.ctx < y.ctx : x.sym < y.sym; });
-            std::size_t w = 0;
-            for (std::size_t a = 0; a < v.size();) {
-                std::size_t b = a;
-                std::uint32_t c = 0;
-                while (b < v.size() && v[b].ctx == v[a].ctx && v[b].sym == v[a].sym) c += v[b++].c;
-                v[w++] = {v[a].ctx, v[a].sym, c};
-                a = b;
-            }
-            v.resize(w);
-            return v;
-        }
-        struct Tri {
-            std::uint64_t ctx, ext;
-            std::uint32_t sym;
-        };
-        std::vector<Tri> tri;
-        if (k == 1) {  // N1+(. w): the distinct bytes seen before w
+            // N1+(. w): the distinct bytes seen before w
             std::vector<std::uint8_t> seen(256 * 256, 0);
             for (std::size_t i = 1; i < n; ++i) seen[t[i - 1] * 256u + t[i]] = 1;
             for (int w = 0; w < 256; ++w) {
@@ -381,26 +399,72 @@ class ByteKN {
                 if (d) v.push_back({kEmptyCtx, static_cast<std::uint32_t>(w), d});
             }
             return v;
-        } else {
-            tri.reserve(gs[static_cast<std::size_t>(g) + 1] - gs[static_cast<std::size_t>(g)]);
-            for (std::uint32_t q = gs[static_cast<std::size_t>(g)]; q < gs[static_cast<std::size_t>(g) + 1]; ++q) {
-                const std::size_t i = pos[q - base];
-                if (i < L + 1) continue;
-                const std::uint64_t c = key_of(i);
-                tri.push_back({c, step(c, t[i - L - 1]), t[i]});
-            }
         }
-        std::sort(tri.begin(), tri.end(), [](const Tri& x, const Tri& y) {
-            return x.ctx != y.ctx ? x.ctx < y.ctx : x.sym != y.sym ? x.sym < y.sym : x.ext < y.ext;
-        });
-        for (std::size_t a = 0; a < tri.size();) {
-            std::size_t b = a;
-            std::uint32_t d = 0;
-            while (b < tri.size() && tri[b].ctx == tri[a].ctx && tri[b].sym == tri[a].sym) {
-                if (b == a || tri[b].ext != tri[b - 1].ext) ++d;
-                ++b;
+        const std::size_t L = static_cast<std::size_t>(k - 1);
+        auto key_of = [&](std::size_t i) {  // key(t_{i-L} .. t_{i-1})
+            std::uint64_t h = kEmptyCtx;
+            for (std::size_t d = 1; d <= L; ++d) h = step(h, t[i - d]);
+            return h;
+        };
+        const std::uint64_t width = P > 1 ? ~std::uint64_t{0} / P + 1 : 0;  // keys [p * width, (p + 1) * width)
+        auto mine = [&](std::uint64_t key) { return P == 1 || key / width == p; };
+        // Entries (context, x, count): x is the byte at the top order, (byte << 8 | left byte) below it, where the
+        // left byte stands for its extension's key (one to one for a fixed context: the key step is a bijection).
+        struct Ent {
+            std::uint64_t ctx;
+            std::uint32_t x, c;
+        };
+        auto less = [](const Ent& a, const Ent& b) { return a.ctx != b.ctx ? a.ctx < b.ctx : a.x < b.x; };
+        const bool top = k == K;
+        auto squeeze = [top](std::vector<Ent>& e) {  // sorted: equal entries summed (top) or kept once (below)
+            std::size_t w = 0;
+            for (std::size_t a = 0; a < e.size();) {
+                std::size_t b = a;
+                std::uint32_t c = 0;
+                while (b < e.size() && e[b].ctx == e[a].ctx && e[b].x == e[a].x) c += e[b++].c;
+                e[w++] = {e[a].ctx, e[a].x, top ? c : 1u};
+                a = b;
             }
-            v.push_back({tri[a].ctx, tri[a].sym, d});
+            e.resize(w);
+        };
+        std::vector<Ent> acc, buf;
+        buf.reserve(std::min<std::size_t>(part, group_size));
+        auto flush = [&] {
+            if (buf.empty()) return;
+            std::sort(buf.begin(), buf.end(), less);
+            squeeze(buf);
+            if (acc.empty()) {
+                acc.assign(buf.begin(), buf.end());
+            } else {
+                std::vector<Ent> m(acc.size() + buf.size());
+                std::merge(acc.begin(), acc.end(), buf.begin(), buf.end(), m.begin(), less);
+                std::vector<Ent>().swap(acc);
+                squeeze(m);
+                acc.assign(m.begin(), m.end());
+            }
+            buf.clear();
+        };
+        each(g, [&](std::size_t i) {
+            if (i < (top ? L : L + 1)) return;
+            const std::uint64_t c = key_of(i);
+            if (!mine(c)) return;
+            buf.push_back({c, top ? std::uint32_t{t[i]} : (std::uint32_t{t[i]} << 8 | t[i - L - 1]), 1});
+            if (buf.size() >= part) flush();
+        });
+        flush();
+        std::vector<Ent>().swap(buf);
+        if (top) {
+            v.reserve(acc.size());
+            for (const Ent& e : acc) v.push_back({e.ctx, e.x, e.c});
+            return v;
+        }
+        std::size_t runs = 0;
+        for (std::size_t a = 0; a < acc.size(); ++a) runs += a == 0 || acc[a].ctx != acc[a - 1].ctx || (acc[a].x >> 8) != (acc[a - 1].x >> 8);
+        v.reserve(runs);
+        for (std::size_t a = 0; a < acc.size();) {  // the distinct left bytes of each (context, byte)
+            std::size_t b = a;
+            while (b < acc.size() && acc[b].ctx == acc[a].ctx && (acc[b].x >> 8) == (acc[a].x >> 8)) ++b;
+            v.push_back({acc[a].ctx, acc[a].x >> 8, static_cast<std::uint32_t>(b - a)});
             a = b;
         }
         return v;
