@@ -9,7 +9,7 @@
 | Step | Agent | What it does | Status |
 |---|---|---|---|
 | 1. Clean training text | GEN-A | `sample` trains on SCRIBE's markup-stripped prose of its own training slice | Done: harness and benchmark ready; clean text not adopted (dev SCRIBE 0.069 against 0.079), `--clean` stays a flag |
-| 2. Sentence gate | GEN-B | A gate at sentence level: CyphaLM writes candidate sentences; a scorer picks | Running |
+| 2. Sentence gate | GEN-B | A gate at sentence level: CyphaLM writes candidate sentences; a scorer picks | Done: not adopted (test SCRIBE 0.072 → 0.090 [0.076, 0.106], intervals overlap); `--gate` stays a flag ([report](GEN_B_SENTENCE_GATE.md)) |
 | 3. Word and topic experts | GEN-C (topic), token track (words) | Document experts (PLAN B5); the word level is the token track (`docs/TOKENS_PLAN.md`) | GEN-C done: not adopted on bytes ([report](GEN_C_TOPIC_CACHE.md)) |
 | 4. Content-plan expert | GEN-E | The fact store steers through a next-byte expert; CyphaLM writes every byte | Done: not adopted; `--plan` flag ([report](GEN_E_CONTENT_PLAN.md)) |
 
@@ -33,6 +33,7 @@ One row per read of `bench/eval/gen_prompts_test.tsv`. Dev runs are not logged h
 | 2026-10-29 | Tokens T4b: the token sampler with its ∞-gram capped at 16 tokens when sampling, BPE-W 4,096 at T 1.0 (chosen on dev) against the byte default at T 0.6 ([report](TOKENS_T3_T4.md), "T4b") | K16; B0 (T4's run, reused) | `cyphalm_tok_gen gen … --prompts-file bench/eval/gen_prompts_test.tsv --inf-cap 16 --temps 1.0`, then `scribe ladder` and `gen_eval_summary.py` | K16 0.115 [0.091, 0.143]; B0 at T 0.6 0.106 [0.078, 0.135] | 0.0728 (B0 0.0561) | Not adopted: intervals overlap |
 | 2026-10-29 | Tokens T4c: the byte sampler's nucleus 0.9 and repeat ban on tokens over Kneser–Ney alone (no ∞-gram), BPE-W 4,096 at T 1.0 (chosen on dev) against the byte default at T 0.6 ([report](TOKENS_T3_T4.md), "T4c") | NRK0; B0 (T4's run, reused) | `cyphalm_tok_gen gen … --prompts-file bench/eval/gen_prompts_test.tsv --inf-cap 0 --nucleus 0.9 --no-repeat --temps 1.0`, then `scribe ladder` and `gen_eval_summary.py` | NRK0 0.187 [0.155, 0.217]; B0 at T 0.6 0.106 [0.078, 0.135] | 0.0649 (B0 0.0561; limit 0.0761) | Gate met: intervals disjoint; a candidate for `sample`'s default (switch not made) |
 | 2026-10-29 | GEN-E content-plan expert | E0 (baseline), E1 (`--plan`) | `gen_eval.sh test E1 OUT --plan /root/work/f2/v2/aug,/root/work/f2raw/patterns_raw.tsv --plan-drop 75497472:100000000` | E0 0.072 [0.059, 0.085]; E1 0.071 [0.059, 0.084] | D_I > 0: 0 → 0; 32-byte 0.0386 → 0.0401 | Not adopted: SCRIBE does not rise. `--plan` stays a flag |
+| 2026-10-29 | GEN-B sentence gate: best of 4 CyphaLM sentences by fluency − 5 × markup share (chosen on dev) ([report](GEN_B_SENTENCE_GATE.md)) | genb_T1; B0 (reused; genb_T0 byte-identical) | `scripts/gen_eval.sh test genb_T1 OUT --gate 4,wm=5` | genb_T1 0.090 [0.076, 0.106]; B0 0.072 [0.059, 0.085] | 32-byte 0.0386 → 0.0557; D_I > 0: 0 → 0 | Not adopted: intervals overlap. Copy and surface S rules met. `--gate` stays a flag |
 
 ## GEN-A
 
@@ -199,6 +200,10 @@ Prompt 3: "In lower concentrations (3%), it is used medically for cleaning wound
 | G9 | The test read agrees on direction | Not scored: no test read |
 
 **What it means for the track.** The markup is a small part of the problem. Sentence form (D_S ≈ 18 of SCRIBE's D ≈ 23) is most of it, in both arms. That is GEN-B's target (sentence gate) and the token track's (whole words). Later steps can stack on `--clean` (and must compare against D1 as well as D0 if they do).
+
+## GEN-B: the sentence gate
+
+The sentence gate's design, rules, dev arms and test read are in [GEN_B_SENTENCE_GATE.md](GEN_B_SENTENCE_GATE.md).
 
 ## GEN-E: the content-plan expert
 

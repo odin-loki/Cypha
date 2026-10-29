@@ -104,6 +104,7 @@ Tool: `native/tools/scribe.cpp` over `native/include/cypha/eval/scribe.hpp` ([re
 | Document experts (GEN-C, `--doc`, off) | Held-out bits per byte −0.043 (cache); coherence distance −23 to −35%; dev SCRIBE 0.048–0.060 against the default's 0.063 (sentence form worsens): not adopted |
 | Generation benchmark and clean text (GEN-A, [report](reports/GEN_TRACK.md)) | Frozen 250 + 250 prompts from enwik8 [72 MiB, end); `scripts/gen_eval.sh`. Default dev SCRIBE, with byte Kneser–Ney (BKN2): 0.125 [0.107, 0.143], continuation bits per byte 2.015, copy share 0.043. Before it: 0.079 [0.064, 0.096], 2.134 and 0.041. `--clean` (off): copy 0.005, surface S +0.023, bits per byte −0.029, SCRIBE 0.069: not adopted; sentence form (D_S ≈ 18 of 23) is the gap, not markup |
 | Content-plan expert (GEN-E, `--plan`, off, [report](reports/GEN_E_CONTENT_PLAN.md)) | Test SCRIBE 0.072 → 0.071 (not adopted); continuation BPC −0.0030 overall, −0.020 on covered prompts (15% of prompts); contradictions 0 → 0. A byte expert takes the frame and drifts on the value |
+| Sentence gate (GEN-B, `--gate 4,wm=5`, off, [report](reports/GEN_B_SENTENCE_GATE.md)) | Test SCRIBE v2 0.072 → 0.090 [0.076, 0.106] (overlap; not adopted; read before BKN2); surface S 0.861 → 0.876; D_S 18.2 → 16.8; D_C 4.5 → 5.0; copy share 0.039 → 0.056; 4.1× CPU. It picks better-formed sentences; it does not keep the subject |
 | Cost | about 1,000 texts/s on one core, about 0.4 GB, 14 s with the 32 MiB pack built |
 
 BPC and surface S are not generation scores. SCRIBE v2 is the one that passes its ladder.
