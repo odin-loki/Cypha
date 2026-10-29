@@ -84,6 +84,7 @@ Tool: `native/tools/scribe.cpp` over `native/include/cypha/eval/scribe.hpp` ([re
 | Held-out degradations followed | 7 of 9 families (blind to sentence order and truncation) |
 | CyphaLM trie samples / trie + class context / human, same prompts | 0.014 / 0.002 / 0.770 (word salad by SCRIBE; surface S said 0.749 / 0.901 / 0.904) |
 | `sample` with its defaults: trie + similar-context (+ copy) / + class | A4d's default 0.063 [0.051, 0.078]; A4c's 0.064 [0.052, 0.078]; B4c's 0.061 [0.049, 0.074] (0.056 with copy) / 0.025 (surface S 0.801 → 0.880: the two scores disagree; B4c) |
+| Document experts (GEN-C, `--doc`, off) | Held-out bits per byte −0.043 (cache); coherence distance −23 to −35%; dev SCRIBE 0.048–0.060 against the default's 0.063 (sentence form worsens): not adopted |
 | Cost | about 1,000 texts/s on one core, about 0.4 GB, 14 s with the 32 MiB pack built |
 
 BPC and surface S are not generation scores. SCRIBE v2 is the one that passes its ladder.
