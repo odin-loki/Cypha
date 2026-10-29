@@ -55,7 +55,8 @@ Living checklist only. Completed July 2026 continuum / optimality / RPSM / cell-
 - [ ] **E1**: Cypha part-of-speech tagger on UD EWT (gate ≥ 94%).
   - **Perceptron baseline passes (2026-10-27):** `native/tools/pos_tagger.cpp`, [report](docs/reports/E1_POS_TAGGER.md). Test UPOS 94.81% (known words 96.4%, unknown 79.2%, questions 93.3%); about 1M tokens/s, 5.6 MB.
   - Noun-phrase chunker F1 83.8 on test, plus a question-parse helper.
-  - **Still open:** the Cypha-classifier tagger, and entities (E2).
+  - **Cypha-classifier tagger 2026-10-29** ([report](docs/reports/E1_CYPHA_TAGGER.md)): test 92.06%, gate not met; the perceptron keeps syntax.
+  - **Still open:** entities (E2: silver labels from typed Wikipedia links first), and Cypha's OOD threshold.
 - [ ] **S1–S3, S5** ([`docs/DISCOVERY.md`](docs/DISCOVERY.md)): reason codes and evidence cards on every answer and every "I don't know"; epistemic states; the hypothesis store and firewall; the gap map.
   - **Done 2026-10-27** ([report](docs/reports/S1_S2_EPISTEMIC.md)):
     - **S1 for `chat_index`:** removed with `chat_index` on 2026-10-27 (PLAN rule 10).
@@ -85,6 +86,7 @@ Living checklist only. Completed July 2026 continuum / optimality / RPSM / cell-
   - **S11e done 2026-10-29 (dev only)** (S11c report, "S11e"): G3 by the link predictor alone, G4 without carried dates, G13 keeps its verdict prior, A6 kept; S10 reads S11c's pools (report only). Open: the fresh read on S8e's set.
   - **S9b / S7d done 2026-10-29** (S9 report "S9b", S7 report "S7d"): §5.12 and §5.14 settled on dev (T2 out, Wikidata one source, K4 stays, store φ recommended for fusion, fragile gaps behind a flag). Open: wire one-source Wikidata into the generators' loops (after S8e); a final read on S8e's fresh set; Odin's call on fusion's φ.
   - **S12a done 2026-10-29, planted-law gate not met** ([report](docs/reports/S12A_DEDUCTION_LAWS_REFINEMENT.md)): recall 0.853 against 0.90, no false law. G15 kept. G1 right 0.07 beyond depth 1. G19 not earned. G20 refuted. No promotions. Prospective log of 46. Next: S12b (G17, G18) after FCAST.
+  - **S12c done 2026-10-29** (S12a report, "S12c"): the planted-law gate met on fresh tables (0.967, no false law) with two G15 changes (flags, off by default); G1's prior calibrated by depth; G19 removed by rule. Open (Odin): G1's prior; the two flags as defaults.
   - **Still open:** S8's promotion gate (after Odin's calls); S10 read again on larger pools.
 - [x] **Slow CTest triage done 2026-10-28; cut done 2026-10-29** ([report](docs/reports/SLOW_TEST_TRIAGE.md)): 38 failures traced to the hp cutover (`0653e25`); the 35 hybrid-era tests and 5,255 lines removed (Odin: delete); the canary test fixed. Open (Odin): the forecast rollouts' cold resets and the codec's 256-symbol vocabulary.
   - **hp-wrapper fixes done 2026-10-29** (Odin: "Fix both"): forecast rollouts read the trained model (8 min → 6 s); vocabularies other than 256 rejected; `cypha_slow` 56 of 56. Open (Odin): forecast's 842-id event vocabulary on a byte model.
