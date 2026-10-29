@@ -36,6 +36,8 @@
 // mixture by lambda per bucket, before InfiniGram) is a default in qa, sample and context8k, built on each one's
 // training bytes. Unlike the experts above it is on inside answers: it is part of the byte model. --no-bkn leaves it
 // out, and each subcommand then prints what it printed before it; --bkn SPEC and --bkn-way a|b choose another.
+// BKN3: --bkn-answers off turns it off inside answers (in_answer, the experts' gate) in qa and context8k, where
+// InfiniGram then uses lambdas fit without it, so the answers are those of the model without Kneser-Ney.
 //
 // Subcommands (stdout carries the numbers, stderr the progress):
 //   bpc [wiki] [--negative] [--no-guard]
@@ -101,6 +103,9 @@
 //        their MB, search p50/p99, scoring time) and the continuation's BPC by MiB; --sim-bits PREFIX writes each
 //        spec's continuation bits for `simpair`; --sim-growth 1,4,16 reads only the expert (no trie, InfiniGram or class)
 //        and reports its online keys' memory and search time at those stream lengths in MiB.
+//        GEN-C2: --doc V1;V2;... reads each variant of the document experts (GEN-C's --doc specs) over qa's default
+//        chain (trie + InfiniGram, class, similar-context, copy): the holdout's second half (lambdas on its first half),
+//        and with --sim-stream FROM:LEN the stream after the holdout (lambdas on the whole holdout). `doc2` lines.
 //   simpair [--margin M] REF.f64 FILE.f64 ...  (A4e) pairs --sim-bits files against REF: whole continuation, each MiB,
 //        last 2 MiB; with a margin also P(change < M).
 //        --out FILE writes the samples (systems trie, trie+cls:SPEC) and the human continuations (human) as JSON
@@ -326,6 +331,7 @@ struct Args {
     bool bkn_fresh = false, bkn_stack = false;    // BKN: also the fresh text / the defaults on top
     std::string bkn, bkn_way = "b";               // BKN: --bkn K[:m:c:d] in qa, sample, context8k; --bkn-way a (replace) | b (add)
     bool no_bkn = false;                          // BKN2: byte Kneser-Ney off where it is a default
+    std::string bkn_answers = "on";               // BKN3: Kneser-Ney inside answers (on: BKN2) or off (the experts' gate)
     std::string plan;                             // GEN-E: sample's content-plan expert, --plan STOREDIR[,RAWFRAMES]
     std::string plan_drop;                        // GEN-E: --plan-drop LO:HI, the prompts' source bytes (facts there dropped)
     std::string prompts_file;                     // GEN-A: sample's prompts and human continuations
@@ -333,10 +339,12 @@ struct Args {
     std::string fam_ent;                          // ANS: the entity's frames before the token (--fam-ent)
     bool copy_dk = false, fam_read = false;       // ANS: copy inside don't-know answers; FAMREAD / FAMDOLLY
     std::string doc;                              // GEN-C: document experts in sample (--doc SPEC; off by default)
+    bool no_doc = false;                          // GEN-C2: the document experts' cache off in context8k and qa's holdout
     double dk_plain = 0;                          // DK2: share of don't-know training turns with no token
     std::string fam_ent_at = "all";               // DK2: where --fam-ent's frames go (all | answer | start)
     bool copy_frame = false;                      // DK2: copy a frame's entity, not its end; the tag may repeat the message
     std::string gate;                             // GEN-B: sample's sentence gate, K[,wf=..][,wp=..][,wm=..][,min=..][,max=..]
+    std::string temps;                            // TEMPS: sample's temperatures, T[,T][,T] (default 0.6,0.8,1.0)
 };
 
 std::string env_or(const char* name, const char* fallback) {
@@ -386,6 +394,7 @@ Args parse(int argc, char** argv, int from) {
         else if (s == "--bkn-way") a.bkn_way = next();     // BKN
         else if (s == "--bkn-stack") a.bkn_stack = true;  // BKN
         else if (s == "--no-bkn") a.no_bkn = true;        // BKN2
+        else if (s == "--bkn-answers") a.bkn_answers = next();  // BKN3
         else if (s == "--sim-surface") a.sim_surface = true;
         else if (s == "--sim-stream") a.sim_stream = next();  // A4e
         else if (s == "--sim-bits") a.sim_bits = next();
@@ -394,6 +403,7 @@ Args parse(int argc, char** argv, int from) {
         else if (s == "--no-cls") a.no_cls = true;
         else if (s == "--no-copy") a.no_copy = true;
         else if (s == "--gate") a.gate = next();
+        else if (s == "--temps") a.temps = next();  // TEMPS
         else if (s == "--fam-only") a.fam_only = true;
         else if (s == "--model") a.model = next();
         else if (s == "--plan") a.plan = next();
@@ -409,6 +419,7 @@ Args parse(int argc, char** argv, int from) {
         else if (s == "--copy-dk") a.copy_dk = true;
         else if (s == "--fam-read") a.fam_read = true;
         else if (s == "--doc") a.doc = next();
+        else if (s == "--no-doc") a.no_doc = true;  // GEN-C2
         else if (s == "--dk-plain") a.dk_plain = std::atof(next());  // DK2
         else if (s == "--fam-ent-at") a.fam_ent_at = next();         // DK2
         else if (s == "--copy-frame") a.copy_frame = true;           // DK2
@@ -740,9 +751,10 @@ void fit_lambdas(const std::vector<double>& pe, const std::vector<double>& pb, c
 std::unique_ptr<SimilarContext> default_sim(const Args& a, const std::uint8_t* text, std::size_t n, int& rc);
 // GEN-C (PLAN B5), defined below with the similar-context expert: the document experts of --doc SPEC, and their
 // lambdas fit on the first half of the holdout over cur (cur is then mixed with them; its second half is the read).
-std::unique_ptr<DocTopic> make_doc(const Args& a, const std::uint8_t* text, std::size_t n, int& rc);
+std::unique_ptr<DocTopic> make_doc(const std::string& doc, const std::uint8_t* text, std::size_t n, int& rc);
 std::vector<std::vector<double>> fit_doc(const DocTopic& dt, const std::uint8_t* data, std::size_t train, std::size_t half,
                                          std::vector<double>& cur);
+void mix_doc_into(const DocTopic& dt, const std::uint8_t* data, std::size_t train, std::size_t half, std::vector<double>& cur);
 std::string sample_with_class(const PackedModel& model, const double w[6], std::size_t limit, const ClassContext* cc,
                               const double* lam, const std::string& prompt, int n, std::uint32_t seed,
                               const SimilarContext* sc, const double* lsm, double temperature, const double* lcp,
@@ -874,6 +886,11 @@ int cmd_context8k(const Args& a) {
     std::cout << "trie_only_bpc " << bits_trie / static_cast<double>(H - half) << "\n";
     // BKN2: Kneser-Ney into the trie mixture, first (as qa); the lines below are over trie + Kneser-Ney.
     const bool kn_rep = a.bkn_way == "a";
+    // BKN3: with Kneser-Ney off inside answers, the answers (gen, below) use InfiniGram's lambdas fit without it (lam8k0,
+    // over this copy of the trie mixture).
+    const bool kn_off_ans = kn && a.bkn_answers == "off";
+    std::vector<double> pt0;
+    if (kn_off_ans) pt0 = pt;
     std::vector<double> lkn;
     if (kn) {
         lkn = mix_bkn_into(*kn, data.data(), kTrain, half, kn_rep, pt);
@@ -883,7 +900,7 @@ int cmd_context8k(const Args& a) {
     }
 
     const int caps[] = {4, 16, 64, 512, 8192};
-    double lam8k[kBuckets] = {0};
+    double lam8k[kBuckets] = {0}, lam8k0[kBuckets] = {0};
     std::vector<int> n8k(H), bk8k;
     std::vector<double> pinf8k;
     for (int cap : caps) {
@@ -924,6 +941,28 @@ int cmd_context8k(const Args& a) {
         double bits = 0;
         for (std::size_t k = half; k < H; ++k) bits += -std::log2(lam[bk[k]] * pinf[k] + (1 - lam[bk[k]]) * pt[k]);
         std::cout << "trie_plus_context_" << cap << "_bpc " << bits / static_cast<double>(H - half) << "\n";
+        if (cap == 8192 && kn_off_ans) {  // BKN3: the same grid fit over the trie mixture without Kneser-Ney
+            for (int b = 0; b < kBuckets; ++b) {
+                double best = -1e300;
+                lam8k0[b] = 0;
+                for (int g = 0; g < 200; ++g) {
+                    const double l = g * 0.005;
+                    double ll = 0;
+                    bool any = false;
+                    for (std::size_t k = 0; k < half; ++k)
+                        if (bk[k] == b) {
+                            ll += std::log(l * pinf[k] + (1 - l) * pt0[k]);
+                            any = true;
+                        }
+                    if (!any) break;
+                    if (ll > best) {
+                        best = ll;
+                        lam8k0[b] = l;
+                    }
+                }
+            }
+            std::vector<double>().swap(pt0);
+        }
         if (cap == 8192) {
             std::copy(lam, lam + kBuckets, lam8k);
             pinf8k = std::move(pinf);
@@ -968,6 +1007,16 @@ int cmd_context8k(const Args& a) {
         mix_copy_into(data.data(), kTrain, half, a.copy_min, base);
         chain_line("_copy");
     }
+    // GEN-C2 (docs/reports/GEN_C_TOPIC_CACHE.md, "GEN-C2"): the document experts' cache (--doc SPEC to read another
+    // setting), last, over wiki train's words; its lambdas on the first half, its line on the second. --no-doc leaves
+    // it out. The answers below never read it.
+    if (!a.no_doc) {
+        int drc = 0;
+        const auto dt = make_doc(a.doc.empty() ? std::string("cache") : a.doc, data.data(), kTrain, drc);
+        if (!dt) return drc ? drc : 1;
+        mix_doc_into(*dt, data.data(), kTrain, half, base);
+        chain_line("_doc");
+    }
 
     const int edges[] = {4, 8, 16, 32, 64, 256, 1024, 8193};
     const char* names[] = {"<4", "4-7", "8-15", "16-31", "32-63", "64-255", "256-1023", "1024-8192"};
@@ -995,13 +1044,13 @@ int cmd_context8k(const Args& a) {
             pm.fill_experts(seq.data(), seq.size(), all, Mode::Synth, e, m, pred, false);
             double M[256];
             mix_dist(w, e, m, pred, M);
-            if (kn) bkn_mix(*kn, lkn.empty() ? nullptr : lkn.data(), kn_rep, seq.data(), seq.size(), M);  // BKN2
+            if (kn && !kn_off_ans) bkn_mix(*kn, lkn.empty() ? nullptr : lkn.data(), kn_rep, seq.data(), seq.size(), M);  // BKN2; BKN3
             const std::size_t len = std::min<std::size_t>(seq.size(), 8192);
             const auto r = ig.query(seq.data() + (seq.size() - len), len, 8192, prev < 0 ? -1 : std::min(prev + 1, 8192),
                                     1, cur);
             prev = r.n;
             if (t == 0) n0 = r.n;
-            const double l = lam8k[bucket(r.n, r.total)];
+            const double l = (kn_off_ans ? lam8k0 : lam8k)[bucket(r.n, r.total)];  // BKN3: answers without Kneser-Ney
             int best = 0;
             double bp = -1;
             for (int s = 0; s < 256; ++s) {
@@ -1140,9 +1189,34 @@ int cmd_sample(const Args& a) {
     if (a.outs.empty() || a.outs.size() > 2 || a.prompts < 1 || a.bytes < 100) {
         std::fprintf(stderr,
                      "usage: cyphalm_trie sample <enwik8> <out_dev.txt> [out_fresh.txt] [--prompts 250] [--bytes 600]\n"
-                     "       cyphalm_trie sample <enwik8> <out.txt> --prompts-file bench/eval/gen_prompts_dev.tsv\n");
+                     "       cyphalm_trie sample <enwik8> <out.txt> --prompts-file bench/eval/gen_prompts_dev.tsv\n"
+                     "       [--temps T[,T][,T]] (default 0.6,0.8,1.0)\n");
         return 2;
     }
+    // TEMPS: one to three temperatures; each keeps the seed of its position, so --temps 0.4 pairs with 0.6's draws.
+    std::vector<double> temps = {0.6, 0.8, 1.0};
+    if (!a.temps.empty()) {
+        temps.clear();
+        for (const auto& t : split(a.temps, ',')) {
+            char* end = nullptr;
+            const double v = std::strtod(t.c_str(), &end);
+            if (t.empty() || end == t.c_str() || *end != '\0' || !(v > 0.0) || v > 4.0) {
+                std::cerr << "bad --temps: " << a.temps << " (one to three temperatures in (0, 4], e.g. 0.4,0.6,0.8)\n";
+                return 2;
+            }
+            temps.push_back(v);
+        }
+        if (temps.empty() || temps.size() > 3) {
+            std::cerr << "--temps takes one to three temperatures\n";
+            return 2;
+        }
+    }
+    const std::size_t nt = temps.size();
+    const auto temp_label = [](double t) {  // trie_T0.6 for one decimal (as before), else two
+        char b[32];
+        std::snprintf(b, sizeof b, std::fabs(t * 10.0 - std::round(t * 10.0)) < 1e-9 ? "%.1f" : "%.2f", t);
+        return std::string(b);
+    };
     const std::size_t nfiles = a.outs.size();
     GateSpec gate;  // GEN-B
     if (!a.gate.empty() && !parse_gate(a.gate, gate)) {
@@ -1286,7 +1360,7 @@ int cmd_sample(const Args& a) {
         std::cerr << "plan store subjects " << cps->subjects() << " relations with frames " << frames.size() << " frames " << nf
                   << "\n";
     }
-    const auto dt = make_doc(a, data.data(), cfg.train, rc);  // GEN-C: nullptr without --doc
+    const auto dt = make_doc(a.doc, data.data(), cfg.train, rc);  // GEN-C: nullptr without --doc
     if (rc) return rc;
     double lsm[SimilarContext::kBuckets] = {0};
     std::vector<double> lcl, lcp, lpl;
@@ -1332,10 +1406,10 @@ int cmd_sample(const Args& a) {
     if (cps) model_line += "\tplan=" + a.plan;
     if (kn) model_line += "\tbkn=" + a.bkn + ":" + a.bkn_way;  // BKN
     if (gate.k > 0) model_line += "\tgate=" + a.gate;  // GEN-B
-    const double temps[3] = {0.6, 0.8, 1.0};
-    std::vector<std::string> gens[3];  // GEN-A: the generated texts by temperature (--prompts-file)
+    if (!a.temps.empty()) model_line += "\ttemps=" + a.temps;  // TEMPS
+    std::vector<std::vector<std::string>> gens(nt);  // GEN-A: the generated texts by temperature (--prompts-file)
     std::vector<int> planned(nfiles, 0);
-    GateStats gst[3];
+    std::vector<GateStats> gst(nt);
     const auto t_gen = std::chrono::steady_clock::now();
     const std::clock_t c_gen = std::clock();  // GEN-B: CPU time too (wall time varies with the machine's load)
     std::size_t gen_bytes = 0;
@@ -1345,7 +1419,7 @@ int cmd_sample(const Args& a) {
             std::cerr << "cannot write " << a.outs[f] << "\n";
             return 1;
         }
-        if (experts || gate.k > 0) out << model_line << "\n";
+        if (experts || gate.k > 0 || !a.temps.empty()) out << model_line << "\n";
         for (int k = 0; k < a.prompts; ++k) {
             const std::size_t id = f * static_cast<std::size_t>(a.prompts) + static_cast<std::size_t>(k);
             const std::string& p = prompts[id];
@@ -1359,7 +1433,7 @@ int cmd_sample(const Args& a) {
                 out << "\n";
                 planned[f] += !plan.facts.empty();
             }
-            for (int ti = 0; ti < 3; ++ti) {
+            for (std::size_t ti = 0; ti < nt; ++ti) {
                 const std::uint64_t seed = 1000003ull * (id + 1) + static_cast<std::uint64_t>(ti) * 7919ull;
                 SampleOptions opt;
                 opt.temperature = temps[ti];
@@ -1376,9 +1450,7 @@ int cmd_sample(const Args& a) {
                                                   kn_rep)
                               : sample_continuation(pm, w, p, cfg.train, a.bytes, seed32, opt);
                 gen_bytes += text.size();
-                char kind[32];
-                std::snprintf(kind, sizeof kind, "trie_T%.1f", temps[ti]);
-                out << "GEN\t" << kind << "\t" << printable(text) << "\n";
+                out << "GEN\ttrie_T" << temp_label(temps[ti]) << "\t" << printable(text) << "\n";
                 if (!a.prompts_file.empty()) gens[ti].push_back(text);
             }
             if ((k + 1) % 50 == 0) std::cerr << "file " << f << " prompt " << (k + 1) << "/" << a.prompts << "\n";
@@ -1389,9 +1461,9 @@ int cmd_sample(const Args& a) {
     const double cpu = static_cast<double>(std::clock() - c_gen) / CLOCKS_PER_SEC;
     std::cerr << "generated " << gen_bytes << " bytes in " << secs << " s (" << 1e6 * secs / std::max<std::size_t>(gen_bytes, 1)
               << " us per byte); cpu " << cpu << " s (" << 1e6 * cpu / std::max<std::size_t>(gen_bytes, 1) << " us per byte)\n";
-    for (int ti = 0; ti < 3 && gate.k > 0; ++ti) {  // GEN-B: what the gate kept
+    for (std::size_t ti = 0; ti < nt && gate.k > 0; ++ti) {  // GEN-B: what the gate kept
         const double ns = static_cast<double>(std::max<std::size_t>(gst[ti].sentences, 1));
-        std::fprintf(stderr, "gate T%.1f sentences %zu mean fluency %.4f pmi %.4f markup %.4f not-first %.3f\n", temps[ti],
+        std::fprintf(stderr, "gate T%s sentences %zu mean fluency %.4f pmi %.4f markup %.4f not-first %.3f\n", temp_label(temps[ti]).c_str(),
                      gst[ti].sentences, gst[ti].fluency / ns, gst[ti].pmi / ns, gst[ti].markup / ns, gst[ti].changed / ns);
     }
     if (a.prompts_file.empty()) return 0;
@@ -1469,7 +1541,7 @@ int cmd_sample(const Args& a) {
     sp.finish();
     std::size_t all_c = 0, all_n = 0;
     std::printf("GEN_EVAL copy32");
-    for (int ti = 0; ti < 3; ++ti) {
+    for (std::size_t ti = 0; ti < nt; ++ti) {
         std::size_t cv = 0, n = 0;
         for (const auto& g : gens[ti]) {
             const auto [x, y] = sp.covered(g);
@@ -1478,7 +1550,7 @@ int cmd_sample(const Args& a) {
         }
         all_c += cv;
         all_n += n;
-        std::printf(" T%.1f %.4f", temps[ti], n ? static_cast<double>(cv) / static_cast<double>(n) : 0.0);
+        std::printf(" T%s %.4f", temp_label(temps[ti]).c_str(), n ? static_cast<double>(cv) / static_cast<double>(n) : 0.0);
     }
     std::printf(" pooled %.4f\n", all_n ? static_cast<double>(all_c) / static_cast<double>(all_n) : 0.0);
     return 0;
@@ -2024,12 +2096,12 @@ std::unique_ptr<SimilarContext> default_sim(const Args& a, const std::uint8_t* t
 // words a part), per=N (triggers a word), stop=N (stop list size), mindf=N, minco=N, words=N (content words a training
 // document gives to pairs), topk=N, topict=X (topic temperature), every=N (topic refresh). The parts are built over
 // the train bytes; the topic part reads the similar-context expert's projected vectors (sim_vectors_path()).
-std::unique_ptr<DocTopic> make_doc(const Args& a, const std::uint8_t* text, std::size_t n, int& rc) {
+std::unique_ptr<DocTopic> make_doc(const std::string& doc, const std::uint8_t* text, std::size_t n, int& rc) {
     rc = 0;
-    if (a.doc.empty()) return nullptr;
+    if (doc.empty()) return nullptr;
     DocTopic::Params p;
     p.trig = p.cache = p.topic = false;
-    const std::string spec = a.doc == "default" ? std::string("trig,cache") : a.doc;
+    const std::string spec = doc == "default" ? std::string("trig,cache") : doc;
     for (const auto& f : split(spec, ',')) {
         const std::size_t eq = f.find('=');
         const std::string k = f.substr(0, eq), v = eq == std::string::npos ? "" : f.substr(eq + 1);
@@ -2054,7 +2126,7 @@ std::unique_ptr<DocTopic> make_doc(const Args& a, const std::uint8_t* text, std:
     }
     if (!(p.trig || p.cache || p.topic) || p.cand < 1 || p.per_source < 1 || p.topic_k < 1 || !(p.topic_temp > 0) ||
         p.topic_every < 1) {
-        std::cerr << "--doc " << a.doc << ": no part, or a bad setting\n";
+        std::cerr << "--doc " << doc << ": no part, or a bad setting\n";
         rc = 2;
         return nullptr;
     }
@@ -2162,6 +2234,46 @@ std::vector<std::vector<double>> fit_doc(const DocTopic& dt, const std::uint8_t*
     return lam;
 }
 
+// GEN-C2: fit_doc's mixture in less memory (context8k, qa's holdout). One stream from the train end; each part's
+// predictions are kept over the first half only, where its lambdas are fit (over cur, in DocTopic's part order) and it
+// is mixed; the second half is mixed as the stream reads it. The same numbers as fit_doc; no DOC lines.
+void mix_doc_into(const DocTopic& dt, const std::uint8_t* data, std::size_t train, std::size_t half, std::vector<double>& cur) {
+    const std::size_t span = cur.size(), h = std::min(half, span);
+    const auto& p = dt.params();
+    const bool on[DocTopic::kParts] = {p.trig, p.cache, p.topic};
+    std::vector<double> pe[DocTopic::kParts];
+    std::vector<int> bk[DocTopic::kParts];
+    for (int q = 0; q < DocTopic::kParts; ++q)
+        if (on[q]) pe[q].resize(h), bk[q].resize(h);
+    DocTopic::Stream st(dt);
+    for (std::size_t k = 0; k < h; ++k) {
+        for (int q = 0; q < DocTopic::kParts; ++q)
+            if (on[q]) {
+                double P[256];
+                bk[q][k] = st.predict(q, P);
+                pe[q][k] = P[data[train + k]];
+            }
+        st.feed(data[train + k]);
+    }
+    double lam[DocTopic::kParts][DocTopic::kBuckets] = {};
+    for (int q = 0; q < DocTopic::kParts; ++q) {
+        if (!on[q]) continue;
+        fit_lambdas(pe[q], cur, bk[q], h, DocTopic::kBuckets, lam[q]);
+        for (std::size_t k = 0; k < h; ++k) cur[k] = lam[q][bk[q][k]] * pe[q][k] + (1 - lam[q][bk[q][k]]) * cur[k];
+        std::vector<double>().swap(pe[q]);
+        std::vector<int>().swap(bk[q]);
+    }
+    for (std::size_t k = h; k < span; ++k) {
+        for (int q = 0; q < DocTopic::kParts; ++q)
+            if (on[q]) {
+                double P[256];
+                const int b = st.predict(q, P);
+                cur[k] = lam[q][b] * P[data[train + k]] + (1 - lam[q][b]) * cur[k];
+            }
+        st.feed(data[train + k]);
+    }
+}
+
 // simvec [wiki] --sim SPEC --out FILE (A4): the expert of SPEC built over the train bytes; its projected word rows
 // written as the file the default reads.
 int cmd_simvec(const Args& a) {
@@ -2231,6 +2343,8 @@ struct Lm {
     const cypha::cyphalm::bkn::ByteKN* kn = nullptr;  // BKN: byte Kneser-Ney, (a) replacing or (b) mixed into the trie
     const double* lkn = nullptr;                      // mixture by lkn per bucket (mix_bkn_into)
     bool kn_replace = false;
+    bool kn_gate = false;                 // BKN3: Kneser-Ney off inside an answer (in_answer), as the other experts
+    const double* lam_ans = nullptr;      // BKN3: InfiniGram's lambdas fit without Kneser-Ney, used where it is off
     const double* lc_dk = nullptr;        // ANS: the copy expert's lambdas inside a don't-know answer (--copy-dk)
     bool copy_frame = false;              // DK2: --copy-frame inside a don't-know answer (copy_closes_unopened; decode)
     // ANS: the next byte is inside a don't-know answer: the answer (from answer_at) begins "I don't know", the switch
@@ -2247,14 +2361,15 @@ struct Lm {
         if (packed) packed->fill_experts(seq.data(), seq.size(), follower_limit, Mode::Synth, e, m, pred, online_match);
         else model->fill_experts(seq.data(), seq.size(), follower_limit, Mode::Synth, e, m, pred, online_match);
         mix_dist(w, e, m, pred, P);
-        if (kn) bkn_mix(*kn, lkn, kn_replace, seq.data(), seq.size(), P);  // BKN
+        const bool kn_off = kn && kn_gate && in_answer(seq, answer_at);  // BKN3: the experts' gate
+        if (kn && !kn_off) bkn_mix(*kn, lkn, kn_replace, seq.data(), seq.size(), P);  // BKN
         if (ig) {
             const std::size_t len = std::min<std::size_t>(seq.size(), static_cast<std::size_t>(cap));
             const auto r =
                 ig->query(seq.data() + (seq.size() - len), len, cap, hint < 0 ? -1 : std::min(hint + 1, cap), 1, cur);
             hint = r.n;
             if (n_out) *n_out = r.n;
-            const double l = lam[bucket(r.n, r.total)];
+            const double l = (kn_off && lam_ans ? lam_ans : lam)[bucket(r.n, r.total)];  // BKN3
             for (int s = 0; s < 256; ++s) {
                 const double pc = r.total ? static_cast<double>(r.count[s]) / static_cast<double>(r.total) : 0.0;
                 P[s] = l * pc + (1 - l) * P[s];
@@ -2727,6 +2842,79 @@ int cmd_cls(const Args& a) {
     auto mean = [](const std::vector<double>& v) { return std::accumulate(v.begin(), v.end(), 0.0) / static_cast<double>(v.size()); };
     const auto h_t = bits(pt, half, H), h_i = bits(pih, half, H), f_t = bits(pt, H, N), f_i = bits(pif, H, N);
     std::printf("holdout2 trie %.6f trie+ig %.6f | fresh trie %.6f trie+ig %.6f\n", mean(h_t), mean(h_i), mean(f_t), mean(f_i));
+
+    // GEN-C2 (docs/reports/GEN_C_TOPIC_CACHE.md, "GEN-C2"): --doc V1;V2;... reads each variant of the document experts
+    // over qa's default chain: trie + InfiniGram, the class expert pos[1], the similar-context expert (default), copy.
+    // Dev: the holdout's second half, every lambda fit on its first half. With --sim-stream the stream after the
+    // holdout is the fresh read: every lambda fit on the whole holdout, read as one stream. The other cls reads are skipped.
+    if (!a.doc.empty()) {
+        const bool fresh = !a.sim_stream.empty();
+        const std::size_t M = fresh ? N : H;
+        auto cc = make_class_context(a.pos[1]);
+        if (!cc) return 1;
+        cc->build(data.data(), cfg.train);
+        int rc = 0;
+        const auto sc = default_sim(a, data.data(), cfg.train, rc);
+        if (rc) return rc;
+        std::vector<double> dev(pih.begin(), pih.begin() + static_cast<std::ptrdiff_t>(H)),
+            fr(pif.begin(), pif.begin() + static_cast<std::ptrdiff_t>(M));
+        auto both = [&](const std::vector<double>& pe, const std::vector<int>& bk, int nb, int copy_m) {
+            mix_into(pe, bk, half, nb, dev, copy_m);
+            if (fresh) mix_into(pe, bk, H, nb, fr, copy_m);
+        };
+        std::vector<double> pe(M);
+        std::vector<int> bk(M);
+        for (std::size_t k = 0; k < M; ++k) {
+            double P[256];
+            bk[k] = ClassContext::bucket(cc->predict(data.data(), cfg.train + k, P));
+            pe[k] = P[data[cfg.train + k]];
+        }
+        both(pe, bk, ClassContext::kBuckets, -1);
+        if (sc) {
+            for (std::size_t k = 0; k < M; ++k) {
+                double P[256];
+                bk[k] = SimilarContext::bucket(sc->predict(data.data(), cfg.train + k, P));
+                pe[k] = P[data[cfg.train + k]];
+            }
+            both(pe, bk, SimilarContext::kBuckets, -1);
+        }
+        if (!a.no_copy) {
+            for (std::size_t k = 0; k < M; ++k) {
+                int n = 0;
+                pe[k] = copy_pred(data.data(), cfg.train + k, n) == data[cfg.train + k] ? 1.0 : 0.0;
+                bk[k] = copy_bucket(n);
+            }
+            both(pe, bk, kCopyBuckets, a.copy_min);
+        }
+        auto change = [](const std::vector<double>& with, const std::vector<double>& without) {
+            std::vector<double> d(with.size());
+            for (std::size_t k = 0; k < d.size(); ++k) d[k] = with[k] - without[k];
+            return d;
+        };
+        const auto h0 = bits(dev, half, H);
+        const auto f0 = fresh ? bits(fr, H, M) : std::vector<double>{};
+        std::printf("doc2 chain trie+ig+cls+%s%s holdout2 %.6f", sc ? "sim+" : "", a.no_copy ? "" : "copy", mean(h0));
+        if (fresh) std::printf(" | fresh %.6f (%zu bytes)", mean(f0), M - H);
+        std::printf("\n");
+        for (const auto& v : split(a.doc, ';')) {
+            const auto dt = make_doc(v, data.data(), cfg.train, rc);
+            if (!dt) return rc ? rc : 1;
+            std::vector<double> d1 = dev;
+            fit_doc(*dt, data.data(), cfg.train, half, d1);
+            const auto h1 = bits(d1, half, H);
+            std::printf("doc2 %s holdout2 %.6f -> %.6f\n", v.c_str(), mean(h0), mean(h1));
+            print_boot("doc2 " + v + " holdout2_change", block_boot(change(h1, h0), 4096, 2000, 7));
+            if (fresh) {
+                std::vector<double> f1 = fr;
+                fit_doc(*dt, data.data(), cfg.train, H, f1);
+                const auto fb = bits(f1, H, M);
+                std::printf("doc2 %s fresh %.6f -> %.6f\n", v.c_str(), mean(f0), mean(fb));
+                print_boot("doc2 " + v + " fresh_change", block_boot(change(fb, f0), 4096, 4000, 11));
+            }
+            std::fflush(stdout);
+        }
+        return 0;
+    }
 
     // Surface prompts and their human continuations.
     const int np = 200, nbytes = 400;
@@ -4669,16 +4857,9 @@ int cmd_qa(const Args& a, const QaOpts& o) {
         pt[k] = M[data[i]];
         bits_all += -std::log2(pt[k]);
     }
-    std::vector<double> lkn;  // BKN: Kneser-Ney into the trie mixture, before InfiniGram and the other experts
-    if (kn) {
-        double b0 = 0, b1 = 0;
-        for (std::size_t k = half; k < H; ++k) b0 -= std::log2(pt[k]);
-        lkn = mix_bkn_into(*kn, data.data(), cfg.train, half, kn_rep, pt);
-        for (std::size_t k = half; k < H; ++k) b1 -= std::log2(pt[k]);
-        std::cout << "bkn " << a.bkn << " way " << a.bkn_way << " table_bytes " << kn->bytes() << " holdout2_trie_bpc "
-                  << b0 / static_cast<double>(H - half) << " holdout2_trie_bkn_bpc " << b1 / static_cast<double>(H - half) << "\n";
-    }
-    double lam[kBuckets] = {0}, lc_t[kCopyBuckets] = {0}, lc_i[kCopyBuckets] = {0};
+    // InfiniGram over the holdout (cap 8192). BKN3: queried before Kneser-Ney is mixed into pt (the queries do not read
+    // pt), so lam0, InfiniGram's lambdas over the trie mixture without Kneser-Ney, can be fit for the answers.
+    double lam[kBuckets] = {0}, lam0[kBuckets] = {0}, lc_t[kCopyBuckets] = {0}, lc_i[kCopyBuckets] = {0};
     FmInfiniGram::Cursor cur;
     for (std::size_t k = 0, prev = 0; k < H; ++k) {
         const std::size_t i = cfg.train + k;
@@ -4688,6 +4869,18 @@ int cmd_qa(const Args& a, const QaOpts& o) {
         prev = static_cast<std::size_t>(r.n);
         pinf[k] = r.total ? static_cast<double>(r.count[data[i]]) / static_cast<double>(r.total) : 0.0;
         bk[k] = bucket(r.n, r.total);
+    }
+    const bool kn_off_ans = kn && a.bkn_answers == "off";  // BKN3: Kneser-Ney off inside answers
+    if (kn_off_ans) fit_lambdas(pinf, pt, bk, half, kBuckets, lam0);
+    std::vector<double> lkn;  // BKN: Kneser-Ney into the trie mixture, before InfiniGram and the other experts
+    if (kn) {
+        double b0 = 0, b1 = 0;
+        for (std::size_t k = half; k < H; ++k) b0 -= std::log2(pt[k]);
+        lkn = mix_bkn_into(*kn, data.data(), cfg.train, half, kn_rep, pt);
+        for (std::size_t k = half; k < H; ++k) b1 -= std::log2(pt[k]);
+        std::cout << "bkn " << a.bkn << " way " << a.bkn_way << " table_bytes " << kn->bytes() << " holdout2_trie_bpc "
+                  << b0 / static_cast<double>(H - half) << " holdout2_trie_bkn_bpc " << b1 / static_cast<double>(H - half) << "\n";
+        if (kn_off_ans) std::cout << "bkn_answers off (Kneser-Ney off inside answers; InfiniGram's lambdas there fit without it)\n";
     }
     fit_lambdas(pinf, pt, bk, half, kBuckets, lam);
     double bits_trie2 = 0, bits_ig2 = 0;
@@ -4831,6 +5024,49 @@ int cmd_qa(const Args& a, const QaOpts& o) {
         for (double l : lc_i) std::cout << " " << l;
         std::cout << "\n";
     }
+    // GEN-C2 (docs/reports/GEN_C_TOPIC_CACHE.md, "GEN-C2"): the document experts' cache (--doc SPEC to read another
+    // setting) over trie + InfiniGram (+ cls) (+ sim) (+ copy), last: its lambdas on the first half, its line and LCI on
+    // the second half's 256 blocks (as copy's). It reads only these lines; no answer mixer is given it. The per-byte
+    // arrays above are not read again: they go first, then the cache is built over wiki train's words in their memory.
+    // --no-doc leaves it out.
+    if (!a.no_doc) {
+        std::vector<double>().swap(pt);
+        std::vector<double>().swap(pig);
+        std::vector<double>().swap(bt0);
+        if (copy_fit) {
+            for (std::size_t k = 0; k < H; ++k) bi0[k] = lc_i[cbk[k]] * pcp[k] + (1 - lc_i[cbk[k]]) * bi0[k];
+            std::vector<double>().swap(pcp);
+            std::vector<int>().swap(cbk);
+        }
+        const std::size_t nb = 256, bl = (H - half) / nb;
+        auto blocks = [&](std::vector<double>& out) {
+            out.assign(nb, 0.0);
+            double sum = 0;
+            for (std::size_t k = half; k < half + nb * bl; ++k) {
+                const double x = -std::log2(bi0[k]);
+                out[(k - half) / bl] += x / static_cast<double>(bl);
+                sum += x;
+            }
+            return sum / static_cast<double>(nb * bl);
+        };
+        std::vector<double> before, after;
+        const double b0 = blocks(before);
+        {
+            int drc = 0;
+            const auto dt = make_doc(a.doc.empty() ? std::string("cache") : a.doc, data.data(), cfg.train, drc);
+            if (!dt) return drc ? drc : 1;
+            mix_doc_into(*dt, data.data(), cfg.train, half, bi0);
+        }
+        const double b1 = blocks(after);
+        const std::string cl = std::string(cc ? "_cls" : "") + (sc ? "_sim" : "") + (copy_fit ? "_copy" : "");
+        std::cout << "holdout2_trie_ig" << cl << "_bpc " << b0 << " holdout2_trie_ig" << cl << "_doc_bpc " << b1 << " (first "
+                  << nb * bl << " bytes of the second half)\n";
+        std::vector<double> d(nb);
+        for (std::size_t b = 0; b < nb; ++b) d[b] = before[b] - after[b];  // bits per byte saved
+        const auto g = cypha::eval::bayesian_bootstrap(d, 0.005), g0 = cypha::eval::bayesian_bootstrap(d, 0.0);
+        std::cout << "doc_lci trie_ig" << cl << " gain_bpc " << g.mean << " lo90 " << g.lo90 << " hi90 " << g.hi90
+                  << " p_gain_gt_0.005 " << g.p_gt << " p_gain_gt_0 " << g0.p_gt << " blocks " << g.n_eff << "\n";
+    }
     for (int i = 0; i < 5; ++i) std::cout << "w" << i << " " << w[i] << "\n";
     std::cout << "wmatch " << w[5] << "\n";
 
@@ -4842,7 +5078,8 @@ int cmd_qa(const Args& a, const QaOpts& o) {
     if (o.copy_dk) {
         Lm base[2] = {{nullptr, w, all_followers, false, nullptr, nullptr, nullptr, 8192, nullptr, nullptr, nullptr,
                        nullptr, &pm},
-                      {nullptr, w, all_followers, false, &ig, lam, nullptr, 8192, nullptr, nullptr, nullptr, nullptr, &pm}};
+                      {nullptr, w, all_followers, false, &ig, kn_off_ans ? lam0 : lam, nullptr, 8192, nullptr, nullptr, nullptr,
+                       nullptr, &pm}};  // BKN3: inside answers InfiniGram's lambdas are lam0 when Kneser-Ney is off there
         std::vector<double> pe, pb[2];
         std::vector<int> bk;
         std::size_t used = 0;
@@ -4904,6 +5141,7 @@ int cmd_qa(const Args& a, const QaOpts& o) {
                  {nullptr, w, lim, false, &ig, lam, lc_i, 8192, cc.get(), lcl_i, sc.get(), lsm_i, &pm}};
     for (auto& l : lms) l.sim_gate = sc && parse_sim(o.sim).gate;  // A4: the expert off inside answers
     for (auto& l : lms) l.kn = kn.get(), l.lkn = lkn.empty() ? nullptr : lkn.data(), l.kn_replace = kn_rep;  // BKN
+    for (auto& l : lms) l.kn_gate = kn_off_ans, l.lam_ans = kn_off_ans ? lam0 : nullptr;  // BKN3
     for (int l = 0; l < 4; ++l) lms[l].cls_gate = true, lms[l].lc_out = o.copy_out ? (l % 2 ? lc_i : lc_t) : nullptr;  // B4C
     if (o.copy_dk)
         for (int l = 0; l < 4; ++l) lms[l].lc_dk = l % 2 ? ldk_i : ldk_t, lms[l].copy_frame = o.copy_frame;  // ANS; DK2
@@ -5634,6 +5872,35 @@ int cmd_selftest() {
             std::cerr << "selftest: class / copy gate checks failed\n";
             return 1;
         }
+        // BKN3: Kneser-Ney off inside an answer (kn_gate) through the same gate: inside one, the trie + InfiniGram
+        // distribution with lam_ans, as a model without Kneser-Ney gives it; outside one, Kneser-Ney and lam as before.
+        const cypha::cyphalm::bkn::ByteKN tkn(data.data(), cfg.train, 4);
+        const FmInfiniGram tig(data.data(), cfg.train);
+        std::vector<double> lk(static_cast<std::size_t>(tkn.buckets()), 0.5);
+        double la[kBuckets], lb[kBuckets];
+        std::fill(la, la + kBuckets, 0.3);
+        std::fill(lb, lb + kBuckets, 0.7);
+        Lm ig_a = plain, ig_b = plain;
+        ig_a.ig = ig_b.ig = &tig;
+        ig_a.lam = la;
+        ig_b.lam = lb;
+        Lm kn_on = ig_a, kn_off = ig_a;
+        kn_on.kn = kn_off.kn = &tkn;
+        kn_on.lkn = kn_off.lkn = lk.data();
+        kn_off.kn_gate = true;
+        kn_off.lam_ans = lb;
+        double F[256], G[256], H[256], I[256], J[256], K[256];
+        dist(ig_b, inside, F);    // no Kneser-Ney, InfiniGram at lb
+        dist(kn_off, inside, G);  // gated: must be F
+        dist(kn_on, inside, H);   // BKN2: Kneser-Ney inside the answer
+        dist(kn_on, outside, I);
+        dist(kn_off, outside, J);  // outside an answer the gate changes nothing: must be I
+        dist(ig_a, outside, K);    // and Kneser-Ney is in it: not K
+        if (std::memcmp(F, G, sizeof F) != 0 || std::memcmp(G, H, sizeof G) == 0 || std::memcmp(I, J, sizeof I) != 0 ||
+            std::memcmp(J, K, sizeof J) == 0) {
+            std::cerr << "selftest: Kneser-Ney answer gate checks failed (BKN3)\n";
+            return 1;
+        }
     }
     // GEN-B: the sentence gate on the tiny model with copy lambdas. Specs parse or are refused; the text is n bytes and
     // the same for the same seed; the first sentence kept is the best-scoring of the K candidates (ties: the lower k);
@@ -6184,6 +6451,23 @@ int cmd_selftest() {
         fz.feed(reinterpret_cast<const std::uint8_t*>(p3.data()), p3.size());
         okd = okd && fz.predict(DocTopic::kTrig, P) > 0 && P['L'] == 0 && P['T'] > 0 &&
               fz.predict(DocTopic::kCache, P) > 0 && P['C'] == 0 && P['A'] > 0.99;
+        {  // GEN-C2: mix_doc_into (context8k, qa) gives fit_doc's numbers, trig and cache on, over a toy mixture
+            const auto* cb = reinterpret_cast<const std::uint8_t*>(corpus.data());
+            auto base = [](std::size_t k) { return 0.02 + 0.4 * static_cast<double>((k * 2654435761u) % 1000) / 1000.0; };
+            std::vector<double> c1(corpus.size());
+            for (std::size_t k = 0; k < c1.size(); ++k) c1[k] = base(k);
+            std::vector<double> c2 = c1;
+            const std::size_t hf = c1.size() / 2;
+            fit_doc(toy, cb, 0, hf, c1);
+            mix_doc_into(toy, cb, 0, hf, c2);
+            double dmax = 0;
+            std::size_t moved = 0;
+            for (std::size_t k = 0; k < c1.size(); ++k) {
+                dmax = std::max(dmax, std::fabs(c1[k] - c2[k]));
+                moved += c2[k] != base(k);
+            }
+            okd = okd && dmax < 1e-15 && moved > 0;
+        }
         if (!okd) {
             std::cerr << "selftest: document experts (GEN-C) wrong on the toy corpus\n";
             return 1;
@@ -6404,8 +6688,9 @@ void usage() {
                  "  context8k [wiki] [dolly]\n"
                  "  sample <wiki> <out_dev> [out_fresh] [--prompts 250] [--bytes 600] [--save FILE | --model FILE]\n"
                  "  cls <wiki> <TABLE|shape>[:tail[:orders[:flags]]] [more specs] [--sim SPEC ...] [--sim-fresh] [--sim-surface]\n"
-                 "  bkn <wiki> K[:m:c:d] [more specs] [--bkn-fresh] [--bkn-stack]   (BKN: packed byte Kneser-Ney)\n"
                  "      [--sim-stream FROM:LEN] [--sim-bits PREFIX] [--sim-growth MIB,MIB,...]   (A4e)\n"
+                 "      cls <wiki> shape --doc V1;V2;... [--sim-stream FROM:LEN]   (GEN-C2)\n"
+                 "  bkn <wiki> K[:m:c:d] [more specs] [--bkn-fresh] [--bkn-stack]   (BKN: packed byte Kneser-Ney)\n"
                  "  simpair [--margin M] REF.f64 FILE.f64 ...   (A4e: cls --sim-bits files paired against REF)\n"
                  "  SPEC: [default,][vec=PREFIX|FILE][,W=8][,k=32][,T=0.05][,min=-1][,sif=1][,dim=64][,drop=1][,lists=512][,probe=8][,tail=32]\n"
                  "        [,src=all|wiki][,gate=1][,mode=knn|dedupe][,online=0]   (default = %s; vectors from $CYPHA_SIMVEC, else %s)\n"
@@ -6422,7 +6707,8 @@ void usage() {
                  "  selftest\n"
                  "  options: --wiki P --dolly P --train N --sample N; qa, sample, context8k: --sim SPEC | --no-sim,\n"
                  "           --cls SPEC | --no-cls (sample: no class expert unless --cls), --copy-min N (default 8) | --no-copy,\n"
-                 "           --bkn K[:m:c:d] [--bkn-way a|b] (byte Kneser-Ney; default 6:4:2:1, way b) | --no-bkn\n"
+                 "           --bkn K[:m:c:d] [--bkn-way a|b] (byte Kneser-Ney; default 6:4:2:1, way b) | --no-bkn,\n"
+                 "           --bkn-answers on|off (qa, context8k: Kneser-Ney inside answers, or off there as the experts)\n"
                  "  paths default to $CYPHA_WIKI / $CYPHA_DOLLY, then %s and %s\n",
                  kSimDefault, CYPHA_SIMVEC_DEFAULT, kDefaultWiki, kDefaultDolly);
 }
@@ -6457,6 +6743,10 @@ int main(int argc, char** argv) {
     if (kn_cmd && !a.no_bkn && a.bkn.empty()) a.bkn = kBknDefault;
     if (!a.bkn.empty() && (!kn_cmd || (a.bkn_way != "a" && a.bkn_way != "b") || bkn_spec(a.bkn).empty())) {
         std::cerr << "--bkn K[:m:c:d] is for qa, sample and context8k, with --bkn-way a (replace) or b (add)\n";  // BKN
+        return 2;
+    }
+    if (a.bkn_answers != "on" && a.bkn_answers != "off") {  // BKN3
+        std::cerr << "--bkn-answers on|off (Kneser-Ney inside answers: on, BKN2; off, the experts' gate)\n";
         return 2;
     }
     if ((!a.model.empty() || !a.save.empty()) && cmd != "chat" && cmd != "sample" && cmd != "qa") {

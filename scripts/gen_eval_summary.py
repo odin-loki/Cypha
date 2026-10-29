@@ -75,13 +75,15 @@ def one(outdir, label, split):
     for line in so.splitlines():
         if line.startswith("GEN_EVAL"):
             print("\n" + line)
-    print("\n## Five samples (T = 0.8)\n")
+    kinds = [line.split("\t")[1] for line in open("%s/%s.gen.txt" % (outdir, label), encoding="utf-8") if line.startswith("GEN\t")]
+    show = "trie_T0.8" if "trie_T0.8" in kinds or not kinds else kinds[0]  # TEMPS: a run without T 0.8 shows its first kind
+    print("\n## Five samples (T = %s)\n" % show[len("trie_T"):])
     prompt, shown = None, 0
     for line in open("%s/%s.gen.txt" % (outdir, label), encoding="utf-8"):
         f = line.rstrip("\n").split("\t")
         if f[0] == "PROMPT":
             prompt = unesc(f[2])
-        elif f[0] == "GEN" and f[1] == "trie_T0.8" and shown < 5:
+        elif f[0] == "GEN" and f[1] == show and shown < 5:
             print("- **Prompt:** %s\n  **CyphaLM:** %s\n" % (prompt, unesc(f[2])[:400].replace("\n", " / ")))
             shown += 1
 
