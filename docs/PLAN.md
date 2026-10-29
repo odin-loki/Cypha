@@ -950,6 +950,7 @@ Everything raised on 2026-10-26, and where this plan covers it.
 | 78 | Decided by measurement under row 55 (2026-10-29), open to Odin's veto: the low-only don't-know token is the answering form | [`reports/A1D_A2B_ANSWERING_VARIANTS.md`](reports/A1D_A2B_ANSWERING_VARIANTS.md) (ANS) |
 | 79 | Decided by measurement under row 55 (2026-10-29), open to Odin's veto: the token's statistic is `ent_bold` (frozen test 0.963 / 0.52, D2 met; `ent_title` 0.635 / 0.94) | ANS |
 | 80 | Rule 3 adopted the entity frame + `--copy-dk` for the tag (test: tags name the entity 49 of 50); veto recommended (the message disagrees with the tag in 50 of 50; frame-token echo in 23 of 97); defaults unchanged until Odin decides | ANS |
+| 81 | Decided by measurement under row 55 (2026-10-29), open to Odin's veto: a Wikidata seed value widens a type lexicon only when Wikidata's own type agrees (persons: instance of human; places: a coordinate location; arm PL, chosen by the registered rule). Removes F2b's leak; gold-test agreement unchanged (96 / 101), confirmed facts −0.10%. Behind `--lexicon-type-check` until the reference outputs are regenerated, then on by default | [F2 report "F2c"](reports/F2_PATTERN_LEARNING.md) |
 
 ---
 
