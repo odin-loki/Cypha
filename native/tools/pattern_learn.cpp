@@ -146,6 +146,13 @@
 //   [--order-relaxed MARGIN] [--s12c-dev] [--s12c-fresh write|read]; --gen-deep … [--s12c] [--g1-prior chain|cap3|depth].
 //   G19 (refinement) was removed by S12c's registered rule; its code is in git at main's 0ce072f.
 //
+// S8e (2026-10-29, docs/reports/S8E_GRADER_AND_FRESH_SET.md; wd_grader.hpp):
+//   --gen-rules / --gen-links / --gen-anomaly (G3 only) / --gen-analogy ... --fresh-slots FILE: the pools on a set file's
+//   slots (bench/eval/s8e_slots_{dev,test}.tsv) with their store facts hidden; the file's labels are not read.
+//   --sources ... --s8e GRADER_DIR SET_DEV SET_TEST [--s8e-pool dev|test GEN FILE]... [--s8e-regrade S8D_FRESH] [--read-test]:
+//   the grader that knows Wikidata's names and places (tables from scripts/fresh_slots.py grader), calibration on S8d's set
+//   and the fresh dev pools, variant M (>= 10 positives) chosen on dev, and S8's gate read once on the test pools.
+//
 // Build: g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp -o pattern_learn
 // Usage: pattern_learn <enwik8> <outdir> [--cv] [--folds K] [--min-train N] [--base-rate A] [--sample N] [--seed S]
 //          [--wikidata FILE [--wikidata-gold-only]] [--phi FILE] [--shard FILE --dev DEV --test TEST [--slice-end B] [--holdout-from B]]
@@ -172,6 +179,7 @@
 #include "cypha/eval/gen_laws.hpp"
 #include "cypha/eval/gen_rules.hpp"
 #include "cypha/eval/sources.hpp"
+#include "cypha/eval/wd_grader.hpp"
 #include "cypha/eval/unknown_signals.hpp"
 #include "cypha/eval/worlds.hpp"
 
@@ -6864,6 +6872,20 @@ int run(int argc, char** argv) {
 // Nothing here answers a question: these are Cypha's own hypotheses (PLAN rule 10).
 namespace s8b {
 
+// S8e: the slots of a set file in S15's columns (every (subject, relation) whose relation is one of pattern_learn's), for
+// --fresh-slots FILE (docs/reports/S8E_GRADER_AND_FRESH_SET.md). The file's labels are not read.
+std::set<std::pair<string, string>> slots_of_file(const string& path) {
+    std::set<std::pair<string, string>> out;
+    std::ifstream f(path);
+    string l;
+    std::getline(f, l);
+    while (std::getline(f, l)) {
+        const auto c = split(l, '\t');
+        if (c.size() >= 6 && rel_index(c[5]) >= 0) out.insert({c[1], c[5]});
+    }
+    return out;
+}
+
 using ecs::TestOutcome;
 constexpr TestOutcome kPos = TestOutcome::Positive, kNeg = TestOutcome::Negative, kInc = TestOutcome::Inconclusive;
 
@@ -7303,7 +7325,7 @@ vector<S15Row> load_s15(const string& path) {
 
 int run(int argc, char** argv) {
     if (argc < 9) {
-        std::fprintf(stderr, "usage: pattern_learn --gen-links ENWIK8 SEEDS.tsv FACTS_F2.tsv WD_VALUES.tsv PATTERNS.tsv S15_DIR OUT_PREFIX [--read-test] [--fresh-confirm | --fresh-test-half]\n");
+        std::fprintf(stderr, "usage: pattern_learn --gen-links ENWIK8 SEEDS.tsv FACTS_F2.tsv WD_VALUES.tsv PATTERNS.tsv S15_DIR OUT_PREFIX [--read-test] [--fresh-confirm | --fresh-test-half | --fresh-slots FILE]\n");
         return 2;
     }
     const double t0 = now_s();
@@ -7311,11 +7333,13 @@ int run(int argc, char** argv) {
     bool read_test = false, fresh_confirm = false;  // --fresh-confirm: S8d's fresh G6/G7 set (docs/reports/S8D_PROMOTION.md)
     bool fresh_test = false;  // --fresh-test-half: S10's gate set, the same on S15 test's bit-17 half (docs/reports/S10_CURIOSITY_SCHEDULER.md)
     double abc_w = 0;         // --abc-w W: S6c, the GATE read with G12's closed form in P0 (the S6 report's "S6c")
+    string fresh_slots;  // --fresh-slots FILE: S8e's set, the same on a set file's slots (docs/reports/S8E_GRADER_AND_FRESH_SET.md)
     for (int i = 9; i < argc; ++i) {
         if (string(argv[i]) == "--abc-w" && i + 1 < argc) { abc_w = std::atof(argv[++i]); continue; }
         if (string(argv[i]) == "--read-test") read_test = true;
         else if (string(argv[i]) == "--fresh-confirm") fresh_confirm = true;
         else if (string(argv[i]) == "--fresh-test-half") fresh_test = true;
+        else if (string(argv[i]) == "--fresh-slots" && i + 1 < argc) fresh_slots = argv[++i];
         else { std::fprintf(stderr, "unknown option %s\n", argv[i]); return 2; }
     }
     char b[1024];
@@ -7583,12 +7607,15 @@ int run(int argc, char** argv) {
         // ---- S8d: the chosen generator on S15 dev's confirm-half slots with their facts hidden (docs/reports/S8D_PROMOTION.md).
         // S15's labels are not read. Priors by PROMO's isotonic map (fitted on its dev items only); tests T1, T6, T4.
         // S10: --fresh-test-half takes the slots of S15 test's subjects with bit 17 = 1 instead.
-        if (fresh_confirm || fresh_test) {
-            const char* ftag = fresh_test ? "S10 FRESH" : "S8D FRESH";
-            const char* fslots = fresh_test ? "test-half (bit 17 = 1)" : "confirm-half";
+        // S8e: --fresh-slots FILE takes the slots of a set file instead.
+        if (fresh_confirm || fresh_test || !fresh_slots.empty()) {
+            const char* ftag = !fresh_slots.empty() ? "S8E FRESH" : fresh_test ? "S10 FRESH" : "S8D FRESH";
+            const char* fslots = !fresh_slots.empty() ? "set-file" : fresh_test ? "test-half (bit 17 = 1)" : "confirm-half";
             std::set<std::pair<string, string>> cslots;
-            for (const S15Row& x : load_s15(string(argv[7]) + (fresh_test ? "/temporal_holdout_test.tsv" : "/temporal_holdout_dev.tsv")))
-                if (((fnv(x.s) >> 17) & 1) == 1 && rel_index(x.r) >= 0) cslots.insert({x.s, x.r});
+            if (!fresh_slots.empty()) cslots = slots_of_file(fresh_slots);
+            else
+                for (const S15Row& x : load_s15(string(argv[7]) + (fresh_test ? "/temporal_holdout_test.tsv" : "/temporal_holdout_dev.tsv")))
+                    if (((fnv(x.s) >> 17) & 1) == 1 && rel_index(x.r) >= 0) cslots.insert({x.s, x.r});
             ecs::TripleStore fst;
             std::size_t held = 0;
             for (const auto& t : triples) {
@@ -8400,7 +8427,7 @@ long days_of(const Date& D) {  // days from civil (proleptic Gregorian), for the
 
 int run(int argc, char** argv) {
     if (argc < 9) {
-        std::fprintf(stderr, "usage: pattern_learn --gen-rules ENWIK8 SEEDS.tsv FACTS_F2.tsv WD_VALUES.tsv PATTERNS.tsv S15_DIR OUT_PREFIX [--read-test] [--fresh-confirm | --fresh-test-half]\n");
+        std::fprintf(stderr, "usage: pattern_learn --gen-rules ENWIK8 SEEDS.tsv FACTS_F2.tsv WD_VALUES.tsv PATTERNS.tsv S15_DIR OUT_PREFIX [--read-test] [--fresh-confirm | --fresh-test-half | --fresh-slots FILE]\n");
         return 2;
     }
     const double t0 = now_s();
@@ -8408,10 +8435,12 @@ int run(int argc, char** argv) {
     bool read_test = false, fresh_confirm = false;  // --fresh-confirm: S8d's fresh G2 set (docs/reports/S8D_PROMOTION.md)
     bool fresh_test = false;  // --fresh-test-half: S10's gate set, the same on S15 test's bit-17 half (docs/reports/S10_CURIOSITY_SCHEDULER.md)
     int t4_variant = 1;
+    string fresh_slots;  // --fresh-slots FILE: S8e's set, the same on a set file's slots (docs/reports/S8E_GRADER_AND_FRESH_SET.md)
     for (int i = 9; i < argc; ++i) {
         if (string(argv[i]) == "--read-test") read_test = true;
         else if (string(argv[i]) == "--fresh-confirm") fresh_confirm = true;
         else if (string(argv[i]) == "--fresh-test-half") fresh_test = true;
+        else if (string(argv[i]) == "--fresh-slots" && i + 1 < argc) fresh_slots = argv[++i];
         else if (string(argv[i]) == "--t4-pattern") t4_variant = 0;
         else {
             std::fprintf(stderr, "unknown option %s\n", argv[i]);
@@ -8670,11 +8699,14 @@ int run(int argc, char** argv) {
         // ---- S8d: G2 on S15 dev's confirm-half slots with their facts hidden (docs/reports/S8D_PROMOTION.md). S15's labels
         // are not read; R1's plan and combination rule; T5 left out (Wikidata is what S15 grades against).
         // S10: --fresh-test-half takes the slots of S15 test's subjects with bit 17 = 1 instead.
-        if (fresh_confirm || fresh_test) {
-            const string ftag = fresh_test ? "S10 FRESH" : "S8D FRESH";
+        // S8e: --fresh-slots FILE takes the slots of a set file instead.
+        if (fresh_confirm || fresh_test || !fresh_slots.empty()) {
+            const string ftag = !fresh_slots.empty() ? "S8E FRESH" : fresh_test ? "S10 FRESH" : "S8D FRESH";
             std::set<std::pair<string, string>> cslots;
-            for (const auto& R : load_s15(s15dir + (fresh_test ? "/temporal_holdout_test.tsv" : "/temporal_holdout_dev.tsv")))
-                if (((fnv(R.s) >> 17) & 1) == 1 && rel_index(R.r) >= 0) cslots.insert({R.s, R.r});
+            if (!fresh_slots.empty()) cslots = s8b::slots_of_file(fresh_slots);
+            else
+                for (const auto& R : load_s15(s15dir + (fresh_test ? "/temporal_holdout_test.tsv" : "/temporal_holdout_dev.tsv")))
+                    if (((fnv(R.s) >> 17) & 1) == 1 && rel_index(R.r) >= 0) cslots.insert({R.s, R.r});
             Facts fred;
             std::size_t held = 0;
             for (const auto& [s, fs] : kby)
@@ -8708,7 +8740,7 @@ int run(int argc, char** argv) {
                 }
             }
             std::snprintf(b, sizeof b, "%s G2 %s slots %zu | store facts hidden %zu, reduced store %zu | slots whose subject is in the store %zu, "
-                          "with a rule candidate %zu | hypotheses %zu", ftag.c_str(), fresh_test ? "test-half (bit 17 = 1)" : "confirm-half", cslots.size(), held, fst.size(), in_store, with_cand, fh.size());
+                          "with a rule candidate %zu | hypotheses %zu", ftag.c_str(), !fresh_slots.empty() ? "set-file" : fresh_test ? "test-half (bit 17 = 1)" : "confirm-half", cslots.size(), held, fst.size(), in_store, with_cand, fh.size());
             std::cout << b << "\n";
             run_loop(fh, PL, ftag + " G2", out + ".fresh_g2.prereg.tsv");
             std::map<string, std::size_t> states;
@@ -10383,24 +10415,31 @@ vector<Hyp> load_hyps(const string& path, const string& gen, const string& want_
     return out;
 }
 
-// The grader on S15 (one half): +1 true, 0 false, -1 ungraded (registered rule).
+// The grader on S15 (one half): +1 true, 0 false, -1 ungraded (registered rule). With S8e's tables (T set), Wikidata's
+// names and places too (docs/reports/S8E_GRADER_AND_FRESH_SET.md, Part 1); without them, S8c's grader unchanged.
 struct Grader {
     std::unordered_map<string, vector<std::pair<src::Value, int>>> slot;  // norm_subject(s) + '\x1f' + r -> (value, label)
+    const cypha::eval::wdgrade::Tables* T = nullptr;
     void add(const Row& x) { slot[src::norm_subject(x.s) + '\x1f' + x.r].push_back({src::make_value(x.v, x.vitem), x.label}); }
-    int grade(const string& s, const string& r, const src::Value& v) const {
+    // why, when given, receives the basis (wd_grader.hpp's grade_slot).
+    int grade(const string& s, const string& r, const src::Value& v, string* why = nullptr) const {
         const auto it = slot.find(src::norm_subject(s) + '\x1f' + r);
-        if (it == slot.end()) return -1;
-        bool any_true = false, match_false = false;
-        for (const auto& [val, lab] : it->second) {
-            if (lab == 1) {
-                any_true = true;
-                if (src::same_value(r, val, v)) return 1;
-            } else if (lab == 0 && src::same_value(r, val, v)) {
-                match_false = true;
-            }
+        if (it == slot.end()) {
+            if (why) *why = "no-slot";
+            return -1;
         }
-        if (match_false) return 0;
-        return any_true && src::single_valued(r) ? 0 : -1;
+        const char* w = "";
+        const int g = cypha::eval::wdgrade::grade_slot(T, r, it->second, v, &w);
+        if (why) *why = w;
+        return g;
+    }
+    // The slot's values for an audit line: label, shown value and item, ';' separated.
+    string values(const string& s, const string& r) const {
+        const auto it = slot.find(src::norm_subject(s) + '\x1f' + r);
+        string o;
+        if (it == slot.end()) return o;
+        for (const auto& [val, lab] : it->second) o += (o.empty() ? "" : ";") + std::to_string(lab) + ":" + val.raw + ":" + val.qid;
+        return o;
     }
 };
 
@@ -10418,6 +10457,35 @@ double odds(double p) {
 using Accepted = std::map<std::pair<int, string>, ecs::OutcomeLikelihoods>;
 
 string item_key(const Hyp& h) { return src::norm_subject(h.s) + '\x1f' + h.r + '\x1f' + src::norm_name(h.o); }
+
+// Each accepted (source, group) measured on graded hypotheses (S8d's calibration): its own tally when it holds at least 10
+// graded true and 10 graded false, else the source's pooled tally; it carries a promotion only if LR+ >= 10, and (S8e's
+// variant M, min_pos > 0) only if the tally it uses holds at least min_pos positive results.
+struct Calib {
+    std::map<std::pair<int, string>, ecs::TestTally> cell;
+    std::map<int, ecs::TestTally> pooled;
+    Accepted cal;
+    std::map<std::pair<int, string>, bool> carry, own;
+};
+Calib calibrate(const Sources& S, const vector<std::pair<const Hyp*, int>>& graded, const Accepted& accepted, double min_pos) {
+    Calib C;
+    for (const auto& [h, g] : graded) {
+        const src::Value v = src::make_value(h->o);
+        for (const auto& [kg, L] : accepted) {
+            if (kg.second != group_of(h->r)) continue;
+            const TestOutcome o = S.answer(kg.first, h->s, h->r, v);
+            C.cell[kg].add(g == 1, o), C.pooled[kg.first].add(g == 1, o);
+        }
+    }
+    for (const auto& [kg, L1] : accepted) {
+        bool own = false;
+        const ecs::OutcomeLikelihoods L = src::calibrated_likelihoods(C.cell[kg], C.pooled[kg.first], 10.0, &own);
+        const ecs::TestTally& used = own ? C.cell[kg] : C.pooled[kg.first];
+        C.cal[kg] = L, C.own[kg] = own;
+        C.carry[kg] = src::may_carry_promotion(L) && used.t_pos + used.f_pos >= min_pos;
+    }
+    return C;
+}
 
 struct Stage {
     double p0 = 0, post = 0, e = 1;
@@ -10561,29 +10629,26 @@ void s8d(const Sources& S, const vector<Hyp>& hyps, const Accepted& accepted, co
          const string& fresh_links, const string& out) {
     char b[1024];
     // ---- calibration: the generators' dev hypotheses on S15's choose half, each distinct one once
-    std::map<std::pair<int, string>, ecs::TestTally> cell;
-    std::map<int, ecs::TestTally> pooled;
+    vector<std::pair<const Hyp*, int>> graded;
     {
         std::set<string> seen;
         double n = 0, nt = 0;
         for (const Hyp& h : hyps) {
             if (!choose_half(h.s) || !seen.insert(item_key(h)).second) continue;
-            const src::Value v = src::make_value(h.o);
-            const int g = choose.grade(h.s, h.r, v);
+            const int g = choose.grade(h.s, h.r, src::make_value(h.o));
             if (g < 0) continue;
             n += 1, nt += g;
-            for (const auto& [kg, L] : accepted) {
-                if (kg.second != group_of(h.r)) continue;
-                const TestOutcome o = S.answer(kg.first, h.s, h.r, v);
-                cell[kg].add(g == 1, o), pooled[kg.first].add(g == 1, o);
-            }
+            graded.push_back({&h, g});
         }
         std::snprintf(b, sizeof b, "S8D CALIBRATION set: %.0f distinct dev hypotheses of S8a-R1, S8a-R2 and S8b graded on S15's choose half, %.0f true (%.3f)",
                       n, nt, n > 0 ? nt / n : 0.0);
         std::cout << b << "\n";
     }
-    Accepted cal;
-    std::map<std::pair<int, string>, bool> carry;
+    Calib C = calibrate(S, graded, accepted, 0);
+    auto& cell = C.cell;
+    auto& pooled = C.pooled;
+    const Accepted& cal = C.cal;
+    const auto& carry = C.carry;
     std::cout << "S8D CALIBRATION (add-one; a cell with < 10 graded true or false uses the source's pooled cell; carries a promotion only if LR+ >= 10):\n";
     auto tl = [&](const ecs::TestTally& t) {
         std::snprintf(b, sizeof b, "true %3.0f (pos %3.0f neg %3.0f inc %3.0f) false %3.0f (pos %3.0f neg %3.0f inc %3.0f) | pos then true %3.0f/%-3.0f",
@@ -10597,12 +10662,10 @@ void s8d(const Sources& S, const vector<Hyp>& hyps, const Accepted& accepted, co
         std::cout << b << "\n";
     }
     for (const auto& [kg, L1] : accepted) {
-        bool own = false;
-        const ecs::OutcomeLikelihoods L = src::calibrated_likelihoods(cell[kg], pooled[kg.first], 10.0, &own);
-        cal[kg] = L, carry[kg] = src::may_carry_promotion(L);
+        const ecs::OutcomeLikelihoods& L = cal.at(kg);
         std::snprintf(b, sizeof b, "  %-7s %-8s %s | uses %-6s LR+ %7.2f BF(neg) %.3f BF(inc) %.3f | read 1 LR+ %7.2f -> %s", kSrcName[kg.first],
-                      kg.second.c_str(), tl(cell[kg]).c_str(), own ? "own" : "pooled", src::positive_lr(L), L.t[1] / L.f[1], L.t[2] / L.f[2],
-                      src::positive_lr(L1), carry[kg] ? "MAY CARRY" : "may not carry");
+                      kg.second.c_str(), tl(cell[kg]).c_str(), C.own.at(kg) ? "own" : "pooled", src::positive_lr(L), L.t[1] / L.f[1], L.t[2] / L.f[2],
+                      src::positive_lr(L1), carry.at(kg) ? "MAY CARRY" : "may not carry");
         std::cout << b << "\n";
     }
     // ---- S8c's dev set again, with the fix and the calibrated sources (the confirm half was read before; nothing is chosen here)
@@ -10637,20 +10700,205 @@ void s8d(const Sources& S, const vector<Hyp>& hyps, const Accepted& accepted, co
     std::cout << b << "\n";
 }
 
+// ============================================================ S8e (docs/reports/S8E_GRADER_AND_FRESH_SET.md)
+// The grader with Wikidata's names and places (wd_grader.hpp); calibration on S8d's choose-half set and the fresh set's dev
+// part, both graded with it; variant M (a cell carries only with >= 10 positives) chosen on dev; the gate read once on the
+// fresh set's test part with --read-test. Pools are any generator's fresh hypotheses on the set's slots (--fresh-slots).
+struct S8ePool {
+    string part, gen, path;
+};
+
+vector<Row> load_set(const string& path) { return load_s15(path); }
+
+void s8e(const Sources& S, const vector<Row>& s15dev, const vector<Hyp>& hyps, const Accepted& accepted, const string& gdir, const string& set_dev,
+         const string& set_test, const vector<S8ePool>& pools, const string& regrade, bool read_test, const string& out) {
+    char b[1024];
+    cypha::eval::wdgrade::Tables T;
+    if (!T.load(gdir)) {
+        std::fprintf(stderr, "S8E: cannot read the grader tables in %s\n", gdir.c_str());
+        return;
+    }
+    std::size_t na = 0;
+    for (const auto& [k, v] : T.anc) na += v.size();
+    std::snprintf(b, sizeof b, "S8E grader tables: items named %zu, distinct names %zu, items with place ancestors %zu (links %zu), country-like %zu, coarse %zu",
+                  T.names.size(), T.by_name.size(), T.anc.size(), na, T.country_like.size(), T.coarse.size());
+    std::cout << b << "\n";
+    Grader choose_old, choose_new, conf_old, conf_new, dev_old, dev_new, test_old, test_new;
+    for (Grader* g : {&choose_new, &conf_new, &dev_new, &test_new}) g->T = &T;
+    for (const Row& x : s15dev) {
+        (choose_half(x.s) ? choose_old : conf_old).add(x);
+        (choose_half(x.s) ? choose_new : conf_new).add(x);
+    }
+    const vector<Row> rdev = load_set(set_dev);
+    for (const Row& x : rdev) dev_old.add(x), dev_new.add(x);
+    std::snprintf(b, sizeof b, "S8E set: dev %s rows %zu", set_dev.c_str(), rdev.size());
+    std::cout << b << "\n";
+
+    // ---- S8d's promotions graded again (report only: they were read once already)
+    if (!regrade.empty()) {
+        std::ifstream f(regrade);
+        string l;
+        std::getline(f, l);
+        std::set<string> seen;
+        double n = 0, t_old = 0, t_new = 0, g_new = 0;
+        while (std::getline(f, l)) {
+            const auto c = split(l, '\t');
+            if (c.size() < 15 || c[10] != "1") continue;  // supported
+            Hyp h;
+            h.s = c[1], h.r = c[2], h.o = c[3];
+            if (!seen.insert(item_key(h)).second) continue;
+            const src::Value v = src::make_value(h.o);
+            string why;
+            const int go = conf_old.grade(h.s, h.r, v), gn = conf_new.grade(h.s, h.r, v, &why);
+            if (go < 0) continue;
+            n += 1, t_old += go == 1, g_new += gn >= 0, t_new += gn == 1;
+            if (go != gn) {
+                std::snprintf(b, sizeof b, "S8E REGRADE changed: %s | %s | %s : S8c's grader %d, S8e's grader %d (%s)", h.s.c_str(), h.r.c_str(), h.o.c_str(), go,
+                              gn, why.c_str());
+                std::cout << b << "\n";
+            }
+        }
+        std::snprintf(b, sizeof b, "S8E REGRADE S8d's fresh promotions (each distinct once, graded by S8c's grader): %.0f | S8c's grader %.0f true (%.3f) | "
+                      "S8e's grader graded %.0f, %.0f true (%.3f)", n, t_old, n > 0 ? t_old / n : 0.0, g_new, t_new, g_new > 0 ? t_new / g_new : 0.0);
+        std::cout << b << "\n";
+    }
+
+    // ---- the pools
+    vector<Hyp> devH, testH;
+    for (const S8ePool& P : pools) {
+        auto v = load_hyps(P.path, P.gen, "fresh");
+        std::snprintf(b, sizeof b, "S8E pool %s %s: %zu hypotheses (%s)", P.part.c_str(), P.gen.c_str(), v.size(), P.path.c_str());
+        std::cout << b << "\n";
+        auto& dst = P.part == "test" ? testH : devH;
+        dst.insert(dst.end(), v.begin(), v.end());
+    }
+
+    // ---- calibration: S8d's choose-half set and the fresh dev part, graded with the new grader, each distinct once
+    vector<std::pair<const Hyp*, int>> graded;
+    {
+        std::set<string> seen;
+        double n15 = 0, t15 = 0, nd = 0, td = 0, n15o = 0;
+        // every distinct calibration item with both graders' verdicts and the basis of the new one (the audit draws from it)
+        std::ofstream af(out + ".s8e_calib.tsv");
+        af << "part\tgenerator\tsubject\trelation\tobject\tgrade_s8c\tgrade_s8e\tbasis\tslot_values\n";
+        auto audit_line = [&](const char* part, const Hyp& h, int go, int gn, const string& why, const Grader& G) {
+            af << part << '\t' << h.gen << '\t' << h.s << '\t' << h.r << '\t' << h.o << '\t' << go << '\t' << gn << '\t' << why << '\t'
+               << G.values(h.s, h.r) << '\n';
+        };
+        for (const Hyp& h : hyps) {
+            if (!choose_half(h.s) || !seen.insert(item_key(h)).second) continue;
+            const src::Value v = src::make_value(h.o);
+            const int go = choose_old.grade(h.s, h.r, v);
+            n15o += go >= 0;
+            string why;
+            const int g = choose_new.grade(h.s, h.r, v, &why);
+            audit_line("s15-choose", h, go, g, why, choose_new);
+            if (g < 0) continue;
+            n15 += 1, t15 += g, graded.push_back({&h, g});
+        }
+        for (const Hyp& h : devH) {
+            if (!seen.insert(item_key(h)).second) continue;
+            const src::Value v = src::make_value(h.o);
+            string why;
+            const int g = dev_new.grade(h.s, h.r, v, &why);
+            audit_line("fresh-dev", h, dev_old.grade(h.s, h.r, v), g, why, dev_new);
+            if (g < 0) continue;
+            nd += 1, td += g, graded.push_back({&h, g});
+        }
+        std::snprintf(b, sizeof b, "S8E CALIBRATION set: S15 choose half %.0f graded (%.0f true; S8c's grader graded %.0f) + fresh dev %.0f graded (%.0f true)",
+                      n15, t15, n15o, nd, td);
+        std::cout << b << "\n";
+    }
+    const Calib C0 = calibrate(S, graded, accepted, 0), CM = calibrate(S, graded, accepted, 10);
+    std::cout << "S8E CALIBRATION (add-one; own cell with >= 10 graded true and false, else pooled; LR+ >= 10; M: and >= 10 positives):\n";
+    for (const auto& [kg, L1] : accepted) {
+        const ecs::TestTally& c = C0.cell.at(kg);
+        const ecs::TestTally& u = C0.own.at(kg) ? c : C0.pooled.at(kg.first);
+        std::snprintf(b, sizeof b,
+                      "  %-7s %-8s own: true %3.0f (pos %3.0f neg %3.0f) false %3.0f (pos %3.0f neg %3.0f) | uses %-6s positives %3.0f LR+ %7.2f -> "
+                      "%s | M: %s",
+                      kSrcName[kg.first], kg.second.c_str(), c.t_pos + c.t_neg + c.t_inc, c.t_pos, c.t_neg, c.f_pos + c.f_neg + c.f_inc, c.f_pos, c.f_neg,
+                      C0.own.at(kg) ? "own" : "pooled", u.t_pos + u.f_pos, src::positive_lr(C0.cal.at(kg)), C0.carry.at(kg) ? "MAY CARRY" : "may not carry",
+                      CM.carry.at(kg) ? "MAY CARRY" : "may not carry");
+        std::cout << b << "\n";
+    }
+
+    // ---- the dev read (in-sample: these items are in the calibration set): choose M or not
+    const vector<Stage> d0 = source_stage(S, devH, C0.cal, C0.carry, dev_new), dM = source_stage(S, devH, CM.cal, CM.carry, dev_new);
+    stage_report("S8E DEV no-minimum", devH, d0, out + ".s8e_dev_nomin.tsv");
+    stage_report("S8E DEV M", devH, dM, out + ".s8e_dev_min.tsv");
+    double rem_g = 0, rem_t = 0;
+    {
+        std::map<string, std::pair<int, std::pair<bool, bool>>> d;  // item -> (grade, (supported without M, with M))
+        for (std::size_t i = 0; i < devH.size(); ++i) {
+            auto& e = d[item_key(devH[i])];
+            e.first = d0[i].graded, e.second.first = e.second.first || d0[i].sup, e.second.second = e.second.second || dM[i].sup;
+        }
+        for (const auto& [k, e] : d)
+            if (e.second.first && !e.second.second && e.first >= 0) rem_g += 1, rem_t += e.first;
+    }
+    const bool use_m = !(rem_g >= 5 && rem_t / rem_g >= 0.9);
+    std::snprintf(b, sizeof b, "S8E DEV CHOICE: promotions M removes, graded %.0f, true %.0f (%.3f) -> %s", rem_g, rem_t, rem_g > 0 ? rem_t / rem_g : 0.0,
+                  use_m ? "M APPLIES" : "NO MINIMUM");
+    std::cout << b << "\n";
+    {  // S10's cost file for the dev pools under the chosen variant, in the rows' order
+        const vector<Stage>& dc = use_m ? dM : d0;
+        std::ofstream rf(out + ".s8e_dev_ran.tsv");
+        rf << "generator\tsubject\trelation\tobject\tsources_run\n";
+        for (std::size_t i = 0; i < devH.size(); ++i)
+            rf << devH[i].gen << '\t' << devH[i].s << '\t' << devH[i].r << '\t' << devH[i].o << '\t' << dc[i].ran << '\n';
+    }
+
+    // ---- the gate read: once, on the test part
+    if (testH.empty()) return;
+    if (!read_test) {
+        std::snprintf(b, sizeof b, "S8E TEST pools: %zu hypotheses (labels not read; pass --read-test for the one gate read)", testH.size());
+        std::cout << b << "\n";
+        return;
+    }
+    const vector<Row> rtest = load_set(set_test);
+    for (const Row& x : rtest) test_old.add(x), test_new.add(x);
+    const Calib& CC = use_m ? CM : C0;
+    const Calib& CO = use_m ? C0 : CM;
+    const vector<Stage> st = source_stage(S, testH, CC.cal, CC.carry, test_new);
+    const auto [g, t] = stage_report(string("S8E TEST ") + (use_m ? "M" : "no-minimum") + " (the gate)", testH, st, out + ".s8e_test.tsv");
+    {  // S10's cost file, in the rows' order
+        std::ofstream rf(out + ".s8e_test_ran.tsv");
+        rf << "generator\tsubject\trelation\tobject\tsources_run\n";
+        for (std::size_t i = 0; i < testH.size(); ++i)
+            rf << testH[i].gen << '\t' << testH[i].s << '\t' << testH[i].r << '\t' << testH[i].o << '\t' << st[i].ran << '\n';
+    }
+    const vector<Stage> so = source_stage(S, testH, CO.cal, CO.carry, test_new);
+    stage_report(string("S8E TEST ") + (use_m ? "no-minimum" : "M") + " (the other variant, not a gate)", testH, so, out + ".s8e_test_other.tsv");
+    const vector<Stage> sg = source_stage(S, testH, CC.cal, CC.carry, test_old);
+    stage_report("S8E TEST S8c's grader (not a gate)", testH, sg, out + ".s8e_test_oldgrader.tsv");
+    std::snprintf(b, sizeof b, "S8E GATE (test, supported, each distinct once, S8e's grader): graded %.0f, precision %.3f [%.3f, %.3f] -> %s", g,
+                  g > 0 ? t / g : 0.0, ecs::wilson_lower(t, g), ecs::wilson_upper(t, g), g >= 20 && t / g >= 0.9 ? "MET" : "NOT MET");
+    std::cout << b << "\n";
+}
+
 int run(int argc, char** argv) {
     if (argc < 11) {
         std::fprintf(stderr, "usage: pattern_learn --sources S15_DEV TABLES WD_VALUES SEEDS FACTS_F2 OUT_PREFIX S8A_R1 S8A_R2 S8B_PROMO "
-                             "[--calibrate | --fresh FRESH_G2 FRESH_LINKS]\n");
+                             "[--calibrate | --fresh FRESH_G2 FRESH_LINKS] [--s8e GRADER_DIR SET_DEV SET_TEST [--s8e-pool dev|test GEN FILE]... "
+                             "[--s8e-regrade S8D_FRESH.tsv] [--read-test]]\n");
         return 2;
     }
     const double t0 = now_s();
     const string s15p = argv[2], tables = argv[3], out = argv[7];
     bool calibrate = false;  // S8d: calibration on the generators' choose-half hypotheses, and S8c's dev set again
     string fresh_g2, fresh_links;  // S8d: the fresh confirm-half set, read once
+    string s8e_dir, s8e_dev, s8e_test, s8e_regrade;  // S8e (docs/reports/S8E_GRADER_AND_FRESH_SET.md)
+    vector<S8ePool> s8e_pools;
+    bool s8e_read_test = false;
     for (int i = 11; i < argc; ++i) {
         const string a = argv[i];
         if (a == "--calibrate") calibrate = true;
         else if (a == "--fresh" && i + 2 < argc) fresh_g2 = argv[i + 1], fresh_links = argv[i + 2], i += 2, calibrate = true;
+        else if (a == "--s8e" && i + 3 < argc) s8e_dir = argv[i + 1], s8e_dev = argv[i + 2], s8e_test = argv[i + 3], i += 3;
+        else if (a == "--s8e-pool" && i + 3 < argc) s8e_pools.push_back({argv[i + 1], argv[i + 2], argv[i + 3]}), i += 3;
+        else if (a == "--s8e-regrade" && i + 1 < argc) s8e_regrade = argv[++i];
+        else if (a == "--read-test") s8e_read_test = true;
         else {
             std::fprintf(stderr, "unknown option %s\n", argv[i]);
             return 2;
@@ -10943,6 +11191,7 @@ int run(int argc, char** argv) {
         std::cout << "\n";
     }
     if (calibrate) s8d(S, hyps, accepted, conf, choose, fresh_g2, fresh_links, out);  // S8d (docs/reports/S8D_PROMOTION.md)
+    if (!s8e_dir.empty()) s8e(S, rows, hyps, accepted, s8e_dir, s8e_dev, s8e_test, s8e_pools, s8e_regrade, s8e_read_test, out);  // S8e
     std::snprintf(b, sizeof b, "S8C seconds %.1f", now_s() - t0);
     std::cout << b << "\n";
     return 0;
@@ -13126,13 +13375,14 @@ void g3_pool(const Facts& kby, const std::set<std::pair<string, string>>& slots,
 
 int run_anomaly(int argc, char** argv) {
     if (argc < 9) {
-        std::fprintf(stderr, "usage: pattern_learn --gen-anomaly ENWIK8 SEEDS.tsv FACTS_F2.tsv WD_VALUES.tsv PATTERNS.tsv S15_DIR OUT_PREFIX [--read-test] [--fresh-dev | --fresh-test] "
+        std::fprintf(stderr, "usage: pattern_learn --gen-anomaly ENWIK8 SEEDS.tsv FACTS_F2.tsv WD_VALUES.tsv PATTERNS.tsv S15_DIR OUT_PREFIX [--read-test] [--fresh-dev | --fresh-test | --fresh-slots FILE] "
                              "[--g3-weights] [--g13-questions]\n");
         return 2;
     }
     const double t0 = now_s();
     const string out = argv[8], s15dir = argv[7];
     bool read_test = false, fresh_dev = false, fresh_test = false, g3_weights = false, g13_questions = false;
+    string fresh_slots;  // S8e: G3's pool on a set file's slots; G13 (parked) is left out (docs/reports/S8E_GRADER_AND_FRESH_SET.md)
     for (int i = 9; i < argc; ++i) {
         const string a = argv[i];
         if (a == "--read-test") read_test = true;
@@ -13140,6 +13390,7 @@ int run_anomaly(int argc, char** argv) {
         else if (a == "--fresh-test") fresh_test = true;
         else if (a == "--g3-weights") g3_weights = true;      // S11e item 2
         else if (a == "--g13-questions") g13_questions = true;  // S11e item 1
+        else if (a == "--fresh-slots" && i + 1 < argc) fresh_slots = argv[++i];
         else {
             std::fprintf(stderr, "unknown option %s\n", argv[i]);
             return 2;
@@ -13176,9 +13427,11 @@ int run_anomaly(int argc, char** argv) {
         std::cout << b << "\n";
     }
     // ---- pools
-    if (fresh_dev || fresh_test) {
-        const auto slots = pool_slots(s15dir, fresh_test);
-        const string ptag = fresh_test ? "S11C POOL test (S15 test, bit 17 = 0)" : "S11C POOL dev (S15 dev, bit 17 = 1)";
+    if (fresh_dev || fresh_test || !fresh_slots.empty()) {
+        const auto slots = !fresh_slots.empty() ? s8b::slots_of_file(fresh_slots) : pool_slots(s15dir, fresh_test);
+        const string ptag = !fresh_slots.empty() ? "S8E POOL (set file)"
+                            : fresh_test         ? "S11C POOL test (S15 test, bit 17 = 0)"
+                                                 : "S11C POOL dev (S15 dev, bit 17 = 1)";
         vector<PoolItem> g3pool;
         std::size_t held = 0, obs = 0;
         g3_pool(S.kby, slots, dev3, g3pool, held, obs);
@@ -13193,6 +13446,11 @@ int run_anomaly(int argc, char** argv) {
         std::cout << b << "\n";
         pool_states(ptag + " G3", g3pool);
         write_pool(out + ".fresh_g3.hyps.tsv", g3pool);
+        if (!fresh_slots.empty()) {
+            std::snprintf(b, sizeof b, "S11C --gen-anomaly done in %.1f s", now_s() - t0);
+            std::cout << b << "\n";
+            return 0;
+        }
         const ecs::TripleStore T = s8a::make_store(S.tby);
         pool_loop(g13pool, T, C, out + ".fresh_g13.prereg.tsv");
         pool_states(ptag + " G13 (store T, " + (fresh_test ? "test" : "dev") + " subjects by bit 11)", g13pool);
@@ -13272,18 +13530,20 @@ double rr(std::size_t k) { return k ? 1.0 / static_cast<double>(k) : 0.0; }
 int run_analogy(int argc, char** argv) {
     if (argc < 11) {
         std::fprintf(stderr, "usage: pattern_learn --gen-analogy ENWIK8 SEEDS.tsv FACTS_F2.tsv WD_VALUES.tsv PATTERNS.tsv S15_DIR VEC_PREFIX SIMVEC OUT_PREFIX "
-                             "[--read-test] [--fresh-dev | --fresh-test] [--g4-date-lambda]\n");
+                             "[--read-test] [--fresh-dev | --fresh-test | --fresh-slots FILE] [--g4-date-lambda]\n");
         return 2;
     }
     const double t0 = now_s();
     const string s15dir = argv[7], vecp = argv[8], simvec = argv[9], out = argv[10];
     bool read_test = false, fresh_dev = false, fresh_test = false, g4_date = false;
+    string fresh_slots;  // S8e: G4 and G5's pools on a set file's slots (docs/reports/S8E_GRADER_AND_FRESH_SET.md)
     for (int i = 11; i < argc; ++i) {
         const string a = argv[i];
         if (a == "--read-test") read_test = true;
         else if (a == "--fresh-dev") fresh_dev = true;
         else if (a == "--fresh-test") fresh_test = true;
         else if (a == "--g4-date-lambda") g4_date = true;  // S11e item 3
+        else if (a == "--fresh-slots" && i + 1 < argc) fresh_slots = argv[++i];
         else {
             std::fprintf(stderr, "unknown option %s\n", argv[i]);
             return 2;
@@ -13533,7 +13793,7 @@ int run_analogy(int argc, char** argv) {
         }
     }
     // ---- pools: the top candidate per slot with the pool's slots hidden
-    if (fresh_dev || fresh_test) {
+    if (fresh_dev || fresh_test || !fresh_slots.empty()) {
         // priors: isotonic from score to P(true) on read 1's dev hidden slots (truth: store K holds the top candidate)
         ecs::IsotonicCalibrator cal[2], cal_d;
         vector<double> pd;  // S11e item 3: the variant's top scores and truth on read 1's dev hidden slots
@@ -13557,7 +13817,7 @@ int run_analogy(int argc, char** argv) {
             for (int g = 0; g < 2; ++g) cal[g].fit(p[g], y[g]);
             if (g4_date) cal_d.fit(pd, yd);
         }
-        const auto slots = pool_slots(s15dir, fresh_test);
+        const auto slots = !fresh_slots.empty() ? s8b::slots_of_file(fresh_slots) : pool_slots(s15dir, fresh_test);
         Facts fred;
         std::size_t held = 0;
         for (const auto& [s, fs] : S.kby)
@@ -13603,7 +13863,9 @@ int run_analogy(int argc, char** argv) {
                 }
             }
         }
-        const string ptag = fresh_test ? "S11C POOL test (S15 test, bit 17 = 0)" : "S11C POOL dev (S15 dev, bit 17 = 1)";
+        const string ptag = !fresh_slots.empty() ? "S8E POOL (set file)"
+                            : fresh_test         ? "S11C POOL test (S15 test, bit 17 = 0)"
+                                                 : "S11C POOL dev (S15 dev, bit 17 = 1)";
         std::snprintf(b, sizeof b, "%s slots %zu | store facts hidden %zu | slots whose subject is in the store %zu | G4 hypotheses %zu | G5 hypotheses %zu", ptag.c_str(),
                       slots.size(), held, in_store, pool[0].size(), pool[1].size());
         std::cout << b << "\n";

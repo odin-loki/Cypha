@@ -38,6 +38,8 @@ TIMELESS = {"birth_place", "birth_year", "birth_date", "death_year", "death_date
 COUNTRY = {"Q6256", "Q3624078", "Q3024240", "Q7275"}
 MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november",
           "december"]
+# The set's name: its ids, its negatives' seeds, its split salt and its file names. S8e reuses this builder for its fresh slots.
+PREFIX, OUTNAME = "S15", "temporal_holdout"
 COLS = ["id", "subject", "subject_item", "subject_type", "region", "relation", "property", "value", "value_item", "date",
         "date_kind", "category", "stated_by", "named_on_page", "named_elsewhere", "label", "pair"]
 
@@ -294,11 +296,11 @@ def build(enwik8, pages_tsv, d4, facts_tsv, seeds_tsv, run, outdir):
                     break
             by = by or ("page" if on else "")
             cat = "a" if by else "b"
-        fid = "S15-" + hashlib.sha256(f"{item}|{rel}|{v}".encode()).hexdigest()[:12]
+        fid = f"{PREFIX}-" + hashlib.sha256(f"{item}|{rel}|{v}".encode()).hexdigest()[:12]
         base = [title, item, subj_type(item), region(item), rel, prop_of[key]]
         rows.append([fid] + base + [show_of[key], vitem_of[key], date, kind, cat, by, str(int(on)),
                                     str(int(elsewhere(titles_of[item], v, rel))), "1", "N" + fid[1:]])
-        rng = random.Random(hashlib.sha256(f"S15|neg|{fid}".encode()).digest())
+        rng = random.Random(hashlib.sha256(f"{PREFIX}|neg|{fid}".encode()).digest())
         w = None
         for p in (tpool[(subj_type(item), rel)], pool[rel]):  # the subject's type first, then the whole relation
             for _ in range(100):
@@ -320,8 +322,8 @@ def build(enwik8, pages_tsv, d4, facts_tsv, seeds_tsv, run, outdir):
 
     os.makedirs(outdir, exist_ok=True)
     for split in ("dev", "test"):
-        keep = [r for r in rows if (hashlib.sha256(f"S15|{r[2]}".encode()).digest()[0] >= 128) == (split == "test")]
-        with open(f"{outdir}/temporal_holdout_{split}.tsv", "w", encoding="utf-8", newline="\n") as f:
+        keep = [r for r in rows if (hashlib.sha256(f"{PREFIX}|{r[2]}".encode()).digest()[0] >= 128) == (split == "test")]
+        with open(f"{outdir}/{OUTNAME}_{split}.tsv", "w", encoding="utf-8", newline="\n") as f:
             f.write("\t".join(COLS) + "\n")
             for r in keep:
                 f.write("\t".join(x.replace("\t", " ").replace("\n", " ") for x in r) + "\n")
