@@ -1,4 +1,4 @@
-# 1 TB runs: train model N, verify it, compare it
+# 1 TB runs: train, verify and compare numbered models
 
 **Odin Loch** · 2026-10-29 · PLAN Track A
 
@@ -7,27 +7,25 @@ Models on the 1 TB corpus are numbered.
 - **Model 1** is the live run: `<corpus>/trie/checkpoint.bin`, trained by `native/tools/trie_stream_train.cpp` through `scripts/run_train.sh`. Neither file is changed.
 - **Model N** (2 or more) goes to `<corpus>/trie/model<N>/`.
 
-## One script
+## Three scripts
 
 ```bash
-bash scripts/train_model.sh          # model 2, compared with model 1
-bash scripts/train_model.sh 3        # model 3, compared with model 2
+bash scripts/verify_model.sh 1                          # check model 1 (the live run)
+bash scripts/train_model.sh 2                           # train model 2
+bash scripts/verify_model.sh 2                          # check model 2
+CYPHA_ENWIK8=/path/to/enwik8 bash scripts/compare_models.sh 1 2   # compare them
 ```
 
-It does, in order:
+| Script | What it does |
+|---|---|
+| `scripts/train_model.sh N` | Trains model N (2 or more) on the corpus into `<corpus>/trie/model<N>/`. It resumes if stopped, ends when every finished corpus file is trained, and writes `done.txt` |
+| `scripts/verify_model.sh N [N ...]` | Checks each model: the file, its structure, whether 32-bit counts wrapped, and that every finished corpus file was trained. Prints `VERIFIED` or the problems; exit code 0 only if all pass |
+| `scripts/compare_models.sh A B` | Scores model A and model B on held-out text and prints B − A with a 95% interval |
+| `scripts/model_common.sh` | Shared paths, model numbers and builds; the other three source it |
 
-1. Builds the trainer and the checker, and runs the checker's self-test.
-2. Verifies model N−1: the file, its structure, whether 32-bit counts wrapped, and that every finished corpus file was trained.
-3. Trains model N on the same corpus files. It resumes if stopped. It ends when every finished file is trained, and writes `done.txt`.
-4. Verifies model N.
-5. Compares model N−1 (A) with model N (B) on held-out text.
+Every report goes to `<corpus>/trie/reports/`: `verify_model<N>.txt`, `train_model<N>.log`, `compare_model<A>_model<B>.txt`, and the checker's `selftest.txt`. The checker runs its self-test each time it is built.
 
-Reports go to `<corpus>/trie/model<N>/report/`:
-- `verify_model<N-1>.txt` and `verify_model<N>.txt`;
-- `compare_model<N-1>_model<N>.txt`;
-- `train.log`.
-
-Training 1 TB takes a long time, so run the script where it can keep going, for example in `tmux` or with `nohup bash scripts/train_model.sh > model2.log 2>&1 &`. Start it after model 1's run has stopped, so the two do not share RAM.
+Training 1 TB takes a long time, so run `train_model.sh` where it can keep going, for example in `tmux` or with `nohup bash scripts/train_model.sh 2 > model2.log 2>&1 &`. Start it after model 1's run has stopped, so the two do not share RAM.
 
 Settings, all optional:
 
@@ -35,11 +33,12 @@ Settings, all optional:
 |---|---|---|
 | `CYPHA_REPO` | `/mnt/c/Users/odinl/OneDrive/Desktop/Cypha` | the repository |
 | `CYPHA_CORPUS` | `/mnt/d/cypha_llm/corpus` | the corpus |
-| `CYPHA_CORE` | `0` | the CPU core |
+| `CYPHA_REPORTS` | `<corpus>/trie/reports` | where reports go |
+| `CYPHA_CORE` | `0` | the CPU core for training |
 | `CYPHA_SNAPSHOTS` | `8M,64M,1G,10G,100G` | sizes at which a copy of the checkpoint is kept (the scaling curve); each is a full copy, so the later ones are large |
-| `CYPHA_HOLDOUTS` | every `*.txt` in `<corpus>/../holdout` | held-out files, `FILE` or `FILE:FROM:LEN`, space-separated |
-| `CYPHA_ENWIK8` | unset | the enwik8 file; adds its 8 MiB-protocol holdout |
-| `CYPHA_DEEP` | `0` | `1` re-reads the corpus to check the bytes seen (hours) |
+| `CYPHA_HOLDOUTS` | every `*.txt` in `<corpus>/../holdout` | held-out files for compare, `FILE` or `FILE:FROM:LEN`, space-separated |
+| `CYPHA_ENWIK8` | unset | the enwik8 file; adds its 8 MiB-protocol holdout to compare |
+| `CYPHA_DEEP` | `0` | `1` makes verify re-read the corpus to check the bytes seen (hours) |
 
 ## Before you start: is model 1 finished?
 
@@ -59,7 +58,7 @@ Model 2 and later use the same model, but a count about to pass 2^32 − 1 halve
 - If enwik8, enwik9 or the Wikipedia dump it came from is in the corpus, enwik8's holdout is text the models have seen. Its bits per byte then measure memory, not prediction.
 - Track A's step 1 asks for a frozen slice per category, set aside before training. Put such files in `/mnt/d/cypha_llm/holdout/`, outside the corpus. The script reads every `*.txt` there.
 
-Each compare row gives, for one held-out file:
+Each row of `compare_models.sh` gives, for one held-out file:
 - A's and B's bits per byte, with today's fixed backoff in two forms: full counts, and the packed serving form (`synth`);
 - B − A with a 95% interval over 4 KiB blocks. Negative means model N predicts better.
 
@@ -77,7 +76,7 @@ These give Track A's A1 points, bits per byte against bytes seen. Prediction P-A
 
 | File | What it does |
 |---|---|
-| `scripts/train_model.sh` | The one script above |
+| `scripts/train_model.sh`, `verify_model.sh`, `compare_models.sh`, `model_common.sh` | The scripts above |
 | `native/include/cypha/cyphalm/stream_trie.hpp` | Model 1's model, with counts that halve instead of wrapping; reads both checkpoint formats ("TRI1" for model 1, "TRI2" for later models) |
 | `native/tools/trie_stream_train_v2.cpp` | The trainer for model 2 and later |
 | `native/tools/trie_ckpt.cpp` | `verify`, `bpc`, `compare`, `selftest` (CTest `native_trie_ckpt_selftest`) |
@@ -91,11 +90,10 @@ Memory: the checker loads one model at a time, about its file size in RAM. The t
   - Both checkpoint formats round-trip.
   - With a small cap, no count passes it, and totals stay their followers' sums.
   - A wrapped unigram, a damaged total, a wrong child count, an untrained corpus file and a `*.part` file are each reported.
-- **The script end to end on 24 MiB of enwik8** (three 8 MiB files):
-  - Model 1 was built with the live trainer, unchanged. `train_model.sh` verified it, trained model 2, verified model 2 and compared them.
+- **The scripts end to end on 24 MiB of enwik8** (three 8 MiB files):
+  - Model 1 was built with the live trainer, unchanged. `verify_model.sh 1`, `train_model.sh 2`, `verify_model.sh 1 2` and `compare_models.sh 1 2` each ran as described; a missing model and missing held-out text each stop with a message.
   - The two models are identical: 754,273 nodes, 2,307,921 followers, 600,243 match keys.
   - Both `VERIFIED`. On enwik8's 1 MiB holdout both score 2.301584 bits per byte, difference +0.0000.
-  - `train_model.sh 3` verified model 2, trained model 3 and compared the two.
   - The 8 MiB snapshot against the final model: −0.0376 [−0.0454, −0.0297].
 
 ## Not done yet
