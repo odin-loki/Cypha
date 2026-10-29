@@ -17,8 +17,11 @@
 #include "cypha/eval/sources.hpp"
 #include "cypha/eval/unknown_signals.hpp"
 #include "cypha/eval/worlds.hpp"
+#include "cypha/eval/wd_grader.hpp"
 
 #include <cmath>
+#include <filesystem>
+#include <fstream>
 #include <map>
 #include <numeric>
 #include <cstdio>
@@ -3495,6 +3498,112 @@ static void test_threshold_S4d() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// S8e: the grader with Wikidata's names and places (wd_grader.hpp; docs/reports/S8E_GRADER_AND_FRESH_SET.md)
+// ---------------------------------------------------------------------------
+
+static void test_wd_grader_S8e() {
+  namespace wg = cypha::eval::wdgrade;
+  using V = wg::Verdict;
+  wg::Tables T;
+  // Toy items: City of Brussels (alias Brussels) in Belgium; Los Angeles in California in the United States; Century City in
+  // Los Angeles; the United Kingdom (demonym British) with England (demonym English) inside it.
+  T.add_name("Q239", "City of Brussels"), T.add_name("Q239", "Brussels"), T.add_name("Q31", "Belgium"), T.add_name("Q31", "Belgian");
+  T.add_name("Q65", "Los Angeles"), T.add_name("Q65", "L.A."), T.add_name("Q99", "California"), T.add_name("Q30", "United States of America");
+  T.add_name("Q30", "American"), T.add_name("Q1054483", "Century City"), T.add_name("Q145", "United Kingdom"), T.add_name("Q145", "British");
+  T.add_name("Q21", "England"), T.add_name("Q21", "English"), T.add_name("Q25265", "Felidae");
+  for (const char* a : {"Q31"}) T.add_ancestor("Q239", a);
+  for (const char* a : {"Q99", "Q30"}) T.add_ancestor("Q65", a);
+  for (const char* a : {"Q65", "Q99", "Q30"}) T.add_ancestor("Q1054483", a);
+  T.add_ancestor("Q99", "Q30"), T.add_ancestor("Q21", "Q145");
+  for (const char* c : {"Q31", "Q30", "Q145", "Q21"}) T.country_like.insert(c), T.coarse.insert(c);
+  T.coarse.insert("Q99");  // a first-level subdivision
+  auto n = [](const char* x) { return cypha::eval::sources::norm_name(x); };
+  // Rule 2, names: an alias, a demonym, the label; case and punctuation as norm_name has them.
+  CHECK(wg::match(T, "capital", "Q239", n("Brussels")) == V::Match);
+  CHECK(wg::match(T, "capital", "Q239", n("brussels")) == V::Match);
+  CHECK(wg::match(T, "nationality", "Q30", n("American")) == V::Match);
+  CHECK(wg::match(T, "family", "Q25265", n("Felidae")) == V::Match);
+  CHECK(wg::match(T, "capital", "Q239", n("Antwerp")) == V::NoMatch);
+  // Rule 3, a containing place: not coarse for birth / death place, location and headquarters; any for located_in.
+  CHECK(wg::match(T, "death_place", "Q1054483", n("Los Angeles")) == V::Match);
+  CHECK(wg::match(T, "birth_place", "Q1054483", n("L.A.")) == V::Match);
+  CHECK(wg::match(T, "death_place", "Q1054483", n("California")) == V::NoMatch);  // coarse
+  CHECK(wg::match(T, "death_place", "Q1054483", n("United States of America")) == V::NoMatch);
+  CHECK(wg::match(T, "located_in", "Q1054483", n("California")) == V::Match);  // located_in is transitive
+  CHECK(wg::match(T, "capital", "Q1054483", n("Los Angeles")) == V::NoMatch);  // capital: names only
+  // Rule 4, a finer place: ungraded for the place relations, no match elsewhere.
+  CHECK(wg::match(T, "birth_place", "Q65", n("Century City")) == V::Finer);
+  CHECK(wg::match(T, "location", "Q65", n("Century City")) == V::Finer);
+  CHECK(wg::match(T, "capital", "Q65", n("Century City")) == V::NoMatch);
+  // Rule 5, a country-like place inside the truth, for country and nationality only.
+  CHECK(wg::match(T, "nationality", "Q145", n("English")) == V::Match);
+  CHECK(wg::match(T, "country", "Q145", n("England")) == V::Match);
+  CHECK(wg::match(T, "country", "Q30", n("California")) == V::NoMatch);  // inside, not country-like
+  CHECK(wg::match(T, "nationality", "Q21", n("British")) == V::NoMatch);  // the wider one does not count
+  CHECK(wg::match(T, "occupation", "Q145", n("English")) == V::NoMatch);
+  // Empty items or names never match; closed-world relations are the fresh set's.
+  CHECK(wg::match(T, "capital", "", n("Brussels")) == V::NoMatch && wg::match(T, "capital", "Q239", "") == V::NoMatch);
+  CHECK(wg::closed_world("nationality") && wg::closed_world("successor") && wg::closed_world("class") && !wg::closed_world("occupation") &&
+        !wg::closed_world("birth_place"));
+  CHECK(wg::place_up("headquarters") && !wg::place_up("capital") && wg::country_relation("nationality") && !wg::country_relation("capital"));
+  // The rule that decided a verdict (for the audit).
+  int k = -1;
+  CHECK(wg::match(T, "capital", "Q239", n("Brussels"), &k) == V::Match && k == 2);
+  CHECK(wg::match(T, "death_place", "Q1054483", n("Los Angeles"), &k) == V::Match && k == 3);
+  CHECK(wg::match(T, "birth_place", "Q65", n("Century City"), &k) == V::Finer && k == 4);
+  CHECK(wg::match(T, "nationality", "Q145", n("English"), &k) == V::Match && k == 5);
+  CHECK(wg::match(T, "capital", "Q239", n("Antwerp"), &k) == V::NoMatch && k == 0);
+  // A slot's grade (rules 1 and 7): +1 true, 0 false, -1 ungraded; without tables, S8c's grader.
+  {
+    namespace src = cypha::eval::sources;
+    using Vals = std::vector<std::pair<src::Value, int>>;
+    T.add_name("Q12892", "Antwerp"), T.add_name("Q12892", "Antwerpen");
+    const Vals cap = {{src::make_value("City of Brussels", "Q239"), 1}, {src::make_value("Antwerpen", "Q12892"), 0}};
+    const char* w = "";
+    auto mv = [](const char* x) { return src::make_value(x); };
+    CHECK(wg::grade_slot(&T, "capital", cap, mv("City of Brussels"), &w) == 1 && std::string(w) == "shown");
+    CHECK(wg::grade_slot(&T, "capital", cap, mv("Brussels"), &w) == 1 && std::string(w) == "rule2");
+    CHECK(wg::grade_slot(nullptr, "capital", cap, mv("Brussels"), &w) == 0 && std::string(w) == "single-valued");  // S8c's grader
+    CHECK(wg::grade_slot(&T, "capital", cap, mv("Antwerp"), &w) == 0 && std::string(w) == "drawn-false");  // the false value's alias
+    CHECK(wg::grade_slot(nullptr, "capital", cap, mv("Antwerp")) == 0);  // single-valued there
+    CHECK(wg::grade_slot(&T, "capital", cap, mv("Ghent"), &w) == 0 && std::string(w) == "single-valued");
+    const Vals nat = {{src::make_value("United Kingdom", "Q145"), 1}};
+    CHECK(wg::grade_slot(&T, "nationality", nat, mv("British"), &w) == 1 && std::string(w) == "rule2");
+    CHECK(wg::grade_slot(&T, "nationality", nat, mv("English"), &w) == 1 && std::string(w) == "rule5");
+    CHECK(wg::grade_slot(&T, "nationality", nat, mv("American"), &w) == 0 && std::string(w) == "closed-world");
+    CHECK(wg::grade_slot(nullptr, "nationality", nat, mv("American"), &w) == -1 && std::string(w) == "open");
+    const Vals occ = {{src::make_value("actor", "Q33999"), 1}};
+    CHECK(wg::grade_slot(&T, "occupation", occ, mv("singer"), &w) == -1 && std::string(w) == "open");  // not closed-world
+    const Vals born = {{src::make_value("Los Angeles", "Q65"), 1}};
+    CHECK(wg::grade_slot(&T, "birth_place", born, mv("Century City"), &w) == -1 && std::string(w) == "finer");  // before single-valued
+    CHECK(wg::grade_slot(nullptr, "birth_place", born, mv("Century City")) == 0);
+    CHECK(wg::grade_slot(&T, "location", born, mv("Century City"), &w) == -1 && std::string(w) == "finer");  // before closed-world
+    CHECK(wg::grade_slot(&T, "location", born, mv("California"), &w) == 0 && std::string(w) == "closed-world");  // coarse
+    const Vals dob = {{src::make_value("1950-01-02"), 1}};
+    CHECK(wg::grade_slot(&T, "birth_date", dob, mv("1950-01-02"), &w) == 1 && std::string(w) == "shown");
+    CHECK(wg::grade_slot(&T, "birth_date", dob, mv("1951"), &w) == 0 && std::string(w) == "single-valued");
+    CHECK(wg::grade_slot(&T, "capital", {}, mv("Brussels")) == -1);
+  }
+  // Loading the tables from files: names normalised, ancestors and flags read.
+  const std::filesystem::path tmp = std::filesystem::temp_directory_path() / ("cypha_s8e_wdg_" + std::to_string(std::random_device{}()));
+  std::filesystem::create_directories(tmp);
+  const std::string dir = tmp.string();
+  {
+    std::ofstream(dir + "/names.tsv") << "item\tnames\nQ239\tCity of Brussels|Brussels\nQ31\tBelgium\nQ1\tThe Beatles\n";
+    std::ofstream(dir + "/anc.tsv") << "item\tancestors\nQ239\tQ31\n";
+    std::ofstream(dir + "/flags.tsv") << "item\tcountry_like\tcoarse\nQ31\t1\t1\n";
+  }
+  wg::Tables L;
+  CHECK(L.load(dir));
+  CHECK(L.named("Q239", "brussels") && L.named("Q1", "beatles") && L.inside("Q239", "Q31") && L.country_like.count("Q31") && L.coarse.count("Q31"));
+  CHECK(L.by_name.count("brussels") && L.by_name.at("brussels").size() == 1 && L.by_name.at("brussels")[0] == "Q239");
+  CHECK(wg::match(L, "death_place", "Q239", n("Belgium")) == V::NoMatch);  // its one ancestor is coarse
+  wg::Tables E;
+  CHECK(!E.load(dir + "/missing") && E.empty());
+  std::filesystem::remove_all(tmp);
+}
+
 static void test_gap_map() {
   // The gap id CyphaLM writes (cyphalm_trie dktext rows and its dev tags).
   CHECK_STR(gap_id("Honduras", "capital"), "G-AEC1");
@@ -3742,6 +3851,7 @@ int main() {
   test_laws_deep_S12a();
   test_abc_closed_S6c();
   test_threshold_S4d();
+  test_wd_grader_S8e();
   std::printf("epistemic_test: %d checks, %d failed\n", g_checks, g_failed);
   return g_failed == 0 ? 0 : 1;
 }
