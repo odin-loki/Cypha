@@ -2467,9 +2467,10 @@ set_tests_properties(native_scribe_selftest PROPERTIES TIMEOUT 120)
 # --- end SCRIBE block ---------------------------------------------------------------------------
 
 # --- 1 TB runs (docs/TRAIN_1TB_RUNBOOK.md): a second streaming trainer and the checkpoint verifier --------------
-# trie_stream_train_v2 trains the live trainer's model (native/tools/trie_stream_train.cpp, not changed) with counts
-# that halve instead of wrapping; trie_ckpt verifies, scores and compares TRI1 / TRI2 checkpoints through
-# include/cypha/cyphalm/stream_trie.hpp and packed_trie.hpp's fixed backoff.
+# trie_stream_train_v2 trains the live trainer's model with counts that halve instead of wrapping; the live trainer
+# (native/tools/trie_stream_train.cpp, built by scripts/build_1tb_tools.sh) writes TR64, 64-bit counts. trie_ckpt
+# verifies, scores, compares and packs TRI1 / TRI2 / TR64 checkpoints through include/cypha/cyphalm/stream_trie.hpp and
+# packed_trie.hpp.
 add_executable(trie_stream_train_v2 tools/trie_stream_train_v2.cpp)
 target_include_directories(trie_stream_train_v2 PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include" "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
 cypha_mingw_apply_exe_link_options(trie_stream_train_v2)

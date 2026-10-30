@@ -2,15 +2,22 @@
 //
 //   trie_ckpt info CKPT
 //   trie_ckpt verify CKPT [--corpus ROOT] [--trained LIST] [--deep]
-//   trie_ckpt bpc CKPT FILE[:FROM:LEN] ...
+//   trie_ckpt bpc CKPT|MODEL.pk FILE[:FROM:LEN] ...
 //   trie_ckpt compare CKPT_A CKPT_B FILE[:FROM:LEN] ...
+//   trie_ckpt pack CKPT OUT.pk [--fit FILE[:FROM:LEN]]
 //   trie_ckpt selftest
 //
-// Reads "TRI1" (the live trainer native/tools/trie_stream_train.cpp) and "TRI2" (trie_stream_train_v2) checkpoints
-// through cypha/cyphalm/stream_trie.hpp. verify checks the file's size and structure, whether 32-bit counts wrapped
-// (TRI1), and with --corpus whether every finished corpus file was trained. bpc scores held-out bytes with today's
-// fixed backoff (packed_trie.hpp Model::mix, Mode::Full and Mode::Synth, the 4-byte match folded in); compare scores
-// two checkpoints on the same bytes, paired over 4 KiB blocks. Scoring only: it answers nothing (PLAN rule 10).
+// Reads "TRI1" (the live trainer's old 32-bit layout), "TRI2" (trie_stream_train_v2) and "TR64" (the live trainer
+// native/tools/trie_stream_train.cpp since 2026-10-28, 64-bit counts) checkpoints through
+// cypha/cyphalm/stream_trie.hpp. verify checks the file's size and structure, whether 32-bit counts wrapped (TRI1),
+// that every total is its counts' sum (TR64), and with --corpus whether every finished corpus file was trained. bpc
+// scores held-out bytes with today's fixed backoff (packed_trie.hpp Model::mix, Mode::Full and Mode::Synth, the 4-byte
+// match folded in); given a stored packed model (pack's output, "CYPHAPK") it prints the fixed backoff in Synth and the
+// learned mixture with the model's own weights. compare scores two checkpoints on the same bytes, paired over 4 KiB
+// blocks. pack writes the checkpoint's packed serving form (packed_trie.hpp PackedModel, the file cyphalm_trie
+// --model serves) without the 4-byte match, whose stored follower is an index into its own side array rather than the
+// training text; the six mixture weights are fit by exponentiated gradient over --fit's bytes (default: the
+// experts' starting weights), with the counts frozen. Scoring only: it answers nothing (PLAN rule 10).
 
 #include "cypha/cyphalm/stream_trie.hpp"
 
@@ -42,7 +49,8 @@ struct Verdict {
     bool ok() const { return problems.empty(); }
 };
 
-void check_structure(const st::Model& m, Verdict& v) {
+template <class M>
+void check_structure(const M& m, Verdict& v) {
     const std::size_t nn = m.nodes.size(), nf = m.fols.size();
     if (nn == 0 || m.nodes[0].depth != 0) return v.problems.push_back("no root node"), void();
     std::uint64_t bad_link = 0, bad_depth = 0, bad_nchild = 0, bad_nfol = 0, fol_at_d1 = 0;
@@ -131,13 +139,50 @@ void check_counts(const st::Model& m, const st::Header& h, Verdict& v) {
     }
 }
 
+// TR64 counts are 64-bit and never wrap, so every total must equal its counts' sum exactly.
+void check_counts64(const st::Model64& m, Verdict& v) {
+    std::uint64_t inconsistent = 0;
+    std::uint64_t depth_sum[5] = {0, 0, 0, 0, 0};
+    for (std::size_t i = 1; i < m.nodes.size(); ++i) {
+        const auto& n = m.nodes[i];
+        if (n.depth <= 4) depth_sum[n.depth] += n.total;
+        if (n.fol_head == st::kNil && n.total == 0) continue;
+        std::uint64_t s = 0;
+        for (auto f = n.fol_head; f != st::kNil && f < m.fols.size(); f = m.fols[f].next) s += m.fols[f].count;
+        if (s != n.total) ++inconsistent;
+    }
+    if (inconsistent) v.problems.push_back(std::to_string(inconsistent) + " nodes whose total is not their followers' sum");
+    std::uint64_t uni_sum = 0;
+    for (auto c : m.uni) uni_sum += c;
+    if (uni_sum != m.uni_n) v.problems.push_back("unigram total is not its counts' sum");
+    if (m.uni_n != m.bytes_seen)
+        v.problems.push_back("unigram total " + std::to_string(m.uni_n) + " != bytes seen " + std::to_string(m.bytes_seen));
+    std::uint64_t bad_rows = 0, o1_sum = 0;
+    for (int p = 0; p < 256; ++p) {
+        std::uint64_t s = 0;
+        for (int y = 0; y < 256; ++y) s += m.o1[static_cast<std::size_t>(p) * 256 + static_cast<std::size_t>(y)];
+        bad_rows += s != m.o1n[p];
+        o1_sum += m.o1n[p];
+    }
+    if (bad_rows) v.problems.push_back(std::to_string(bad_rows) + " order-1 rows whose total is off");
+    if (o1_sum > m.bytes_seen) v.problems.push_back("order-1 totals exceed the bytes seen");
+    // Each record or file start leaves out its first d bytes at order d, so order d falls a little short.
+    for (int d = 2; d <= 4; ++d) {
+        if (depth_sum[d] > m.bytes_seen) v.problems.push_back("order-" + std::to_string(d) + " totals exceed the bytes seen");
+        v.notes.push_back("order-" + std::to_string(d) + " totals " + std::to_string(depth_sum[d]) + " (" +
+                          std::to_string(m.bytes_seen - std::min(m.bytes_seen, depth_sum[d])) +
+                          " short of the bytes seen: record and file starts)");
+    }
+}
+
 fs::path rel_to(const fs::path& p, const fs::path& root) {
     const std::string s = p.generic_string(), r = root.generic_string();
     if (s.size() > r.size() && s.compare(0, r.size(), r) == 0) return fs::path(s.substr(r.size() + (s[r.size()] == '/')));
     return p;
 }
 
-void check_corpus(const st::Model& m, const fs::path& root, const fs::path& trained_list, bool deep, Verdict& v) {
+template <class M>
+void check_corpus(const M& m, const fs::path& root, const fs::path& trained_list, bool deep, Verdict& v) {
     std::set<std::string> trained;
     {
         std::ifstream in(trained_list);
@@ -201,21 +246,38 @@ int cmd_verify(const std::vector<std::string>& args) {
         else if (args[i] == "--deep") deep = true;
         else return std::cerr << "unknown option " << args[i] << "\n", 2;
     }
-    st::Model m;
     st::Header h;
     std::string err;
     Verdict v;
-    if (!st::load(ckpt, m, h, err)) {
+    if (!st::read_header(ckpt, h, err)) {
         std::cout << "verify " << ckpt.string() << ": NOT VERIFIED\n  - " << err << "\n";
         return 1;
     }
-    std::cout << "verify " << ckpt.string() << " (" << (h.tri2 ? "TRI2" : "TRI1") << ")\n  bytes seen " << m.bytes_seen
-              << ", nodes " << m.nodes.size() << ", followers " << m.fols.size() << ", match keys " << m.mfilled
-              << ", file " << h.file_bytes << " bytes\n";
-    check_structure(m, v);
-    check_counts(m, h, v);
-    if (!corpus.empty()) check_corpus(m, corpus, trained, deep, v);
-    else v.notes.push_back("corpus not checked (give --corpus ROOT to check every finished file was trained)");
+    auto run = [&](const auto& m) {
+        std::cout << "verify " << ckpt.string() << " (" << st::format_name(h) << ")\n  bytes seen " << m.bytes_seen
+                  << ", nodes " << m.nodes.size() << ", followers " << m.fols.size() << ", match keys " << m.mfilled
+                  << ", file " << h.file_bytes << " bytes\n";
+        check_structure(m, v);
+        if (!corpus.empty()) check_corpus(m, corpus, trained, deep, v);
+        else v.notes.push_back("corpus not checked (give --corpus ROOT to check every finished file was trained)");
+    };
+    if (h.tr64) {
+        st::Model64 m;
+        if (!st::load64(ckpt, m, h, err)) {
+            std::cout << "verify " << ckpt.string() << ": NOT VERIFIED\n  - " << err << "\n";
+            return 1;
+        }
+        check_counts64(m, v);
+        run(m);
+    } else {
+        st::Model m;
+        if (!st::load(ckpt, m, h, err)) {
+            std::cout << "verify " << ckpt.string() << ": NOT VERIFIED\n  - " << err << "\n";
+            return 1;
+        }
+        check_counts(m, h, v);
+        run(m);
+    }
     for (const auto& n : v.notes) std::cout << "  note: " << n << "\n";
     for (const auto& p : v.problems) std::cout << "  - " << p << "\n";
     std::cout << (v.ok() ? "VERIFIED" : "NOT VERIFIED") << "\n";
@@ -227,7 +289,7 @@ int cmd_info(const std::vector<std::string>& args) {
     st::Header h;
     std::string err;
     if (!st::read_header(args[0], h, err)) return std::cerr << err << "\n", 1;
-    std::cout << "format " << (h.tri2 ? "TRI2" : "TRI1") << "\nbytes_seen " << h.bytes_seen << "\nnodes " << h.nn
+    std::cout << "format " << st::format_name(h) << "\nbytes_seen " << h.bytes_seen << "\nnodes " << h.nn
               << "\nfollowers " << h.nf << "\nmatch_slots " << h.slots << "\nmatch_keys " << h.mfilled
               << "\nfile_bytes " << h.file_bytes << "\nexpected_bytes " << h.expected_bytes << "\n";
     if (h.tri2)
@@ -307,13 +369,57 @@ bool load_scorer(const fs::path& ckpt, tr::Model& pm, std::vector<std::uint8_t>&
         std::cerr << "cannot load " << ckpt << ": " << err << "\n";
         return false;
     }
-    std::cerr << "loaded " << ckpt.string() << " (" << (h.tri2 ? "TRI2" : "TRI1") << ", bytes seen " << h.bytes_seen
+    std::cerr << "loaded " << ckpt.string() << " (" << st::format_name(h) << ", bytes seen " << h.bytes_seen
               << ", nodes " << h.nn << ", kept match keys " << pm.dense.size() << ")\n";
+    if (h.tr64)
+        std::cerr << "scaled: unigram shift " << h.uni_shift << ", order-1 rows shifted " << h.scaled_o1_rows
+                  << ", nodes shifted " << h.scaled_nodes << " (largest shift " << h.max_shift << "), followers dropped "
+                  << h.dropped_fols << ", followers kept " << pm.fols.size() << "\n";
     return true;
 }
 
+bool is_pack(const fs::path& p) {
+    std::ifstream in(p, std::ios::binary);
+    char magic[8] = {};
+    in.read(magic, 8);
+    return in && std::memcmp(magic, "CYPHAPK", 8) == 0;
+}
+
+// A stored packed model: the fixed backoff (Synth) and the learned mixture with the model's own weights.
+int bpc_pack(const std::vector<std::string>& args) {
+    double w[6];
+    tr::Config cfg;
+    tr::PackedModel pk;
+    try {
+        pk = tr::PackedModel::load(args[0], w, cfg);
+    } catch (const std::exception& e) {
+        return std::cerr << e.what() << "\n", 1;
+    }
+    std::cerr << "loaded " << args[0] << " (packed, " << pk.bytes() << " bytes, nodes " << pk.nodes() << ", followers "
+              << pk.followers() << ", match keys " << pk.matches() << ")\n";
+    std::printf("weights %.6f %.6f %.6f %.6f %.6f %.6f\n", w[0], w[1], w[2], w[3], w[4], w[5]);
+    for (std::size_t i = 1; i < args.size(); ++i) {
+        Slice s;
+        if (!read_slice(args[i], s)) return std::cerr << "cannot read " << args[i] << "\n", 1;
+        double bs = 0, bm = 0, P[256], e[5][256];
+        for (std::size_t j = 0; j < s.bytes.size(); ++j) {
+            bool matched = false;
+            unsigned pred = 0;
+            pk.mix(s.bytes.data(), j, SIZE_MAX, tr::Mode::Synth, P, matched);
+            bs += -std::log2(std::max(P[s.bytes[j]], 1e-300));
+            pk.fill_experts(s.bytes.data(), j, SIZE_MAX, tr::Mode::Synth, e, matched, pred, false);
+            tr::mix_dist(w, e, matched, pred, P);
+            bm += -std::log2(std::max(P[s.bytes[j]], 1e-300));
+        }
+        const double n = s.bytes.empty() ? 1.0 : static_cast<double>(s.bytes.size());
+        std::printf("bpc %s bytes %zu synth %.6f mix %.6f\n", s.label.c_str(), s.bytes.size(), bs / n, bm / n);
+    }
+    return 0;
+}
+
 int cmd_bpc(const std::vector<std::string>& args) {
-    if (args.size() < 2) return std::cerr << "usage: trie_ckpt bpc CKPT FILE[:FROM:LEN] ...\n", 2;
+    if (args.size() < 2) return std::cerr << "usage: trie_ckpt bpc CKPT|MODEL.pk FILE[:FROM:LEN] ...\n", 2;
+    if (is_pack(args[0])) return bpc_pack(args);
     tr::Model pm;
     std::vector<std::uint8_t> side;
     if (!load_scorer(args[0], pm, side)) return 1;
@@ -371,6 +477,59 @@ int cmd_compare(const std::vector<std::string>& args) {
         std::printf("%-40s %10zu %10.6f %10.6f %+8.4f [%+.4f, %+.4f] %10.6f %10.6f\n", slices[i].label.c_str(),
                     slices[i].bytes.size(), sa[i].full, sb[i].full, m, lo, hi, sa[i].synth, sb[i].synth);
     }
+    return 0;
+}
+
+// ---- pack
+
+// Fits the six weights by exponentiated gradient over `x` (counts frozen), as cyphalm_trie does on its training stream.
+void fit_weights(const tr::PackedModel& pk, const std::vector<std::uint8_t>& x, const tr::Config& cfg, double w[6]) {
+    tr::init_weights(w, cfg);
+    double e[5][256], py[6];
+    for (std::size_t i = 0; i < x.size(); ++i) {
+        bool matched = false;
+        unsigned pred = 0;
+        pk.fill_experts(x.data(), i, SIZE_MAX, tr::Mode::Synth, e, matched, pred, false);
+        for (int k = 0; k < 5; ++k) py[k] = e[k][x[i]];
+        py[5] = matched && pred == x[i] ? 1.0 : 0.0;
+        tr::eg_update(w, py, matched, cfg);
+    }
+}
+
+int cmd_pack(const std::vector<std::string>& args) {
+    if (args.size() < 2) return std::cerr << "usage: trie_ckpt pack CKPT OUT.pk [--fit FILE[:FROM:LEN]]\n", 2;
+    std::string fit;
+    for (std::size_t i = 2; i < args.size(); ++i) {
+        if (args[i] == "--fit" && i + 1 < args.size()) fit = args[++i];
+        else return std::cerr << "unknown option " << args[i] << "\n", 2;
+    }
+    Slice fs_;
+    if (!fit.empty() && !read_slice(fit, fs_)) return std::cerr << "cannot read " << fit << "\n", 1;
+    tr::PackedModel pk;
+    {
+        tr::Model pm;
+        std::vector<std::uint8_t> side;
+        if (!load_scorer(args[0], pm, side)) return 1;
+        pm.dense.clear();  // no match: its follower indexes side, not a training text
+        pm.data = nullptr;
+        pk = tr::pack(pm);
+    }
+    const tr::Config cfg;
+    double w[6];
+    if (fit.empty()) tr::init_weights(w, cfg);
+    else fit_weights(pk, fs_.bytes, cfg, w);
+    try {
+        pk.save(args[1], w, cfg);
+    } catch (const std::exception& e) {
+        return std::cerr << e.what() << "\n", 1;
+    }
+    std::error_code ec;
+    std::printf("packed %s nodes %llu followers %llu match_keys %llu bytes %llu file %llu\n", args[1].c_str(),
+                static_cast<unsigned long long>(pk.nodes()), static_cast<unsigned long long>(pk.followers()),
+                static_cast<unsigned long long>(pk.matches()), static_cast<unsigned long long>(pk.bytes()),
+                static_cast<unsigned long long>(fs::file_size(args[1], ec)));
+    std::printf("weights %.6f %.6f %.6f %.6f %.6f %.6f%s%s\n", w[0], w[1], w[2], w[3], w[4], w[5],
+                fit.empty() ? " (initial)" : " fit on ", fit.c_str());
     return 0;
 }
 
@@ -453,6 +612,101 @@ int cmd_selftest() {
         check_structure(back, v);
         check_counts(back, hb, v);
         CHECK(v.ok());
+    }
+
+    // 2b. TR64: the same model widened to 64 bits scores identically and verifies; a damaged total is caught. With
+    // every count times 2^33, to_packed shifts each node back, so order 2-4 keep their exact ratios (Full mode differs
+    // only through the KT tables' +1/2), and the packed form fit on held-out bytes round-trips through its file.
+    {
+        const fs::path c64 = tmp / "w64.bin";
+        CHECK(st::save64(c64, st::widen(sm)));
+        tr::Model p64;
+        std::vector<std::uint8_t> s64;
+        st::Header h64;
+        CHECK(st::to_packed(c64, p64, s64, h64, err) && h64.tr64 && h64.scaled_nodes == 0 && h64.dropped_fols == 0);
+        CHECK(p64.nodes.size() == pm.nodes.size() && p64.fols.size() == pm.fols.size() &&
+              p64.dense.size() == pm.dense.size());
+        double d64 = 0;
+        for (auto mode : {tr::Mode::Full, tr::Mode::Synth})
+            for (std::size_t i = 0; i < H.size(); i += 7) {
+                double P[256], Q[256];
+                bool m1 = false, m2 = false;
+                p64.mix(H.data(), i, SIZE_MAX, mode, P, m1);
+                pm.mix(H.data(), i, SIZE_MAX, mode, Q, m2);
+                CHECK(m1 == m2);
+                for (int s = 0; s < 256; ++s) d64 = std::max(d64, std::fabs(P[s] - Q[s]));
+            }
+        CHECK(d64 < 1e-12);
+        st::Model64 back;
+        st::Header hb;
+        CHECK(st::load64(c64, back, hb, err));
+        Verdict v;
+        check_structure(back, v);
+        check_counts64(back, v);
+        CHECK(v.ok());
+        for (auto& n : back.nodes)
+            if (n.depth == 4 && n.total > 2) {
+                n.total += 1;
+                break;
+            }
+        Verdict vd;
+        check_counts64(back, vd);
+        CHECK(!vd.ok());
+
+        const fs::path cbig = tmp / "w64big.bin";
+        CHECK(st::save64(cbig, st::widen(sm, std::uint64_t{1} << 33)));
+        tr::Model pb;
+        std::vector<std::uint8_t> sb;
+        st::Header hbig;
+        CHECK(st::to_packed(cbig, pb, sb, hbig, err) && hbig.scaled_nodes > 0 && hbig.dropped_fols == 0 &&
+              hbig.uni_shift > 0);
+        bool ratios = pb.nodes.size() == pm.nodes.size();
+        for (std::size_t i = 1; ratios && i < pm.nodes.size(); ++i) {
+            const auto ta = pm.nodes[i].total, tb = pb.nodes[i].total;
+            if (ta == 0) continue;
+            for (auto f = pm.nodes[i].fol_head, g = pb.nodes[i].fol_head; f != st::kNil;
+                 f = pm.fols[f].next, g = pb.fols[g].next)
+                ratios = ratios && g != st::kNil && pb.fols[g].sym == pm.fols[f].sym &&
+                         std::uint64_t{pb.fols[g].count} * ta == std::uint64_t{pm.fols[f].count} * tb;
+        }
+        CHECK(ratios);
+        // The reference with pb's unigram and order-1 tables: the shifted nodes alone must not move Full mode.
+        tr::Model ref2;
+        std::vector<std::uint8_t> side2;
+        st::Header h2;
+        CHECK(st::to_packed(c2, ref2, side2, h2, err));
+        std::memcpy(ref2.uni, pb.uni, sizeof ref2.uni);
+        ref2.uni_n = pb.uni_n;
+        std::memcpy(ref2.o1, pb.o1, sizeof ref2.o1);
+        std::memcpy(ref2.o1n, pb.o1n, sizeof ref2.o1n);
+        double dbig = 0;
+        for (std::size_t i = 0; i < H.size(); i += 7) {
+            double P[256], Q[256];
+            bool m1 = false, m2 = false;
+            pb.mix(H.data(), i, SIZE_MAX, tr::Mode::Full, P, m1);
+            ref2.mix(H.data(), i, SIZE_MAX, tr::Mode::Full, Q, m2);
+            CHECK(m1 == m2);
+            for (int s = 0; s < 256; ++s) dbig = std::max(dbig, std::fabs(P[s] - Q[s]));
+        }
+        CHECK(dbig < 1e-12);
+        std::fprintf(stderr, "TR64: max |dP| %.3g unscaled, %.3g at 2^33 (Full)\n", d64, dbig);
+
+        pb.dense.clear();
+        pb.data = nullptr;
+        const tr::PackedModel pk = tr::pack(pb);
+        const tr::Config pc;
+        double wf[6];
+        fit_weights(pk, H, pc, wf);
+        double ws = 0;
+        for (double x : wf) ws += x;
+        CHECK(std::fabs(ws - 1.0) < 1e-9 && wf[4] > wf[0]);
+        const fs::path pkf = tmp / "m.pk";
+        pk.save(pkf.string(), wf, pc);
+        CHECK(is_pack(pkf) && !is_pack(c64));
+        double wb[6];
+        tr::Config cb;
+        const tr::PackedModel back_pk = tr::PackedModel::load(pkf.string(), wb, cb);
+        CHECK(back_pk == pk && std::equal(wf, wf + 6, wb) && pk.matches() == 0);
     }
 
     // 3. Halving: with a small cap no count passes it, totals stay their followers' sums, and verify passes.
@@ -541,7 +795,7 @@ int cmd_selftest() {
 
 int main(int argc, char** argv) {
     if (argc < 2) {
-        std::cerr << "usage: trie_ckpt info|verify|bpc|compare|selftest ...\n";
+        std::cerr << "usage: trie_ckpt info|verify|bpc|compare|pack|selftest ...\n";
         return 2;
     }
     const std::string cmd = argv[1];
@@ -550,6 +804,7 @@ int main(int argc, char** argv) {
     if (cmd == "verify") return cmd_verify(args);
     if (cmd == "bpc") return cmd_bpc(args);
     if (cmd == "compare") return cmd_compare(args);
+    if (cmd == "pack") return cmd_pack(args);
     if (cmd == "selftest") return cmd_selftest();
     std::cerr << "unknown command " << cmd << "\n";
     return 2;

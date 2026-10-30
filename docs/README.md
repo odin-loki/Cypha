@@ -2,7 +2,7 @@
 
 **One product:** `cypha::Cypha` -- classify + regress + sample latents + next-byte generation. Native C++ only.
 
-The language model being taken forward is the **packed byte trie** (~**2.30 BPC** on an 8 MiB holdout). **hp gate24** (~**1.61 BPC**, about **1.5 GB**) is the comparison baseline. It is not trained at terabyte scale. Map, measurements, and the 1 TB train plan: [`CURRENT.md`](CURRENT.md).
+The language model being taken forward is the **packed byte trie** (~**2.30 BPC** on an 8 MiB holdout). It has now been trained on **918.6 GB** of text and scores **2.17 BPC** on an unseen C4 shard. The trained form is 12.4 GB. The packed form is 992 MB and is in git as [`models/cyphalm_1tb/`](../models/cyphalm_1tb/README.md): [`reports/TRIE_1TB_PROFILE.md`](reports/TRIE_1TB_PROFILE.md). **hp gate24** (~**1.61 BPC**, about **1.5 GB**) is the comparison baseline. It is not trained at terabyte scale. Map, measurements, and the 1 TB train plan: [`CURRENT.md`](CURRENT.md).
 
 **Default plan: [`PLAN.md`](PLAN.md)** (2026-10-26). It covers language understanding from statistics plus a data pack, the Cypha classifier as the decision engine, the SCRIBE text metric (v2 passes its control ladder: [report](reports/SCRIBE_V2.md), [paper](../paper/scribe/SCRIBE_paper.md)), the ECS and LCI certainty metrics, and the 1 TB run as Track A. The evidence behind it: [`reports/CYPHALM_QA_AND_CONTEXT_TEST.md`](reports/CYPHALM_QA_AND_CONTEXT_TEST.md). Mining a teacher model for the data pack: [`GGUF_MINING.md`](GGUF_MINING.md) and `scripts/gguf_mine.py`. Knowing what it knows, what it doesn't, and discovery: [`DISCOVERY.md`](DISCOVERY.md). Thought processes: [`THOUGHT.md`](THOUGHT.md). Meaning from statistics: [`SEMANTICS.md`](SEMANTICS.md); copying an embedding model's geometry: [`EMBEDDING_GEOMETRY.md`](EMBEDDING_GEOMETRY.md). CyphaLM over tokens: [`TOKENS_PLAN.md`](TOKENS_PLAN.md). Event forecasting to parity (a scaffold under repair): [`FORECAST_PLAN.md`](FORECAST_PLAN.md), with the module's design, data and evaluation in [`research/forecasting/`](research/forecasting/README.md).
 
@@ -41,7 +41,8 @@ For platform-specific setup see [CONTRIBUTING.md](../CONTRIBUTING.md) and [`pack
 | [Native quick start](native/NATIVE_QUICKSTART.md) | Build, CTest, `cypha_rest`, `cypha_qt_shell`, `cypha_bench_run` |
 | [Environment variables](studio/CYPHA_ENV.md) | `CYPHA_*` registry root, API host/port, REST routes |
 | [Optional memory & load testing](studio/OPTIONAL_MEMORY_AND_LOAD.md) | Load-testing notes for REST |
-| [Current numbers](CURRENT.md) | Small trie, hp gate24, corpus fetch, what is not ready to scale |
+| [Current numbers](CURRENT.md) | 1 TB trie, small trie, hp gate24, corpus fetch, what is not ready to scale |
+| [Trie trained on the 1 TB corpus](reports/TRIE_1TB_PROFILE.md) | Corpus and checksums, size, the packed model, held-out BPC on C4 / lcet10 / enwik9, InfiniGram, unseen questions, SCRIBE, Track A predictions, time |
 | [One Cypha cutover](reports/ONE_CYPHA_CUTOVER.md) | `cypha::Cypha` ownership and routes. The hybrid default named there is historical. |
 | [CyphaLM as a language model](reports/CYPHALM_LM_QUALITY_REPORT.md) | hp next-byte distribution quality, decoding, ensembles, ∞-gram, RAM, speed, the winner; tools / flags / formats reference |
 | [CyphaLM vs a Transformer and an LSTM](reports/CYPHALM_VS_NEURAL_LM.md) | same data, same CPU, ≤ 1 h training each: held-out quality, in-context learning, copying, byte classes, calibration, generation with cross-judges, latency, RAM, learning curves |

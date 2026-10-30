@@ -60,7 +60,9 @@
 //        adds the similar-context expert (lambdas on the first half; --no-sim leaves the line out). B4C: the class
 //        expert (on InfiniGram's bytes) and the copy expert add lines too, each name the chain so far
 //        (trie_plus_context_8192_cls_bpc, ..._cls_sim_bpc, ..._cls_sim_copy_bpc), each expert's lambdas fit on the
-//        first half over the distribution it is mixed into.
+//        first half over the distribution it is mixed into. --model FILE takes the trie and its weights from a stored
+//        packed model (e.g. trie_ckpt pack's 1 TB trie; docs/reports/TRIE_1TB_PROFILE.md), which has not read the chat;
+//        InfiniGram and the experts are built on wiki train + chat as without it.
 //   sample <wiki> <out_dev> [out_fresh] [--prompts 250] [--bytes 600] [--save FILE | --model FILE]
 //        trie_sample: wiki-only trie, 3 temperatures, no-repeat rule, files for `scribe ladder --gen-trie`.
 //        A4: with the similar-context expert (its lambdas over the trie on the first half of the holdout) the files
@@ -815,15 +817,23 @@ std::vector<double> mix_plan_into(const ContentPlanStore& st, const std::map<std
                                   const std::uint8_t* data, std::size_t train, std::size_t half, std::vector<double>& cur);
 
 int cmd_context8k(const Args& a) {
-    const Config& cfg = a.cfg;
+    Config cfg = a.cfg;
     std::vector<std::uint8_t> data;
-    if (!load_wiki(a, data)) return 1;
-    Model model;
-    model.data = data.data();
-    model.init(cfg);
     double w[6];
-    init_weights(w, cfg);
-    train_span(model, data, w, 0, cfg.train, cfg);
+    // --model FILE (Track A, docs/reports/TRIE_1TB_PROFILE.md): the trie and its weights come from a stored packed model
+    // (trie_ckpt pack's 1 TB trie), which has not read the chat. InfiniGram and every expert below are still built on
+    // wiki train + chat, as without it.
+    const bool served = !a.model.empty();
+    PackedModel spm;
+    if (served && !load_model(a, spm, w, cfg, data)) return 1;
+    if (!served && !load_wiki(a, data)) return 1;
+    Model model;
+    if (!served) {
+        model.data = data.data();
+        model.init(cfg);
+        init_weights(w, cfg);
+        train_span(model, data, w, 0, cfg.train, cfg);
+    }
 
     std::vector<Turn> turns;
     load_dolly(a.dolly, turns);
@@ -842,11 +852,15 @@ int cmd_context8k(const Args& a) {
     for (std::size_t i = 0; i < turns.size(); ++i)
         if (!held[i]) chat += turns[i].prompt + turns[i].answer + "\n\n";
     const std::size_t chat_at = append_chat(model, data, chat);
-    train_span(model, data, w, chat_at, data.size(), cfg);
-    train_span(model, data, w, chat_at, data.size(), cfg);
-    model.compact_match();
-    std::cerr << "trie trained, held out " << held_idx.size() << " dolly turns\n";
-    const PackedModel pm = pack(model);  // M4
+    if (!served) {
+        train_span(model, data, w, chat_at, data.size(), cfg);
+        train_span(model, data, w, chat_at, data.size(), cfg);
+        model.compact_match();
+        std::cerr << "trie trained, held out " << held_idx.size() << " dolly turns\n";
+    } else {
+        std::cerr << "trie served from " << a.model << ", held out " << held_idx.size() << " dolly turns\n";
+    }
+    const PackedModel pm = served ? std::move(spm) : pack(model);  // M4
     model.release();
 
     // Index the training bytes only: wiki train + boundary + chat. No wiki holdout. The index takes T, then the class
@@ -6755,7 +6769,7 @@ void usage() {
                  "  bpc [wiki] [--negative] [--no-guard]\n"
                  "  chat [wiki] [dolly] [--prompt TEXT] [--no-repeat] [--save FILE | --model FILE]\n"
                  "  probe [wiki] [dolly]\n"
-                 "  context8k [wiki] [dolly]\n"
+                 "  context8k [wiki] [dolly] [--model FILE]\n"
                  "  sample <wiki> <out_dev> [out_fresh] [--prompts 250] [--bytes 600] [--save FILE | --model FILE]\n"
                  "  cls <wiki> <TABLE|shape>[:tail[:orders[:flags]]] [more specs] [--sim SPEC ...] [--sim-fresh] [--sim-surface]\n"
                  "      [--sim-stream FROM:LEN] [--sim-bits PREFIX] [--sim-growth MIB,MIB,...]   (A4e)\n"
@@ -6819,8 +6833,9 @@ int main(int argc, char** argv) {
         std::cerr << "--bkn-answers on|off (Kneser-Ney inside answers: on, BKN2; off, the experts' gate)\n";
         return 2;
     }
-    if ((!a.model.empty() || !a.save.empty()) && cmd != "chat" && cmd != "sample" && cmd != "qa") {
-        std::cerr << "--model and --save are for chat, sample and qa\n";
+    if ((!a.model.empty() || !a.save.empty()) && cmd != "chat" && cmd != "sample" && cmd != "qa" &&
+        !(cmd == "context8k" && a.save.empty())) {
+        std::cerr << "--model and --save are for chat, sample and qa (context8k takes --model)\n";
         return 2;
     }
     if (!self_test()) return 1;

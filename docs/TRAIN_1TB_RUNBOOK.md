@@ -4,8 +4,12 @@
 
 Models on the 1 TB corpus are numbered.
 
-- **Model 1** is the live run: `<corpus>/trie/checkpoint.bin`, trained by `native/tools/trie_stream_train.cpp` through `scripts/run_train.sh`. Neither file is changed.
+- **Model 1** is the live run: `<corpus>/trie/checkpoint.bin`, trained by `native/tools/trie_stream_train.cpp` through `scripts/run_train.sh`.
 - **Model N** (2 or more) goes to `<corpus>/trie/model<N>/`.
+
+**Update 2026-10-31.** Model 1 was retrained after its 32-bit counts wrapped. The live trainer now writes `TR64`: the same model with 64-bit counts, on eight cores, plus `--once`. That run finished on 918.6 GB, and `trie_ckpt verify` passes everything except the one unfinished Wikipedia download.
+
+`trie_ckpt` reads `TR64` as well as `TRI1` and `TRI2`. `trie_ckpt pack CKPT OUT.pk [--fit FILE:FROM:LEN]` writes the packed serving form that `cyphalm_trie chat | sample | context8k --model` loads. The packed model 1 is in `models/cyphalm_1tb/`. Results: [`reports/TRIE_1TB_PROFILE.md`](reports/TRIE_1TB_PROFILE.md).
 
 ## Three scripts
 
@@ -44,9 +48,9 @@ Settings, all optional:
 
 The live trainer never exits by itself. It is finished when its log repeats `waiting for a finished file` and no `*.part` file is left in the corpus. Stop it with Ctrl-C. Its checkpoint is safe: each one is written to a temporary file and then renamed.
 
-## A problem to expect in model 1
+## A problem to expect in model 1 (fixed 2026-10-31: the live trainer now writes `TR64`)
 
-The live trainer keeps its counts in 32 bits: the unigram, the order-1 table, each context's total and each follower's count. A 32-bit count wraps past 4.29 billion. A space is about one byte in six, so its count wraps after roughly 26 GB of text. Frequent contexts wrap soon after. At 1 TB many counts have wrapped, and their probabilities are wrong.
+Before the fix, the live trainer kept its counts in 32 bits: the unigram, the order-1 table, each context's total and each follower's count. A 32-bit count wraps past 4.29 billion. A space is about one byte in six, so its count wraps after roughly 26 GB of text. Frequent contexts wrap soon after. At 1 TB many counts have wrapped, and their probabilities are wrong.
 
 The checker finds this. The trainer also keeps `bytes_seen` in 64 bits, which never wraps. The checker compares each table's total with it, and a short total means a wrap. Expect model 1 to show `NOT VERIFIED` with lines like "unigram counts wrapped" and "order-2 totals fall short of the bytes seen".
 
@@ -98,5 +102,5 @@ Memory: the checker loads one model at a time, about its file size in RAM. The t
 
 ## Not done yet
 
-- Today's full CyphaLM stack (class, similar-context, copy, byte Kneser–Ney, the document cache) does not run on a 1 TB trie yet. `cyphalm_trie` trains its own trie from a slice. A loader for a 1 TB checkpoint is the next step.
+- **`qa`.** `chat`, `sample` and `context8k` serve a packed 1 TB trie with `--model FILE`, and their experts are built on the slice as before. `qa --model` still takes only a store built by `qa --save`.
 - Byte Kneser–Ney at 1 TB needs its own build at that scale (BYTE_KN.md).

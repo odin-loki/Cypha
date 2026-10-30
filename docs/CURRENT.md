@@ -4,7 +4,28 @@ The language model being taken forward is the packed byte trie. hp gate24 stays 
 
 **The default plan is now [`PLAN.md`](PLAN.md)** (2026-10-26). The 1 TB run below continues inside it as Track A, with its predictions registered there. The question-answering and 8K count-context results are in [`reports/CYPHALM_QA_AND_CONTEXT_TEST.md`](reports/CYPHALM_QA_AND_CONTEXT_TEST.md).
 
-## Packed trie (the model to train)
+## Trie trained on the 1 TB corpus (2026-10-30)
+
+Full profile, packed model and tests: [`reports/TRIE_1TB_PROFILE.md`](reports/TRIE_1TB_PROFILE.md). The packed model is in git as [`models/cyphalm_1tb/`](../models/cyphalm_1tb/README.md).
+
+One pass over **918.6 GB** of text took about 48 h. The text came from 976 files totalling 1,023 GB: C4 625 GB, GitHub 224 GB, arXiv 94 GB, Stack Exchange 80 GB, and 40 Gutenberg books. Every RedPajama file matches its published SHA-256.
+
+| | Value |
+|--|------:|
+| Context nodes | 53.8 M (52.9 M at order 4) |
+| Follower counts | 574 M |
+| Unpacked (`TR64`, 64-bit counts; `trie_ckpt verify` checks every total) | 12.4 GB on disk, 12.3 GB resident |
+| **Packed** (`trie_ckpt pack`, `cyphalm_trie --model`) | **992 MB** (465 MB with zstd); 41.8 M nodes, 390 M followers, no match |
+| BPC, unseen C4 shard (packed / unpacked) | **2.180** / 2.173 |
+| BPC, lcet10 | 2.328 / 2.337 |
+| BPC, enwik9 holdout `[7340032, 8388608)` | 3.207 / 3.206 (the 8 MiB trie scores 2.298 here) |
+| + 8K InfiniGram over wiki train + Dolly, holdout second half | 2.2757 (8 MiB trie 2.0684) |
+| Unseen questions answered (`context8k`) | 0 / 41 (8 MiB trie 0 / 41) |
+| SCRIBE v2 / surface S, GEN-A dev, trie only | 0.028 [0.021, 0.035] / 0.796 (8 MiB trie 0.020 [0.014, 0.027] / 0.737) |
+
+Order-4 backoff takes 92–100% of the mixture weight. The 4-byte match keeps only the latest follower. At this scale it is right on only 33–43% of the bytes where it fires, so the packed model leaves it out. Wikipedia is not in this model: the dumps are bz2 XML, and the trainer reads only `.txt` and `.jsonl`. That is why enwik9 scores worse than the small trie trained on enwik9 itself. On clean Wikipedia prose (GEN-A's human continuations) the 1 TB trie is better: 2.25 against 2.40 BPC.
+
+## Packed trie (8 MiB enwik9 slice)
 
 Tools: `native/tools/cyphalm_trie.cpp` (`bpc`, `chat`, `probe`, `context8k`, `sample`, `selftest`) over the one model in `native/include/cypha/cyphalm/packed_trie.hpp`. On 2026-10-27 it replaced the forked `trie_*.cpp` tools and reproduces their numbers to the printed digit. The experiments behind the 2.286, 2.642 and word-trie rows (`trie_together`, `trie_gria_gate`) were retired; their results and the git commits that hold them are in [`reports/B1_TRIE_CONSOLIDATION.md`](reports/B1_TRIE_CONSOLIDATION.md). Surface score: `native/tools/surface_score.cpp`.
 
@@ -198,6 +219,10 @@ The RedPajama book files are not downloaded. That slice was removed for copyrigh
 
 Seed URLs were probed on 2026-10-25 (`python scripts/fetch_corpus.py --check`). Each returned HTTP 206 with a real body.
 
+State on 2026-10-30: articles (C4 shards `00000`–`00738`) and code are at their caps. Papers and Stack Exchange are complete. Books stopped at 40 Gutenberg texts plus the Wikisource and Wikibooks dumps. English Wikipedia is a 5.9 GB `.part`.
+
+`python scripts/verify_corpus_sha.py` checks every file against the RedPajama SHA-256 lists and the Wikimedia SHA-1 lists. It writes `corpus/sha256/checked.jsonl` and `report.txt`. The first check found 18 truncated files, and all were fetched again until they matched. `fetch_corpus.py` now treats a body shorter than `Content-Length` as a failure, and asks Gutenberg for gzip (plain requests get HTTP 406).
+
 ## hp gate24 (comparison only)
 
 Observe **1.611729 BPC**, archive **1.611759 BPC** on enwik8 (2026-09-19). Lab RSS at mem 22 is about **1.5–2 GB**. A tiny-tier run on the first 8 MiB used about **40 MB** and scored about **1.92 BPC**, with a best sample surface near **0.997**. Those tables are sized in advance. They are not the model trained on this corpus. Serve notes for that binary: [`native/CYPHALM_SERVE.md`](native/CYPHALM_SERVE.md).
@@ -209,6 +234,8 @@ The D17 number **2.664 BPC** in `bench/BASELINE_LOCK.json` is a bench lock for t
 **Runbook (2026-10-29): [`TRAIN_1TB_RUNBOOK.md`](TRAIN_1TB_RUNBOOK.md).** The live trainer's 32-bit counts wrap on a large corpus; `scripts/verify_model.sh 1` checks model 1 (the live run), `scripts/train_model.sh 2` trains model 2 with counts that halve instead of wrapping, and `scripts/compare_models.sh 1 2` compares the two on held-out text.
 
 This is Track A of [`PLAN.md`](PLAN.md). The experiments A1–A8 and predictions P-A1 to P-A5 are recorded there.
+
+Status 2026-10-31: one unstructured pass is done as a single 64-bit trie (`trie_stream_train.cpp`), not as packed 1 GB shards, and packed afterwards (step 3's packing; the match is dropped rather than stored as the next byte, step 4). Steps 1, 5 and 6 are still open. Results and the scored predictions: [`reports/TRIE_1TB_PROFILE.md`](reports/TRIE_1TB_PROFILE.md).
 
 Unstructured text and labelled chat are different jobs.
 

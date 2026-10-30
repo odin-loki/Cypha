@@ -6,13 +6,17 @@
 // 32-bit counts wrap on a large corpus (a frequent byte passes 4.29e9 within a few tens of GB), which this header's
 // verifier detects in its checkpoints.
 //
-// Checkpoint files: "TRI1" is the live trainer's layout, read as is. "TRI2" is the same layout followed by a trailer
-// (cap and the number of halvings), written by native/tools/trie_stream_train_v2.cpp.
-// The live trainer and scripts/run_train.sh are not changed by this header.
+// Checkpoint files: "TRI1" is the live trainer's old 32-bit layout, read as is. "TRI2" is the same layout followed by
+// a trailer (cap and the number of halvings), written by native/tools/trie_stream_train_v2.cpp. "TR64" is the live
+// trainer's layout since 2026-10-28: the same fields with 64-bit counts (unigram, order 1, node totals, follower
+// counts), 32-byte nodes and 16-byte followers, no trailer.
 //
 // to_packed() loads a checkpoint into cyphalm::trie::Model (packed_trie.hpp) so today's fixed backoff (Model::mix)
 // scores it: the trie, order-1 and unigram tables are byte-compatible; the match becomes Model's compacted table
-// (keys seen at least twice) over a side array holding each key's stored next byte.
+// (keys seen at least twice) over a side array holding each key's stored next byte. A TR64 checkpoint is scaled on the
+// way in: each node's followers are shifted right until the node's total is at most qdec[255] (the largest count the
+// packed form's one-byte quantiser keeps apart), followers that reach 0 are dropped, and each order-1 row and the
+// unigram are shifted until their totals fit 32 bits. A shift keeps the ratios that the backoff reads.
 
 #pragma once
 
@@ -35,6 +39,7 @@ namespace fs = std::filesystem;
 constexpr std::uint32_t kNil = 0xffffffffu;
 constexpr char kMagic1[4] = {'T', 'R', 'I', '1'};
 constexpr char kMagic2[4] = {'T', 'R', 'I', '2'};
+constexpr char kMagic64[4] = {'T', 'R', '6', '4'};
 
 struct Node {
     std::uint32_t parent = kNil;
@@ -275,24 +280,73 @@ struct Model {
     }
 };
 
+// ---- TR64: the live trainer's 64-bit model (native/tools/trie_stream_train.cpp)
+
+struct Node64 {
+    std::uint32_t parent = kNil;
+    std::uint32_t child_head = kNil;
+    std::uint32_t sibling = kNil;
+    std::uint32_t fol_head = kNil;
+    std::uint64_t total = 0;
+    std::uint16_t nchild = 0;
+    std::uint16_t nfol = 0;
+    std::uint8_t byte = 0;
+    std::uint8_t depth = 0;
+};
+
+struct Fol64 {
+    std::uint64_t count = 0;
+    std::uint32_t next = kNil;
+    std::uint8_t sym = 0;
+};
+
+static_assert(sizeof(Node64) == 32 && sizeof(Fol64) == 16, "TR64 checkpoint layout");
+
+struct Model64 {
+    std::uint64_t uni[256]{};
+    std::uint64_t uni_n = 0;
+    std::vector<std::uint64_t> o1 = std::vector<std::uint64_t>(256 * 256);  // row = the previous byte
+    std::uint64_t o1n[256]{};
+    std::vector<Node64> nodes;
+    std::vector<Fol64> fols;
+    std::uint32_t root_child[256]{};
+    std::vector<std::uint32_t> mk, mv;
+    std::vector<std::uint8_t> mb;
+    std::vector<std::uint16_t> ms;
+    std::uint32_t mfilled = 0;
+    std::uint64_t bytes_seen = 0;
+};
+
 // ---- Checkpoint files
 
 struct Header {
     bool tri2 = false;
+    bool tr64 = false;
     std::uint32_t nn = 0, nf = 0, slots = 0, mfilled = 0;
     std::uint64_t bytes_seen = 0;
     std::uint64_t file_bytes = 0, expected_bytes = 0;
     std::uint32_t cap = 0xffffffffu;
     std::uint64_t halve_uni = 0, halve_o1 = 0, halve_node = 0;
+    // TR64 through to_packed: nodes whose followers were shifted, followers dropped by the shift, the largest node
+    // shift, the unigram's shift and the order-1 rows shifted.
+    std::uint64_t scaled_nodes = 0, dropped_fols = 0, scaled_o1_rows = 0;
+    unsigned max_shift = 0, uni_shift = 0;
 };
+
+inline const char* format_name(const Header& h) { return h.tr64 ? "TR64" : h.tri2 ? "TRI2" : "TRI1"; }
 
 constexpr std::uint64_t kTrailerBytes = 4 + 8 * 3;
 
+// Bytes before the node array: magic, nn, nf, bytes_seen, unigram, uni_n, order 1, its row totals, root children.
+inline std::uint64_t fixed_bytes(const Header& h) {
+    const std::uint64_t c = h.tr64 ? 8 : 4;
+    return 4 + 4 + 4 + 8 + c * 256 + c + c * 256 * 256 + c * 256 + 4 * 256;
+}
+
 inline std::uint64_t expected_size(const Header& h) {
-    std::uint64_t s = 4 + 4 + 4 + 8;
-    s += sizeof(std::uint32_t) * 256 + 4 + sizeof(std::uint32_t) * 256 * 256 + sizeof(std::uint32_t) * 256 +
-         sizeof(std::uint32_t) * 256;
-    s += static_cast<std::uint64_t>(h.nn) * sizeof(Node) + static_cast<std::uint64_t>(h.nf) * sizeof(Fol);
+    std::uint64_t s = fixed_bytes(h);
+    s += static_cast<std::uint64_t>(h.nn) * (h.tr64 ? sizeof(Node64) : sizeof(Node)) +
+         static_cast<std::uint64_t>(h.nf) * (h.tr64 ? sizeof(Fol64) : sizeof(Fol));
     s += 4 + 4 + static_cast<std::uint64_t>(h.slots) * (4 + 4 + 1 + 2);
     if (h.tri2) s += kTrailerBytes;
     return s;
@@ -352,13 +406,14 @@ inline bool read_header(const fs::path& path, Header& h, std::string& err) {
     in.read(magic, 4);
     if (std::memcmp(magic, kMagic1, 4) == 0) h.tri2 = false;
     else if (std::memcmp(magic, kMagic2, 4) == 0) h.tri2 = true;
+    else if (std::memcmp(magic, kMagic64, 4) == 0) h.tr64 = true;
     else return err = "bad magic", false;
     in.read(reinterpret_cast<char*>(&h.nn), 4);
     in.read(reinterpret_cast<char*>(&h.nf), 4);
     in.read(reinterpret_cast<char*>(&h.bytes_seen), 8);
-    const std::uint64_t fixed = 4 + 4 + 4 + 8 + 4 * 256 + 4 + 4 * 256 * 256 + 4 * 256 + 4 * 256;
-    const std::uint64_t at_slots = fixed + static_cast<std::uint64_t>(h.nn) * sizeof(Node) +
-                                   static_cast<std::uint64_t>(h.nf) * sizeof(Fol);
+    const std::uint64_t at_slots = fixed_bytes(h) +
+                                   static_cast<std::uint64_t>(h.nn) * (h.tr64 ? sizeof(Node64) : sizeof(Node)) +
+                                   static_cast<std::uint64_t>(h.nf) * (h.tr64 ? sizeof(Fol64) : sizeof(Fol));
     in.seekg(static_cast<std::streamoff>(at_slots));
     in.read(reinterpret_cast<char*>(&h.slots), 4);
     in.read(reinterpret_cast<char*>(&h.mfilled), 4);
@@ -376,6 +431,7 @@ inline bool read_header(const fs::path& path, Header& h, std::string& err) {
 
 inline bool load(const fs::path& path, Model& m, Header& h, std::string& err) {
     if (!read_header(path, h, err)) return false;
+    if (h.tr64) return err = "TR64 holds 64-bit counts: load it with load64", false;
     if (h.file_bytes != h.expected_bytes) {
         err = "size " + std::to_string(h.file_bytes) + " != expected " + std::to_string(h.expected_bytes);
         return false;
@@ -412,15 +468,222 @@ inline bool load(const fs::path& path, Model& m, Header& h, std::string& err) {
     return true;
 }
 
+// Reads a TR64 checkpoint in full.
+inline bool load64(const fs::path& path, Model64& m, Header& h, std::string& err) {
+    if (!read_header(path, h, err)) return false;
+    if (!h.tr64) return err = "not a TR64 checkpoint", false;
+    if (h.file_bytes != h.expected_bytes) {
+        err = "size " + std::to_string(h.file_bytes) + " != expected " + std::to_string(h.expected_bytes);
+        return false;
+    }
+    std::ifstream in(path, std::ios::binary);
+    in.seekg(4 + 4 + 4 + 8);
+    m.bytes_seen = h.bytes_seen;
+    in.read(reinterpret_cast<char*>(m.uni), sizeof m.uni);
+    in.read(reinterpret_cast<char*>(&m.uni_n), 8);
+    in.read(reinterpret_cast<char*>(m.o1.data()), static_cast<std::streamsize>(m.o1.size() * 8));
+    in.read(reinterpret_cast<char*>(m.o1n), sizeof m.o1n);
+    in.read(reinterpret_cast<char*>(m.root_child), sizeof m.root_child);
+    m.nodes.resize(h.nn);
+    m.fols.resize(h.nf);
+    in.read(reinterpret_cast<char*>(m.nodes.data()), static_cast<std::streamsize>(h.nn) * sizeof(Node64));
+    in.read(reinterpret_cast<char*>(m.fols.data()), static_cast<std::streamsize>(h.nf) * sizeof(Fol64));
+    std::uint32_t slots = 0;
+    in.read(reinterpret_cast<char*>(&slots), 4);
+    in.read(reinterpret_cast<char*>(&m.mfilled), 4);
+    m.mk.resize(slots);
+    m.mv.resize(slots);
+    m.mb.resize(slots);
+    m.ms.resize(slots);
+    in.read(reinterpret_cast<char*>(m.mk.data()), static_cast<std::streamsize>(slots) * 4);
+    in.read(reinterpret_cast<char*>(m.mv.data()), static_cast<std::streamsize>(slots) * 4);
+    in.read(reinterpret_cast<char*>(m.mb.data()), static_cast<std::streamsize>(slots));
+    in.read(reinterpret_cast<char*>(m.ms.data()), static_cast<std::streamsize>(slots) * 2);
+    if (!in) return err = "read failed", false;
+    return true;
+}
+
+// Writes `m` as TR64, the live trainer's layout (for tests; the trainer writes its own).
+inline bool save64(const fs::path& path, const Model64& m) {
+    std::ofstream out(path, std::ios::binary);
+    if (!out) return false;
+    out.write(kMagic64, 4);
+    const auto nn = static_cast<std::uint32_t>(m.nodes.size());
+    const auto nf = static_cast<std::uint32_t>(m.fols.size());
+    out.write(reinterpret_cast<const char*>(&nn), 4);
+    out.write(reinterpret_cast<const char*>(&nf), 4);
+    out.write(reinterpret_cast<const char*>(&m.bytes_seen), 8);
+    out.write(reinterpret_cast<const char*>(m.uni), sizeof m.uni);
+    out.write(reinterpret_cast<const char*>(&m.uni_n), 8);
+    out.write(reinterpret_cast<const char*>(m.o1.data()), static_cast<std::streamsize>(m.o1.size() * 8));
+    out.write(reinterpret_cast<const char*>(m.o1n), sizeof m.o1n);
+    out.write(reinterpret_cast<const char*>(m.root_child), sizeof m.root_child);
+    out.write(reinterpret_cast<const char*>(m.nodes.data()), static_cast<std::streamsize>(nn) * sizeof(Node64));
+    out.write(reinterpret_cast<const char*>(m.fols.data()), static_cast<std::streamsize>(nf) * sizeof(Fol64));
+    const auto slots = static_cast<std::uint32_t>(m.mk.size());
+    out.write(reinterpret_cast<const char*>(&slots), 4);
+    out.write(reinterpret_cast<const char*>(&m.mfilled), 4);
+    out.write(reinterpret_cast<const char*>(m.mk.data()), static_cast<std::streamsize>(slots) * 4);
+    out.write(reinterpret_cast<const char*>(m.mv.data()), static_cast<std::streamsize>(slots) * 4);
+    out.write(reinterpret_cast<const char*>(m.mb.data()), static_cast<std::streamsize>(slots));
+    out.write(reinterpret_cast<const char*>(m.ms.data()), static_cast<std::streamsize>(slots) * 2);
+    return static_cast<bool>(out);
+}
+
+// A 32-bit model widened to TR64, every count multiplied by `scale` (tests: scale 1 is the same model, a large scale
+// is one that to_packed must shift back).
+inline Model64 widen(const Model& m, std::uint64_t scale = 1) {
+    Model64 w;
+    for (int s = 0; s < 256; ++s) w.uni[s] = std::uint64_t{m.uni[s]} * scale;
+    w.uni_n = std::uint64_t{m.uni_n} * scale;
+    for (int p = 0; p < 256; ++p) {
+        for (int y = 0; y < 256; ++y) w.o1[static_cast<std::size_t>(p) * 256 + static_cast<std::size_t>(y)] =
+            std::uint64_t{m.o1[p][y]} * scale;
+        w.o1n[p] = std::uint64_t{m.o1n[p]} * scale;
+    }
+    std::memcpy(w.root_child, m.root_child, sizeof w.root_child);
+    w.nodes.resize(m.nodes.size());
+    for (std::size_t i = 0; i < m.nodes.size(); ++i) {
+        const Node& a = m.nodes[i];
+        Node64& b = w.nodes[i];
+        b.parent = a.parent;
+        b.child_head = a.child_head;
+        b.sibling = a.sibling;
+        b.fol_head = a.fol_head;
+        b.total = std::uint64_t{a.total} * scale;
+        b.nchild = a.nchild;
+        b.nfol = a.nfol;
+        b.byte = a.byte;
+        b.depth = a.depth;
+    }
+    w.fols.resize(m.fols.size());
+    for (std::size_t i = 0; i < m.fols.size(); ++i) {
+        w.fols[i].count = std::uint64_t{m.fols[i].count} * scale;
+        w.fols[i].next = m.fols[i].next;
+        w.fols[i].sym = m.fols[i].sym;
+    }
+    w.mk = m.mk;
+    w.mv = m.mv;
+    w.mb = m.mb;
+    w.ms = m.ms;
+    w.mfilled = m.mfilled;
+    w.bytes_seen = m.bytes_seen * scale;
+    return w;
+}
+
+// The smallest right shift that brings `total` to at most `top`.
+inline unsigned shift_to(std::uint64_t total, std::uint64_t top) {
+    unsigned k = 0;
+    while ((total >> k) > top) ++k;
+    return k;
+}
+
+// TR64 into packed_trie's Model, scaled as the header comment says. Statistics go to `h`.
+inline void scale64_into(Model64& m, trie::Model& pm, Header& h) {
+    const std::uint64_t top = trie::qdec[255];
+    h.uni_shift = shift_to(m.uni_n, 0xffffffffu);
+    std::uint64_t un = 0;
+    for (int s = 0; s < 256; ++s) un += pm.uni[s] = static_cast<std::uint32_t>(m.uni[s] >> h.uni_shift);
+    pm.uni_n = static_cast<std::uint32_t>(un);
+    for (int p = 0; p < 256; ++p) {
+        const unsigned k = shift_to(m.o1n[p], 0xffffffffu);
+        h.scaled_o1_rows += k > 0;
+        std::uint64_t t = 0;
+        for (int y = 0; y < 256; ++y)
+            t += pm.o1[p][y] =
+                static_cast<std::uint32_t>(m.o1[static_cast<std::size_t>(p) * 256 + static_cast<std::size_t>(y)] >> k);
+        pm.o1n[p] = static_cast<std::uint32_t>(t);
+    }
+    std::memcpy(pm.root_child, m.root_child, sizeof pm.root_child);
+    std::vector<std::uint64_t>().swap(m.o1);
+
+    const std::size_t nn = m.nodes.size();
+    std::size_t kept = 0;
+    for (std::size_t i = 0; i < nn; ++i) {
+        const unsigned k = shift_to(m.nodes[i].total, top);
+        for (auto f = m.nodes[i].fol_head; f != kNil; f = m.fols[f].next) kept += (m.fols[f].count >> k) > 0;
+    }
+    pm.nodes.resize(nn);
+    pm.fols.clear();
+    pm.fols.reserve(kept);
+    for (std::size_t i = 0; i < nn; ++i) {
+        const Node64& a = m.nodes[i];
+        trie::Node& b = pm.nodes[i];
+        b.parent = a.parent;
+        b.child_head = a.child_head;
+        b.sibling = a.sibling;
+        b.nchild = a.nchild;
+        b.byte = a.byte;
+        b.depth = a.depth;
+        b.chain_open = 1;
+        b.fol_head = kNil;
+        b.total = 0;
+        b.nfol = 0;
+        const unsigned k = shift_to(a.total, top);
+        if (k > 0) ++h.scaled_nodes;
+        h.max_shift = std::max(h.max_shift, k);
+        std::uint32_t last = kNil;
+        std::uint64_t t = 0;
+        for (auto f = a.fol_head; f != kNil; f = m.fols[f].next) {
+            const std::uint64_t c = m.fols[f].count >> k;
+            if (c == 0) {
+                ++h.dropped_fols;
+                continue;
+            }
+            const auto id = static_cast<std::uint32_t>(pm.fols.size());
+            trie::Fol nf;
+            nf.sym = m.fols[f].sym;
+            nf.count = static_cast<std::uint32_t>(c);
+            pm.fols.push_back(nf);
+            if (last == kNil) b.fol_head = id;
+            else pm.fols[last].next = id;
+            last = id;
+            t += c;
+            ++b.nfol;
+        }
+        b.total = static_cast<std::uint32_t>(t);
+    }
+    std::vector<Node64>().swap(m.nodes);
+    std::vector<Fol64>().swap(m.fols);
+}
+
 // Loads a checkpoint into packed_trie's training Model for scoring with Model::mix (Mode::Full or Synth).
 // `side` receives one stored next byte per kept match key; pm.data points into it. Peak memory is about the
-// checkpoint's size: the trie arrays are read in place, the match is compacted while it is read.
+// checkpoint's size for TRI1 / TRI2 (the trie arrays are read in place, the match is compacted while it is read) and
+// about the checkpoint plus the 32-bit model for TR64 (scaled into it, then freed).
 inline bool to_packed(const fs::path& path, trie::Model& pm, std::vector<std::uint8_t>& side, Header& h,
                       std::string& err) {
     if (!read_header(path, h, err)) return false;
     if (h.file_bytes != h.expected_bytes) {
         err = "size " + std::to_string(h.file_bytes) + " != expected " + std::to_string(h.expected_bytes);
         return false;
+    }
+    if (h.tr64) {
+        Model64 m;
+        if (!load64(path, m, h, err)) return false;
+        trie::Config cfg;
+        cfg.reserve_nodes = 1;
+        cfg.reserve_fols = 1;
+        cfg.match_bits = 1;
+        pm.verbose = false;
+        pm.init(cfg);
+        scale64_into(m, pm, h);
+        pm.dense.clear();
+        side.clear();
+        for (std::size_t i = 0; i < m.mk.size(); ++i) {
+            if (m.mk[i] == kNil || m.mv[i] < 2) continue;
+            pm.dense.push_back(trie::Hit{m.mk[i], static_cast<std::uint32_t>(side.size())});
+            side.push_back(m.mb[i]);
+        }
+        std::sort(pm.dense.begin(), pm.dense.end(),
+                  [](const trie::Hit& a, const trie::Hit& b) { return a.key < b.key; });
+        pm.match_seen = m.mfilled;
+        std::vector<std::uint32_t>().swap(pm.mk);
+        std::vector<std::uint32_t>().swap(pm.mv);
+        std::vector<std::uint32_t>().swap(pm.ms);
+        static const std::uint8_t kNone = 0;
+        pm.data = side.empty() ? &kNone : side.data();
+        return true;
     }
     trie::Config cfg;
     cfg.reserve_nodes = 1;
@@ -471,10 +734,13 @@ inline bool to_packed(const fs::path& path, trie::Model& pm, std::vector<std::ui
 
 // ---- Corpus files, as the live trainer reads them
 
-// Paths holding "/trie/" (the trainers' output) or "/labelled/" are skipped, and so are unfinished *.part files.
+// Paths holding "/trie/" (the trainers' output), "/labelled/" or "/sha256/" (scripts/verify_corpus_sha.py's lists) are
+// skipped, and so are unfinished *.part files.
 inline bool trainable(const fs::path& p) {
     const std::string s = p.generic_string();
-    if (s.find("/labelled/") != std::string::npos || s.find("/trie/") != std::string::npos) return false;
+    if (s.find("/labelled/") != std::string::npos || s.find("/trie/") != std::string::npos ||
+        s.find("/sha256/") != std::string::npos)
+        return false;
     const std::string name = p.filename().string();
     if (name.size() >= 5 && name.compare(name.size() - 5, 5, ".part") == 0) return false;
     const auto ext = p.extension().string();

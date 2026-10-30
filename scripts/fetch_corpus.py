@@ -32,10 +32,13 @@ import csv
 import gzip
 import json
 import os
+import shutil
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 GB = 1024 ** 3
@@ -149,11 +152,25 @@ class Progress:
         self.session = 0
         self.t0 = time.monotonic()
         self.label = ""
+        self.active = 0
+        self.lock = threading.Lock()
 
     def add(self, nbytes: int, label: str) -> None:
-        self.session += nbytes
-        self.label = label
-        self.draw()
+        with self.lock:
+            self.session += nbytes
+            self.label = label
+            self.draw()
+
+    def begin(self, label: str) -> None:
+        with self.lock:
+            self.active += 1
+            self.label = label
+            self.draw()
+
+    def end(self) -> None:
+        with self.lock:
+            self.active = max(0, self.active - 1)
+            self.draw()
 
     def draw(self) -> None:
         have = self.base + self.session
@@ -161,48 +178,79 @@ class Progress:
         elapsed = max(time.monotonic() - self.t0, 0.001)
         speed = self.session / elapsed
         left = format_eta((self.target - have) / speed if speed > 1 else None)
-        width = 30
+        width = 20
         filled = int(width * frac)
         bar = "#" * filled + "-" * (width - filled)
+        name = self.label[-24:]
         line = (
-            f"\r[{bar}] {have / GB:7.2f}/{self.target / GB:.0f} GB"
-            f"  {speed / (1024 * 1024):6.1f} MB/s  left {left}  {self.label}"
+            f"[{bar}] {have / GB:6.2f}/{self.target / GB:.0f} GB"
+            f"  {speed / (1024 * 1024):5.1f} MB/s  left {left}  {name}"
         )
-        sys.stdout.write(line[:118].ljust(118))
+        cols = shutil.get_terminal_size(fallback=(80, 24)).columns
+        if cols < 40 or cols > 160:
+            cols = 78
+        visible = line[: cols - 1].ljust(cols - 1)
+        sys.stdout.write("\r" + visible)
         sys.stdout.flush()
 
     def finish_file(self) -> None:
-        self.draw()
-        sys.stdout.write("\n")
-        sys.stdout.flush()
+        with self.lock:
+            self.draw()
 
 
-def download(url: str, dest: Path, progress: Progress | None = None, timeout: int = 120) -> None:
+def download(url: str, dest: Path, progress: Progress | None = None, timeout: int = 120,
+             accept_gzip: bool = False) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
     if dest.exists() and dest.stat().st_size > 0:
         return
     part = dest.with_suffix(dest.suffix + ".part")
-    existing = part.stat().st_size if part.exists() else 0
+    # A gzip body cannot be continued with a byte range of the decoded file.
+    if accept_gzip and part.exists():
+        part.unlink()
+    existing = 0 if accept_gzip else (part.stat().st_size if part.exists() else 0)
     headers = {"User-Agent": "cypha-corpus-fetch/1.0"}
-    if existing:
+    if accept_gzip:
+        headers["Accept-Encoding"] = "gzip"
+    elif existing:
         headers["Range"] = f"bytes={existing}-"
     label = dest.name
-    with request(url, headers, timeout) as resp:
-        code = getattr(resp, "status", 200)
-        mode = "ab" if code == 206 and existing else "wb"
-        if progress is not None and existing and mode == "ab":
-            progress.add(0, label)
-        with part.open(mode) as out:
-            while True:
-                chunk = resp.read(1024 * 1024)
-                if not chunk:
-                    break
-                out.write(chunk)
-                if progress is not None:
-                    progress.add(len(chunk), label)
-    part.replace(dest)
     if progress is not None:
-        progress.finish_file()
+        progress.begin(label)
+    try:
+        with request(url, headers, timeout) as resp:
+            code = getattr(resp, "status", 200)
+            if code == 416 and part.exists():
+                part.replace(dest)
+                return
+            mode = "ab" if code == 206 and existing else "wb"
+            total = None
+            content_range = resp.headers.get("Content-Range")
+            if content_range and "/" in content_range:
+                total_s = content_range.rsplit("/", 1)[-1]
+                if total_s.isdigit():
+                    total = int(total_s)
+            elif resp.headers.get("Content-Length", "").isdigit() and code != 206:
+                total = int(resp.headers["Content-Length"])
+            stream = resp
+            if accept_gzip and "gzip" in resp.headers.get("Content-Encoding", "").lower():
+                stream = gzip.GzipFile(fileobj=resp)
+                total = None
+            got = existing if mode == "ab" else 0
+            with part.open(mode) as out:
+                while True:
+                    chunk = stream.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    out.write(chunk)
+                    got += len(chunk)
+                    if progress is not None:
+                        progress.add(len(chunk), label)
+        if total is not None and got != total:
+            raise OSError(f"short download {got} of {total} for {dest.name}")
+        part.replace(dest)
+    finally:
+        if progress is not None:
+            progress.end()
 
 
 def fetch_text(url: str) -> str:
@@ -254,7 +302,8 @@ def gutenberg(root: Path, state: dict, state_path: Path, progress: Progress | No
                 continue
             time.sleep(GUTENBERG_DELAY)
             try:
-                download(url, dest, progress)
+                # Gutenberg answers 406 unless the client accepts the gzip variant.
+                download(url, dest, progress, accept_gzip=True)
             except urllib.error.HTTPError as exc:
                 if exc.code == 404:
                     state["skipped"][url] = 404
@@ -320,6 +369,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Stoppable corpus download toward ~1 TB on D:")
     parser.add_argument("--root", type=Path, default=default_root())
     parser.add_argument("--check", action="store_true", help="Probe seed URLs and exit")
+    parser.add_argument("--jobs", type=int, default=8, help="Files downloading at once")
     args = parser.parse_args()
     if args.check:
         return check()
@@ -332,19 +382,10 @@ def main() -> int:
     progress = Progress(target, already)
     print(f"downloading to {root}", flush=True)
     print(f"target {target / GB:.0f} GB   already {already / GB:.2f} GB", flush=True)
-    print("small files first so the trie can train while the big dumps continue", flush=True)
+    print("one file at a time", flush=True)
     try:
-        # One short book so a finished file exists quickly. The 27 GB Wikipedia
-        # dump resumes later from its .part file.
-        take(
-            root,
-            "books",
-            "https://www.gutenberg.org/cache/epub/1342/pg1342.txt",
-            root / "books" / "gutenberg" / "pg1342.txt",
-            state,
-            state_path,
-            progress,
-        )
+        take(root, "books", "https://www.gutenberg.org/cache/epub/1342/pg1342.txt",
+             root / "books" / "gutenberg" / "pg1342.txt", state, state_path, progress)
         for category, list_url in LISTS:
             from_list(root, category, list_url, state, state_path, progress)
         for category, rel, url in DIRECT:

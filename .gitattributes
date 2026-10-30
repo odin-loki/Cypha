@@ -15,3 +15,7 @@ scripts/*.sh text eol=lf
 requirements-verify.txt text eol=lf
 requirements-pip-merged.txt text eol=lf
 cypha_studio/requirements.txt text eol=lf
+
+# The packed 1 TB trie (docs/reports/TRIE_1TB_PROFILE.md) is 465 MB: Git LFS. Its checksum list stays LF for sha256sum -c.
+models/cyphalm_1tb/*.zst filter=lfs diff=lfs merge=lfs -text
+models/cyphalm_1tb/SHA256SUMS text eol=lf

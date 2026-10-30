@@ -379,6 +379,16 @@ This is the plan in [`CURRENT.md`](CURRENT.md): hold out first, shard at about 1
 | P-A4 | Held-out answers to unseen questions: **≤ 2%** at every checkpoint | No mechanism links a question to an unstored answer |
 | P-A5 | Surface `S` of samples: unchanged within **±0.05** | `S` measures word validity and repetition, which saturate early |
 
+**Scored 2026-10-31** ([`reports/TRIE_1TB_PROFILE.md`](reports/TRIE_1TB_PROFILE.md)):
+
+- **P-A1 missed:** 3.206, or 3.207 packed. No Wikipedia was trained.
+- **P-A2 missed:** 2.2757 with an 8K InfiniGram over wiki train and Dolly. The 8 MiB trie scores 2.0684 the same way.
+- **P-A3 held:** 52.9 M distinct 4-grams.
+- **P-A4 held:** 0 of 41 unseen questions answered in `context8k`. `qa`'s T-QA sets were not run.
+- **P-A5 missed, just:** surface S rose 0.737 → 0.796 on GEN-A dev. SCRIBE v2 went 0.020 → 0.028, and those intervals overlap.
+
+The pass was one 64-bit trie, with no per-category holdout and no intermediate checkpoints, so A1 cannot be fitted from it.
+
 ### Track B: CyphaLM model upgrades
 
 | ID | Upgrade | Measure | Gate |

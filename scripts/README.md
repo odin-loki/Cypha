@@ -10,6 +10,10 @@ Native build, validation, and release helpers for **One Cypha** (`cypha::Cypha`)
 |--------|---------|
 | `fetch_corpus.py` | Stoppable download toward ~1 TB under `D:\cypha_llm\corpus`. `--check` probes seed URLs. Ctrl+C resumes. |
 | `run_fetch.sh` | WSL launcher for that fetch. |
+| `verify_corpus_sha.py` | SHA-256 of every corpus file against the RedPajama lists (SHA-1 for Wikimedia dumps). Resumable. Writes `corpus/sha256/`. |
+| `run_train.sh` | Builds and runs `trie_stream_train` on the corpus (`TR64`, eight cores). Add `--once` to the binary to stop when no file is left. |
+| `build_1tb_tools.sh` | Builds the 1 TB tools into `~/bin` (trainer, profiler, `trie_ckpt` with its self-test, `cyphalm_trie`, `scribe`, `ppmi_svd`). [`docs/reports/TRIE_1TB_PROFILE.md`](../docs/reports/TRIE_1TB_PROFILE.md) |
+| `heldout_c4_slice.py` | Writes the unseen C4 slice (`c4-train.01023`) used to score the 1 TB trie. |
 
 ## Mining a teacher model (offline)
 

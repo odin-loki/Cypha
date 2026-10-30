@@ -1,14 +1,22 @@
-// One-core streaming trainer. Reads finished corpus files, checkpoints after
+// Eight-core streaming trainer. Reads finished corpus files, checkpoints after
 // each file, and resumes after a crash. Labelled chat is not observed.
 // A file still named *.part is ignored.
+// Counts are 64-bit. A uint32 unigram wraps after 4 GiB, and this corpus is
+// hundreds of gigabytes. Checkpoint magic is TR64 (TRI1 is the old 32-bit
+// layout, TRI2 is trie_stream_train_v2's). cypha/cyphalm/stream_trie.hpp reads
+// it; trie_ckpt verifies, scores and packs it (docs/TRAIN_1TB_RUNBOOK.md).
+// --once stops when no finished file is left untrained.
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
@@ -18,14 +26,14 @@ namespace fs = std::filesystem;
 namespace {
 
 constexpr std::uint32_t kNil = 0xffffffffu;
-constexpr char kMagic[4] = {'T', 'R', 'I', '1'};
+constexpr char kMagic[4] = {'T', 'R', '6', '4'};
 
 struct Node {
     std::uint32_t parent = kNil;
     std::uint32_t child_head = kNil;
     std::uint32_t sibling = kNil;
     std::uint32_t fol_head = kNil;
-    std::uint32_t total = 0;
+    std::uint64_t total = 0;
     std::uint16_t nchild = 0;
     std::uint16_t nfol = 0;
     std::uint8_t byte = 0;
@@ -33,10 +41,13 @@ struct Node {
 };
 
 struct Fol {
-    std::uint8_t sym = 0;
-    std::uint32_t count = 0;
+    std::uint64_t count = 0;
     std::uint32_t next = kNil;
+    std::uint8_t sym = 0;
 };
+
+static_assert(sizeof(Node) == 32, "Node layout changed");
+static_assert(sizeof(Fol) == 16, "Fol layout changed");
 
 std::uint32_t mix32(std::uint32_t x) {
     x ^= x >> 16;
@@ -48,10 +59,10 @@ std::uint32_t mix32(std::uint32_t x) {
 }
 
 struct Model {
-    std::uint32_t uni[256]{};
-    std::uint32_t uni_n = 0;
-    std::uint32_t o1[256][256]{};
-    std::uint32_t o1n[256]{};
+    std::uint64_t uni[256]{};
+    std::uint64_t uni_n = 0;
+    std::uint64_t o1[256][256]{};
+    std::uint64_t o1n[256]{};
     std::vector<Node> nodes;
     std::vector<Fol> fols;
     std::uint32_t root_child[256]{};
@@ -121,12 +132,13 @@ struct Model {
         return id;
     }
 
-    void add_fol(std::uint32_t node, std::uint8_t y) {
+    void add_fol_n(std::uint32_t node, std::uint8_t y, std::uint64_t nadd) {
+        if (nadd == 0) return;
         std::uint32_t prev = kNil;
         for (std::uint32_t f = nodes[node].fol_head; f != kNil; f = fols[f].next) {
             if (fols[f].sym == y) {
-                ++fols[f].count;
-                ++nodes[node].total;
+                fols[f].count += nadd;
+                nodes[node].total += nadd;
                 if (prev != kNil) {
                     fols[prev].next = fols[f].next;
                     fols[f].next = nodes[node].fol_head;
@@ -138,14 +150,16 @@ struct Model {
         }
         Fol f;
         f.sym = y;
-        f.count = 1;
+        f.count = nadd;
         f.next = nodes[node].fol_head;
         const auto id = static_cast<std::uint32_t>(fols.size());
         fols.push_back(f);
         nodes[node].fol_head = id;
         nodes[node].nfol++;
-        nodes[node].total++;
+        nodes[node].total += nadd;
     }
+
+    void add_fol(std::uint32_t node, std::uint8_t y) { add_fol_n(node, y, 1); }
 
     void match_note(std::uint32_t key, std::uint8_t y) {
         if ((static_cast<std::uint64_t>(mfilled) + 1) * 10 >= mk.size() * 7) {
@@ -183,6 +197,31 @@ struct Model {
                 if (mv[i] < 0xffffffffu) ++mv[i];
                 mb[i] = y;
                 if (ms[i] < 65535) ++ms[i];
+                return;
+            }
+            i = (i + 1u) & mmask;
+        }
+    }
+
+    void match_add(std::uint32_t key, std::uint8_t y, std::uint32_t times) {
+        if (times == 0) return;
+        if ((static_cast<std::uint64_t>(mfilled) + 1) * 10 >= mk.size() * 7) match_note(key, y), times -= 1;
+        if (times == 0) return;
+        std::uint32_t i = mix32(key) & mmask;
+        for (;;) {
+            if (mk[i] == kNil) {
+                mk[i] = key;
+                mv[i] = times;
+                mb[i] = y;
+                ms[i] = static_cast<std::uint16_t>(std::min<std::uint32_t>(times, 65535));
+                ++mfilled;
+                return;
+            }
+            if (mk[i] == key) {
+                const auto room = 0xffffffffu - mv[i];
+                mv[i] += std::min(room, times);
+                mb[i] = y;
+                ms[i] = static_cast<std::uint16_t>(std::min<std::uint32_t>(65535u, ms[i] + times));
                 return;
             }
             i = (i + 1u) & mmask;
@@ -232,7 +271,7 @@ bool save_checkpoint(const fs::path& path, const Model& m) {
     out.write(reinterpret_cast<const char*>(&nf), 4);
     out.write(reinterpret_cast<const char*>(&m.bytes_seen), 8);
     out.write(reinterpret_cast<const char*>(m.uni), sizeof m.uni);
-    out.write(reinterpret_cast<const char*>(&m.uni_n), 4);
+    out.write(reinterpret_cast<const char*>(&m.uni_n), sizeof m.uni_n);
     out.write(reinterpret_cast<const char*>(m.o1), sizeof m.o1);
     out.write(reinterpret_cast<const char*>(m.o1n), sizeof m.o1n);
     out.write(reinterpret_cast<const char*>(m.root_child), sizeof m.root_child);
@@ -268,7 +307,7 @@ bool load_checkpoint(const fs::path& path, Model& m) {
     in.read(reinterpret_cast<char*>(&nf), 4);
     in.read(reinterpret_cast<char*>(&m.bytes_seen), 8);
     in.read(reinterpret_cast<char*>(m.uni), sizeof m.uni);
-    in.read(reinterpret_cast<char*>(&m.uni_n), 4);
+    in.read(reinterpret_cast<char*>(&m.uni_n), sizeof m.uni_n);
     in.read(reinterpret_cast<char*>(m.o1), sizeof m.o1);
     in.read(reinterpret_cast<char*>(m.o1n), sizeof m.o1n);
     in.read(reinterpret_cast<char*>(m.root_child), sizeof m.root_child);
@@ -292,7 +331,9 @@ bool load_checkpoint(const fs::path& path, Model& m) {
 
 bool trainable(const fs::path& p) {
     const std::string s = p.generic_string();
-    if (s.find("/labelled/") != std::string::npos || s.find("/trie/") != std::string::npos) return false;
+    if (s.find("/labelled/") != std::string::npos || s.find("/trie/") != std::string::npos ||
+        s.find("/sha256/") != std::string::npos)
+        return false;
     if (p.filename().string().ends_with(".part")) return false;
     const auto ext = p.extension().string();
     return ext == ".txt" || ext == ".jsonl";
@@ -335,35 +376,148 @@ void observe_bytes(Model& m, const std::string& bytes) {
     for (unsigned char c : bytes) m.observe_byte(c);
 }
 
-bool train_file(Model& m, const fs::path& path) {
-    std::ifstream in(path, std::ios::binary);
-    if (!in) return false;
-    const auto ext = path.extension().string();
-    std::uint64_t n = 0;
-    if (ext == ".jsonl") {
-        std::string line, text;
-        while (std::getline(in, line)) {
-            if (!extract_text(line, text)) continue;
-            observe_bytes(m, text);
-            n += text.size();
-            if ((n & 0xfffff) == 0) {
-                std::cerr << "  bytes " << n << " nodes " << m.nodes.size() << "\n";
-            }
+void merge_model(Model& dst, Model& src) {
+    for (int s = 0; s < 256; ++s) {
+        dst.uni[s] += src.uni[s];
+        dst.uni_n += src.uni[s];
+        for (int y = 0; y < 256; ++y) {
+            dst.o1[s][y] += src.o1[s][y];
+            dst.o1n[s] += src.o1[s][y];
         }
-    } else {
-        std::string buf;
-        char chunk[1 << 16];
-        m.reset_hist();
-        while (in) {
-            in.read(chunk, sizeof chunk);
-            const auto got = in.gcount();
-            for (std::streamsize i = 0; i < got; ++i) m.observe_byte(static_cast<std::uint8_t>(chunk[i]));
-            n += static_cast<std::uint64_t>(got);
-        }
-        (void)buf;
     }
-    std::cerr << "trained " << path.filename().string() << " bytes " << n << " nodes " << m.nodes.size()
-              << " seen " << m.bytes_seen << "\n";
+    const auto walk = [&](auto&& self, std::uint32_t dnode, std::uint32_t snode) -> void {
+        for (std::uint32_t f = src.nodes[snode].fol_head; f != kNil; f = src.fols[f].next) {
+            dst.add_fol_n(dnode, src.fols[f].sym, src.fols[f].count);
+        }
+        if (snode == 0) {
+            for (int b = 0; b < 256; ++b) {
+                const std::uint32_t c = src.root_child[b];
+                if (c == kNil) continue;
+                const std::uint32_t child = dst.ensure_child(0, static_cast<std::uint8_t>(b));
+                self(self, child, c);
+            }
+            return;
+        }
+        for (std::uint32_t c = src.nodes[snode].child_head; c != kNil; c = src.nodes[c].sibling) {
+            const std::uint32_t child = dst.ensure_child(dnode, src.nodes[c].byte);
+            self(self, child, c);
+        }
+    };
+    if (!src.nodes.empty()) walk(walk, 0, 0);
+    for (std::size_t i = 0; i < src.mk.size(); ++i) {
+        if (src.mk[i] == kNil || src.ms[i] == 0) continue;
+        dst.match_add(src.mk[i], src.mb[i], src.ms[i]);
+    }
+    dst.bytes_seen += src.bytes_seen;
+}
+
+std::string format_left(double seconds) {
+    if (!(seconds >= 0) || seconds > 99 * 24 * 3600) return "--:--:--";
+    const int s = static_cast<int>(seconds);
+    const int h = s / 3600;
+    const int m = (s % 3600) / 60;
+    const int r = s % 60;
+    char buf[16];
+    std::snprintf(buf, sizeof buf, "%d:%02d:%02d", h, m, r);
+    return buf;
+}
+
+void draw_bar(const std::string& name, std::uint64_t done, std::uint64_t total, double elapsed) {
+    const double frac = total ? std::min(1.0, static_cast<double>(done) / static_cast<double>(total)) : 0;
+    const double speed = elapsed > 0.05 ? static_cast<double>(done) / elapsed : 0;
+    const double left = speed > 1 ? static_cast<double>(total - done) / speed : -1;
+    constexpr int width = 28;
+    const int filled = static_cast<int>(width * frac);
+    std::string bar(filled, '#');
+    bar.append(width - filled, '-');
+    char line[180];
+    std::snprintf(line, sizeof line, "\r[%s] %6.1f/%6.1f MB  %5.1f MB/s  left %s  8 cores  %.24s",
+                  bar.c_str(), done / 1e6, total / 1e6, speed / 1e6, format_left(left).c_str(), name.c_str());
+    std::fputs(line, stderr);
+    std::fflush(stderr);
+}
+
+bool train_file(Model& model, const fs::path& path) {
+    const auto ext = path.extension().string();
+    const auto file_size = fs::file_size(path);
+    if (file_size == 0) return true;
+    const int cores = 8;
+    std::vector<std::uint64_t> cuts(static_cast<std::size_t>(cores) + 1, 0);
+    cuts.back() = file_size;
+    {
+        std::ifstream in(path, std::ios::binary);
+        if (!in) return false;
+        for (int i = 1; i < cores; ++i) {
+            auto at = static_cast<std::uint64_t>(file_size * i / cores);
+            in.seekg(static_cast<std::streamoff>(at));
+            if (ext == ".jsonl") {
+                std::string skip;
+                std::getline(in, skip);
+                at = static_cast<std::uint64_t>(in.tellg());
+                if (!in) at = file_size;
+            }
+            cuts[static_cast<std::size_t>(i)] = at;
+        }
+    }
+    std::atomic<std::uint64_t> read_bytes{0};
+    std::atomic<bool> failed{false};
+    std::vector<Model> shards(static_cast<std::size_t>(cores));
+    for (auto& shard : shards) shard.init();
+    const auto t0 = std::chrono::steady_clock::now();
+    std::atomic<bool> running{true};
+    std::thread ticker([&] {
+        while (running.load()) {
+            const double elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+            draw_bar(path.filename().string(), read_bytes.load(), file_size, elapsed);
+            std::this_thread::sleep_for(std::chrono::milliseconds(400));
+        }
+    });
+    std::vector<std::thread> workers;
+    for (int i = 0; i < cores; ++i) {
+        workers.emplace_back([&, i] {
+            std::ifstream in(path, std::ios::binary);
+            if (!in) {
+                failed = true;
+                return;
+            }
+            const auto begin = cuts[static_cast<std::size_t>(i)];
+            const auto end = cuts[static_cast<std::size_t>(i) + 1];
+            if (begin >= end) return;
+            in.seekg(static_cast<std::streamoff>(begin));
+            Model& shard = shards[static_cast<std::size_t>(i)];
+            if (ext == ".jsonl") {
+                std::string line, text;
+                while (static_cast<std::uint64_t>(in.tellg()) < end && std::getline(in, line)) {
+                    read_bytes += line.size() + 1;
+                    if (!extract_text(line, text)) continue;
+                    observe_bytes(shard, text);
+                }
+            } else {
+                shard.reset_hist();
+                std::vector<char> buf(1 << 16);
+                std::uint64_t pos = begin;
+                while (pos < end) {
+                    const auto want = std::min<std::uint64_t>(buf.size(), end - pos);
+                    in.read(buf.data(), static_cast<std::streamsize>(want));
+                    const auto got = static_cast<std::uint64_t>(in.gcount());
+                    if (got == 0) break;
+                    for (std::uint64_t k = 0; k < got; ++k)
+                        shard.observe_byte(static_cast<std::uint8_t>(buf[static_cast<std::size_t>(k)]));
+                    pos += got;
+                    read_bytes += got;
+                }
+            }
+        });
+    }
+    for (auto& worker : workers) worker.join();
+    running = false;
+    ticker.join();
+    std::fputc('\n', stderr);
+    if (failed.load()) return false;
+    std::cerr << "merging " << cores << " shards\n";
+    for (auto& shard : shards) merge_model(model, shard);
+    std::cerr << "trained " << path.filename().string() << " nodes " << model.nodes.size()
+              << " seen " << model.bytes_seen << "\n";
     return true;
 }
 
@@ -386,7 +540,13 @@ void append_trained(const fs::path& list, const fs::path& file) {
 }  // namespace
 
 int main(int argc, char** argv) {
-    const fs::path root = argc > 1 ? argv[1] : "/mnt/d/cypha_llm/corpus";
+    bool once = false;
+    fs::path root = "/mnt/d/cypha_llm/corpus";
+    for (int i = 1; i < argc; ++i) {
+        const std::string arg = argv[i];
+        if (arg == "--once") once = true;
+        else root = arg;
+    }
     const fs::path dir = root / "trie";
     fs::create_directories(dir);
     const fs::path ckpt = dir / "checkpoint.bin";
@@ -394,6 +554,16 @@ int main(int argc, char** argv) {
 
     Model model;
     model.init();
+    if (fs::exists(ckpt)) {
+        std::ifstream probe(ckpt, std::ios::binary);
+        char magic[4] = {};
+        probe.read(magic, 4);
+        if (std::memcmp(magic, kMagic, 4) != 0) {
+            std::cerr << "refusing " << ckpt.generic_string() << ": not a TR64 checkpoint (TRI1 is the old 32-bit "
+                      << "layout). Move it aside to train a new model.\n";
+            return 1;
+        }
+    }
     if (load_checkpoint(ckpt, model)) {
         std::cerr << "resumed bytes " << model.bytes_seen << " nodes " << model.nodes.size() << "\n";
     } else {
@@ -418,6 +588,10 @@ int main(int argc, char** argv) {
         }
         std::sort(fresh.begin(), fresh.end());
         if (fresh.empty()) {
+            if (once) {
+                std::cerr << "done\n";
+                return 0;
+            }
             std::cerr << "waiting for a finished file\n";
             std::this_thread::sleep_for(std::chrono::seconds(3));
             continue;
