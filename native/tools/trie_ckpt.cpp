@@ -778,6 +778,63 @@ int cmd_selftest() {
         CHECK(!v3.ok());
     }
 
+    // 5b. Parallel training (trie_stream_train_v2 --threads): on a .jsonl file 4 threads give the one-thread model's
+    // counts, structure, match entries and distributions; with a small cap every total stays its followers' sum.
+    {
+        const fs::path jl = tmp / "p.jsonl";
+        {
+            std::ofstream o(jl, std::ios::binary);
+            for (std::size_t r = 0; r < 400; ++r) {
+                const auto t = make_text(100 + r, 300 + (r * 37) % 700);
+                o << "{\"text\": \"" << std::string(t.begin(), t.end()) << "\", \"id\": " << r << "}\n";
+            }
+        }
+        st::Model a, b;
+        a.init(10);
+        b.init(10);
+        std::uint64_t na = 0, nb = 0;
+        CHECK(st::train_file(&a, jl, na));
+        CHECK(st::train_file_parallel(b, jl, 4, nb, 8));
+        CHECK(na == nb && a.bytes_seen == b.bytes_seen && a.nodes.size() == b.nodes.size() &&
+              a.fols.size() == b.fols.size() && a.mfilled == b.mfilled && a.uni_n == b.uni_n &&
+              std::equal(&a.o1[0][0], &a.o1[0][0] + 65536, &b.o1[0][0]));
+        const auto cuts = st::cut_file(jl, 4);
+        CHECK(cuts.size() == 5 && cuts[0] == 0 && cuts[4] == fs::file_size(jl) && cuts[1] > 0 && cuts[1] < cuts[2]);
+        const fs::path fa = tmp / "pa.bin", fb = tmp / "pb.bin";
+        CHECK(st::save(fa, a, true) && st::save(fb, b, true));
+        tr::Model ma, mb2;
+        std::vector<std::uint8_t> sa, sb2;
+        st::Header ha, hb2;
+        CHECK(st::to_packed(fa, ma, sa, ha, err) && st::to_packed(fb, mb2, sb2, hb2, err));
+        CHECK(ma.dense.size() == mb2.dense.size());
+        double dp = 0;
+        for (auto mode : {tr::Mode::Full, tr::Mode::Synth})
+            for (std::size_t i = 0; i < H.size(); i += 5) {
+                double P[256], Q[256];
+                bool m1 = false, m2 = false;
+                ma.mix(H.data(), i, SIZE_MAX, mode, P, m1);
+                mb2.mix(H.data(), i, SIZE_MAX, mode, Q, m2);
+                CHECK(m1 == m2);
+                for (int s = 0; s < 256; ++s) dp = std::max(dp, std::fabs(P[s] - Q[s]));
+            }
+        CHECK(dp < 1e-12);
+        std::fprintf(stderr, "parallel training: max |dP| %.3g against one thread\n", dp);
+
+        st::Model c;
+        c.init(10);
+        c.cap = 64;
+        const fs::path tx = tmp / "p.txt";
+        std::ofstream(tx, std::ios::binary).write(reinterpret_cast<const char*>(T.data()), 60000);
+        std::uint64_t nc = 0;
+        CHECK(st::train_file_parallel(c, tx, 4, nc, 8) && nc == 60000 && c.bytes_seen == 60000);
+        Verdict v;
+        st::Header hc;
+        hc.tri2 = true;
+        check_structure(c, v);
+        check_counts(c, hc, v);
+        CHECK(v.ok() && c.uni_n <= 64 && c.halve_uni > 0 && c.halve_node > 0);
+    }
+
     // 6. compare's pairing: identical blocks give a zero difference.
     {
         double m = 1, lo = 1, hi = 1;

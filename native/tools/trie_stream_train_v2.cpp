@@ -1,5 +1,5 @@
-// One-core streaming trainer, version 2 (docs/TRAIN_1TB_RUNBOOK.md). The live trainer
-// native/tools/trie_stream_train.cpp is not changed; this is a second run beside it.
+// Streaming trainer, version 2 (docs/TRAIN_1TB_RUNBOOK.md): a second run beside the live trainer
+// native/tools/trie_stream_train.cpp.
 //
 // The same model, the same corpus files and the same per-file checkpoint and resume as the live trainer, through
 // cypha/cyphalm/stream_trie.hpp, with these changes:
@@ -9,9 +9,12 @@
 //   - output goes to ROOT/trie/model2 by default, or --out DIR (keep it inside "/trie/", so no trainer reads another's
 //     files as text); scripts/train_model.sh numbers the models: model 1 is the live run, model N is <corpus>/trie/model<N>;
 //   - --once stops when every finished file is trained and writes done.txt (bytes, nodes, followers, files, time);
-//   - --snapshots 8M,64M,1G keeps a copy of the checkpoint at the first file boundary past each size (scaling curve).
+//   - --snapshots 8M,64M,1G keeps a copy of the checkpoint at the first file boundary past each size (scaling curve);
+//   - --threads N trains each file on N threads (stream_trie.hpp train_file_parallel: one byte range a thread, the
+//     shards merged pairwise in parallel, then into the model). On .jsonl files the model equals the one-thread model
+//     while no count reaches the cap; a .txt file differs only by the history reset at each cut. Default 1.
 //
-// Usage: trie_stream_train_v2 ROOT [--out DIR] [--once] [--snapshots LIST] [--cap N]
+// Usage: trie_stream_train_v2 ROOT [--out DIR] [--once] [--snapshots LIST] [--cap N] [--threads N]
 
 #include "cypha/cyphalm/stream_trie.hpp"
 
@@ -59,18 +62,21 @@ std::uint64_t parse_size(const std::string& s) {
 
 int main(int argc, char** argv) {
     if (argc < 2) {
-        std::cerr << "usage: trie_stream_train_v2 ROOT [--out DIR] [--once] [--snapshots 8M,64M,1G] [--cap N]\n";
+        std::cerr << "usage: trie_stream_train_v2 ROOT [--out DIR] [--once] [--snapshots 8M,64M,1G] [--cap N] "
+                     "[--threads N]\n";
         return 2;
     }
     const fs::path root = argv[1];
     fs::path dir = root / "trie" / "model2";
     bool once = false;
+    unsigned threads = 1;
     std::vector<std::pair<std::uint64_t, std::string>> snaps;
     std::uint32_t cap = 0xffffffffu;
     for (int i = 2; i < argc; ++i) {
         const std::string a = argv[i];
         if (a == "--out" && i + 1 < argc) dir = argv[++i];
         else if (a == "--once") once = true;
+        else if (a == "--threads" && i + 1 < argc) threads = static_cast<unsigned>(std::strtoul(argv[++i], nullptr, 10));
         else if (a == "--cap" && i + 1 < argc) cap = static_cast<std::uint32_t>(std::strtoul(argv[++i], nullptr, 10));
         else if (a == "--snapshots" && i + 1 < argc) {
             std::string list = argv[++i], item;
@@ -88,8 +94,8 @@ int main(int argc, char** argv) {
             return 2;
         }
     }
-    if (cap < 2) {
-        std::cerr << "--cap must be at least 2\n";
+    if (cap < 2 || threads < 1 || threads > 256) {
+        std::cerr << "--cap must be at least 2 and --threads 1 to 256\n";
         return 2;
     }
     fs::create_directories(dir);
@@ -142,12 +148,14 @@ int main(int argc, char** argv) {
         for (const auto& p : fresh) {
             std::cerr << "file " << p.generic_string() << "\n";
             std::uint64_t n = 0;
-            if (!st::train_file(&model, p, n)) {
+            const auto tf = std::chrono::steady_clock::now();
+            if (!st::train_file_parallel(model, p, threads, n)) {
                 std::cerr << "skip unreadable " << p << "\n";
                 continue;
             }
+            const double fs_ = std::chrono::duration<double>(std::chrono::steady_clock::now() - tf).count();
             std::cerr << "trained " << p.filename().string() << " bytes " << n << " nodes " << model.nodes.size()
-                      << " seen " << model.bytes_seen << "\n";
+                      << " seen " << model.bytes_seen << " seconds " << fs_ << "\n";
             if (!st::save(ckpt, model, true)) {
                 std::cerr << "checkpoint failed\n";
                 return 1;

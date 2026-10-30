@@ -38,7 +38,8 @@ Settings, all optional:
 | `CYPHA_REPO` | `/mnt/c/Users/odinl/OneDrive/Desktop/Cypha` | the repository |
 | `CYPHA_CORPUS` | `/mnt/d/cypha_llm/corpus` | the corpus |
 | `CYPHA_REPORTS` | `<corpus>/trie/reports` | where reports go |
-| `CYPHA_CORE` | `0` | the CPU core for training |
+| `CYPHA_THREADS` | `1` | threads a file (`trie_stream_train_v2 --threads`); model 2 runs with 32 |
+| `CYPHA_CORE` | `0` | the CPU core for training when `CYPHA_THREADS` is 1 |
 | `CYPHA_SNAPSHOTS` | `8M,64M,1G,10G,100G` | sizes at which a copy of the checkpoint is kept (the scaling curve); each is a full copy, so the later ones are large |
 | `CYPHA_HOLDOUTS` | every `*.txt` in `<corpus>/../holdout` | held-out files for compare, `FILE` or `FILE:FROM:LEN`, space-separated |
 | `CYPHA_ENWIK8` | unset | the enwik8 file; adds its 8 MiB-protocol holdout to compare |

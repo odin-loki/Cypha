@@ -14,6 +14,8 @@ Short version:
 - **Packing.** The packed model is **992 MB**, or 465 MB compressed. It scores the same as the unpacked model.
 - **What does the work.** Order-4 backoff carries the model. The 4-byte match table is worthless at this scale and is not in the packed model.
 - **Held-out scores.** **2.17 BPC** on an unseen C4 shard. **3.21 BPC** on the enwik9 holdout, worse than the 8 MiB trie (2.30), because no Wikipedia XML was trained.
+- **Against the 8 MiB trie on the same slices.** Off Wikipedia the terabyte is worth a lot: −0.45 BPC on unseen C4 (2.180 against 2.627) and −0.66 on lcet10 (2.328 against 2.984). On Wikipedia XML the 8 MiB wiki trie still wins: 2.298 against 3.207 on the holdout, and 2.440 against 2.880 200 MB later.
+- **Model 2.** The runbook's second model is training on 32 threads (`trie_stream_train_v2 --threads 32`), with snapshots for the scaling curve.
 - **InfiniGram.** With an 8K InfiniGram over the wiki training slice and Dolly, the 1 TB trie scores 2.276, against 2.068 for the 8 MiB trie.
 - **Questions.** Neither model answers an unseen question: 0 of 41.
 - **Generation.** SCRIBE v2 rises from 0.020 to 0.028, but the 95% intervals overlap.
@@ -157,8 +159,29 @@ Fitted weights:
 - **Order-4 backoff is the model.** It takes 92–100% of the weight on every text. On C4 the learned mixture is order-4 backoff to four decimals.
 - **The match table no longer works.** It stores the most recent follower of each 4-byte context. After 918 GB of mixed text, the most recent follower is close to arbitrary: it fires on 99% of bytes and is right only 33–43% of the time. The fixed blend is worse than plain order-4 backoff on every text, by 0.10–0.15 BPC. At 8 MiB it took weight 0.06. Here it falls to the 0.0001 floor everywhere except lcet10. Replacing it with the most frequent follower would just repeat order 4's argmax, so the packed model drops it.
 - **enwik9 is out of domain.** The 2006 XML dump is mostly wiki markup (`[[`, `{{`, `&quot;`, `<revision>`), and none of it was trained. The same bytes score 2.298 with the 8 MiB trie, which trained on the 7 MiB just before them. Later in the file, at 200 MB, the article text is denser, and the 1 TB trie scores 2.878.
-- **In domain, the trie is far stronger than the small one.** 2.17 BPC on unseen web text and 2.34 on lcet10, from counts alone, with no adaptation to the scored text. On clean Wikipedia prose (GEN-A's human continuations, below) it beats the 8 MiB wiki trie too: 2.25 against 2.40. The comparison point is hp gate24: about 1.61 BPC on enwik8, at a resident size of about 1.5–2 GB. Those numbers are on different text, so this is not a direct comparison.
+- **Off Wikipedia, the trie is far stronger than the small one.** 2.17 BPC on unseen web text and 2.34 on lcet10, from counts alone, with no adaptation to the scored text. The 8 MiB wiki trie scores 2.63 and 2.98 on the same bytes (next section). On clean Wikipedia prose (GEN-A's human continuations, below) the 1 TB trie wins too: 2.25 against 2.40. The comparison point is hp gate24: about 1.61 BPC on enwik8, at a resident size of about 1.5–2 GB. Those numbers are on different text, so this is not a direct comparison.
 - **Wikipedia is the missing domain.** Adding the dumps needs a bz2 reader in the trainer (or a decompressed `.txt` copy), plus the rest of the enwiki download.
+
+## Against the 8 MiB trie on the same slices
+
+`cyphalm_trie sample … --save trie_8m.pk --no-sim --no-copy --no-bkn` stores the 8 MiB trie, trained as usual on enwik9 `[0, 7340032)` with its weights learned on that stream. That gives 0.93 on order 4 and 0.06 on the match, and here the match stays in, because its followers point into the training text. `trie_ckpt bpc` then scores both packed models on the same bytes.
+
+| BPC (learned mixture; packed) | 8 MiB trie | 1 TB trie | Difference |
+|-----|------:|------:|------:|
+| enwik9 holdout `[7340032, 8388608)` | **2.298** | 3.207 | +0.909 |
+| enwik9 `[200000000, 201048576)` | **2.440** | 2.880 | +0.440 |
+| C4, unseen shard | 2.627 | **2.180** | −0.447 |
+| lcet10 `[200000, 426754)` | 2.984 | **2.328** | −0.656 |
+| Model size | 4.1 MB | 992 MB | |
+
+With the fixed order-4 backoff alone (Synth) the gaps are the same within 0.1: 2.386 / 2.536 / 2.734 / 3.069 against 3.271 / 2.904 / 2.173 / 2.323.
+
+**What this means.** The terabyte is worth about half a bit per byte, but only on the kinds of text it holds. Each trie is good on its own domain and poor off it.
+
+- The 8 MiB trie read 7 MiB of wiki XML and wins on wiki XML, even 200 MB further into the file.
+- The 1 TB trie read web pages, code, papers and Q&A, and wins on web text and plain English by 0.45–0.66 BPC.
+- An order-4 model knows only which byte follows each 4-byte string. Those statistics are not shared across domains: markup, prose, LaTeX and code use different 4-grams.
+- Inside one domain, the counts saturate early. The 8 MiB trie on wiki (2.30) and the 1 TB trie on web text (2.18) end up close, though the second read 125,000 times more bytes.
 
 ## Tests on the packed model
 
@@ -228,6 +251,44 @@ With the C4 weights:
 
 The words are real and the phrases run on. Nothing holds together past a few words. Code and LaTeX leak into prose: `$a_n \in \{1,\cdot`, `</message>`, `// Retry.`, `{\n            find`. Four bytes of context cannot tell a Python file from a news article.
 
+## Model 2 (training)
+
+This is the runbook's second model: `trie_stream_train_v2`. It is the same model and the same corpus files as model 1, through `stream_trie.hpp`. It uses 32-bit counts that halve instead of wrapping (`TRI2`), and keeps snapshots at 8M, 64M, 1G, 10G and 100G for the scaling curve. Started 2026-10-31 01:14 with
+
+```bash
+CYPHA_THREADS=32 bash scripts/train_model.sh 2      # D:\cypha_llm\run_model2.sh, in its own window
+```
+
+into `<corpus>/trie/model2/` (log: `<corpus>/trie/reports/train_model2.log`).
+
+**32 threads.** `--threads N` (`stream_trie.hpp`, `train_file_parallel`) works like this:
+
+1. Each file is cut into N byte ranges. A `.jsonl` cut moves to the next line, so every record is read whole by one thread.
+2. Each thread trains its own model on its range.
+3. The models merge pairwise in parallel, later data into earlier, then once into the main model.
+4. A count that would pass the cap halves its table first, as in one-thread training.
+
+On `.jsonl` files the result is the one-thread model exactly: the self-test (`trie_ckpt selftest`, 22,339 checks) finds the same counts, structure and match entries, and a probability difference of 0. On `.txt` files it differs only by the history reset at each cut.
+
+| One C4 file (766 MB of text), empty model | Wall time | Peak memory |
+|-----|------:|------:|
+| 8 threads (model 1's setting) | 88 s | 0.97 GB |
+| 16 threads | 50 s | 1.2 GB |
+| **32 threads** | **39 s** | 2.0 GB |
+
+The serial merge into the main model grows with the trie, so later files take longer. File 2 took 45 s. Model 1's C4 files averaged about 129 s each on 8 threads.
+
+Snapshots are taken at file boundaries, and a file holds about 0.76 GB of text. So the 8M and 64M snapshots were both written after the first file, at 0.77 GB. The small end of the scaling curve comes from the 8 MiB runs instead.
+
+When it finishes, the next steps are:
+
+```bash
+bash scripts/verify_model.sh 2
+bash scripts/compare_models.sh 1 2
+```
+
+Then each snapshot is scored with `trie_ckpt bpc` for A1.
+
 ## Track A predictions
 
 [`PLAN.md`](../PLAN.md) registered these predictions on 2026-10-26.
@@ -287,5 +348,5 @@ CYPHALM_TRIE=~/bin/cyphalm_trie SCRIBE=~/bin/scribe WIKI=/mnt/d/cypha_llm/enwik9
 
 1. **Train Wikipedia.** Add a bz2 or extracted-text reader and finish the enwiki download. This is what P-A1 and P-A2 are missing.
 2. **Keep non-ASCII text.** Fix the `\u` escapes in the JSON reader.
-3. **Hold out before training.** Set aside a frozen slice per category, as step 1 of the plan says, and keep snapshots so A1's scaling curve can be fitted. `trie_stream_train_v2`'s `CYPHA_SNAPSHOTS` does this.
+3. **Hold out before training.** Set aside a frozen slice per category, as step 1 of the plan says. Model 2 (running) keeps the snapshots for A1's scaling curve.
 4. **Run the T-QA sets.** Let `qa` take a stored trie (`--model FILE`) next to its own InfiniGram and experts, so the T-QA dev and test sets can be read on the 1 TB trie.

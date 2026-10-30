@@ -17,12 +17,12 @@ need_number() {  # need_number N MIN
 }
 
 build_trainer() {
-  (cd "$REPO" && g++ -std=c++23 -O2 -I native/include -I native/third_party \
+  (cd "$REPO" && g++ -std=c++23 -O2 -pthread -I native/include -I native/third_party \
      -o /tmp/cypha_train_model native/tools/trie_stream_train_v2.cpp) || { echo "trainer build failed"; exit 1; }
 }
 
 build_checker() {
-  (cd "$REPO" && g++ -std=c++23 -O2 -I native/include -I native/third_party \
+  (cd "$REPO" && g++ -std=c++23 -O2 -pthread -I native/include -I native/third_party \
      -o /tmp/cypha_trie_ckpt native/tools/trie_ckpt.cpp) || { echo "checker build failed"; exit 1; }
   mkdir -p "$REPORTS"
   /tmp/cypha_trie_ckpt selftest > "$REPORTS/selftest.txt" 2>&1 || { cat "$REPORTS/selftest.txt"; echo "checker selftest failed"; exit 1; }

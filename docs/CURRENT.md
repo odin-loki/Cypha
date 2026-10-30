@@ -19,6 +19,8 @@ One pass over **918.6 GB** of text took about 48 h. The text came from 976 files
 | BPC, unseen C4 shard (packed / unpacked) | **2.180** / 2.173 |
 | BPC, lcet10 | 2.328 / 2.337 |
 | BPC, enwik9 holdout `[7340032, 8388608)` | 3.207 / 3.206 (the 8 MiB trie scores 2.298 here) |
+| 8 MiB trie on the same slices: C4 / lcet10 / enwik9 @ 200 MB | 2.627 / 2.984 / 2.440 (1 TB: **2.180** / **2.328** / 2.880) |
+| Model 2 (`trie_stream_train_v2`, 32 threads, snapshots) | training since 2026-10-31 |
 | + 8K InfiniGram over wiki train + Dolly, holdout second half | 2.2757 (8 MiB trie 2.0684) |
 | Unseen questions answered (`context8k`) | 0 / 41 (8 MiB trie 0 / 41) |
 | SCRIBE v2 / surface S, GEN-A dev, trie only | 0.028 [0.021, 0.035] / 0.796 (8 MiB trie 0.020 [0.014, 0.027] / 0.737) |

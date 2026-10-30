@@ -30,6 +30,7 @@
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace cypha::cyphalm::stream {
@@ -166,6 +167,40 @@ struct Model {
         ++halve_node;
     }
 
+    // Adds n to follower y (merging shards). The node halves until n fits under cap; a node already at one count per
+    // follower cannot halve further, so n is clipped instead.
+    void add_fol_n(std::uint32_t node, std::uint8_t y, std::uint32_t n) {
+        if (n == 0) return;
+        while (std::uint64_t{nodes[node].total} + n > cap && nodes[node].total > nodes[node].nfol) halve_node_counts(node);
+        if (std::uint64_t{nodes[node].total} + n > cap) {
+            if (nodes[node].total >= cap) return;
+            n = cap - nodes[node].total;
+        }
+        std::uint32_t prev = kNil;
+        for (std::uint32_t f = nodes[node].fol_head; f != kNil; f = fols[f].next) {
+            if (fols[f].sym == y) {
+                fols[f].count += n;
+                nodes[node].total += n;
+                if (prev != kNil) {
+                    fols[prev].next = fols[f].next;
+                    fols[f].next = nodes[node].fol_head;
+                    nodes[node].fol_head = f;
+                }
+                return;
+            }
+            prev = f;
+        }
+        Fol f;
+        f.sym = y;
+        f.count = n;
+        f.next = nodes[node].fol_head;
+        const auto id = static_cast<std::uint32_t>(fols.size());
+        fols.push_back(f);
+        nodes[node].fol_head = id;
+        nodes[node].nfol++;
+        nodes[node].total += n;
+    }
+
     void add_fol(std::uint32_t node, std::uint8_t y) {
         if (nodes[node].total >= cap) halve_node_counts(node);
         std::uint32_t prev = kNil;
@@ -191,6 +226,17 @@ struct Model {
         nodes[node].fol_head = id;
         nodes[node].nfol++;
         nodes[node].total++;
+    }
+
+    // A shard's match entry: `times` more sightings (saturating), `seen` more for the 16-bit count, y the later follower.
+    void match_add(std::uint32_t key, std::uint8_t y, std::uint32_t times, std::uint16_t seen) {
+        match_note(key, y);  // inserts or counts once, growing the table if needed
+        std::uint32_t i = mix32(key) & mmask;
+        while (mk[i] != key) i = (i + 1u) & mmask;
+        const std::uint64_t t = std::uint64_t{mv[i]} + times - 1;
+        mv[i] = t > 0xffffffffu ? 0xffffffffu : static_cast<std::uint32_t>(t);
+        const std::uint32_t s = std::uint32_t{ms[i]} + seen - 1;
+        ms[i] = static_cast<std::uint16_t>(std::min<std::uint32_t>(s, 65535u));
     }
 
     void match_note(std::uint32_t key, std::uint8_t y) {
@@ -806,6 +852,144 @@ inline bool train_file(Model* m, const fs::path& path, std::uint64_t& n) {
             n += static_cast<std::uint64_t>(got);
         }
     }
+    return true;
+}
+
+// ---- Parallel training (trie_stream_train_v2 --threads)
+//
+// A file is cut into one byte range per thread (a .jsonl cut moves to the next line start, so every record is read
+// whole by one thread); each thread trains its own shard model; the shards merge pairwise in parallel, later data into
+// earlier, and the result merges into the main model. On a .jsonl file the counts, totals and match entries equal the
+// sequential trainer's (no count reaches the cap); a .txt file differs only by the history reset at each cut.
+
+// Adds src's counts to dst. Tables and nodes that would pass dst.cap halve first, as observe_byte does.
+inline void merge(Model& dst, const Model& src) {
+    auto fold = [&](std::uint32_t* c, std::uint32_t& total, const std::uint32_t* add, std::uint64_t& halvings) {
+        std::uint64_t w[256], t = 0;
+        for (int s = 0; s < 256; ++s) t += w[s] = std::uint64_t{c[s]} + add[s];
+        while (t > dst.cap) {
+            std::uint64_t t2 = 0;
+            for (auto& x : w) t2 += x = x / 2 + (x & 1);
+            ++halvings;
+            if (t2 == t) break;
+            t = t2;
+        }
+        for (int s = 0; s < 256; ++s) c[s] = static_cast<std::uint32_t>(std::min<std::uint64_t>(w[s], 0xffffffffu));
+        total = static_cast<std::uint32_t>(std::min<std::uint64_t>(t, 0xffffffffu));
+    };
+    fold(dst.uni, dst.uni_n, src.uni, dst.halve_uni);
+    for (int p = 0; p < 256; ++p) fold(dst.o1[p], dst.o1n[p], src.o1[p], dst.halve_o1);
+    const auto walk = [&](auto&& self, std::uint32_t dnode, std::uint32_t snode) -> void {
+        for (std::uint32_t f = src.nodes[snode].fol_head; f != kNil; f = src.fols[f].next)
+            dst.add_fol_n(dnode, src.fols[f].sym, src.fols[f].count);
+        if (snode == 0) {
+            for (int b = 0; b < 256; ++b)
+                if (src.root_child[b] != kNil)
+                    self(self, dst.ensure_child(0, static_cast<std::uint8_t>(b)), src.root_child[b]);
+            return;
+        }
+        for (std::uint32_t c = src.nodes[snode].child_head; c != kNil; c = src.nodes[c].sibling)
+            self(self, dst.ensure_child(dnode, src.nodes[c].byte), c);
+    };
+    if (!src.nodes.empty()) walk(walk, 0, 0);
+    for (std::size_t i = 0; i < src.mk.size(); ++i)
+        if (src.mk[i] != kNil && src.mv[i] > 0) dst.match_add(src.mk[i], src.mb[i], src.mv[i], src.ms[i]);
+    dst.bytes_seen += src.bytes_seen;
+    dst.halve_uni += src.halve_uni;
+    dst.halve_o1 += src.halve_o1;
+    dst.halve_node += src.halve_node;
+}
+
+// train_file over the bytes [begin, end) of a file: whole .jsonl records starting in it, or the raw .txt bytes.
+inline bool train_range(Model* m, const fs::path& path, std::uint64_t begin, std::uint64_t end, std::uint64_t& n) {
+    std::ifstream in(path, std::ios::binary);
+    if (!in) return false;
+    n = 0;
+    in.seekg(static_cast<std::streamoff>(begin));
+    std::uint64_t pos = begin;
+    if (path.extension().string() == ".jsonl") {
+        std::string line, text;
+        while (pos < end && std::getline(in, line)) {
+            pos += line.size() + 1;
+            if (!extract_text(line, text)) continue;
+            if (m) {
+                m->reset_hist();
+                for (unsigned char c : text) m->observe_byte(c);
+            }
+            n += text.size();
+        }
+    } else {
+        std::vector<char> chunk(1 << 16);
+        if (m) m->reset_hist();
+        while (pos < end) {
+            const auto want = std::min<std::uint64_t>(chunk.size(), end - pos);
+            in.read(chunk.data(), static_cast<std::streamsize>(want));
+            const auto got = static_cast<std::uint64_t>(in.gcount());
+            if (got == 0) break;
+            if (m)
+                for (std::uint64_t i = 0; i < got; ++i) m->observe_byte(static_cast<std::uint8_t>(chunk[i]));
+            pos += got;
+            n += got;
+        }
+    }
+    return true;
+}
+
+// Cut points for `parts` ranges; a .jsonl cut moves past the line it lands in.
+inline std::vector<std::uint64_t> cut_file(const fs::path& path, unsigned parts) {
+    std::error_code ec;
+    const std::uint64_t size = fs::file_size(path, ec);
+    std::vector<std::uint64_t> cuts(parts + 1, size);
+    cuts[0] = 0;
+    std::ifstream in(path, std::ios::binary);
+    const bool jsonl = path.extension().string() == ".jsonl";
+    for (unsigned i = 1; i < parts; ++i) {
+        std::uint64_t at = size * i / parts;
+        if (jsonl && in) {
+            in.clear();
+            in.seekg(static_cast<std::streamoff>(at));
+            std::string skip;
+            std::getline(in, skip);
+            const auto t = in.tellg();
+            at = in && t >= 0 ? static_cast<std::uint64_t>(t) : size;
+        }
+        cuts[i] = std::max(at, cuts[i - 1]);
+    }
+    return cuts;
+}
+
+// Trains one file on `threads` threads into `main` (threads <= 1: train_file). `match_bits` sizes each shard's
+// starting match table.
+inline bool train_file_parallel(Model& main, const fs::path& path, unsigned threads, std::uint64_t& n,
+                                unsigned match_bits = 16) {
+    if (threads <= 1) return train_file(&main, path, n);
+    const std::vector<std::uint64_t> cuts = cut_file(path, threads);
+    std::vector<Model> shards(threads);
+    std::vector<std::uint64_t> got(threads, 0);
+    std::vector<char> ok(threads, 1);
+    {
+        std::vector<std::thread> ws;
+        for (unsigned i = 0; i < threads; ++i)
+            ws.emplace_back([&, i] {
+                shards[i].init(match_bits);
+                shards[i].cap = main.cap;
+                if (cuts[i] < cuts[i + 1]) ok[i] = train_range(&shards[i], path, cuts[i], cuts[i + 1], got[i]);
+            });
+        for (auto& w : ws) w.join();
+    }
+    if (std::find(ok.begin(), ok.end(), 0) != ok.end()) return false;
+    for (unsigned step = 1; step < threads; step *= 2) {
+        std::vector<std::thread> ws;
+        for (unsigned i = 0; i + step < threads; i += 2 * step)
+            ws.emplace_back([&, i, step] {
+                merge(shards[i], shards[i + step]);
+                shards[i + step] = Model{};
+            });
+        for (auto& w : ws) w.join();
+    }
+    merge(main, shards[0]);
+    n = 0;
+    for (auto g : got) n += g;
     return true;
 }
 
