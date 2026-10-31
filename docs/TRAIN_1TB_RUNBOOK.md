@@ -9,6 +9,8 @@ Models on the 1 TB corpus are numbered.
 
 **Update 2026-10-31.** Model 1 was retrained after its 32-bit counts wrapped. The live trainer now writes `TR64`: the same model with 64-bit counts, on eight cores, plus `--once`. That run finished on 918.6 GB, and `trie_ckpt verify` passes everything except the one unfinished Wikipedia download.
 
+Model 2 was trained on 32 threads (`CYPHA_THREADS=32`, 26.5 h) and verified. Model 2 and model 1 are the same model, and model 2's snapshots give the scaling curve (report, "Model 2 and the scaling curve").
+
 `trie_ckpt` reads `TR64` as well as `TRI1` and `TRI2`. `trie_ckpt pack CKPT OUT.pk [--fit FILE:FROM:LEN]` writes the packed serving form that `cyphalm_trie chat | sample | context8k --model` loads. The packed model 1 is in `models/cyphalm_1tb/`. Results: [`reports/TRIE_1TB_PROFILE.md`](reports/TRIE_1TB_PROFILE.md).
 
 ## Three scripts

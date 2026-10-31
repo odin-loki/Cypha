@@ -68,6 +68,10 @@ milestone or a significant self-contained change.
 - **Odin's rulings, 2026-10-28** ([CYPHALM_ANSWERING.md](docs/CYPHALM_ANSWERING.md) §5; PLAN ledger rows 51–53): R1 question-form fact text and R3 statement scoring go first, with R3 frames from the question parse and the learned patterns; teacher text only as a separate low-trust shard; the familiarity control token is allowed on the gate side, after `Assistant: `, and an entity-level familiarity is to be tried.
 
 ### Added
+- **Model 2 and the scaling curve (Track A's A1)** ([report](docs/reports/TRIE_1TB_PROFILE.md), "Model 2 and the scaling curve").
+  - **Model 2.** Trained on 32 threads in 26.5 h (model 1: 48 h on 8). It verifies apart from the unfinished Wikipedia download, and it is the same model as model 1: B − A from −0.011 to −0.015 with the fixed backoff (`Full`), ±0.01 packed.
+  - **Snapshots on unseen C4.** 2.299 at 0.77 GB, 2.287 at 1.5 GB, 2.287 at 11.5 GB, 2.282 at 108 GB, 2.285 at 918.6 GB. The order-4 counts saturate within a domain by about 1 GB.
+  - **Snapshots off C4.** lcet10 and enwik9 improve only when code, papers and Stack Exchange arrive (−0.56 and −0.58).
 - **`trie_stream_train_v2 --threads N`** (`CYPHA_THREADS` in `scripts/train_model.sh`): each file is trained on N threads, and their models are merged pairwise in parallel. On `.jsonl` files the result is the one-thread model exactly (self-test: same counts and match entries, probability difference 0). One C4 file takes 39 s on 32 threads, against 88 s on 8. Model 2 is training this way, with snapshots. The 8 MiB trie was scored on the 1 TB trie's slices: unseen C4 2.627 against 2.180, and lcet10 2.984 against 2.328. On enwik9 it wins, 2.298 against 3.207 ([report](docs/reports/TRIE_1TB_PROFILE.md)).
 - **The trie trained on the 1 TB corpus, packed and tested** ([report](docs/reports/TRIE_1TB_PROFILE.md)).
   - **Corpus.** Every corpus file was checked against RedPajama's SHA-256 lists and Wikimedia's SHA-1 lists (`scripts/verify_corpus_sha.py`). 18 short downloads were fetched again until they matched. `fetch_corpus.py` now fails a short body and asks Gutenberg for gzip (plain requests get HTTP 406).

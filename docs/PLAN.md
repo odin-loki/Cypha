@@ -387,7 +387,9 @@ This is the plan in [`CURRENT.md`](CURRENT.md): hold out first, shard at about 1
 - **P-A4 held:** 0 of 41 unseen questions answered in `context8k`. `qa`'s T-QA sets were not run.
 - **P-A5 missed, just:** surface S rose 0.737 → 0.796 on GEN-A dev. SCRIBE v2 went 0.020 → 0.028, and those intervals overlap.
 
-The pass was one 64-bit trie, with no per-category holdout and no intermediate checkpoints, so A1 cannot be fitted from it.
+The pass was one 64-bit trie with no per-category holdout.
+
+**A1** (model 2's snapshots, 2026-11-01): unseen C4 scores 2.299 / 2.287 / 2.287 / 2.282 / 2.285 BPC at 0.77 / 1.5 / 11.5 / 108 / 918.6 GB. Within a domain the counts saturate by about 1 GB, with \(L_\infty \approx 2.28\). lcet10 and enwik9 improve only when code, papers and Stack Exchange arrive.
 
 ### Track B: CyphaLM model upgrades
 
