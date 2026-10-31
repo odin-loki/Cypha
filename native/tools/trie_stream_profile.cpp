@@ -1,10 +1,13 @@
-// Profile a TR64 streaming-trie checkpoint (native/tools/trie_stream_train.cpp).
+// Profile a streaming-trie checkpoint: TR64 (native/tools/trie_stream_train.cpp), or TRI1 / TRI2
+// (trie_stream_train_v2) read through cypha/cyphalm/stream_trie.hpp with their counts widened.
 //
 // Structural counts, packed-size estimate, and next-byte scores on a text
 // file. The fit slice teaches mixture weights only. Counts stay frozen.
 // Default split matches the 8 MiB enwik protocol: fit [0, 7340032),
 // score [7340032, 8388608). A second 1 MiB slice at 200 MiB is scored
 // with those same weights when the file is long enough.
+
+#include "cypha/cyphalm/stream_trie.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -182,6 +185,45 @@ bool load_model(const std::string& path, Model& m) {
     in.read(reinterpret_cast<char*>(m.ms.data()), slots * 2);
     m.mmask = slots ? slots - 1 : 0;
     return static_cast<bool>(in);
+}
+
+// TR64, else TRI1 / TRI2 (trie_stream_train_v2's models) with their 32-bit counts widened to this model's fields.
+bool load_any(const std::string& path, Model& m) {
+    if (load_model(path, m)) return true;
+    namespace st = cypha::cyphalm::stream;
+    static_assert(sizeof(Node) == sizeof(st::Node64) && sizeof(Fol) == sizeof(st::Fol64), "same record layout");
+    st::Header h;
+    std::string err;
+    st::Model64 w;
+    {
+        st::Model sm;
+        if (!st::load(path, sm, h, err)) {
+            std::cerr << err << "\n";
+            return false;
+        }
+        w = st::widen(sm);
+    }
+    std::memcpy(m.uni, w.uni, sizeof m.uni);
+    m.uni_n = w.uni_n;
+    for (int p = 0; p < 256; ++p)
+        for (int y = 0; y < 256; ++y) m.o1[p][y] = w.o1[static_cast<std::size_t>(p) * 256 + static_cast<std::size_t>(y)];
+    std::memcpy(m.o1n, w.o1n, sizeof m.o1n);
+    std::memcpy(m.root_child, w.root_child, sizeof m.root_child);
+    m.nodes.resize(w.nodes.size());
+    std::memcpy(m.nodes.data(), w.nodes.data(), w.nodes.size() * sizeof(Node));
+    std::vector<st::Node64>().swap(w.nodes);
+    m.fols.resize(w.fols.size());
+    std::memcpy(m.fols.data(), w.fols.data(), w.fols.size() * sizeof(Fol));
+    std::vector<st::Fol64>().swap(w.fols);
+    m.mk = std::move(w.mk);
+    m.mv = std::move(w.mv);
+    m.mb = std::move(w.mb);
+    m.ms = std::move(w.ms);
+    m.mmask = m.mk.empty() ? 0 : static_cast<std::uint32_t>(m.mk.size() - 1);
+    m.mfilled = w.mfilled;
+    m.bytes_seen = w.bytes_seen;
+    std::cerr << "loaded " << st::format_name(h) << " (32-bit counts widened)\n";
+    return true;
 }
 
 double entropy_bits(const double* p) {
@@ -533,8 +575,8 @@ int main(int argc, char** argv) {
     const std::string text_path = argc > 2 ? argv[2] : "/mnt/d/cypha_llm/enwik9";
     Model model;
     const auto t0 = std::chrono::steady_clock::now();
-    if (!load_model(ckpt, model)) {
-        std::cerr << "cannot load TR64 checkpoint " << ckpt << "\n";
+    if (!load_any(ckpt, model)) {
+        std::cerr << "cannot load checkpoint " << ckpt << "\n";
         return 1;
     }
     const double load_s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();

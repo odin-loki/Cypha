@@ -5,6 +5,7 @@
 //   trie_ckpt bpc CKPT|MODEL.pk FILE[:FROM:LEN] ...
 //   trie_ckpt compare CKPT_A CKPT_B FILE[:FROM:LEN] ...
 //   trie_ckpt pack CKPT OUT.pk [--fit FILE[:FROM:LEN]]
+//   trie_ckpt top MODEL.pk CONTEXT [CONTEXT ...] [--k K]
 //   trie_ckpt selftest
 //
 // Reads "TRI1" (the live trainer's old 32-bit layout), "TRI2" (trie_stream_train_v2) and "TR64" (the live trainer
@@ -512,6 +513,11 @@ int cmd_pack(const std::vector<std::string>& args) {
         if (!load_scorer(args[0], pm, side)) return 1;
         pm.dense.clear();  // no match: its follower indexes side, not a training text
         pm.data = nullptr;
+        st::Header hf;
+        st::fit_nodes(pm, hf);  // TRI1 / TRI2 totals reach 2^32; TR64 was fitted on load
+        if (hf.scaled_nodes)
+            std::cerr << "fitted to the quantiser: nodes shifted " << hf.scaled_nodes << " (largest shift "
+                      << hf.max_shift << "), followers dropped " << hf.dropped_fols << "\n";
         pk = tr::pack(pm);
     }
     const tr::Config cfg;
@@ -530,6 +536,86 @@ int cmd_pack(const std::vector<std::string>& args) {
                 static_cast<unsigned long long>(fs::file_size(args[1], ec)));
     std::printf("weights %.6f %.6f %.6f %.6f %.6f %.6f%s%s\n", w[0], w[1], w[2], w[3], w[4], w[5],
                 fit.empty() ? " (initial)" : " fit on ", fit.c_str());
+    return 0;
+}
+
+// ---- top
+
+// "\n", "\t" and "\\" in a command-line context.
+std::string unescape_arg(const std::string& s) {
+    std::string o;
+    for (std::size_t i = 0; i < s.size(); ++i) {
+        if (s[i] == '\\' && i + 1 < s.size()) {
+            const char c = s[++i];
+            o += c == 'n' ? '\n' : c == 't' ? '\t' : c;
+        } else {
+            o += s[i];
+        }
+    }
+    return o;
+}
+
+std::string show_byte(int b) {
+    if (b == '\n') return "\\n";
+    if (b == '\t') return "\\t";
+    if (b == ' ') return "' '";
+    if (b >= 33 && b < 127) return std::string(1, static_cast<char>(b));
+    char buf[8];
+    std::snprintf(buf, sizeof buf, "\\x%02x", b);
+    return buf;
+}
+
+// The learned mixture's next-byte distribution after each context: the K likeliest bytes, the entropy, the deepest
+// order the trie holds for the context, and a greedy continuation (the likeliest byte, 60 times).
+int cmd_top(const std::vector<std::string>& args) {
+    if (args.size() < 2) return std::cerr << "usage: trie_ckpt top MODEL.pk CONTEXT [CONTEXT ...] [--k K]\n", 2;
+    double w[6];
+    tr::Config cfg;
+    tr::PackedModel pk;
+    try {
+        pk = tr::PackedModel::load(args[0], w, cfg);
+    } catch (const std::exception& e) {
+        return std::cerr << e.what() << "\n", 1;
+    }
+    int K = 8;
+    std::vector<std::string> ctxs;
+    for (std::size_t i = 1; i < args.size(); ++i) {
+        if (args[i] == "--k" && i + 1 < args.size()) K = std::atoi(args[++i].c_str());
+        else ctxs.push_back(unescape_arg(args[i]));
+    }
+    auto dist = [&](const std::vector<std::uint8_t>& h, double P[256]) {
+        double e[5][256];
+        bool matched = false;
+        unsigned pred = 0;
+        pk.fill_experts(h.data(), h.size(), SIZE_MAX, tr::Mode::Synth, e, matched, pred, false);
+        tr::mix_dist(w, e, matched, pred, P);
+    };
+    for (const auto& c : ctxs) {
+        std::vector<std::uint8_t> h(c.begin(), c.end());
+        double P[256];
+        dist(h, P);
+        int order = 0;
+        for (int o = 2; o <= 4; ++o)
+            if (pk.find_ctx(h.data(), h.size(), o) != tr::kNil) order = o;
+        double H = 0;
+        for (double p : P)
+            if (p > 0) H -= p * std::log2(p);
+        std::vector<int> idx(256);
+        for (int s = 0; s < 256; ++s) idx[s] = s;
+        std::partial_sort(idx.begin(), idx.begin() + K, idx.end(), [&](int a, int b) { return P[a] > P[b]; });
+        std::string shown;
+        for (unsigned char ch : c) shown += ch == '\n' ? std::string("\\n") : std::string(1, static_cast<char>(ch));
+        std::printf("context \"%s\" order %d entropy %.3f\n ", shown.c_str(), order, H);
+        for (int k = 0; k < K; ++k) std::printf(" %s %.3f", show_byte(idx[k]).c_str(), P[idx[k]]);
+        std::string g;
+        for (int t = 0; t < 60; ++t) {
+            dist(h, P);
+            const int b = static_cast<int>(std::max_element(P, P + 256) - P);
+            h.push_back(static_cast<std::uint8_t>(b));
+            g += b == '\n' ? std::string("\\n") : std::string(1, static_cast<char>(b));
+        }
+        std::printf("\n  greedy: %s\n", g.c_str());
+    }
     return 0;
 }
 
@@ -707,6 +793,28 @@ int cmd_selftest() {
         tr::Config cb;
         const tr::PackedModel back_pk = tr::PackedModel::load(pkf.string(), wb, cb);
         CHECK(back_pk == pk && std::equal(wf, wf + 6, wb) && pk.matches() == 0);
+
+        // fit_nodes: a 32-bit node past the quantiser's top is shifted under it, keeping its ratio and total.
+        tr::Model fm;
+        std::vector<std::uint8_t> fside;
+        st::Header fh;
+        CHECK(st::to_packed(c2, fm, fside, fh, err));
+        std::uint32_t big = st::kNil;
+        for (std::uint32_t i = 1; i < fm.nodes.size() && big == st::kNil; ++i)
+            if (fm.nodes[i].nfol >= 2) big = i;
+        CHECK(big != st::kNil);
+        const std::uint32_t f1 = fm.nodes[big].fol_head, f2 = fm.fols[f1].next;
+        for (auto f = fm.nodes[big].fol_head; f != st::kNil; f = fm.fols[f].next) fm.fols[f].count = 1;
+        fm.fols[f1].count = 3000000000u;
+        fm.fols[f2].count = 1000000000u;
+        const std::uint32_t nf0 = fm.nodes[big].nfol;
+        fm.nodes[big].total = 4000000000u + (nf0 - 2u);
+        st::Header fh2;
+        st::fit_nodes(fm, fh2);
+        std::uint64_t fs2 = 0;
+        for (auto f = fm.nodes[big].fol_head; f != st::kNil; f = fm.fols[f].next) fs2 += fm.fols[f].count;
+        CHECK(fh2.scaled_nodes == 1 && fm.nodes[big].total <= tr::qdec[255] && fs2 == fm.nodes[big].total &&
+              fm.fols[f1].count == 3 * fm.fols[f2].count && fm.nodes[big].nfol == 2 && fh2.dropped_fols == nf0 - 2);
     }
 
     // 3. Halving: with a small cap no count passes it, totals stay their followers' sums, and verify passes.
@@ -852,7 +960,7 @@ int cmd_selftest() {
 
 int main(int argc, char** argv) {
     if (argc < 2) {
-        std::cerr << "usage: trie_ckpt info|verify|bpc|compare|pack|selftest ...\n";
+        std::cerr << "usage: trie_ckpt info|verify|bpc|compare|pack|top|selftest ...\n";
         return 2;
     }
     const std::string cmd = argv[1];
@@ -862,6 +970,7 @@ int main(int argc, char** argv) {
     if (cmd == "bpc") return cmd_bpc(args);
     if (cmd == "compare") return cmd_compare(args);
     if (cmd == "pack") return cmd_pack(args);
+    if (cmd == "top") return cmd_top(args);
     if (cmd == "selftest") return cmd_selftest();
     std::cerr << "unknown command " << cmd << "\n";
     return 2;

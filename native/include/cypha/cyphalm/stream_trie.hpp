@@ -693,6 +693,34 @@ inline void scale64_into(Model64& m, trie::Model& pm, Header& h) {
     std::vector<Fol64>().swap(m.fols);
 }
 
+// Shifts each node whose total passes qdec[255] until it fits (the packed form's one-byte counts saturate there),
+// dropping followers that reach 0. to_packed does this for TR64; pack does it for every format. Statistics go to `h`.
+inline void fit_nodes(trie::Model& pm, Header& h) {
+    const std::uint64_t top = trie::qdec[255];
+    for (auto& n : pm.nodes) {
+        if (n.total <= top) continue;
+        const unsigned k = shift_to(n.total, top);
+        ++h.scaled_nodes;
+        h.max_shift = std::max(h.max_shift, k);
+        std::uint32_t prev = kNil, t = 0;
+        for (std::uint32_t f = n.fol_head; f != kNil;) {
+            const std::uint32_t next = pm.fols[f].next;
+            pm.fols[f].count >>= k;
+            if (pm.fols[f].count == 0) {
+                ++h.dropped_fols;
+                if (prev == kNil) n.fol_head = next;
+                else pm.fols[prev].next = next;
+                --n.nfol;
+            } else {
+                t += pm.fols[f].count;
+                prev = f;
+            }
+            f = next;
+        }
+        n.total = t;
+    }
+}
+
 // Loads a checkpoint into packed_trie's training Model for scoring with Model::mix (Mode::Full or Synth).
 // `side` receives one stored next byte per kept match key; pm.data points into it. Peak memory is about the
 // checkpoint's size for TRI1 / TRI2 (the trie arrays are read in place, the match is compacted while it is read) and

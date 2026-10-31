@@ -6,7 +6,7 @@ The language model being taken forward is the packed byte trie. hp gate24 stays 
 
 ## Trie trained on the 1 TB corpus (2026-10-30)
 
-Full profile, packed model and tests: [`reports/TRIE_1TB_PROFILE.md`](reports/TRIE_1TB_PROFILE.md). The packed model is in git as [`models/cyphalm_1tb/`](../models/cyphalm_1tb/README.md).
+**How it works and how it performs, in full:** [`reports/CYPHALM_1TB_MODEL.md`](reports/CYPHALM_1TB_MODEL.md). Run log, packed model and tests: [`reports/TRIE_1TB_PROFILE.md`](reports/TRIE_1TB_PROFILE.md). The packed model is in git as [`models/cyphalm_1tb/`](../models/cyphalm_1tb/README.md).
 
 One pass over **918.6 GB** of text took about 48 h. The text came from 976 files totalling 1,023 GB: C4 625 GB, GitHub 224 GB, arXiv 94 GB, Stack Exchange 80 GB, and 40 Gutenberg books. Every RedPajama file matches its published SHA-256.
 
@@ -21,6 +21,8 @@ One pass over **918.6 GB** of text took about 48 h. The text came from 976 files
 | BPC, enwik9 holdout `[7340032, 8388608)` | 3.207 / 3.206 (the 8 MiB trie scores 2.298 here) |
 | 8 MiB trie on the same slices: C4 / lcet10 / enwik9 @ 200 MB | 2.627 / 2.984 / 2.440 (1 TB: **2.180** / **2.328** / 2.880) |
 | Model 2 (`trie_stream_train_v2`, 32 threads, 26.5 h) | same model (compare −0.011 to −0.015 Full, ±0.01 Synth) |
+| Full default stack (`context8k`, enwik holdout second half) | **1.6906** (8 MiB trie 1.6971) |
+| Full default stack, GEN-A dev SCRIBE v2 / continuation BPC | 0.113 [0.097, 0.131] / 2.015 (8 MiB trie 0.135 [0.116, 0.153] / 2.055) |
 | Scaling curve, unseen C4: 0.77 / 1.5 / 11.5 / 108 / 918.6 GB | 2.299 / 2.287 / 2.287 / 2.282 / 2.285 (saturated by about 1 GB; lcet10 and enwik9 improve only when code, papers and Stack Exchange arrive) |
 | + 8K InfiniGram over wiki train + Dolly, holdout second half | 2.2757 (8 MiB trie 2.0684) |
 | Unseen questions answered (`context8k`) | 0 / 41 (8 MiB trie 0 / 41) |

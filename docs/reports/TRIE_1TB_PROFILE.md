@@ -1,5 +1,7 @@
 # Byte trie trained on the 1 TB corpus: profile, packed model, tests
 
+> **The plain-language explanation** of the model and every result, including model 2's profile, the full CyphaLM stack and next-byte examples, is [`CYPHALM_1TB_MODEL.md`](CYPHALM_1TB_MODEL.md). This report is the run log.
+
 **Date:** 2026-10-28 to 2026-10-31
 **Trainer:** `native/tools/trie_stream_train.cpp` (8 cores, one pass, checkpoint `TR64`, 64-bit counts)
 **Profiler:** `native/tools/trie_stream_profile.cpp`
@@ -309,6 +311,17 @@ Model 2 is slightly better in `Full` mode. Model 1's 64-bit counts are shifted i
 
 - **Within a domain the counts saturate by about 1 GB.** On unseen C4, 0.77 GB of C4 already gives 2.299. 140 times more C4 (108 GB) gains 0.017, and the last 810 GB of other text changes nothing. A power law \(L(n) = L_\infty + a\,n^{-b}\) on these four C4 points has \(L_\infty \approx 2.28\).
 - **Across domains, coverage is what helps.** More C4 makes lcet10 worse, 2.87 → 2.98. That is the match table's latest follower drifting toward web text. More C4 helps wiki only slowly, 4.09 → 3.98. When code, papers, Stack Exchange and books arrive, lcet10 falls 0.56 and enwik9 0.58. Most of the terabyte's value is the kinds of text it adds, not the amount.
+**Model 2 profiled and packed like model 1** (`trie_stream_profile` now reads `TRI2`, widening its counts; peak 21.7 GB, 13.4 min on enwik9):
+
+| | enwik9 holdout | enwik9 @ 200 MB | Unseen C4 | lcet10 |
+|---|---:|---:|---:|---:|
+| Learned mixture (weights fit per text) | 3.2027 | 2.8766 | 2.1731 | 2.3344 |
+| Packed model 2 (`trie_model2.pk`, 992,444,253 bytes) | 3.2052 | 2.8785 | 2.1802 | 2.3292 |
+
+- **Same scores as model 1, with one difference.** Model 2's unigram and order-1 tables reflect recent text: 383 and 334 halvings. Its unigram entropy is 5.09 bits, against 4.84 over the whole corpus, because each halving halves the weight of everything before it.
+- **Tests.** `context8k`, trie plus InfiniGram: 2.2749 (model 1: 2.2757). Questions: 0 of 41 unseen. GEN-A SCRIBE v2: 0.032 [0.023, 0.041], surface S 0.798, continuations 2.2518 BPC.
+- **Packing.** `pack` now fits every format into the one-byte quantiser: 2,389 nodes shifted, 1,611 followers dropped.
+
 - **What follows.** More text of a kind already held will not lower BPC much. A new kind of text helps that kind (Wikipedia would help enwik9), and longer contexts help everything: InfiniGram, orders 5–6, the experts.
 
 ## Track A predictions

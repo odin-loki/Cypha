@@ -68,6 +68,11 @@ milestone or a significant self-contained change.
 - **Odin's rulings, 2026-10-28** ([CYPHALM_ANSWERING.md](docs/CYPHALM_ANSWERING.md) §5; PLAN ledger rows 51–53): R1 question-form fact text and R3 statement scoring go first, with R3 frames from the question parse and the learned patterns; teacher text only as a separate low-trust shard; the familiarity control token is allowed on the gate side, after `Assistant: `, and an entity-level familiarity is to be tried.
 
 ### Added
+- **The 1 TB model explained** ([report](docs/reports/CYPHALM_1TB_MODEL.md)): how the order-4 byte trie works, how it was built, and every measurement. New this round:
+  - **Model 2 profiled and packed like model 1.** It scores within 0.004 BPC of model 1. Its halving weights recent text, so its unigram reflects the last few GB.
+  - **Full default stack, 1 TB trie against 8 MiB trie.** `context8k` 1.6906 against 1.6971. GEN-A dev SCRIBE 0.113 [0.097, 0.131] against 0.135 [0.116, 0.153], continuation BPC 2.015 against 2.055.
+  - **Next-byte examples.** `trie_ckpt top` shows what each model knows: `#include <` → `/contributor>` for the 8 MiB wiki trie, `string` for the 1 TB trie.
+  - **Tools.** `trie_stream_profile` reads `TRI1` / `TRI2`. `trie_ckpt pack` fits every format to the one-byte quantiser (`fit_nodes`). `trie_ckpt top` prints the K likeliest next bytes.
 - **Model 2 and the scaling curve (Track A's A1)** ([report](docs/reports/TRIE_1TB_PROFILE.md), "Model 2 and the scaling curve").
   - **Model 2.** Trained on 32 threads in 26.5 h (model 1: 48 h on 8). It verifies apart from the unfinished Wikipedia download, and it is the same model as model 1: B − A from −0.011 to −0.015 with the fixed backoff (`Full`), ±0.01 packed.
   - **Snapshots on unseen C4.** 2.299 at 0.77 GB, 2.287 at 1.5 GB, 2.287 at 11.5 GB, 2.282 at 108 GB, 2.285 at 918.6 GB. The order-4 counts saturate within a domain by about 1 GB.

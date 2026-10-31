@@ -42,6 +42,7 @@ For platform-specific setup see [CONTRIBUTING.md](../CONTRIBUTING.md) and [`pack
 | [Environment variables](studio/CYPHA_ENV.md) | `CYPHA_*` registry root, API host/port, REST routes |
 | [Optional memory & load testing](studio/OPTIONAL_MEMORY_AND_LOAD.md) | Load-testing notes for REST |
 | [Current numbers](CURRENT.md) | 1 TB trie, small trie, hp gate24, corpus fetch, what is not ready to scale |
+| [The 1 TB model explained](reports/CYPHALM_1TB_MODEL.md) | How the byte trie works, how it was built, and how it performs: BPC by domain, the scaling curve, the full stack, next-byte examples, generation, questions, strengths and limits |
 | [Trie trained on the 1 TB corpus](reports/TRIE_1TB_PROFILE.md) | Corpus and checksums, size, the packed model, held-out BPC on C4 / lcet10 / enwik9, InfiniGram, unseen questions, SCRIBE, Track A predictions, time |
 | [One Cypha cutover](reports/ONE_CYPHA_CUTOVER.md) | `cypha::Cypha` ownership and routes. The hybrid default named there is historical. |
 | [CyphaLM as a language model](reports/CYPHALM_LM_QUALITY_REPORT.md) | hp next-byte distribution quality, decoding, ensembles, ∞-gram, RAM, speed, the winner; tools / flags / formats reference |
