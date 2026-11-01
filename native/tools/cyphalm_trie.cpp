@@ -342,6 +342,7 @@ struct Args {
     bool copy_dk = false, fam_read = false;       // ANS: copy inside don't-know answers; FAMREAD / FAMDOLLY
     std::string doc;                              // GEN-C: document experts in sample (--doc SPEC; off by default)
     bool no_doc = false;                          // GEN-C2: the document experts' cache off in context8k and qa's holdout
+    std::string dump_experts;                     // GLNX: context8k writes every expert's per-byte probability here
     double dk_plain = 0;                          // DK2: share of don't-know training turns with no token
     std::string fam_ent_at = "all";               // DK2: where --fam-ent's frames go (all | answer | start)
     bool copy_frame = false;                      // DK2: copy a frame's entity, not its end; the tag may repeat the message
@@ -422,6 +423,7 @@ Args parse(int argc, char** argv, int from) {
         else if (s == "--fam-read") a.fam_read = true;
         else if (s == "--doc") a.doc = next();
         else if (s == "--no-doc") a.no_doc = true;  // GEN-C2
+        else if (s == "--dump-experts") a.dump_experts = next();  // GLNX (docs/GENERATION_PLAN.md §13.10)
         else if (s == "--dk-plain") a.dk_plain = std::atof(next());  // DK2
         else if (s == "--fam-ent-at") a.fam_ent_at = next();         // DK2
         else if (s == "--copy-frame") a.copy_frame = true;           // DK2
@@ -810,6 +812,8 @@ std::vector<double> mix_cls_into(const ClassContext& cc, const std::uint8_t* dat
                                  std::vector<double>& cur);
 std::vector<double> mix_copy_into(const std::uint8_t* data, std::size_t train, std::size_t half, int m,
                                   std::vector<double>& cur);
+int copy_pred(const std::uint8_t* s, std::size_t i, int& n, std::size_t* at = nullptr);  // the copy expert (below)
+int copy_bucket(int n);
 // GEN-E, defined below with the copy expert: A3's frames, and the content-plan expert mixed into cur.
 std::map<std::string, std::vector<std::string>> load_frames(const std::string& path);
 bool good_start(const std::string& l);
@@ -905,6 +909,10 @@ int cmd_context8k(const Args& a) {
     const bool kn_off_ans = kn && a.bkn_answers == "off";
     std::vector<double> pt0;
     if (kn_off_ans) pt0 = pt;
+    const bool dump = !a.dump_experts.empty();
+    std::vector<double> pt_trie;
+    if (dump) pt_trie = pt;
+    std::vector<std::vector<double>> pinf_caps;
     std::vector<double> lkn;
     if (kn) {
         lkn = mix_bkn_into(*kn, data.data(), kTrain, half, kn_rep, pt);
@@ -977,6 +985,7 @@ int cmd_context8k(const Args& a) {
             }
             std::vector<double>().swap(pt0);
         }
+        if (dump) pinf_caps.push_back(pinf);
         if (cap == 8192) {
             std::copy(lam, lam + kBuckets, lam8k);
             pinf8k = std::move(pinf);
@@ -991,6 +1000,9 @@ int cmd_context8k(const Args& a) {
     // above, so the answers use it.
     std::vector<double> base(H);
     for (std::size_t k = 0; k < H; ++k) base[k] = lam8k[bk8k[k]] * pinf8k[k] + (1 - lam8k[bk8k[k]]) * pt[k];
+    std::vector<std::vector<double>> snaps;  // GLNX: the chain after InfiniGram, class, similar-context, copy
+    std::vector<double> d_sim, d_simb, d_doc[DocTopic::kParts], d_docb[DocTopic::kParts];
+    if (dump) snaps.push_back(base);
     std::string chain = "trie_plus_context_8192";
     auto chain_line = [&](const char* part) {
         double bits = 0;
@@ -1002,6 +1014,7 @@ int cmd_context8k(const Args& a) {
         mix_cls_into(*cc, data.data(), kTrain, half, base);
         chain_line("_cls");
     }
+    if (dump) snaps.push_back(base);
     int rc = 0;
     if (const auto sc = default_sim(a, data.data(), kTrain, rc)) {
         std::vector<double> ps(H);
@@ -1015,12 +1028,18 @@ int cmd_context8k(const Args& a) {
         fit_lambdas(ps, base, sb, half, SimilarContext::kBuckets, ls);
         for (std::size_t k = 0; k < H; ++k) base[k] = ls[sb[k]] * ps[k] + (1 - ls[sb[k]]) * base[k];
         chain_line("_sim");
+        if (dump) {
+            d_sim = ps;
+            d_simb.assign(sb.begin(), sb.end());
+        }
     } else if (rc)
         return rc;
+    if (dump) snaps.push_back(base);
     if (!a.no_copy) {
         mix_copy_into(data.data(), kTrain, half, a.copy_min, base);
         chain_line("_copy");
     }
+    if (dump) snaps.push_back(base);
     // GEN-C2 (docs/reports/GEN_C_TOPIC_CACHE.md, "GEN-C2"): the document experts' cache (--doc SPEC to read another
     // setting), last, over wiki train's words; its lambdas on the first half, its line on the second. --no-doc leaves
     // it out. The answers below never read it.
@@ -1030,6 +1049,74 @@ int cmd_context8k(const Args& a) {
         if (!dt) return drc ? drc : 1;
         mix_doc_into(*dt, data.data(), kTrain, half, base);
         chain_line("_doc");
+        if (dump) {  // GLNX: the document experts' parts over the whole holdout, as mix_doc_into reads them
+            const auto& dp = dt->params();
+            const bool on[DocTopic::kParts] = {dp.trig, dp.cache, dp.topic};
+            DocTopic::Stream st(*dt);
+            for (int q = 0; q < DocTopic::kParts; ++q) d_doc[q].assign(H, 0.0), d_docb[q].assign(H, 0.0);
+            for (std::size_t k = 0; k < H; ++k) {
+                for (int q = 0; q < DocTopic::kParts; ++q)
+                    if (on[q]) {
+                        double P[256];
+                        d_docb[q][k] = st.predict(q, P);
+                        d_doc[q][k] = P[data[kTrain + k]];
+                    }
+                st.feed(data[kTrain + k]);
+            }
+        }
+    }
+    if (dump) {
+        // GLNX (docs/GENERATION_PLAN.md §13.10): one row of float32 per holdout byte. Columns, in order: the byte; the trie's
+        // 5 experts' probability of it and the match (hit, present); the trie mixture; Kneser-Ney (prob, bucket);
+        // InfiniGram at caps 4, 16, 64, 512, 8192 (prob), its bucket and match length at 8192; class (prob, bucket);
+        // similar-context (prob, bucket); copy (hit, bucket, match length); the document parts trig, cache, topic (prob,
+        // bucket each); the chain after InfiniGram, class, similar-context, copy, and the final chain. Absent experts are 0.
+        const int C = 1 + 7 + 2 + 7 + 2 + 2 + 3 + 6 + 5;
+        std::vector<float> row(C);
+        std::ofstream f(a.dump_experts, std::ios::binary);
+        for (std::size_t k = 0; k < H; ++k) {
+            const std::size_t i = kTrain + k;
+            const unsigned y = data[i];
+            int c = 0;
+            row[c++] = static_cast<float>(y);
+            double e[5][256];
+            bool em = false;
+            unsigned pred = 0;
+            pm.fill_experts(data.data(), i, kTrain, Mode::Synth, e, em, pred, false);
+            for (int j = 0; j < 5; ++j) row[c++] = static_cast<float>(e[j][y]);
+            row[c++] = em && pred == y ? 1.0f : 0.0f;
+            row[c++] = em ? 1.0f : 0.0f;
+            row[c++] = static_cast<float>(pt_trie[k]);
+            int kb = 0;
+            row[c++] = kn ? static_cast<float>(kn->prob_bucket(data.data(), i, y, kb)) : 0.0f;
+            row[c++] = static_cast<float>(kb);
+            for (int q = 0; q < 5; ++q) row[c++] = q < static_cast<int>(pinf_caps.size()) ? static_cast<float>(pinf_caps[q][k]) : 0.0f;
+            row[c++] = static_cast<float>(bk8k[k]);
+            row[c++] = static_cast<float>(n8k[k]);
+            if (cc) {
+                double P[256];
+                row[c + 1] = static_cast<float>(ClassContext::bucket(cc->predict(data.data(), i, P)));
+                row[c] = static_cast<float>(P[y]);
+            } else {
+                row[c] = row[c + 1] = 0.0f;
+            }
+            c += 2;
+            row[c++] = d_sim.empty() ? 0.0f : static_cast<float>(d_sim[k]);
+            row[c++] = d_simb.empty() ? 0.0f : static_cast<float>(d_simb[k]);
+            int cn = 0;
+            const unsigned cpred = copy_pred(data.data(), i, cn);
+            row[c++] = cpred == y && cn > 0 ? 1.0f : 0.0f;
+            row[c++] = static_cast<float>(copy_bucket(cn));
+            row[c++] = static_cast<float>(cn);
+            for (int q = 0; q < DocTopic::kParts; ++q) {
+                row[c++] = d_doc[q].empty() ? 0.0f : static_cast<float>(d_doc[q][k]);
+                row[c++] = d_docb[q].empty() ? 0.0f : static_cast<float>(d_docb[q][k]);
+            }
+            for (int q = 0; q < 4; ++q) row[c++] = q < static_cast<int>(snaps.size()) ? static_cast<float>(snaps[q][k]) : 0.0f;
+            row[c++] = static_cast<float>(base[k]);
+            f.write(reinterpret_cast<const char*>(row.data()), static_cast<std::streamsize>(C * sizeof(float)));
+        }
+        std::cerr << "dumped " << H << " rows of " << C << " columns to " << a.dump_experts << " (half " << half << ")\n";
     }
 
     const int edges[] = {4, 8, 16, 32, 64, 256, 1024, 8193};
@@ -1753,7 +1840,7 @@ std::string reference_code(int in_slice, int prose, int covered) {
 // until B4C (B4B chose 16,384; a Q/A prompt and its answer fit inside either).
 constexpr std::size_t kCopyWin = 16384;
 constexpr int kCopyBuckets = 8;
-int copy_pred(const std::uint8_t* s, std::size_t i, int& n, std::size_t* at = nullptr) {  // DK2: at = the source j
+int copy_pred(const std::uint8_t* s, std::size_t i, int& n, std::size_t* at) {  // DK2: at = the source j
     n = 0;
     int pred = -1;
     const std::size_t lo = i > kCopyWin ? i - kCopyWin : 0;

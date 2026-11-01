@@ -632,3 +632,27 @@ Running the result stays lookups and counts. **Tool:** `bench/fuzzy/so_bench.py`
 - The pattern model's fallback to the unigram is a weight learned by EM, not a fixed 1%.
 - **A known confound:** the pattern model uses maximum-likelihood counts mixed by EM, while K5 uses Kneser–Ney discounting. So SO2 measures structure and smoothing together. On the smoke slice, the chosen contexts score 1.615 bits per byte against 1.518 for pruned K5.
 - `bench/fuzzy/run_so.sh` runs the 11 jobs on cores 53–63 after the bake-off finishes. SO5's shift text is the first 8 MiB of the unseen C4 shard (`c4_heldout.txt`).
+
+### 13.10 GLNX: a gated linear network on CyphaLM's whole model (exploration, 2026-11-01)
+
+**Odin:**
+- "Make the content mixer a 2-layer gated linear network, gated on a side-information vector of expert losses and fuzzy features."
+- "Use my whole model. It's meant to be the first layer."
+- "Try it all at once ... on 1 meg of data and then we will reverse engineer it. I just wanna see it."
+- "Keep doing the quick fast-mode check first: small streams and 10 prompts, to profile it and iterate it real quick."
+
+This is exploration. Nothing is registered as a gate, and no default changes.
+
+- **Layer 1 is CyphaLM's default stack.** `cyphalm_trie context8k ... --dump-experts FILE` writes one row per byte of the 1 MiB wiki holdout:
+  - each expert's probability of the true byte, with its bucket: the trie's 5 experts and match, the trie mixture, byte Kneser–Ney, InfiniGram at 5 caps, class, similar-context, copy, the document parts;
+  - the content mixer's chain after each stage.
+
+  Without the flag, `context8k`'s output is unchanged.
+- **Layer 2 is `bench/fuzzy/glnx.py`:**
+  - gated linear mixers over those 24 inputs, each gate chosen by half-spaces of a side-information vector (buckets, match lengths, recent losses, surprise, previous byte's class, position in the word);
+  - weights learned online by exponentiated gradient on log loss;
+  - every gate starts at the content mixer's output;
+  - it learns on the holdout's first half (where the content mixer fit its lambdas), then reads the second half prequentially;
+  - `--fast` uses 64 KiB of each half.
+- **Generation (10 prompts)** needs layer 2 inside `cyphalm_trie sample`. That comes once the bits show what layer 2 does.
+- **The word-level version** written first, with experts I picked (log-bilinear, reservoir, linear state), is replaced by this one. Odin: "You didn't use my model."
