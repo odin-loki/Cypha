@@ -861,6 +861,15 @@ One online layer on top of the online chain is the best, and a second layer adds
 - More neurons do not help. 64 is worse than 32, and 16 is about as good. A small one is enough, as Odin said.
 - It is not adopted. It only decides something once it reads CyphaLM's experts, and that is the bit-level dump Odin ruled out for this experiment.
 
+**Context capacity against data** (registered 2026-11-01, before the runs). Odin cited Veness et al.: GLNs approximate any continuous function "so long as the context capacity is sufficiently expressive".
+- **The test:** H32 with 2, 4, 6 and 8 half-spaces per layer-1 neuron (4, 16, 64 and 256 contexts per bit position). Each is scored on 64 KiB and on 512 KiB, after learning on as much of the first half. `glnb.py ENWIK8 hs HALF_SPACES BYTES`.
+- **The frozen chain on the same bytes:** 1.7786 on 64 KiB and 1.6979 on 512 KiB.
+- **Reading rule:**
+  - "Data is the limit" if the best half-space count on 512 KiB is higher than on 64 KiB, and beats 4 half-spaces there by at least 0.01.
+  - "Inputs are the limit" if, at both sizes, every count is within 0.01 of the others.
+  - Anything else is mixed.
+- **Prediction:** inputs are the limit. On 512 KiB every arm stays at least 0.2 bits per byte behind the chain.
+
 ### 13.14 Research item: the signal coherent text needs, and optimising to extract it (Odin, 2026-11-01)
 
 **Odin:** "Add a note to the documentation to research the signal needed to extract to get coherent text. We can optimise to extract that."

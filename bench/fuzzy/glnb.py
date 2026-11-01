@@ -149,13 +149,13 @@ class LSTM:
 
 
 class Hybrid:
-    def __init__(self, tabs, neurons=32, lstm=True, seed=0):
+    def __init__(self, tabs, neurons=32, lstm=True, seed=0, hs=4):
         rng = np.random.default_rng(seed)
         self.tabs, self.N, self.use_lstm = tabs, neurons, lstm
         self.K = ORDERS + (1 if lstm else 0) + 1  # inputs: orders, LSTM, bias
         self.D = (64 if lstm else 0) + self.K  # side vector: LSTM state + inputs
-        self.H1 = rng.standard_normal((neurons, 4, self.D))
-        self.W1 = np.full((neurons, 16, 8, self.K), 0.3)
+        self.H1 = rng.standard_normal((neurons, hs, self.D))  # hs half-spaces per neuron: 2**hs contexts
+        self.W1 = np.full((neurons, 2 ** hs, 8, self.K), 0.3)
         self.W1[..., -1] = 0.0
         self.H2 = rng.standard_normal((4, 2, self.D))
         self.W2 = np.full((4, 4, 8, neurons + 1), 1.0 / neurons)
@@ -192,7 +192,7 @@ class Hybrid:
                 ps.append(min(max((cum[hi] - cum[mid]) / max(tot, 1e-12), 1e-4), 1 - 1e-4))
             x = np.array([stretch(min(max(p, 1e-4), 1 - 1e-4)) for p in ps] + [1.0])
             z = np.concatenate([hstate, x]) if self.lstm is not None else x
-            g1 = ((np.einsum("nmd,d->nm", self.H1, z) > 0) * (1 << np.arange(4))).sum(1)
+            g1 = ((np.einsum("nmd,d->nm", self.H1, z) > 0) * (1 << np.arange(self.H1.shape[1]))).sum(1)
             w1 = self.W1[np.arange(self.N), g1, j]
             s1 = np.clip(w1 @ x, -12, 12)
             p1 = 1 / (1 + np.exp(-s1))
@@ -240,6 +240,18 @@ def main():
     t0 = time.time()
     base = pretrain(train)
     print("pretrained", round(time.time() - t0), "s", flush=True)
+    if len(sys.argv) > 4 and sys.argv[2] == "hs":  # context capacity: glnb.py ENWIK8 hs HALF_SPACES BYTES
+        hs, size = int(sys.argv[3]), int(sys.argv[4])
+        t1 = time.time()
+        m = Hybrid(base, neurons=32, hs=hs)
+        for y in hold[:size]:
+            m.code_byte(int(y))
+        Bs = hold[HALF:HALF + size]
+        bits = sum(m.code_byte(int(y)) for y in Bs)
+        r = dict(bpb=bits / len(Bs), sec=round(time.time() - t1), neurons=32, hs=hs, bytes=size)
+        json.dump(r, open(f"/root/work/glnx/glnb_hs{hs}_{size}.json", "w"))
+        print(json.dumps(r), flush=True)
+        return
     res = {}
     for name, cfg in (("H16", dict(neurons=16)), ("H32", dict(neurons=32)), ("H64", dict(neurons=64)),
                       ("H32_noLSTM", dict(neurons=32, lstm=False))):
