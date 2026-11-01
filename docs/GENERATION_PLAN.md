@@ -656,3 +656,18 @@ This is exploration. Nothing is registered as a gate, and no default changes.
   - `--fast` uses 64 KiB of each half.
 - **Generation (10 prompts)** needs layer 2 inside `cyphalm_trie sample`. That comes once the bits show what layer 2 does.
 - **The word-level version** written first, with experts I picked (log-bilinear, reservoir, linear state), is replaced by this one. Odin: "You didn't use my model."
+
+**The data preprocessing phase (Odin, 2026-11-01: "Save that as a data preprocessing phase to save time").** Layer-2 work runs in two phases:
+
+1. **Preprocess once:** `bench/fuzzy/glnx_prep.sh OUT`.
+   - It runs CyphaLM's whole model (`context8k --dump-experts`) over the 1 MiB wiki holdout.
+   - It saves `OUT/experts.f32`: one row of 36 float32 values per byte, about 150 MB. The columns are listed in `glnx.py`'s `COLS`.
+   - It writes `OUT/manifest.txt`: the binary's hash, the command, the row count, the file's sha256, and the content mixer's chain lines.
+   - It takes about 20 minutes on 4 cores. It is skipped when the manifest matches the binary and the flags (`FORCE=1` redoes it).
+   - **Redo it whenever an expert or the content mixer changes,** because the dump is a snapshot of layer 1.
+2. **Iterate on layer 2:** `python3 bench/fuzzy/glnx.py OUT/experts.f32 --fast`.
+   - It uses 64 KiB of each half, which takes seconds.
+   - Without `--fast` it reads the whole holdout, which takes minutes.
+   - Every layer-2 idea is tried here first.
+
+The dump holds only each expert's probability of the true byte, which is all a linear layer 2 needs to learn and score. Generation needs layer 2 inside `cyphalm_trie sample`.
