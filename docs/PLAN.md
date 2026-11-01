@@ -406,6 +406,7 @@ The pass was one 64-bit trie with no per-category holdout.
 | B9 | **Copy-from-prompt expert.** A match model over the prompt itself, for closed questions whose answer is in the given context (CyphaLM's reading mode already copies a passage's second occurrence at 0.048 BPC) | Closed-QA exact match on SQuAD-style items | LCI ≥ 0.95 |
 | B10 | **Constrained answer decoding.** Stop at the end of an answer, constrain to the expected type, keep the repetition guard (`mark_banned`) | SCRIBE I and R axes | No loss in exact match |
 | B11 | **hp gate24 stays as the comparison**, with the A6 bit-scaling curve | — | — |
+| BKN4 | **Fix BKN2's answers with Kneser–Ney kept on** (added 2026-11-01; ledger 93, 95). Not started. On the frozen test BKN2 lets 3 wrong answers through, against 0 before. Two ways to try, chosen on dev: re-fit the answer gate with Kneser–Ney on, or an agreement gate that answers only when CyphaLM with and without Kneser–Ney agree | `qa` dev and the frozen test (read once): right and wrong answers; BPC; SCRIBE v2 with surface S; RAM | Registered before the run. On dev: fewer wrong answers than BKN2 and no fewer right ones; BKN2's BPC and text gains kept; `qa` under 200 MB. Then the frozen test, read once |
 
 ### Track C: semantics from statistics (the encoders)
 
@@ -491,6 +492,12 @@ The full design, work items S1–S15 and gates are in [`DISCOVERY.md`](DISCOVERY
 - **S5:** the hypothesis store with its firewall;
 - **S3:** the gap map.
 
+Open items not yet in DISCOVERY.md §13:
+
+| ID | Item | Measure | Gate |
+|---|---|---|---|
+| S8f | **S8e's grader for S8's reads, with rule 5 limited to countries** (added 2026-11-01; ledger 93, 95; Claude's picks, Odin inclined to agree). Not started. Rule 5 lets a country-like part count for the whole country. It is about 15% wrong where it fires (Joyce "English"), so it is dropped for persons: `match()` in `wd_grader.hpp` applies it only to `country`. Keep the minimum of 10 positives per source. The next fresh read uses slots where DBpedia has fields. The gate stays on Supported | Audited grader error, as in S8e; S8's reads graded again, listing every verdict that changes | Audited error no higher than S8e's 4 / 100 |
+
 ### Track K: thought processes
 
 A learnable library of human thinking and work processes, plus the AI and data-science processes Cypha uses day to day. It has 144 processes in 25 categories, each a control graph with its source and core maths. Cypha runs, selects and improves them with its own statistics:
@@ -515,6 +522,13 @@ Design: [`THOUGHT.md`](THOUGHT.md). Library: [`thought/processes.yaml`](thought/
 See section 10. It covers every component, every checkpoint, and every promotion.
 
 **Which support tools make the cut** (tagger, pattern learner, word vectors, teacher text, InfiniGram, Cypha abstain gate): [`TOOL_PROFILE_PLAN.md`](TOOL_PROFILE_PLAN.md). Each tool is measured only by what it adds to CyphaLM's own Q/A and BPC (rule 10), for its cost in code and RAM, with LCI as referee.
+
+Open items:
+
+| ID | Item | Measure | Gate |
+|---|---|---|---|
+| M18 | **Win back `qa`'s RAM headroom** (added 2026-11-01; ledger 57, 95). Not started. Odin's limit: `qa`, built and served, under 200 MB. Built `qa` peaks at 195.3 MB and served at 194.6 MB (A4f). The frozen-test configuration, not under the rule, peaks at 199.9 MB. Byte Kneser–Ney added 24.3 MB of tables (BKN2), so the next expert would break the limit. Find where each peak sits and cut it without changing any output | Peak RSS (`/usr/bin/time -v`) in every `qa` configuration; outputs byte-identical | Every configuration at least 10 MB under 200 MB, with the same output |
+| M18b | **The 200 MB limit and the 1 TB trie** (added 2026-11-01; ledger 95). Odin's call. The packed 1 TB trie alone needs about 1.0 GB resident. So `qa`'s T-QA sets on it (TRIE_1TB_PROFILE "Next", item 5) cannot meet the limit. Options: a separate limit for the 1 TB trie; memory-map it and count only the pages it touches; or no T-QA run on it | — | Odin's ruling |
 
 ### Track Q: code health
 
@@ -978,6 +992,7 @@ Everything raised on 2026-10-26, and where this plan covers it.
 | 92 | Decided by measurement under row 55 (2026-10-29), open to Odin's veto: byte Kneser–Ney stays on inside answers. Gated off there like the other experts (`--bkn-answers off`, InfiniGram at lambdas fit without it), `qa`'s answers equal the pre-BKN model's in every answer-side column; dev gated answers 2 right / 0 wrong against on's 3 / 2, and the rule (more right, wrong ≤ 0.02) keeps on. `--bkn-answers off` stays as the veto switch | [`reports/BYTE_KN.md`](reports/BYTE_KN.md) |
 | 93 | Odin's rulings (2026-10-29, evening): (1) BKN2 stays the default, no veto ("Record it. Don't do it."): `--bkn-answers off` is not made the default; "see if you can't fix BKN2 and use it as default": the fix for its answers (the frozen test's 3 wrong) with Kneser–Ney kept on is recorded as the next step (BKN4: re-fit the answer gate with KN on, or an agreement gate between CyphaLM with and without KN in answers); not started (Odin: "Just record it"). (2) Forecasting held ("Hold off on Forecasting"): FCAST stays off main; Track FC waits. (3) S8e's questions, Claude's picks with Odin inclined to agree: adopt S8e's grader for S8's reads with its rule 5 (a country-like part counts for the whole country) dropped for persons; keep the minimum of 10 positives per source; next fresh read on slots where DBpedia has fields; the gate stays on Supported; more DBpedia occupation and genre grading deferred (licence) | this file |
 | 94 | Decided by measurement under row 55 (2026-10-29), open to Odin's veto: the similar-context expert merges repeated online keys by default (`merge=1`, A4f). Online memory at 16 MiB −62%; dev −0.0089 [−0.0094, −0.0085] and fresh text read once −0.0091 [−0.0095, −0.0087] bits per byte (LCI 1.000); answers unchanged; with today's defaults built / served `qa` 195.3 / 194.6 MB and the holdout 1.6989 → 1.6983 | [A4 report, A4f](reports/A4_SIMILAR_CONTEXT_EXPERT.md) |
+| 95 | Odin (2026-11-01): the open items become rows in the track tables. BKN4 (fix BKN2's answers with Kneser–Ney kept on) in Track B; S8f (S8e's grader, rule 5 limited to countries) in Track S; M18 (win back `qa`'s RAM headroom) and M18b (the 200 MB limit against the 1 TB trie, Odin's call) in Track P. All not started | §5, Tracks B, S and P |
 
 ---
 
