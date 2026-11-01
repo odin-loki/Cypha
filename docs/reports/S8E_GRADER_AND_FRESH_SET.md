@@ -339,3 +339,55 @@ Why ungraded and not false: nationality is closed-world (rule 7). If rule 5 were
 The first dev read with the registered change graded 24 of the 26 rule-5 items ungraded, as F2 said. The other 2 went from true to **false**: Daniel Jones (phonetician) and G. K. Chesterton, both "English". S15 drew the Kingdom of England as their false value, and its demonym is also "English". Once rule 5 no longer matched, the drawn-false rule took them. Both men were English, so both verdicts would be wrong.
 
 The name is ambiguous there: it names England (inside the United Kingdom, a true value) and the drawn false Kingdom of England. So `rule5-person` now comes before `drawn-false` in `grade_slot`, and such an item is ungraded. A name that matches only a drawn false value is still false. This was found and changed on dev, before the test read, and is the change the test read uses. F2 is scored against the first read.
+
+### S8f results (2026-11-01)
+
+Tool: `pattern_learn` at 9f34fdd (`g++ -O2`), run with S8e's commands. Outputs are in `/root/work/s8f/runs`.
+
+| Read | S8e | S8f |
+|---|---|---|
+| 1. Parity: `main` before the change, against S8e's files | — | all 11 files byte for byte; the printed lines are equal apart from times |
+| Fresh dev items graded in the calibration | 1,858 (366 true) | 1,832 (340 true) |
+| DB-IB lexical | LR+ 10.60, may carry | LR+ 11.29, may carry |
+| The dev choice | M | M |
+| S8d's 25 promotions graded again | 25 true | 25 true |
+| Audit error, unsure items counted | 0.040 [0.016, 0.098] (100 items) | **0.031 [0.010, 0.086]** (98 items) |
+| Audit error, opposite only | 0.020 [0.006, 0.070] | 0.010 [0.002, 0.056] |
+| Test read under M: graded / supported | 1,911 / 0 | 1,885 / 0 |
+| Test read without the minimum: supported (true) | 2 (2) | 2 (2) |
+
+- **Every verdict that changed.**
+  - Dev: the 26 rule-5 items, all nationality, now ungraded (`rule5-person`).
+  - Test: 26 distinct hypotheses (23 "English", 3 "Scottish"), all nationality, all from true to ungraded.
+  - No `country` verdict changed, and no other verdict changed.
+- **The hand check of the 26 dev items.**
+  - 20 are right: English people, and the fictional Inspector Morse.
+  - 4 are wrong: James Joyce "English", Emma Goldman "Scottish", Gordon Banks "Scottish", Ian Botham "Scottish".
+  - 2 are unsure: David Beatty and Harold Alexander, both Anglo-Irish.
+  - So the change takes 4 wrong, 2 unsure and 20 right verdicts out of the graded set. Reading F (rule 5 removed, closed-world false) would have made the 20 right ones errors.
+- **The audit.** James Joyce (a wrong verdict) and Elvis Costello (a right one) leave the graded set. The other 98 verdicts do not change.
+- **The test read.** Under M nothing is supported, so S8's gate is still not met, for want of 20 graded promotions. The refuting side is unchanged: 690 refuted, 688 graded.
+
+**Decision (the registered rule).** The audited error (0.031) is not above S8e's 0.040. So S8e's grader, with rule 5 limited to countries, is adopted for S8's reads, with the minimum of positives (M) and the gate on Supported (Odin's ruling, ledger 93). S8's reads use it through `--s8e` and the tables in `bench/eval/s8e_grader_tables.tar.gz`. Without `--s8e`, `pattern_learn --sources` is S8d's, as before.
+
+**Predictions, scored.**
+
+| # | Result |
+|---|---|
+| F1 | **Hit:** byte for byte |
+| F2 | **Miss** on the first read: 24 became ungraded and 2 became false (Daniel Jones, G. K. Chesterton). This was amended on dev, above. After that, all 26 are ungraded |
+| F3 | **Hit:** no `country` verdict changed |
+| F4 | **Hit:** 0.031 [0.010, 0.086]. Two items left the graded set, not one |
+| F5 | **Hit:** LR+ 11.29 |
+| F6 | **Hit:** M |
+| F7 | **Hit:** 25 of 25 |
+| F8 | **Hit:** nothing supported under M |
+| F9 | **Hit:** the planted bug fails 4 checks |
+
+**Checks.**
+- `epistemic_test` passes 1,484 checks, 6 more than before, in `test_wd_grader_S8e`.
+- The planted bug (rule 5 still a match for nationality) fails 4 of them.
+- Without tables the grader is S8c's. That code path is unchanged, and S8d's regrade line is identical.
+- S3's `--gaps` was not run again: it never calls the grader (only `--sources --s8e` does).
+
+**How to reproduce.** Build `pattern_learn` as above, then run S8e's `--sources … --s8e … --s8e-pool …` command. Add the five test pools and `--read-test` for the test read.
