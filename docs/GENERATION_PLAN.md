@@ -486,3 +486,38 @@ M5 and TR each train on the same number of tokens (two passes over train), AdamW
 
   It is either learned to predict (route 2: a linear map, e.g. CCA between past and future features) or distilled (route 3: TR's hidden states clustered into a few thousand discrete states, with transitions learned as counts).
 - **Either way:** exact matching stays for facts and copying, where it is better (rule 9: a fuzzy match blends facts). Fuzzy matching is for form.
+
+### 13.5 Q0: a yardstick from Qwen 3.5 9B (Odin, 2026-11-01, ledger 100)
+
+Odin runs Qwen 3.5 9B locally (Ollama). His ruling: it is used **only as a yardstick**. "No Qwen inference" is lifted for this use alone.
+- No table or state is taken from it, no text of it is trained on, and nothing of it enters CyphaLM. Uses B, C and D of the discussion are declined.
+- **What is run:** its plain continuations (raw completion, no chat template, thinking off) of the same 250 GEN-A **dev** prompts. Nucleus 0.9 at T 0.8 and T 1.0, cut at 600 bytes, scored by the same SCRIBE ladder, axes and copy share as N0's arms.
+- **When:** after N0's training, so it does not compete for the CPU.
+- **Caveat:** Qwen has read Wikipedia, likely including modern versions of these pages. Its score is a reference point, not a fair comparison, and its copy share against our training text does not measure its memory.
+
+### 13.6 Fuzzy matching without a network: the candidates
+
+Odin: "There are better fuzzy approaches. There is a plethora of techniques." The ones that fit CyphaLM, by what they port. Each is registered on N0's bench (W1, the shared tokens, the shared decoder, SCRIBE) before it runs, against K5.
+
+| Part ported | Technique | What it does |
+|---|---|---|
+| Fuzzy keys | **Approximate matching in the FM-index**: backtracking search with up to k substitutions (as in read aligners), substitutions weighted by a learned word-substitution matrix (which words replace each other in the same contexts, from counts) | The ∞-gram finds training text that matches the context with a few words changed |
+| Fuzzy keys | **Gapped and skip contexts** (skip-grams; PAQ's sparse contexts) | Matches that skip a word or two |
+| Fuzzy keys | **Class and factored backoff** (Brown clusters by the exchange algorithm; generalised parallel backoff, Bilmes and Kirchhoff, 2003) | Back off to the word's class or tag instead of forgetting it |
+| Fuzzy keys | **Locality-sensitive hashing** (SimHash, MinHash) of context features | Fast nearest-context lookup |
+| Similarity tuned to predict | **Memory-based learning** (TiMBL, IGTree; Daelemans and van den Bosch, 2005): nearest stored examples under a distance whose feature weights are the information gain of each context position for the next word | A learned "what counts as alike", from counts |
+| Similarity tuned to predict | **Decision-tree and random-forest language models** (Bahl et al., 1989; Xu and Jelinek, 2004): trees ask questions about any word of the history, chosen to predict | Generalises across contexts, reaches beyond the window |
+| Similarity tuned to predict | **Spectral and CCA context states** (Dhillon, Foster and Ungar, eigenwords): an SVD of the covariance of past and future features | Context vectors whose closeness means similar futures (route 2) |
+| Similarity tuned to predict | **Indirect contexts** (PAQ): contexts grouped by what followed them recently, not by their spelling | Contexts that behave alike share evidence |
+| The long state | **Sparse distributed memory with counters** (Kanerva, 1988). Attention approximates it (Bricken and Pehlevan, 2021) | A count-based content-addressable memory: the closest thing to attention without a network |
+| The long state | **Hyperdimensional state vectors** (holographic reduced representations; random indexing, already in `ppmi_svd`): the past bound into one vector with position and decay | A running state of the whole past, by algebra, with no training |
+| The long state | **Head-word contexts from syntax** (the structured language model, Chelba and Jelinek, 2000): predict from the exposed heads of the partial parse, using E1's tags and K6's chunks | Grammar across clauses |
+| The long state | **Latent-state models** (HMMs at scale, spectral learning: Hsu, Kakade and Zhang, 2009) | A learned discrete state, by EM or spectral methods |
+
+**The first to try, by fit and cost:**
+1. Approximate FM-index matching: it reuses our index.
+2. Memory-based kNN with information-gain weights.
+3. A random-forest language model.
+4. Sparse distributed memory and hyperdimensional states, for the long state.
+
+N0's result decides which group goes first.
