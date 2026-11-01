@@ -788,6 +788,42 @@ One online layer on top of the online chain is the best, and a second layer adds
 - Human text commits where language is constrained, and its surprise rises only at real choice points (Holtzman et al., 2020; Meister et al., 2023, typical sampling).
 - Next measures: the per-word surprise profile of human, K5 and mixture text; and sampling from a sharpened mixture (geometric mixing, typical sampling) while the hedged mixture still scores and answers.
 
+**The C++ results** (Odin's PC, 2026-11-01, one core per arm, the standard `context8k` command):
+
+| Arm | Final chain line | `online_final_bpc` | Wall | Peak RSS |
+|---|---:|---:|---:|---:|
+| R0, as it is | 1.6971 | — | 915 s | 216 MB |
+| R1, `--online-mix` | 1.6966 | — | 909 s | 216 MB |
+| R2, `--online-mix --online-final` | crashed | — | — | — |
+| R2b, R2 plus `--dump-experts` | 1.6966 | **1.6674** | 935 s | 321 MB |
+
+- The answers do not change. Outside the bits lines, R0 and R1 differ in 0 lines, and R1 and R2b in 0 lines. Selftest passes.
+- **R2's crash.** `--online-final` read per-byte arrays that only `--dump-experts` filled. Fixed: both flags now fill them. They are also stored as float, since the dump and the final layer only read them as float. That halves their memory, and no output changes.
+
+**Why R1 gains so little.** In Python the online chain gained 0.017 bits per byte. In C++ it gains 0.0005.
+- The Python chain let copy's short matches back in. The C++ chain keeps their lambdas at 0, as B4B chose: short copies lowered generated text's surface S from 0.907 to 0.840.
+- With the same clip in Python, the online chain scores 1.7027, worse than the frozen 1.6979.
+- So the Python gain came from short copies, not from learning online.
+
+**Decision.**
+- `--online-mix` does not become the default. Rule 1 fails: −0.0005 against the 0.01 needed. O1 missed (1.6966 is outside 1.675–1.690). O3 held.
+- `--online-final` passes its own rule: −0.029 against the 0.005 needed. The answers are identical, the wall time is +2%, and selftest passes. O2 held (−0.029 is at least 0.008).
+- But it was run on top of the online chain, and the default chain stays frozen. So R3 checks it on the frozen chain before it becomes the default.
+- The final layer reads every expert, short copies included, and only scores. Answers and samplers still read the frozen chain. So its bits measure prediction, not writing, and the final chain line stays the line the sampler matches.
+
+**R3** (registered 2026-11-01, before the run; this container, one core per arm, all three side by side):
+- R0c: `context8k` as it is.
+- R3: `context8k --online-final`, on the frozen chain.
+- R2c: `context8k --dump-experts`. Its dump must match `experts.f32` (sha256 `manifest.txt`) byte for byte. This shows the float arrays change nothing.
+
+**Rule.** `--online-final` becomes the default of `context8k` (`--no-online-final` restores the old output) if all hold:
+1. R3's `online_final_bpc` is below its own final chain line by at least 0.005.
+2. Every line of R3 outside `online_final_bpc` and `online_mix` matches R0c's.
+3. R3's wall time is within +10% of R0c's.
+4. Selftest passes, and R2c's dump matches.
+
+**Prediction.** O4: R3's `online_final_bpc` is 1.663–1.673. The Python layer on the frozen chain gave 1.6688; this machine's chain line is 1.6979. O5: R3's peak memory is under 290 MB.
+
 ### 13.13 GLNB: a bitwise gated linear network with an LSTM inside it (exploration, 2026-11-01)
 
 **Odin:** "Make a hybrid model of a proper bitwise GLN with an LSTM capability", in fast mode and in Python. The LSTM is ruled in for this experiment. No bit-level dump and no separate LSTM byte model.

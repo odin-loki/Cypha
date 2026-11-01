@@ -919,9 +919,10 @@ int cmd_context8k(const Args& a) {
     std::vector<double> pt0;
     if (kn_off_ans) pt0 = pt;
     const bool dump = !a.dump_experts.empty();
-    std::vector<double> pt_trie;
-    if (dump) pt_trie = pt;
-    std::vector<std::vector<double>> pinf_caps;
+    const bool keep = dump || a.online_final;  // the per-byte arrays the dump and the final layer both read
+    std::vector<float> pt_trie;  // the per-byte arrays below are float: the dump and the final layer read them as float
+    if (keep) pt_trie.assign(pt.begin(), pt.end());
+    std::vector<std::vector<float>> pinf_caps;
     std::vector<double> lkn;
     if (kn) {
         lkn = mix_bkn_into(*kn, data.data(), kTrain, half, kn_rep, pt);
@@ -994,7 +995,7 @@ int cmd_context8k(const Args& a) {
             }
             std::vector<double>().swap(pt0);
         }
-        if (dump) pinf_caps.push_back(pinf);
+        if (keep) pinf_caps.emplace_back(pinf.begin(), pinf.end());
         if (cap == 8192) {
             std::copy(lam, lam + kBuckets, lam8k);
             pinf8k = std::move(pinf);
@@ -1014,9 +1015,9 @@ int cmd_context8k(const Args& a) {
     } else {
         for (std::size_t k = 0; k < H; ++k) base[k] = lam8k[bk8k[k]] * pinf8k[k] + (1 - lam8k[bk8k[k]]) * pt[k];
     }
-    std::vector<std::vector<double>> snaps;  // GLNX: the chain after InfiniGram, class, similar-context, copy
-    std::vector<double> d_sim, d_simb, d_doc[DocTopic::kParts], d_docb[DocTopic::kParts];
-    if (dump) snaps.push_back(base);
+    std::vector<std::vector<float>> snaps;  // GLNX: the chain after InfiniGram, class, similar-context, copy
+    std::vector<float> d_sim, d_simb, d_doc[DocTopic::kParts], d_docb[DocTopic::kParts];
+    if (keep) snaps.emplace_back(base.begin(), base.end());
     std::string chain = "trie_plus_context_8192";
     auto chain_line = [&](const char* part) {
         double bits = 0;
@@ -1028,7 +1029,7 @@ int cmd_context8k(const Args& a) {
         mix_cls_into(*cc, data.data(), kTrain, half, base);
         chain_line("_cls");
     }
-    if (dump) snaps.push_back(base);
+    if (keep) snaps.emplace_back(base.begin(), base.end());
     int rc = 0;
     if (const auto sc = default_sim(a, data.data(), kTrain, rc)) {
         std::vector<double> ps(H);
@@ -1046,18 +1047,18 @@ int cmd_context8k(const Args& a) {
             for (std::size_t k = 0; k < H; ++k) base[k] = ls[sb[k]] * ps[k] + (1 - ls[sb[k]]) * base[k];
         }
         chain_line("_sim");
-        if (dump) {
-            d_sim = ps;
+        if (keep) {
+            d_sim.assign(ps.begin(), ps.end());
             d_simb.assign(sb.begin(), sb.end());
         }
     } else if (rc)
         return rc;
-    if (dump) snaps.push_back(base);
+    if (keep) snaps.emplace_back(base.begin(), base.end());
     if (!a.no_copy) {
         mix_copy_into(data.data(), kTrain, half, a.copy_min, base);
         chain_line("_copy");
     }
-    if (dump) snaps.push_back(base);
+    if (keep) snaps.emplace_back(base.begin(), base.end());
     // GEN-C2 (docs/reports/GEN_C_TOPIC_CACHE.md, "GEN-C2"): the document experts' cache (--doc SPEC to read another
     // setting), last, over wiki train's words; its lambdas on the first half, its line on the second. --no-doc leaves
     // it out. The answers below never read it.
@@ -1067,17 +1068,17 @@ int cmd_context8k(const Args& a) {
         if (!dt) return drc ? drc : 1;
         mix_doc_into(*dt, data.data(), kTrain, half, base);
         chain_line("_doc");
-        if (dump) {  // GLNX: the document experts' parts over the whole holdout, as mix_doc_into reads them
+        if (keep) {  // GLNX: the document experts' parts over the whole holdout, as mix_doc_into reads them
             const auto& dp = dt->params();
             const bool on[DocTopic::kParts] = {dp.trig, dp.cache, dp.topic};
             DocTopic::Stream st(*dt);
-            for (int q = 0; q < DocTopic::kParts; ++q) d_doc[q].assign(H, 0.0), d_docb[q].assign(H, 0.0);
+            for (int q = 0; q < DocTopic::kParts; ++q) d_doc[q].assign(H, 0.0f), d_docb[q].assign(H, 0.0f);
             for (std::size_t k = 0; k < H; ++k) {
                 for (int q = 0; q < DocTopic::kParts; ++q)
                     if (on[q]) {
                         double P[256];
-                        d_docb[q][k] = st.predict(q, P);
-                        d_doc[q][k] = P[data[kTrain + k]];
+                        d_docb[q][k] = static_cast<float>(st.predict(q, P));
+                        d_doc[q][k] = static_cast<float>(P[data[kTrain + k]]);
                     }
                 st.feed(data[kTrain + k]);
             }
