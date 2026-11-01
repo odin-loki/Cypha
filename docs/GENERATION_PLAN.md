@@ -521,3 +521,55 @@ Odin: "There are better fuzzy approaches. There is a plethora of techniques." Th
 4. Sparse distributed memory and hyperdimensional states, for the long state.
 
 N0's result decides which group goes first.
+
+### 13.7 The fuzzy bake-off (Odin, 2026-11-01: "You can do all of it at once. Try it on 8 MB of data in Python"; registered before any run)
+
+**Tool.** `bench/fuzzy/fuzzy_bake.py`, numpy only, run in the cloud container. It is an instrument for choosing what to build in C++. Nothing in it becomes a default.
+
+**Data.**
+- enwik8 [0, 16) MiB, cleaned by SCRIBE's cleaner. That is about 8 MB of prose, outside SCRIBE's regions and GEN-A's benchmark.
+- Pages holding a 32-byte span of a GEN-A continuation are dropped.
+- Every 20th page is held out (val). Its pages alternate between fitting weights and scoring.
+
+**Units.** Words, numbers and punctuation. The vocabulary is words seen at least twice, up to 32,000. Rarer words are `<unk>`, which is never sampled.
+
+**Arms.** Each fuzzy model is mixed with K5 by one weight fit on val. ALL mixes every model, with weights fit by EM over the models available at each position.
+
+| Arm | Technique (§13.6) |
+|---|---|
+| K5 | Interpolated modified Kneser–Ney, order 5 (the baseline) |
+| F1 | Class substitution: windows of 2–4 words with one word replaced by its class (512 classes, k-means on our own PPMI-SVD vectors) |
+| F2 | Gapped word contexts (7 skip patterns) |
+| F3 | SimHash buckets of a context vector, at 10 / 14 / 18 / 22 bits |
+| F4 | Memory-based learning, IB1-IG: neighbours by information-gain-weighted word and class matches at 4 positions |
+| F5 | Random class forest: 6 random partitions of the history. An approximation of Xu and Jelinek: the trees are not grown by likelihood |
+| F6 | PAQ indirect contexts (the last two followers of the context) |
+| F7 | CCA context states with kNN over 600,000 stored training states |
+| F8a | Sparse distributed memory with counters (8,192 locations), addressed by the last 3 words |
+| F8b | The same, addressed by a decayed state of the whole past (40 words) beside the last word |
+| ALL | All of the above with K5 |
+
+**Measures.**
+- Bits per byte on val's scoring half, with each arm's difference from K5 and a bootstrap interval over pages.
+- Each model's mixture weight and coverage.
+- Generation: GEN-A's 250 **dev** prompts, T 1.0, nucleus 0.9, the 11-byte repeat ban lifted to words, 600 bytes.
+- SCRIBE v2 (the same ladder command as `gen_eval.sh`), copy share (32-byte spans of the training text), the share of samples with a 13-word verbatim run, and continuation bits per byte.
+- No test read.
+
+**Rule (a screen).** A technique goes forward to C++ if both hold:
+- K5 + F lowers val bits per byte with its 95% interval below 0, by at least 0.01;
+- its dev SCRIBE point estimate is at least K5's + 0.02, with copy share within K5's + 0.02.
+
+ALL is reported against K5 by the same measures.
+
+**Predictions.**
+
+| # | Prediction |
+|---|---|
+| B1 | ALL lowers val bits per byte against K5 by at least 0.05 |
+| B2 | The largest single gain in bits comes from F4 or F1 |
+| B3 | F8b lowers SCRIBE's coherence distance the most of the single arms |
+| B4 | No single arm raises dev SCRIBE by more than +0.05 over K5 at 8 MB |
+| B5 | ALL raises dev SCRIBE over K5 by at least +0.03 (point estimate) |
+| B6 | K5's dev SCRIBE is in [0.10, 0.20] |
+| B7 | At least 3 techniques pass the screen |
