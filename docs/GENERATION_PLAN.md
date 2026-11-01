@@ -871,6 +871,17 @@ One online layer on top of the online chain is the best, and a second layer adds
   - Anything else is mixed.
 - **Prediction:** inputs are the limit. On 512 KiB every arm stays at least 0.2 bits per byte behind the chain.
 
+**A bug in GLNB's LSTM** (found 2026-11-01, after the results above). The LSTM read each byte's predecessor only after predicting the byte, so every prediction came from a state one byte behind. Fixed: the state now reads every byte before the one it predicts. H16 to H64 and the half-space test (sent to the PC before the fix) ran with the old LSTM; the writing test below reports the fixed H32's bits per byte beside them.
+
+**Does GLNB write better?** (Odin, 2026-11-01: "See if GLNB generates better. We haven't checked that. Remember prediction isn't generation." Registered before the run; fast mode on Odin's PC.)
+- **Sampler** (`glnb.py ENWIK8 gen ARM TEMP NPROMPTS OUT`): the byte sampler's rules. The model gives all 256 byte probabilities (255 bit predictions). Bytes that would repeat what followed the same 11-byte window earlier are banned. Then temperature and nucleus 0.9; 600 bytes; no learning while writing.
+- **Arms:** H32 with the fixed LSTM, and H32 without the LSTM, each at T 1.0 and T 0.6. Each learns as the read does (128 KiB of the holdout) first.
+- **Prompts:** GEN-A dev's first 10.
+- **On the same 10 prompts:** the byte default (`cyphalm_trie sample`, T 0.6, its best), and K5 (the bake-off's text).
+- **Score:** SCRIBE v2 with surface S (GEN_TRACK's ladder command).
+- **Rule:** this is a screen. GLNB goes to all 250 dev prompts if its best arm's SCRIBE is at least 0.05 above the byte default's on the same 10 prompts.
+- **Prediction:** GLNB writes worse than the byte default (SCRIBE below it, surface S lower). It reads 5 bytes of context and a small LSTM, against the byte default's whole model.
+
 ### 13.14 Research item: the signal coherent text needs, and optimising to extract it (Odin, 2026-11-01)
 
 **Odin:** "Add a note to the documentation to research the signal needed to extract to get coherent text. We can optimise to extract that."

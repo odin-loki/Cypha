@@ -94,7 +94,7 @@ class LSTM:
         self.t = 0
         self.h, self.c = np.zeros(H), np.zeros(H)
         self.buf = []
-        self.prev = 32
+        self.cache = self._forward(32)  # the state after reading a space; dist() predicts the first byte from it
 
     def dist(self):
         z = self.P["Wo"] @ self.h + self.P["bo"]
@@ -102,20 +102,27 @@ class LSTM:
         e = np.exp(z)
         return e / e.sum()
 
-    def step(self, y):
-        """Learn that the byte after self.prev is y, then advance the state with y."""
+    def _forward(self, xb):
+        """Read byte xb: the new state, and what BPTT needs to learn from it."""
         P, H = self.P, self.H
-        x = P["E"][self.prev]
-        xh = np.concatenate([x, self.h])
+        xh = np.concatenate([P["E"][xb], self.h])
         a = P["W"] @ xh + P["b"]
         i, f, o = (1 / (1 + np.exp(-a[:H])), 1 / (1 + np.exp(-a[H:2 * H])), 1 / (1 + np.exp(-a[2 * H:3 * H])))
         g = np.tanh(a[3 * H:])
         c = f * self.c + i * g
         h = o * np.tanh(c)
-        self.buf.append((self.prev, xh, i, f, o, g, self.c, c, h, y))
-        self.h, self.c, self.prev = h, c, y
-        if len(self.buf) >= self.T:
-            self.bptt()
+        cache = (xb, xh, i, f, o, g, self.c, c, h)
+        self.h, self.c = h, c
+        return cache
+
+    def step(self, y, learn=True):
+        """The state has read every byte before y and predicted y: learn from that, then read y.
+        (Until 2026-11-01 the state read y's predecessor only after predicting y, so it was one byte behind.)"""
+        if learn:
+            self.buf.append(self.cache + (y,))
+            if len(self.buf) >= self.T:
+                self.bptt()
+        self.cache = self._forward(y)
 
     def bptt(self):
         P, H = self.P, self.H
@@ -165,8 +172,8 @@ class Hybrid:
         self.lstm = LSTM(seed=seed) if lstm else None
         self.hist = [32] * 8
 
-    def code_byte(self, y, learn=True):
-        """Bits of byte y under the model, then learn it."""
+    def _ctx(self):
+        """What every bit of the next byte reads: the history hashes, the LSTM's byte distribution and its state."""
         hist = self.hist
         hh = [0] * ORDERS
         for k in range(1, ORDERS):
@@ -174,42 +181,53 @@ class Hybrid:
             for i in range(1, k + 1):
                 v = (v * 1099511628211 + hist[-i] + 1) & 0xFFFFFFFFFFFFFFFF
             hh[k] = v
+        cum = hstate = None
         if self.lstm is not None:
             pl = self.lstm.dist()
             cum = np.concatenate([[0.0], np.cumsum(pl)])
             hstate = self.lstm.h
+        return hh, cum, hstate
+
+    def _bit(self, hh, cum, hstate, c0, j):
+        """The probability that bit j (most significant first) is 1 after the partial byte c0, and what learning needs."""
+        keys = [ctx_hash(hh[k], k, c0) for k in range(ORDERS)]
+        ps = []
+        for k, key in enumerate(keys):
+            n1, n = self.tabs[k][0][key], self.tabs[k][1][key]
+            ps.append((n1 + 0.4) / (n + 0.8))
+        if self.lstm is not None:
+            lo, hi = (c0 - (1 << j)) << (8 - j), ((c0 - (1 << j)) + 1) << (8 - j)
+            mid = (lo + hi) // 2
+            tot = cum[hi] - cum[lo]
+            ps.append(min(max((cum[hi] - cum[mid]) / max(tot, 1e-12), 1e-4), 1 - 1e-4))
+        x = np.array([stretch(min(max(p, 1e-4), 1 - 1e-4)) for p in ps] + [1.0])
+        z = np.concatenate([hstate, x]) if self.lstm is not None else x
+        g1 = ((np.einsum("nmd,d->nm", self.H1, z) > 0) * (1 << np.arange(self.H1.shape[1]))).sum(1)
+        w1 = self.W1[np.arange(self.N), g1, j]
+        s1 = np.clip(w1 @ x, -12, 12)
+        p1 = 1 / (1 + np.exp(-s1))
+        x2 = np.concatenate([s1, [1.0]])
+        g2 = ((np.einsum("nmd,d->nm", self.H2, z) > 0) * (1 << np.arange(2))).sum(1)
+        w2 = self.W2[np.arange(4), g2, j]
+        s2 = np.clip(w2 @ x2, -12, 12)
+        p2 = 1 / (1 + np.exp(-s2))
+        x3 = np.concatenate([s2, [1.0]])
+        s3 = float(np.clip(self.W3[j] @ x3, -12, 12))
+        p3 = squash(s3)
+        pos = (s3 + 8) * 2
+        lo_i = int(min(max(math.floor(pos), 0), 31))
+        fr = min(max(pos - lo_i, 0.0), 1.0)
+        pa = self.apm[c0, lo_i] * (1 - fr) + self.apm[c0, lo_i + 1] * fr
+        p = min(max(0.5 * p3 + 0.5 * pa, 1e-6), 1 - 1e-6)
+        return p, (keys, x, g1, w1, p1, x2, g2, w2, p2, x3, p3, lo_i, fr)
+
+    def code_byte(self, y, learn=True):
+        """Bits of byte y under the model, then learn it (learn=False: only read it)."""
+        hh, cum, hstate = self._ctx()
         bits, c0 = 0.0, 1
         for j in range(8):
             bit = (y >> (7 - j)) & 1
-            keys = [ctx_hash(hh[k], k, c0) for k in range(ORDERS)]
-            ps = []
-            for k, key in enumerate(keys):
-                n1, n = self.tabs[k][0][key], self.tabs[k][1][key]
-                ps.append((n1 + 0.4) / (n + 0.8))
-            if self.lstm is not None:
-                lo, hi = (c0 - (1 << j)) << (8 - j), ((c0 - (1 << j)) + 1) << (8 - j)
-                mid = (lo + hi) // 2
-                tot = cum[hi] - cum[lo]
-                ps.append(min(max((cum[hi] - cum[mid]) / max(tot, 1e-12), 1e-4), 1 - 1e-4))
-            x = np.array([stretch(min(max(p, 1e-4), 1 - 1e-4)) for p in ps] + [1.0])
-            z = np.concatenate([hstate, x]) if self.lstm is not None else x
-            g1 = ((np.einsum("nmd,d->nm", self.H1, z) > 0) * (1 << np.arange(self.H1.shape[1]))).sum(1)
-            w1 = self.W1[np.arange(self.N), g1, j]
-            s1 = np.clip(w1 @ x, -12, 12)
-            p1 = 1 / (1 + np.exp(-s1))
-            x2 = np.concatenate([s1, [1.0]])
-            g2 = ((np.einsum("nmd,d->nm", self.H2, z) > 0) * (1 << np.arange(2))).sum(1)
-            w2 = self.W2[np.arange(4), g2, j]
-            s2 = np.clip(w2 @ x2, -12, 12)
-            p2 = 1 / (1 + np.exp(-s2))
-            x3 = np.concatenate([s2, [1.0]])
-            s3 = float(np.clip(self.W3[j] @ x3, -12, 12))
-            p3 = squash(s3)
-            pos = (s3 + 8) * 2
-            lo_i = int(min(max(math.floor(pos), 0), 31))
-            fr = min(max(pos - lo_i, 0.0), 1.0)
-            pa = self.apm[c0, lo_i] * (1 - fr) + self.apm[c0, lo_i + 1] * fr
-            p = min(max(0.5 * p3 + 0.5 * pa, 1e-6), 1 - 1e-6)
+            p, (keys, x, g1, w1, p1, x2, g2, w2, p2, x3, p3, lo_i, fr) = self._bit(hh, cum, hstate, c0, j)
             bits += -math.log2(p if bit else 1 - p)
             if learn:
                 e1 = bit - p1
@@ -228,9 +246,99 @@ class Hybrid:
                         n[key] *= 0.5
             c0 = (c0 << 1) | bit
         if self.lstm is not None:
-            self.lstm.step(y)
-        self.hist = hist[1:] + [y]
+            self.lstm.step(y, learn)
+        self.hist = self.hist[1:] + [y]
         return bits
+
+    def byte_dist(self):
+        """The model's probability of each of the 256 next bytes: 255 bit predictions, depth by depth."""
+        hh, cum, hstate = self._ctx()
+        P = np.ones(1)
+        for j in range(8):
+            p1 = np.array([self._bit(hh, cum, hstate, (1 << j) | r, j)[0] for r in range(1 << j)])
+            P = np.stack([P * (1 - p1), P * p1], 1).reshape(-1)
+        return P
+
+    def snap(self):
+        L = self.lstm
+        return (self.hist[:],) + ((L.h, L.c, L.cache, L.buf[:]) if L is not None else ())
+
+    def restore(self, st):
+        self.hist = st[0][:]
+        if self.lstm is not None:
+            self.lstm.h, self.lstm.c, self.lstm.cache, self.lstm.buf = st[1], st[2], st[3], st[4][:]
+
+
+def esc(s):
+    return s.replace("\\", "\\\\").replace("\t", "\\t").replace("\n", "\\n")
+
+
+def unesc(s):
+    out, i = [], 0
+    while i < len(s):
+        if s[i] == "\\" and i + 1 < len(s):
+            out.append({"t": "\t", "n": "\n", "\\": "\\"}.get(s[i + 1], s[i + 1]))
+            i += 2
+        else:
+            out.append(s[i])
+            i += 1
+    return "".join(out)
+
+
+def generate(m, prompt, rng, temp, nbytes=600, W=11, nucleus=0.9):
+    """The byte sampler's rules (as fuzzy_bake.py's K5 arm and cyphalm_trie sample): no learning while writing; a byte
+    is banned if it would follow an 11-byte window with the byte that followed the same window earlier (prompt
+    included); temperature, then nucleus 0.9."""
+    st = m.snap()
+    pb = prompt.encode("utf-8")
+    for y in pb:
+        m.code_byte(y, learn=False)
+    text, out = bytearray(pb), bytearray()
+    nx = {}
+    for s in range(len(text) - W):
+        nx.setdefault(bytes(text[s:s + W]), set()).add(text[s + W])
+    while len(out) < nbytes:
+        P0 = m.byte_dist()
+        P = P0 ** (1.0 / temp) if temp != 1.0 else P0.copy()
+        key = bytes(text[-W:]) if len(text) >= W else None
+        for c in nx.get(key, ()):
+            P[c] = 0.0
+        if P.sum() <= 0:
+            P = P0.copy()
+        P /= P.sum()
+        order = np.argsort(-P)
+        k = int(np.searchsorted(np.cumsum(P[order]), nucleus)) + 1
+        keep = order[:k]
+        y = int(rng.choice(keep, p=P[keep] / P[keep].sum()))
+        if key is not None:
+            nx.setdefault(key, set()).add(y)
+        text.append(y)
+        out.append(y)
+        m.code_byte(y, learn=False)
+    m.restore(st)
+    return bytes(out).decode("utf-8", "ignore")
+
+
+def gen_main(base, hold, arm, temp, nprompts, out):
+    """Learn as the read does (64 KiB of the holdout's first half, then 64 KiB of its second half, scored), then write
+    600 bytes for each of GEN-A's first NPROMPTS dev prompts, in the gen file format SCRIBE's ladder reads."""
+    t0 = time.time()
+    m = Hybrid(base, neurons=32, lstm=(arm != "H32_noLSTM"))
+    for y in hold[:FAST]:
+        m.code_byte(int(y))
+    Bs = hold[HALF:HALF + FAST]
+    bpb = sum(m.code_byte(int(y)) for y in Bs) / len(Bs)
+    print(json.dumps(dict(arm=arm, bpb=bpb, sec=round(time.time() - t0))), flush=True)
+    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    rows = [l.split("\t") for l in open(f"{root}/bench/eval/gen_prompts_dev.tsv", encoding="utf-8").read().split("\n")[1:] if l]
+    with open(out, "w", encoding="utf-8") as f:
+        f.write(f"MODEL\tglnb\t{arm}\n")
+        for i, r in enumerate(rows[:nprompts]):
+            p = unesc(r[2])
+            g = generate(m, p, np.random.default_rng(20261101 + i), temp)
+            f.write(f"PROMPT\t{i}\t{esc(p)}\nGEN\ttrie_T{temp}\t{esc(g)}\n")
+            f.flush()
+    print(json.dumps(dict(arm=arm, temp=temp, prompts=nprompts, out=out, sec=round(time.time() - t0))), flush=True)
 
 
 def main():
@@ -241,6 +349,8 @@ def main():
     t0 = time.time()
     base = pretrain(train)
     print("pretrained", round(time.time() - t0), "s", flush=True)
+    if len(sys.argv) > 6 and sys.argv[2] == "gen":  # writing: glnb.py ENWIK8 gen ARM TEMP NPROMPTS OUT.gen.txt
+        return gen_main(base, hold, sys.argv[3], float(sys.argv[4]), int(sys.argv[5]), sys.argv[6])
     if len(sys.argv) > 4 and sys.argv[2] == "hs":  # context capacity: glnb.py ENWIK8 hs HALF_SPACES BYTES
         hs, size = int(sys.argv[3]), int(sys.argv[4])
         t1 = time.time()
