@@ -153,8 +153,8 @@ def kn_pairs(kn):
 
 def mdl_select(bank, budget, p_uni, V):
     """Contexts kept by minimum description length: the bits saved by coding a context's next words with its own
-    distribution instead of the unigram, minus the bits to store it (32 + k * (log2 V + 8) for k next words). The
-    contexts with positive net saving are taken, the most saving per stored pair first, until `budget` pairs."""
+    distribution instead of the unigram, minus the bits to store it (32 + k * (log2 V + 8) for k next words). Contexts
+    are taken by net saving per stored pair, best first, until `budget` pairs, so the comparison is at equal size."""
     logpu = np.log2(p_uni)
     rows, pats = [], list(bank.tab)
     for j, p in enumerate(pats):
@@ -164,7 +164,7 @@ def mdl_select(bank, budget, p_uni, V):
         g = np.bincount(per, weights=t.cnt * (np.log2(q) - logpu[t.ids]), minlength=len(t.keys))
         k = np.diff(t.off)
         net = g - (32 + k * (math.log2(V) + 8))
-        m = net > 0
+        m = k > 0
         rows.append(np.stack([net[m] / k[m], k[m], np.full(m.sum(), j), np.flatnonzero(m)], 1))
     R = np.concatenate(rows)
     R = R[np.argsort(-R[:, 0], kind="stable")]
@@ -183,18 +183,29 @@ class FilteredBank(fb.Bank):
         self.tab = {p: filter_table(bank.tab[p], sel[p])[0] for p in sel}
 
 
-class WithFloor:
-    """A pattern mixture with a 1% unigram floor, so it always gives a distribution."""
-
-    def __init__(self, pm, p_uni):
-        self.pm, self.pu = pm, p_uni
+class Uni:
+    def __init__(self, p_uni):
+        self.pu = p_uni
 
     def dist(self, ctx):
-        d = self.pm.dist(ctx)
-        return self.pu.copy() if d is None else 0.99 * d + 0.01 * self.pu
+        return self.pu
+
+
+class WithFloor:
+    """A pattern mixture backed by the unigram, the two weighted by EM on held-out text, so it always gives a
+    distribution."""
+
+    def __init__(self, pm, p_uni):
+        self.pm, self.u = pm, Uni(p_uni)
+        self.mix = None
+
+    def dist(self, ctx):
+        return self.mix.dist(ctx)
 
     def fit(self, ctxs, ys):
         self.pm.fit(ctxs, ys)
+        self.mix = Mix([self.pm, self.u])
+        self.mix.fit(ctxs, ys)
 
 
 # ------------------------------------------------------------------------------------------- SO3: ARTMAP
@@ -453,7 +464,7 @@ def whole_learner(tr, V, E, cls0, vs, passes=6):
     pm = fb.PatternMix(FilteredBank(bank, sel), list(sel), V)
     pm.fit(vs["fit_ctx"], vs["fit_y"])
     art = ARTMAP(tr, E, V, uni(tr, V))
-    alone = Mix([WithFloor(pm, uni(tr, V)), art])
+    alone = Mix([pm, art, Uni(uni(tr, V))])
     alone.fit(vs["fit_ctx"], vs["fit_y"])
     G["K5"] = kn
     withk = Mix([k5_pred(), pm, art])

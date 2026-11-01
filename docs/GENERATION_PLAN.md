@@ -626,3 +626,9 @@ Running the result stays lookups and counts. **Tool:** `bench/fuzzy/so_bench.py`
 | S5 | The whole learner's advantage over K5 grows from 1 to 8 MB (the self-organising signature) |
 | S6 | REORG beats FIXED on the shift's mean bits per byte, and the gap widens over the chunks |
 | S7 | No SO arm raises dev SCRIBE over K5 by more than +0.02 at 8 MB |
+
+**Changes before the full run (2026-11-01, from the smoke test on 1 MB; no full-run number was read).**
+- SO2 and SO4 now fill the pair budget, taking contexts by net bits saved per stored pair, best first. The registered rule took only contexts with a positive net saving: at 1 MB that kept about 9,000 of 161,000 pairs, which broke "equal size".
+- The pattern model's fallback to the unigram is a weight learned by EM, not a fixed 1%.
+- **A known confound:** the pattern model uses maximum-likelihood counts mixed by EM, while K5 uses Kneser–Ney discounting. So SO2 measures structure and smoothing together. On the smoke slice, the chosen contexts score 1.615 bits per byte against 1.518 for pruned K5.
+- `bench/fuzzy/run_so.sh` runs the 11 jobs on cores 53–63 after the bake-off finishes. SO5's shift text is the first 8 MiB of the unseen C4 shard (`c4_heldout.txt`).
