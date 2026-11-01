@@ -3536,8 +3536,9 @@ static void test_wd_grader_S8e() {
   CHECK(wg::match(T, "birth_place", "Q65", n("Century City")) == V::Finer);
   CHECK(wg::match(T, "location", "Q65", n("Century City")) == V::Finer);
   CHECK(wg::match(T, "capital", "Q65", n("Century City")) == V::NoMatch);
-  // Rule 5, a country-like place inside the truth, for country and nationality only.
-  CHECK(wg::match(T, "nationality", "Q145", n("English")) == V::Match);
+  // Rule 5, a country-like place inside the truth: counts for country; for nationality (S8f) ungraded, as a finer place.
+  CHECK(wg::match(T, "nationality", "Q145", n("English")) == V::Finer);
+  CHECK(wg::match(T, "nationality", "Q145", n("British")) == V::Match);  // the country's own demonym still counts
   CHECK(wg::match(T, "country", "Q145", n("England")) == V::Match);
   CHECK(wg::match(T, "country", "Q30", n("California")) == V::NoMatch);  // inside, not country-like
   CHECK(wg::match(T, "nationality", "Q21", n("British")) == V::NoMatch);  // the wider one does not count
@@ -3552,7 +3553,8 @@ static void test_wd_grader_S8e() {
   CHECK(wg::match(T, "capital", "Q239", n("Brussels"), &k) == V::Match && k == 2);
   CHECK(wg::match(T, "death_place", "Q1054483", n("Los Angeles"), &k) == V::Match && k == 3);
   CHECK(wg::match(T, "birth_place", "Q65", n("Century City"), &k) == V::Finer && k == 4);
-  CHECK(wg::match(T, "nationality", "Q145", n("English"), &k) == V::Match && k == 5);
+  CHECK(wg::match(T, "nationality", "Q145", n("English"), &k) == V::Finer && k == 5);
+  CHECK(wg::match(T, "country", "Q145", n("England"), &k) == V::Match && k == 5);
   CHECK(wg::match(T, "capital", "Q239", n("Antwerp"), &k) == V::NoMatch && k == 0);
   // A slot's grade (rules 1 and 7): +1 true, 0 false, -1 ungraded; without tables, S8c's grader.
   {
@@ -3570,7 +3572,17 @@ static void test_wd_grader_S8e() {
     CHECK(wg::grade_slot(&T, "capital", cap, mv("Ghent"), &w) == 0 && std::string(w) == "single-valued");
     const Vals nat = {{src::make_value("United Kingdom", "Q145"), 1}};
     CHECK(wg::grade_slot(&T, "nationality", nat, mv("British"), &w) == 1 && std::string(w) == "rule2");
-    CHECK(wg::grade_slot(&T, "nationality", nat, mv("English"), &w) == 1 && std::string(w) == "rule5");
+    CHECK(wg::grade_slot(&T, "nationality", nat, mv("English"), &w) == -1 && std::string(w) == "rule5-person");  // S8f
+    const Vals ctry = {{src::make_value("United Kingdom", "Q145"), 1}};
+    CHECK(wg::grade_slot(&T, "country", ctry, mv("England"), &w) == 1 && std::string(w) == "rule5");
+    // A nationality slot whose other true value matches by name stays true. When the name also matches a drawn false
+    // value, it is ambiguous and stays ungraded (S8f, amended on dev); a drawn false value alone still makes it false.
+    const Vals nat2 = {{src::make_value("United Kingdom", "Q145"), 1}, {src::make_value("England", "Q21"), 1}};
+    CHECK(wg::grade_slot(&T, "nationality", nat2, mv("English"), &w) == 1 && std::string(w) == "rule2");
+    T.add_name("Q179876", "Kingdom of England"), T.add_name("Q179876", "English");
+    const Vals nat3 = {{src::make_value("United Kingdom", "Q145"), 1}, {src::make_value("Kingdom of England", "Q179876"), 0}};
+    CHECK(wg::grade_slot(&T, "nationality", nat3, mv("English"), &w) == -1 && std::string(w) == "rule5-person");
+    CHECK(wg::grade_slot(&T, "nationality", nat3, mv("Kingdom of England"), &w) == 0 && std::string(w) == "drawn-false");
     CHECK(wg::grade_slot(&T, "nationality", nat, mv("American"), &w) == 0 && std::string(w) == "closed-world");
     CHECK(wg::grade_slot(nullptr, "nationality", nat, mv("American"), &w) == -1 && std::string(w) == "open");
     const Vals occ = {{src::make_value("actor", "Q33999"), 1}};

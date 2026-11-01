@@ -333,3 +333,9 @@ Why ungraded and not false: nationality is closed-world (rule 7). If rule 5 were
 | F7 | S8d's 25 promotions stay 25 of 25 true | any changes |
 | F8 | The test read under M supports nothing, so S8's gate is not met | anything is supported under M |
 | F9 | `epistemic_test` passes with the updated checks. A planted bug (rule 5 still on for nationality) fails at least one | it passes with the bug |
+
+### S8f: a change from the registration, made on dev before the test read (2026-11-01)
+
+The first dev read with the registered change graded 24 of the 26 rule-5 items ungraded, as F2 said. The other 2 went from true to **false**: Daniel Jones (phonetician) and G. K. Chesterton, both "English". S15 drew the Kingdom of England as their false value, and its demonym is also "English". Once rule 5 no longer matched, the drawn-false rule took them. Both men were English, so both verdicts would be wrong.
+
+The name is ambiguous there: it names England (inside the United Kingdom, a true value) and the drawn false Kingdom of England. So `rule5-person` now comes before `drawn-false` in `grade_slot`, and such an item is ungraded. A name that matches only a drawn false value is still false. This was found and changed on dev, before the test read, and is the change the test read uses. F2 is scored against the first read.

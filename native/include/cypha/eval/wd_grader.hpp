@@ -3,9 +3,11 @@
 // A hypothesis value h (a name, normalised by sources.hpp's norm_name) against one true value item t of its slot:
 //   Match    h is one of t's names (English label, any English alias, enwiki title, English demonym, taxon name); or, for
 //            birth_place / death_place / location / headquarters, h names a place ancestor of t that is not coarse; or, for
-//            located_in (transitive), h names any place ancestor of t; or, for country / nationality, h names a
+//            located_in (transitive), h names any place ancestor of t; or, for country (a place's), h names a
 //            country-like item inside t (England for the United Kingdom).
 //   Finer    for the place relations above, h names an item inside t: Wikidata cannot say whether the finer place is right.
+//            S8f (2026-11-01, ledger 93): for nationality (a person's), a country-like item inside t is Finer too. A
+//            person's citizenship does not say which part of the country they are from (James Joyce is not "English").
 //   NoMatch  otherwise.
 // Place ancestors are (P131 | P276 | P17)+; country-like and coarse come from P31/P279* (scripts/fresh_slots.py grader).
 // Grading only: it judges Cypha's own hypotheses and never answers a question (PLAN rule 10).
@@ -102,7 +104,7 @@ inline bool closed_world(const std::string& r) {
 }
 
 /// The verdict for one true value item t; `rule`, when given, receives the registered rule that decided it (2 a name, 3 a
-/// containing place, 4 a finer place, 5 a country-like place inside; 0 no match).
+/// containing place, 4 a finer place, 5 a country-like place inside: Match for country, Finer for nationality; 0 no match).
 inline Verdict match(const Tables& T, const std::string& r, const std::string& t, const std::string& h, int* rule = nullptr) {
   auto out = [&](Verdict v, int k) {
     if (rule) *rule = k;
@@ -120,7 +122,7 @@ inline Verdict match(const Tables& T, const std::string& r, const std::string& t
   if (bn == T.by_name.end()) return out(Verdict::NoMatch, 0);
   if (country_relation(r)) {
     for (const std::string& i : bn->second)
-      if (T.country_like.count(i) && T.inside(i, t)) return out(Verdict::Match, 5);
+      if (T.country_like.count(i) && T.inside(i, t)) return out(r == "country" ? Verdict::Match : Verdict::Finer, 5);
   } else if (up || loc) {
     for (const std::string& i : bn->second)
       if (T.inside(i, t)) return out(Verdict::Finer, 4);
@@ -131,7 +133,7 @@ inline Verdict match(const Tables& T, const std::string& r, const std::string& t
 /// One hypothesis value v against its slot's rows (value, label 1 true / 0 drawn false), S8c's grader with S8e's rules
 /// (docs/reports/S8E_GRADER_AND_FRESH_SET.md, Part 1): +1 true, 0 false, -1 ungraded. Without tables (T null) it is S8c's
 /// grader unchanged. `basis` receives what decided it: shown (S15's shown value), rule2 / rule3 / rule5, drawn-false, finer
-/// (rule 4), single-valued, closed-world, or open.
+/// (rule 4), rule5-person (S8f: a country-like part of a person's nationality, ungraded), single-valued, closed-world, or open.
 inline int grade_slot(const Tables* T, const std::string& r, const std::vector<std::pair<sources::Value, int>>& vals,
                       const sources::Value& v, const char** basis = nullptr) {
   auto out = [&](int g, const char* w) {
@@ -139,7 +141,7 @@ inline int grade_slot(const Tables* T, const std::string& r, const std::vector<s
     return g;
   };
   const bool wd = T && !sources::year_relation(r) && !sources::date_relation(r);
-  bool any_true = false, match_false = false, finer = false;
+  bool any_true = false, match_false = false, finer = false, person5 = false;
   int rule_hit = 0;
   for (const auto& [val, lab] : vals) {
     if (lab == 1) {
@@ -149,13 +151,16 @@ inline int grade_slot(const Tables* T, const std::string& r, const std::vector<s
         int k = 0;
         const Verdict m = match(*T, r, val.qid, v.name, &k);
         if (m == Verdict::Match && (rule_hit == 0 || k < rule_hit)) rule_hit = k;
-        finer = finer || m == Verdict::Finer;
+        if (m == Verdict::Finer) (k == 5 ? person5 : finer) = true;
       }
     } else if (lab == 0 && (sources::same_value(r, val, v) || (wd && T->named(val.qid, v.name)))) {
       match_false = true;
     }
   }
   if (rule_hit) return out(1, rule_hit == 2 ? "rule2" : rule_hit == 3 ? "rule3" : "rule5");
+  // S8f: before drawn-false, because the name is then ambiguous ("English" names England, inside the United Kingdom, and
+  // the Kingdom of England, S15's drawn false value for G. K. Chesterton).
+  if (person5) return out(-1, "rule5-person");
   if (match_false) return out(0, "drawn-false");
   if (finer) return out(-1, "finer");
   if (any_true && sources::single_valued(r)) return out(0, "single-valued");
