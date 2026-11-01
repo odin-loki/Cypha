@@ -182,8 +182,132 @@ def block_boot(a, b, block=4096, n=2000, seed=7):
     return float((b - a).mean()), [float(np.percentile(bs, 2.5)), float(np.percentile(bs, 97.5))]
 
 
+# ------------------------------------------------------------------------------------------------ D: on the online chain
+# Odin (2026-11-01): "Try the experiment we just did with the online learning on the 2-layer one." The inputs are the raw
+# experts plus the chain's stages as the online chain (C0o) computes them while it learns, not the frozen chain's.
+RAW = ["uni", "o1", "bo2", "bo3", "bo4", "match_hit", "trie_mix", "bkn", "ig4", "ig16", "ig64", "ig512", "ig8192", "cls",
+       "sim", "copy_hit", "trig", "cache", "topic"]
+SELECT = [("ig_b", 16), ("bkn_b", 16), ("copy_b", 8), ("cls_b", 16), ("sim_b", 16), ("cache_b", 16), ("prev", 5),
+          ("ign", 16)]  # each layer-1 neuron's small context (gate24-style), the same sizes as the buckets
+
+
+def online_stages(D):
+    """The online chain over all rows in order (first half then second): each row's 6 stage outputs, the last is final."""
+    ch = OnlineChain()
+    S = np.zeros((len(D), len(OnlineChain.STAGES)))
+    for t in range(len(D)):
+        r = D[t]
+        ch.predict(None, None, None, r)
+        S[t] = [tr[4] for tr in ch.trace]
+        ch.learn()
+    return S
+
+
+class Net2:
+    """Two layers over RAW + the online stages. sel='half': half-space gates on the side vector (as C2);
+    sel='small': neuron j gated by its own small context SELECT[j], layer 2 by InfiniGram's bucket x the previous byte."""
+
+    def __init__(self, K, D, sel, lr, neurons=8, seed=0):
+        start = np.full(K, 0.01)
+        start[-1] = 1.0  # start at the online chain's final stage
+        self.sel = sel
+        if sel == "half":
+            self.l1 = [GatedLin(K, D, 4, lr, start, seed + j) for j in range(neurons)]
+        else:
+            self.l1 = [GatedLin(K, 0, 0, lr, start, seed + j) for j in range(len(SELECT))]
+            self.tabs = [[GatedLin(K, 0, 0, lr, start, seed + 100 * j + g) for g in range(n)] for j, (_, n) in enumerate(SELECT)]
+        n1 = len(self.l1)
+        s2 = np.full(n1 + 1, 0.01)
+        s2[-1] = 1.0
+        self.l2 = GatedLin(n1 + 1, D, 4, lr, s2, seed + 99) if sel == "half" else None
+        self.l2s = None if sel == "half" else [GatedLin(n1 + 1, 0, 0, lr, s2, seed + 999 + g) for g in range(80)]
+
+    def predict(self, q, s, ctxs, small):
+        if self.sel == "half":
+            h = [n.predict(q, s) for n in self.l1]
+            self.u2 = self.l2
+            return self.u2.predict(np.array(h + [q[-1]]), s)
+        self.units = [self.tabs[j][min(c, SELECT[j][1] - 1)] for j, c in enumerate(ctxs)]
+        h = [u.predict(q, np.zeros(0)) for u in self.units]
+        self.u2 = self.l2s[small]
+        return self.u2.predict(np.array(h + [q[-1]]), np.zeros(0))
+
+    def learn(self):
+        for u in (self.l1 if self.sel == "half" else self.units):
+            u.learn()
+        self.u2.learn()
+
+
+def run_d(net, D, S, mu, sd):
+    E = np.maximum(np.concatenate([D[:, [COLS.index(e) for e in RAW]], S], 1), 1e-9)
+    ys = D[:, 0]
+    ewma = np.full(len(TRACK), 2.0)
+    tix = [EXPERTS.index(t) for t in TRACK]
+    E0 = np.maximum(D[:, [COLS.index(e) for e in EXPERTS]], 1e-9)
+    surprise, wordpos, prevc = 2.0, 0, 0
+    side_cols = [COLS.index(c) for c in ("bkn_b", "ig_b", "cls_b", "sim_b", "copy_b", "trig_b", "cache_b", "topic_b", "match_on")]
+    bits = np.zeros(len(D))
+    for t in range(len(D)):
+        r = D[t]
+        s = np.concatenate([r[side_cols], [math.log1p(r[COLS.index("ig_n")]) / 9.0, r[COLS.index("copy_n")] / 32.0],
+                            ewma, [surprise, min(wordpos, 12) / 12.0], np.eye(5)[prevc]])
+        s = (s - mu) / sd
+        ctxs = [int(r[COLS.index("ig_b")]), int(r[COLS.index("bkn_b")]), int(r[COLS.index("copy_b")]), int(r[COLS.index("cls_b")]),
+                int(r[COLS.index("sim_b")]), int(r[COLS.index("cache_b")]), prevc, min(15, int(math.log2(1 + r[COLS.index("ig_n")])))]
+        small = min(int(r[COLS.index("ig_b")]), 15) * 5 + prevc
+        p = net.predict(E[t], s, ctxs, small)
+        b = -math.log2(max(p, 1e-12))
+        bits[t] = b
+        net.learn()
+        ewma = 0.95 * ewma + 0.05 * -np.log2(E0[t, tix])
+        surprise = 0.95 * surprise + 0.05 * b
+        c = byte_class(ys[t])
+        wordpos = 0 if c == 0 else wordpos + 1
+        prevc = c
+    return bits
+
+
+def main_d(path, fast):
+    A, B, half = load(path, fast)
+    mu, sd = side_stats(A)
+    S = online_stages(np.concatenate([A, B]))
+    SA, SB = S[:len(A)], S[len(A):]
+    base = -np.log2(np.maximum(B[:, COLS.index("chain")], 1e-12))
+    online = -np.log2(np.maximum(SB[:, -1], 1e-12))
+    res = {"C0": float(base.mean()), "D0_online_chain": float(online.mean())}
+    K = len(RAW) + S.shape[1]
+    arms = {"D1": dict(sel="small1"), "D2": dict(sel="half", lr=0.05), "D3": dict(sel="small", lr=0.05),
+            "D4": dict(sel="small", lr=0.025), "D5": dict(sel="half", lr=0.025)}
+    for name, cfg in arms.items():
+        t0 = time.time()
+        if cfg["sel"] == "small1":  # one online layer over the online chain (the C++ test's R2)
+            units = [GatedLin(K, 0, 0, 0.05, np.r_[np.full(K - 1, 0.01), 1.0], j) for j in range(80)]
+
+            class W:
+                def predict(self, q, s, ctxs, small):
+                    self.u = units[small]
+                    return self.u.predict(q, np.zeros(0))
+
+                def learn(self):
+                    self.u.learn()
+            net = W()
+        else:
+            net = Net2(K, len(mu), "half" if cfg["sel"] == "half" else "small", cfg["lr"])
+        run_d(net, A, SA, mu, sd)
+        bits = run_d(net, B, SB, mu, sd)
+        d, ci = block_boot(base, bits)
+        d2, ci2 = block_boot(online, bits)
+        res[name] = dict(bpb=float(bits.mean()), minus_C0=d, ci=ci, minus_D0=d2, ci_D0=ci2, sec=round(time.time() - t0, 1), **cfg)
+        print(name, json.dumps(res[name]), flush=True)
+    res["rows"] = dict(first=len(A), second=len(B), fast=fast)
+    print(json.dumps({k: v for k, v in res.items() if not isinstance(v, dict)}, indent=1))
+    json.dump(res, open(path + (".fast" if fast else "") + ".glnx_d.json", "w"), indent=1)
+
+
 def main():
     path, fast = sys.argv[1], "--fast" in sys.argv
+    if "--online-inputs" in sys.argv:
+        return main_d(path, fast)
     A, B, half = load(path, fast)
     mu, sd = side_stats(A)
     D = len(mu)

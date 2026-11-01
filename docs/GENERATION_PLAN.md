@@ -766,3 +766,24 @@ The dump holds only each expert's probability of the true byte, which is all a l
 - O1: R1's final chain line is 1.675–1.690 (R0 1.6979).
 - O2: R2's `online_final_bpc` is at least 0.008 below R1's final line.
 - O3: the answer tallies are identical.
+
+**The two-layer experiment on the online chain** (2026-11-01, `glnx.py --online-inputs`, fast mode on the 150 MB dump). Odin: "Try the experiment we just did with the online learning on the 2-layer one."
+
+The inputs are the raw experts plus the chain's stages as the online chain computes them while it learns. Results, in bits per byte:
+
+| Arm | Fast slice | Against the online chain [95%] |
+|---|---:|---|
+| C0: the chain, frozen | 1.7786 | — |
+| D0: the chain, online | 1.7557 | — |
+| D1: one online layer on top (gate24-style small context) | **1.7369** | **−0.019 [−0.023, −0.015]** |
+| D2: two layers, half-space gates | 1.7425 | −0.013 |
+| D3: two layers, each neuron gated by its own small context | 1.7385 | −0.017 |
+| D4: D3 at half the step size | 1.7463 | −0.009 |
+| D5: D2 at half the step size | 1.7443 | −0.011 |
+
+One online layer on top of the online chain is the best, and a second layer adds nothing. D1 is the C++ test's R2 (`--online-mix --online-final`).
+
+**Why the better predictors wrote worse (a reading, not yet measured).**
+- Log loss rewards a smooth, hedged distribution. Sampling from it gives average, non-committal text.
+- Human text commits where language is constrained, and its surprise rises only at real choice points (Holtzman et al., 2020; Meister et al., 2023, typical sampling).
+- Next measures: the per-word surprise profile of human, K5 and mixture text; and sampling from a sharpened mixture (geometric mixing, typical sampling) while the hedged mixture still scores and answers.
