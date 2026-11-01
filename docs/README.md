@@ -44,6 +44,7 @@ For platform-specific setup see [CONTRIBUTING.md](../CONTRIBUTING.md) and [`pack
 | [Current numbers](CURRENT.md) | 1 TB trie, small trie, hp gate24, corpus fetch, what is not ready to scale |
 | [The 1 TB model explained](reports/CYPHALM_1TB_MODEL.md) | How the byte trie works, how it was built, and how it performs: BPC by domain, the scaling curve, the full stack, next-byte examples, generation, questions, strengths and limits |
 | [Trie trained on the 1 TB corpus](reports/TRIE_1TB_PROFILE.md) | Corpus and checksums, size, the packed model, held-out BPC on C4 / lcet10 / enwik9, InfiniGram, unseen questions, SCRIBE, Track A predictions, time |
+| [M18: where `qa`'s RAM peaks sit](reports/QA_RAM_PROFILE.md) | Peak RSS of built, served and frozen-test `qa`, and the phase at each peak |
 | [One Cypha cutover](reports/ONE_CYPHA_CUTOVER.md) | `cypha::Cypha` ownership and routes. The hybrid default named there is historical. |
 | [CyphaLM as a language model](reports/CYPHALM_LM_QUALITY_REPORT.md) | hp next-byte distribution quality, decoding, ensembles, ∞-gram, RAM, speed, the winner; tools / flags / formats reference |
 | [CyphaLM vs a Transformer and an LSTM](reports/CYPHALM_VS_NEURAL_LM.md) | same data, same CPU, ≤ 1 h training each: held-out quality, in-context learning, copying, byte classes, calibration, generation with cross-judges, latency, RAM, learning curves |

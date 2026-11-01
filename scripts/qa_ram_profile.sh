@@ -11,7 +11,7 @@ set -euo pipefail
 R=$(cd "$(dirname "$0")/.." && pwd)
 OUT=${CYPHA_M18_OUT:-/mnt/d/cypha_llm/profile/m18}
 BLD=${CYPHA_BUILD:-$HOME/cypha_build}
-find1() { find /mnt/d/cypha_llm "$HOME" /root -maxdepth 4 -type f -name "$1" 2>/dev/null | head -1; }
+find1() { find /mnt/d/cypha_llm "$HOME" /root -maxdepth 4 -type f -name "$1" 2>/dev/null | head -1 || true; }
 E=${CYPHA_ENWIK8:-$(find1 enwik8)}
 D=${CYPHA_DOLLY:-$(find1 dolly.jsonl)}
 [ -f "$E" ] || { echo "enwik8 not found: set CYPHA_ENWIK8"; exit 1; }
@@ -45,7 +45,7 @@ trace R1 "$B" qa "$E" "$D" $C1LD --save "$OUT/store" --out "$OUT/R1.rows.tsv"
 trace R2 "$B" qa "$E" "$D" $C1LD --model "$OUT/store" --out "$OUT/R2.rows.tsv"
 trace R3 "$B" qa "$E" "$D" $TEST --out "$OUT/R3.rows.tsv"
 {
-  echo "M18 qa RAM profile, $(date -u +%FT%TZ), $(git -C "$R" rev-parse --short HEAD), $(uname -n)"
+  echo "M18 qa RAM profile, $(date -u +%FT%TZ), $(git -C "$R" rev-parse --short HEAD 2>/dev/null || echo no-git), $(uname -n)"
   for n in R1 R2 R3; do
     pk=$(awk '{print $2}' "$OUT/$n.peak")
     echo "== $n: $(cat "$OUT/$n.peak") ($(awk -v k="$pk" 'BEGIN{printf "%.1f", k/1024}') MB)"
