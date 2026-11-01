@@ -1071,7 +1071,7 @@ int cmd_context8k(const Args& a) {
         // InfiniGram at caps 4, 16, 64, 512, 8192 (prob), its bucket and match length at 8192; class (prob, bucket);
         // similar-context (prob, bucket); copy (hit, bucket, match length); the document parts trig, cache, topic (prob,
         // bucket each); the chain after InfiniGram, class, similar-context, copy, and the final chain. Absent experts are 0.
-        const int C = 1 + 7 + 2 + 7 + 2 + 2 + 3 + 6 + 5;
+        const int C = 1 + 7 + 1 + 2 + 7 + 2 + 2 + 3 + 6 + 5;  // 36: byte, trie 5 + match 2, trie mixture, ... (glnx.py COLS)
         std::vector<float> row(C);
         std::ofstream f(a.dump_experts, std::ios::binary);
         for (std::size_t k = 0; k < H; ++k) {

@@ -100,7 +100,7 @@ class Net:
         self.l2.learn()
 
 
-def run(net, D, nsig, mu, sd, score):
+def run(net, D, nsig, mu, sd, score, learn=True):
     E = np.maximum(D[:, [COLS.index(e) for e in EXPERTS]], 1e-9)
     ys = D[:, 0]
     ewma = np.full(len(TRACK), 2.0)
@@ -119,7 +119,8 @@ def run(net, D, nsig, mu, sd, score):
         p = net.predict(q, s, small)
         b = -math.log2(max(p, 1e-12))
         bits[t] = b
-        net.learn()
+        if learn:
+            net.learn()
         ewma = 0.95 * ewma + 0.05 * -np.log2(q[tix])
         surprise = 0.95 * surprise + 0.05 * b
         c = byte_class(ys[t])
@@ -155,7 +156,8 @@ def main():
     mu, sd = side_stats(A)
     D = len(mu)
     arms = {"C1": dict(kind="one"), "C2": dict(kind="two", m=4), "C3": dict(kind="two", m=6),
-            "C4": dict(kind="two", m=4, lr=0.02), "C5": dict(kind="two", m=4, neurons=16)}
+            "C4": dict(kind="two", m=4, lr=0.02), "C5": dict(kind="two", m=4, neurons=16),
+            "C2f": dict(kind="two", m=4, frozen=True), "C6": dict(kind="two", m=6, neurons=32)}
     base = -np.log2(np.maximum(B[:, COLS.index("chain")], 1e-12))
     res = {"C0": dict(bpb=float(base.mean()), what="the content mixer as it is (lambdas fit on the first half)")}
     out = {}
@@ -163,7 +165,7 @@ def main():
         t0 = time.time()
         net = Net(cfg["kind"], D, m=cfg.get("m", 4), lr=cfg.get("lr", 0.05), neurons=cfg.get("neurons", 8))
         run(net, A, None, mu, sd, False)  # learn on the first half
-        bits = run(net, B, None, mu, sd, True)  # read the second half: predict, score, learn
+        bits = run(net, B, None, mu, sd, True, learn=not cfg.get("frozen"))  # second half: predict, score (and learn)
         d, ci = block_boot(base, bits)
         res[name] = dict(bpb=float(bits.mean()), minus_C0=d, ci=ci, sec=round(time.time() - t0, 1), **cfg)
         out[name] = net
