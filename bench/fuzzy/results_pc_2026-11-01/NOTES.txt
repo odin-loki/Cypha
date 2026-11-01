@@ -1,0 +1,11 @@
+Fuzzy bake-off on Odin's PC, 2026-11-01 (commit 0f74d2b, worktree ~/fuzzy_wt).
+- Paths: ENWIK8=/mnt/d/cypha_llm/enwik8, SCRIBE=~/cypha_build/nn_diag/scribe (built from wip/nn-diag; the only scribe change names
+  trie-rung export ids by GEN line, scores unchanged; selftest 76/76), SCRIBE_VEC=/mnt/d/cypha_llm/scribe/v32, PY=~/nn_venv/bin/python (numpy).
+- Free RAM was 23 GB at launch, below the expected 25-30 GB peak, so ALL starts after the other 12 arms finish (launch.sh,
+  run_bake.sh's steps otherwise unchanged; ALL on core 52). fuzzy_bake.py is unchanged.
+- N0 runs beside it pinned to logical CPUs 0-39,54-63 (24 torch threads), off cores 40-53.
+- Smoke test FZ_SMALL=1 (prep, K5, F9) passed: /mnt/d/cypha_llm/fuzzy_small.
+SO bench (commit fa26204, same fuzzy_bake.py), launched 2026-11-01 after the bake-off:
+- SO_CORE0=40, not 53: N0 is pinned to logical CPUs 0-39,54-63, so cores 53-63 would share with its torch threads.
+  run_so.sh waits for the bake-off's summary.md, so cores 40-50 are free when its 11 jobs start. so_bench.py unchanged.
+- SO_SHIFT: /mnt/d/cypha_llm/profile/c4_heldout.txt is present (9,000,982 bytes), used as is.
