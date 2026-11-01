@@ -671,3 +671,66 @@ This is exploration. Nothing is registered as a gate, and no default changes.
    - Every layer-2 idea is tried here first.
 
 The dump holds only each expert's probability of the true byte, which is all a linear layer 2 needs to learn and score. Generation needs layer 2 inside `cyphalm_trie sample`.
+
+### 13.11 Everything checked, and the decision (2026-11-01)
+
+**Odin:** "Double check everything we did and why. Then make a decision. Check the whole repo." Also: "Don't undo my work."
+
+**What was done, and why.**
+
+| Step | Why | Result |
+|---|---|---|
+| The plan (§0–12) | Coherent text. Sentence form binds (D_S about 18 of D about 23) | The ladder G0–G5. Phases CT0–CT5 |
+| N0, the neural diagnostic (§13.3), on Odin's PC | Which half of a network's fuzzy matching matters: similarity or the long state | Still running. Its report is pending |
+| The fuzzy bake-off (§13.7), on Odin's PC | Non-neural fuzzy matching, 10 techniques, each mixed into word-level Kneser–Ney (K5) | Results below (`bench/fuzzy/results_pc_2026-11-01/`) |
+| The self-organising bench (§13.9), on Odin's PC | Structure chosen by prediction: exchange classes, contexts chosen by bits, ARTMAP, the whole learner, a domain shift | Results below |
+| GLNX (§13.10), in the cloud | Odin's content mixer as a gated linear network over his whole model | Fast mode below |
+
+**What the results say.** All on dev, with no test read.
+
+1. **Word-level counts on clean prose write far better than anything before.**
+   - K5 is Kneser–Ney order 5 over words on about 7 MB of clean enwik8 prose. It samples whole words at T 1.0, nucleus 0.9, with the repeat ban.
+   - It scores GEN-A dev **SCRIBE v2 0.344 [0.311, 0.379]**, with surface S 0.928 and copy share 0.040. That is the shuffled-sentence rung (G2's level).
+   - The byte default scores 0.157 on dev at T 0.6, and the token sampler 0.192.
+   - The lever is the combination of whole-word units and clean prose. Clean text alone on bytes (GEN-A) and tokens alone on raw XML (T4) each failed.
+   - 1.2% of K5's samples hold a verbatim run of more than 12 words, which breaks Odin's copy cap.
+2. **Every expert mixed into K5 improves bits and makes the text worse.**
+   - All 10 fuzzy arms, and every self-organising arm with K5, lower val bits per byte by 0.0004–0.032. They lower SCRIBE by 0.013–0.33.
+   - ALL predicts best (−0.015) and writes worst (0.218).
+   - Weights fit to predict spread the mass that the sampler draws from.
+3. **The best structural move is exchange classes:** −0.032 bits per byte against k-means classes (SO1), the largest single gain. Contexts chosen by bits (SO2), ARTMAP (SO3) and re-organising on a shift (SO5) did not help.
+4. **The content mixer is right; freezing it is what is wrong.**
+   - On GLNX's fast slice, Odin's chain with its per-bucket lambdas learning online (C0o) gains −0.050 bits per byte [−0.064, −0.037].
+   - One gated layer gains −0.041, and two layers −0.043. More gates add nothing, as gate24 found.
+   - The full clean dump, with the document stage, is being rebuilt to confirm this.
+
+**Predictions, scored.**
+- Bake-off:
+  - B1 miss (ALL −0.015, not −0.05);
+  - B2 miss (F2 is the largest single gain, −0.0083);
+  - B3 not scored (the axes were not computed);
+  - B4 hit;
+  - B5 miss;
+  - B6 miss (K5 0.344, far above [0.10, 0.20]);
+  - B7 miss (none passed the screen);
+  - B8 miss (F9 −0.0008 against F1 −0.0030);
+  - B9 miss on the gain (F10 −0.0010, more than F9).
+- Self-organising bench:
+  - S1 hit (−0.032);
+  - S2 and S3 miss;
+  - S4 miss (−0.014 with K5; alone +0.105);
+  - S5 hit (−0.004, −0.010, −0.012, −0.014 from 1 to 8 MB);
+  - S6 miss (a tie);
+  - S7 hit.
+
+**The decision** (open to Odin's veto):
+1. **Generation: build K5's design into CyphaLM.**
+   - Whole words, Kneser–Ney counts, clean prose, the nucleus and repeat ban, inside `cyphalm_trie sample`.
+   - The byte model spells any word outside the vocabulary, so nothing is dropped as `<unk>`. The 12-word cap is enforced.
+   - Register it, then make one GEN-A test read against the byte default (BK0, test 0.147 at T 0.6).
+   - **No other expert is mixed into the sampler** until it is shown on dev to raise SCRIBE, not only bits.
+2. **Prediction: keep Odin's content mixer and stop freezing it.**
+   - Once the full dump confirms C0o, the chain's per-bucket lambdas learn online in `cyphalm_trie` (AdaGrad per bucket, as C0o). Registered first; answers unchanged.
+   - Exchange classes are a candidate for the class expert's classes.
+3. **Stopped for generation:** the fuzzy experts, the self-organising structure moves, and extra gates or layers in the mixer. Their code and results stay in `bench/fuzzy/` as the record. Nothing is deleted.
+4. **Waiting:** N0 and Qwen's yardstick (Q0) will show how far neural models on the same data and decoder sit above K5's 0.344.

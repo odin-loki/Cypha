@@ -9,6 +9,7 @@ milestone or a significant self-contained change.
 ## [Unreleased]
 
 ### Added
+- **The 2026-11-01 review and decision** (GENERATION_PLAN §13.11, PLAN ledger 102). The fuzzy bake-off and self-organising bench results from Odin's PC are in `bench/fuzzy/results_pc_2026-11-01/`. Word-level Kneser–Ney on clean prose scores dev SCRIBE 0.344, the best measured. GLNX's online-chain arm (C0o) is in `bench/fuzzy/glnx.py`.
 - **M18 step 1 results: [`docs/reports/QA_RAM_PROFILE.md`](docs/reports/QA_RAM_PROFILE.md)** (PLAN ledger 101). On Odin's PC, built `qa` peaks at 191.8 MB, served at 187.7 MB and frozen-test at 193.8 MB. The peak is the doc cache on top of the similar-context expert. `scripts/qa_ram_profile.sh` now finds its inputs under `set -o pipefail` and runs from a `git archive` copy.
 - **The plan for coherent text: [`docs/GENERATION_PLAN.md`](docs/GENERATION_PLAN.md)** (PLAN ledger 98). It covers everything tried for generation (GEN-A to GEN-E, BKN, TEMPS, tokens T0–T4d, the 1 TB trie), the data, a generation ladder G0–G5 and phases CT0–CT5 with gates, predictions and kill criteria.
 - **M18 step 1: `scripts/qa_ram_profile.sh`** (PLAN Track P, ledger 96). It traces built, served and frozen-test `qa` on Odin's PC and names the phase at each peak. Its inputs are `bench/eval/qa_inputs.tar.gz` (3 MB). **BKN4 read on dev** ([report](docs/reports/BYTE_KN.md), BKN4): no way of fixing BKN2's answers beats it, so BKN2 stays; `scripts/bkn4_dev_gate.py` re-reads the gate.

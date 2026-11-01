@@ -120,6 +120,8 @@ Chat must not be poured into those counts. On the 8 MiB split, the 4-byte match 
 
 ## Generated-text quality (SCRIBE v2)
 
+**Word-level counts on clean prose (2026-11-01, dev, Python bench):** Kneser–Ney order 5 over words on about 7 MB of clean enwik8 prose scores GEN-A dev SCRIBE v2 **0.344 [0.311, 0.379]** (the shuffled-sentence rung), against 0.157 for the byte default. The fuzzy and self-organising experts each lower it. Decision and next steps: [`GENERATION_PLAN.md`](GENERATION_PLAN.md) §13.11.
+
 **The plan for coherent text (2026-11-01):** [`GENERATION_PLAN.md`](GENERATION_PLAN.md). It covers everything tried, the data, a generation ladder G0–G5, and phases CT0–CT5 with gates and predictions.
 
 Tool: `native/tools/scribe.cpp` over `native/include/cypha/eval/scribe.hpp` ([report](reports/SCRIBE_V2.md), [paper](../paper/scribe/SCRIBE_paper.md)). Counts only; scores a text by its distance from human reference text of the same genre and length.

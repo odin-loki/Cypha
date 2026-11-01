@@ -67,6 +67,38 @@ class GatedLin:
         self.n[self.g] += 1
 
 
+class OnlineChain:
+    """The content mixer exactly as CyphaLM chains it (trie mixture, then Kneser-Ney, InfiniGram 8192, class,
+    similar-context, copy, the document cache, each mixed into the running mixture with a lambda per bucket), but with
+    every lambda learning online instead of frozen (Odin: don't freeze the mixer). Each stage's lambda follows the
+    gradient of its own stage's log loss, as the frozen fit chose it, with a step that shrinks per bucket (AdaGrad)."""
+    STAGES = [("bkn", "bkn_b"), ("ig8192", "ig_b"), ("cls", "cls_b"), ("sim", "sim_b"), ("copy_hit", "copy_b"),
+              ("cache", "cache_b")]
+
+    def __init__(self, lr=0.05, nb=64):
+        self.lam = np.full((len(self.STAGES), nb), 0.05)
+        self.g2 = np.full((len(self.STAGES), nb), 1e-3)
+        self.lr = lr
+        self.ix = [(COLS.index(e), COLS.index(b)) for e, b in self.STAGES]
+
+    def predict(self, q, s, small, r=None):
+        p = r[COLS.index("trie_mix")]
+        self.trace = []
+        for j, (ie, ib) in enumerate(self.ix):
+            b = int(r[ib]) % self.lam.shape[1]
+            pe = r[ie]
+            pn = self.lam[j, b] * pe + (1 - self.lam[j, b]) * p
+            self.trace.append((j, b, pe, p, pn))
+            p = pn
+        return p
+
+    def learn(self):
+        for j, b, pe, prev, pn in self.trace:
+            g = (pe - prev) / max(pn, 1e-12)  # d log p_stage / d lambda
+            self.g2[j, b] += g * g
+            self.lam[j, b] = min(0.995, max(0.0, self.lam[j, b] + self.lr * g / math.sqrt(self.g2[j, b])))
+
+
 class Net:
     """kind: 'one' (one layer, gated by a small context: InfiniGram bucket x previous byte class, as gate24 gates);
     'two' (8 neurons gated by half-spaces of the side vector, then a gated layer 2 over them and the content mixer)."""
@@ -84,7 +116,7 @@ class Net:
             s2[-1] = 1.0
             self.l2 = GatedLin(neurons + 1, D, m, lr, s2, seed + 99)
 
-    def predict(self, q, s, small):
+    def predict(self, q, s, small, r=None):
         if self.kind == "one":
             self.u = self.units[small]
             return self.u.predict(q, np.zeros(0))
@@ -116,7 +148,7 @@ def run(net, D, nsig, mu, sd, score, learn=True):
                             ewma, [surprise, min(wordpos, 12) / 12.0], np.eye(5)[prevc]])
         s = (s - mu) / sd
         small = min(int(r[COLS.index("ig_b")]), 15) * 5 + prevc
-        p = net.predict(q, s, small)
+        p = net.predict(q, s, small, r)
         b = -math.log2(max(p, 1e-12))
         bits[t] = b
         if learn:
@@ -155,15 +187,15 @@ def main():
     A, B, half = load(path, fast)
     mu, sd = side_stats(A)
     D = len(mu)
-    arms = {"C1": dict(kind="one"), "C2": dict(kind="two", m=4), "C3": dict(kind="two", m=6),
-            "C4": dict(kind="two", m=4, lr=0.02), "C5": dict(kind="two", m=4, neurons=16),
-            "C2f": dict(kind="two", m=4, frozen=True), "C6": dict(kind="two", m=6, neurons=32)}
+    # Odin: more gates do not learn better (gate24's finding), and the mixer is not to be frozen
+    arms = {"C0o": dict(kind="chain"), "C1": dict(kind="one"), "C2": dict(kind="two", m=4)}
     base = -np.log2(np.maximum(B[:, COLS.index("chain")], 1e-12))
     res = {"C0": dict(bpb=float(base.mean()), what="the content mixer as it is (lambdas fit on the first half)")}
     out = {}
     for name, cfg in arms.items():
         t0 = time.time()
-        net = Net(cfg["kind"], D, m=cfg.get("m", 4), lr=cfg.get("lr", 0.05), neurons=cfg.get("neurons", 8))
+        net = OnlineChain() if cfg["kind"] == "chain" else Net(cfg["kind"], D, m=cfg.get("m", 4), lr=cfg.get("lr", 0.05),
+                                                                 neurons=cfg.get("neurons", 8))
         run(net, A, None, mu, sd, False)  # learn on the first half
         bits = run(net, B, None, mu, sd, True, learn=not cfg.get("frozen"))  # second half: predict, score (and learn)
         d, ci = block_boot(base, bits)
