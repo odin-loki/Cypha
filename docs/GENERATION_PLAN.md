@@ -842,6 +842,25 @@ One online layer on top of the online chain is the best, and a second layer adds
   Every neuron learns online from its own log loss.
 - **The read:** the same bytes as `glnx.py --fast`. It learns on 64 KiB of the holdout's first half, then predicts, scores and learns on 64 KiB of its second half. Arms: H16, H32, H64, and H32 without the LSTM.
 
+**Results** (2026-11-01, this container, one run each, so no intervals). Bits per byte on the 64 KiB scored:
+
+| Arm | Layer-1 neurons | LSTM | Bits per byte | Time |
+|---|---:|---|---:|---:|
+| H16 | 16 | yes | 2.0835 | 145 s |
+| H32 | 32 | yes | **2.0821** | 154 s |
+| H64 | 64 | yes | 2.0964 | 192 s |
+| H32 without the LSTM | 32 | no | 2.0945 | 122 s |
+| The content mixer, frozen (same bytes) | — | — | 1.7786 | — |
+| The content mixer, online (same bytes) | — | — | 1.7557 | — |
+
+**Reading.**
+- GLNB is about 0.30 bits per byte behind CyphaLM's content mixer on the same bytes.
+  - Its inputs are hashed bit counts of orders 0–5 from 7 MiB of text.
+  - The mixer's inputs are CyphaLM's whole model: the trie, InfiniGram, class, similar-context, copy and the document parts. The gap is the inputs, not the mixing.
+- The LSTM helps a little: 2.0945 to 2.0821 (−0.012). With one run and no interval, that is not yet shown.
+- More neurons do not help. 64 is worse than 32, and 16 is about as good. A small one is enough, as Odin said.
+- It is not adopted. It only decides something once it reads CyphaLM's experts, and that is the bit-level dump Odin ruled out for this experiment.
+
 ### 13.14 Research item: the signal coherent text needs, and optimising to extract it (Odin, 2026-11-01)
 
 **Odin:** "Add a note to the documentation to research the signal needed to extract to get coherent text. We can optimise to extract that."
