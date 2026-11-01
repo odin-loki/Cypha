@@ -805,3 +805,28 @@ One online layer on top of the online chain is the best, and a second layer adds
 
   Every neuron learns online from its own log loss.
 - **The read:** the same bytes as `glnx.py --fast`. It learns on 64 KiB of the holdout's first half, then predicts, scores and learns on 64 KiB of its second half. Arms: H16, H32, H64, and H32 without the LSTM.
+
+### 13.14 Research item: the signal coherent text needs, and optimising to extract it (Odin, 2026-11-01)
+
+**Odin:** "Add a note to the documentation to research the signal needed to extract to get coherent text. We can optimise to extract that."
+
+**Why.** The bake-off, the self-organising bench and GLNX all found the same thing: what predicts best does not write best.
+- Mixtures fitted for log loss are smooth and hedged, so they are never badly surprised.
+- Sampling from them gives average, non-committal text.
+- Human text commits where language is constrained, and its surprise rises only at real choice points (§13.12).
+
+So prediction (bits per byte) is the wrong target for writing. We need to know what signal writing needs, then optimise the model to extract that signal.
+
+**What to research.** Each is measured on human continuations (GEN-A dev), K5's text and the mixtures' text:
+1. **The surprise profile:** the distribution of per-byte and per-word surprise, its variance, and its autocorrelation (burstiness). Where it rises: word starts, content words, sentence starts.
+2. **Entropy against surprise:** whether human text sits near the local entropy (typical sampling; Meister et al., 2023) and model text does not.
+3. **Commitment:** the probability mass the top choice holds inside words and phrases, against at choice points.
+4. **Which of these track SCRIBE's axes** (sentence form D_S, coherence D_C) across every arm already scored (the bake-off, SO, N0, GEN-A to GEN-E, T4).
+5. **Where each expert helps or hurts the text:** per position class, which experts sharpen the right choices and which only spread mass.
+
+**What to optimise.** Once the signal is known:
+- **A generation objective, separate from log loss.** For example, match human text's surprise profile, or reward commitment at constrained positions. This is not SCRIBE itself: it must not be gamed (§1.3), and it is checked on the second benchmark and by Odin's ratings.
+- **Mixer weights for writing.** The online content mixer (or the GLN) gets a second weight set, or a gate, learned for that objective. The hedged mixture keeps scoring and answering.
+- **The sampler:** temperature per position, typical sampling, or geometric mixing (where the experts must agree), each tuned on dev for the objective.
+
+**Measures and rules:** as §1.2 and §5, with dev for choices and one test read per change.
