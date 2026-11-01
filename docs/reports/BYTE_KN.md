@@ -474,3 +474,29 @@ Tool: `cyphalm_trie` at e7a9a9e (CMake Release, md5 `d35b17c3…`), A4d's `qa` f
 - `cyphalm_trie selftest` checks the gate: inside an answer, the gated distribution equals a model without Kneser–Ney with InfiniGram at `lam_ans`; outside an answer it equals the ungated one. Three planted bugs each fail it: `lam_ans` ignored, the gate never firing, and the gate firing everywhere.
 - The seven `cyphalm` CTests of HANDOFF §4.4 pass (`native_cyphalm_trie_selftest`, `native_fm_infinigram_test`, `native_class_context_test`, `native_cyphalm_tok_selftest`, `native_token_bridge_test`, `native_scribe_selftest`, `native_cyphalm_neural_smoke`).
 - The merged tree (main d291c29) builds and passes the selftest.
+
+## BKN4: fixing BKN2's answers with Kneser–Ney kept on (2026-11-01)
+
+**Odin Loch** · 2026-11-01 · PLAN Track B, BKN4; ledger 93 and 96.
+
+**Question.** BKN2 lets 3 wrong answers through the gate on the frozen test (0 before). Can its answers be fixed with Kneser–Ney kept on?
+
+**How it was read.** On dev only, from BKN3's two `qa` rows files: `QONS.rows.tsv` (Kneser–Ney on in answers) and `QOFFS.rows.tsv` (off), from the same build. `scripts/bkn4_dev_gate.py` is a copy of `qa`'s gate (`choose_gate`, 5-fold CV with fold = row % 5, chat form, trie + InfiniGram). It reproduces the tool's lines exactly: on 3 right / 2 wrong, off 2 / 0, and both full-dev cuts. This read was not registered before it was made. It is a dev choice. No test read was made.
+
+| Way | Dev, `CV chat/trie_ig all`: right / wrong |
+|---|---:|
+| BKN2 (Kneser–Ney on in answers) | 3 / 2 |
+| Kneser–Ney off in answers (BKN3's `--bkn-answers off`) | 2 / 0 |
+| (a) Re-fit the gate with Kneser–Ney on | 3 / 2: this is what BKN2 already does (min_lp, cut −1.304) |
+| (b) Agreement: on's answer only where the off model writes the same text | 3 / 2 |
+| (b') Agreement, and each model's own CV gate passes | 2 / 0 |
+
+- The two models write the same answer on 78 of 130 dev questions.
+- BKN2's two wrong dev answers are among them. Without Kneser–Ney, CyphaLM writes the same wrong text. Only its stricter cut (−0.895 against −1.304) keeps it out.
+- So agreement removes nothing, and agreement with both cuts is the off arm again.
+
+**Decision.** Neither way meets the plan's gate: fewer wrong than BKN2 and no fewer right. BKN2 stays the default, as Odin ruled. `--bkn-answers off` stays the switch. No code changed. With 2–4 right answers in 130, dev cannot tell these ways apart. A bigger dev set is what would.
+
+```bash
+python3 scripts/bkn4_dev_gate.py /root/work/bkn3/runs/QONS.rows.tsv /root/work/bkn3/runs/QOFFS.rows.tsv
+```

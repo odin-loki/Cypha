@@ -8,6 +8,9 @@ milestone or a significant self-contained change.
 
 ## [Unreleased]
 
+### Added
+- **M18 step 1: `scripts/qa_ram_profile.sh`** (PLAN Track P, ledger 96). It traces built, served and frozen-test `qa` on Odin's PC and names the phase at each peak. Its inputs are `bench/eval/qa_inputs.tar.gz` (3 MB). **BKN4 read on dev** ([report](docs/reports/BYTE_KN.md), BKN4): no way of fixing BKN2's answers beats it, so BKN2 stays; `scripts/bkn4_dev_gate.py` re-reads the gate.
+
 ### Removed
 - **S12c: G19, rule refinement** ([report](docs/reports/S12A_DEDUCTION_LAWS_REFINEMENT.md), "S12c"). It failed its earn-its-place read (+0.010 [−0.004, +0.021]) and no richer store is scheduled, so by the rule S12c registered first its code goes. The code is at `0ce072f`.
 - **S11b: G12, literature-based discovery (Swanson's ABC); S11's ABC gate not met, code removed by its registered rule** ([report](docs/reports/S11B_ABC_DISCOVERY.md)). Over the 2006 articles (links as co-occurrence, pairs never together in the text), judged by S15: open-form P@100 0 on test (degree 0.010, random 0), LCI 0.000. G12 does not beat random, so `gen_abc.hpp` and `pattern_learn --gen-abc` were removed (the code is at `0230741`). The closed form separates true values from false partners (AUROC 0.682 on test, popularity 0.472). Its typed pool promotes nothing (0 of 2,235). S15 test read once, logged.
