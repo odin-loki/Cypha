@@ -343,6 +343,8 @@ struct Args {
     std::string doc;                              // GEN-C: document experts in sample (--doc SPEC; off by default)
     bool no_doc = false;                          // GEN-C2: the document experts' cache off in context8k and qa's holdout
     std::string dump_experts;                     // GLNX: context8k writes every expert's per-byte probability here
+    bool online_mix = false;                      // GLNX: the content mixer's lambdas learn online (context8k, qa holdout)
+    bool online_final = false;                    // GLNX: one online gated mixer over every stage, after the chain
     double dk_plain = 0;                          // DK2: share of don't-know training turns with no token
     std::string fam_ent_at = "all";               // DK2: where --fam-ent's frames go (all | answer | start)
     bool copy_frame = false;                      // DK2: copy a frame's entity, not its end; the tag may repeat the message
@@ -424,6 +426,8 @@ Args parse(int argc, char** argv, int from) {
         else if (s == "--doc") a.doc = next();
         else if (s == "--no-doc") a.no_doc = true;  // GEN-C2
         else if (s == "--dump-experts") a.dump_experts = next();  // GLNX (docs/GENERATION_PLAN.md §13.10)
+        else if (s == "--online-mix") a.online_mix = true;        // GLNX, §13.12
+        else if (s == "--online-final") a.online_final = true;    // GLNX, §13.12
         else if (s == "--dk-plain") a.dk_plain = std::atof(next());  // DK2
         else if (s == "--fam-ent-at") a.fam_ent_at = next();         // DK2
         else if (s == "--copy-frame") a.copy_frame = true;           // DK2
@@ -814,6 +818,9 @@ std::vector<double> mix_copy_into(const std::uint8_t* data, std::size_t train, s
                                   std::vector<double>& cur);
 int copy_pred(const std::uint8_t* s, std::size_t i, int& n, std::size_t* at = nullptr);  // the copy expert (below)
 int copy_bucket(int n);
+extern bool g_online_mix;  // GLNX §13.12 (below, with mix_into)
+std::vector<double> online_mix(const std::vector<double>& pe, const std::vector<int>& bk, int nb, std::vector<double>& cur,
+                               int copy_m = -1);
 // GEN-E, defined below with the copy expert: A3's frames, and the content-plan expert mixed into cur.
 std::map<std::string, std::vector<std::string>> load_frames(const std::string& path);
 bool good_start(const std::string& l);
@@ -886,6 +893,8 @@ int cmd_context8k(const Args& a) {
 
     const std::size_t kTrain = cfg.train, kSample = cfg.sample;
     const std::size_t H = kSample - kTrain, half = H / 2;
+    g_online_mix = a.online_mix;
+    if (a.online_mix) std::cout << "online_mix on (the chain's lambdas learn online, GENERATION_PLAN §13.12)\n";
     std::vector<double> pt(H);
     for (std::size_t k = 0; k < H; ++k) {
         const std::size_t i = kTrain + k;
@@ -999,7 +1008,12 @@ int cmd_context8k(const Args& a) {
     // off inside answers (in_answer), and they are written without them. Kneser-Ney (BKN2) is part of the byte model
     // above, so the answers use it.
     std::vector<double> base(H);
-    for (std::size_t k = 0; k < H; ++k) base[k] = lam8k[bk8k[k]] * pinf8k[k] + (1 - lam8k[bk8k[k]]) * pt[k];
+    if (a.online_mix) {
+        base = pt;
+        online_mix(pinf8k, bk8k, kBuckets, base);
+    } else {
+        for (std::size_t k = 0; k < H; ++k) base[k] = lam8k[bk8k[k]] * pinf8k[k] + (1 - lam8k[bk8k[k]]) * pt[k];
+    }
     std::vector<std::vector<double>> snaps;  // GLNX: the chain after InfiniGram, class, similar-context, copy
     std::vector<double> d_sim, d_simb, d_doc[DocTopic::kParts], d_docb[DocTopic::kParts];
     if (dump) snaps.push_back(base);
@@ -1024,9 +1038,13 @@ int cmd_context8k(const Args& a) {
             sb[k] = SimilarContext::bucket(sc->predict(data.data(), kTrain + k, P));
             ps[k] = P[data[kTrain + k]];
         }
-        double ls[SimilarContext::kBuckets];
-        fit_lambdas(ps, base, sb, half, SimilarContext::kBuckets, ls);
-        for (std::size_t k = 0; k < H; ++k) base[k] = ls[sb[k]] * ps[k] + (1 - ls[sb[k]]) * base[k];
+        if (a.online_mix) {
+            online_mix(ps, sb, SimilarContext::kBuckets, base);
+        } else {
+            double ls[SimilarContext::kBuckets];
+            fit_lambdas(ps, base, sb, half, SimilarContext::kBuckets, ls);
+            for (std::size_t k = 0; k < H; ++k) base[k] = ls[sb[k]] * ps[k] + (1 - ls[sb[k]]) * base[k];
+        }
         chain_line("_sim");
         if (dump) {
             d_sim = ps;
@@ -1065,7 +1083,7 @@ int cmd_context8k(const Args& a) {
             }
         }
     }
-    if (dump) {
+    if (dump || a.online_final) {
         // GLNX (docs/GENERATION_PLAN.md §13.10): one row of float32 per holdout byte. Columns, in order: the byte; the trie's
         // 5 experts' probability of it and the match (hit, present); the trie mixture; Kneser-Ney (prob, bucket);
         // InfiniGram at caps 4, 16, 64, 512, 8192 (prob), its bucket and match length at 8192; class (prob, bucket);
@@ -1073,7 +1091,15 @@ int cmd_context8k(const Args& a) {
         // bucket each); the chain after InfiniGram, class, similar-context, copy, and the final chain. Absent experts are 0.
         const int C = 1 + 7 + 1 + 2 + 7 + 2 + 2 + 3 + 6 + 5;  // 36: byte, trie 5 + match 2, trie mixture, ... (glnx.py COLS)
         std::vector<float> row(C);
-        std::ofstream f(a.dump_experts, std::ios::binary);
+        std::ofstream f;
+        if (dump) f.open(a.dump_experts, std::ios::binary);
+        // --online-final (§13.12): one gated linear mixer over 24 of the row's values (every expert and every chain
+        // stage), weights on the simplex chosen by InfiniGram's bucket x the previous byte's class (80 sets, as gate24
+        // gates by a small context), learned online by exponentiated gradient on log loss, every set starting at the chain.
+        static const int kIn[24] = {1, 2, 3, 4, 5, 6, 8, 9, 11, 12, 13, 14, 15, 18, 20, 22, 25, 27, 29, 31, 32, 33, 34, 35};
+        std::vector<double> W(80 * 24, 0.01 / (1.0 + 0.01 * 23));
+        for (int g = 0; g < 80; ++g) W[static_cast<std::size_t>(g) * 24 + 23] = 1.0 / (1.0 + 0.01 * 23);
+        double fin_bits = 0, chain_bits = 0;
         for (std::size_t k = 0; k < H; ++k) {
             const std::size_t i = kTrain + k;
             const unsigned y = data[i];
@@ -1114,9 +1140,30 @@ int cmd_context8k(const Args& a) {
             }
             for (int q = 0; q < 4; ++q) row[c++] = q < static_cast<int>(snaps.size()) ? static_cast<float>(snaps[q][k]) : 0.0f;
             row[c++] = static_cast<float>(base[k]);
-            f.write(reinterpret_cast<const char*>(row.data()), static_cast<std::streamsize>(C * sizeof(float)));
+            if (dump) f.write(reinterpret_cast<const char*>(row.data()), static_cast<std::streamsize>(C * sizeof(float)));
+            if (a.online_final) {
+                const unsigned char pb = i ? data[i - 1] : ' ';
+                const int pc = std::isspace(pb) ? 0 : std::isalpha(pb) ? 1 : std::isdigit(pb) ? 2
+                               : std::strchr("[]{}<>|&=", pb) && pb ? 3 : 4;
+                const int g = std::min(static_cast<int>(bk8k[k]), 15) * 5 + pc;
+                double* w = &W[static_cast<std::size_t>(g) * 24];
+                double q[24], p = 0;
+                for (int j = 0; j < 24; ++j) p += w[j] * (q[j] = std::max(1e-9, static_cast<double>(row[kIn[j]])));
+                if (k >= half) {
+                    fin_bits += -std::log2(std::max(p, 1e-12));
+                    chain_bits += -std::log2(std::max(base[k], 1e-12));
+                }
+                double z = 0;
+                for (int j = 0; j < 24; ++j) z += (w[j] *= std::exp(0.05 * std::min(q[j] / std::max(p, 1e-300), 30.0)));
+                double z2 = 0;
+                for (int j = 0; j < 24; ++j) z2 += (w[j] = std::max(w[j] / z, 1e-7));
+                for (int j = 0; j < 24; ++j) w[j] /= z2;
+            }
         }
-        std::cerr << "dumped " << H << " rows of " << C << " columns to " << a.dump_experts << " (half " << half << ")\n";
+        if (dump) std::cerr << "dumped " << H << " rows of " << C << " columns to " << a.dump_experts << " (half " << half << ")\n";
+        if (a.online_final)
+            std::cout << "online_final_bpc " << fin_bits / static_cast<double>(H - half) << " (chain "
+                      << chain_bits / static_cast<double>(H - half) << ")\n";
     }
 
     const int edges[] = {4, 8, 16, 32, 64, 256, 1024, 8193};
@@ -1907,9 +1954,36 @@ void fit_lambdas(const std::vector<double>& pe, const std::vector<double>& pb, c
 // B4C: one default expert mixed into cur, where cur[k] is a distribution's probability of the true byte data[train + k]:
 // the expert's lambdas are fit on k < half over cur (the copy expert's then zeroed below a match of m bytes), and cur
 // becomes lam pe + (1 - lam) cur. Returns the lambdas, one a bucket.
+// GLNX (docs/GENERATION_PLAN.md §13.12; Odin: "don't freeze the mixer"): with g_online_mix the same chain stage learns
+// its lambda per bucket online instead of fitting it on the first half and freezing it. Each byte is predicted with the
+// current lambda, then the lambda follows the gradient of its stage's log loss (AdaGrad per bucket, start 0.05, step 0.05,
+// kept in [0, 0.995]); the copy stage's short-match buckets stay 0 as copy_clip sets them. cur becomes the online mix.
+bool g_online_mix = false;
+void copy_clip(double* lam, int m);
+std::vector<double> online_mix(const std::vector<double>& pe, const std::vector<int>& bk, int nb, std::vector<double>& cur,
+                               int copy_m) {
+    std::vector<double> lam(static_cast<std::size_t>(nb), 0.05), g2(static_cast<std::size_t>(nb), 1e-3);
+    if (copy_m >= 0) copy_clip(lam.data(), copy_m);
+    for (std::size_t k = 0; k < cur.size(); ++k) {
+        const std::size_t b = static_cast<std::size_t>(bk[k]);
+        const double prev = cur[k], p = lam[b] * pe[k] + (1 - lam[b]) * prev;
+        cur[k] = p;
+        const double g = (pe[k] - prev) / std::max(p, 1e-12);
+        g2[b] += g * g;
+        lam[b] = std::min(0.995, std::max(0.0, lam[b] + 0.05 * g / std::sqrt(g2[b])));
+        if (copy_m >= 0) copy_clip(lam.data(), copy_m);
+    }
+    return lam;
+}
 std::vector<double> mix_into(const std::vector<double>& pe, const std::vector<int>& bk, std::size_t half, int nb,
                              std::vector<double>& cur, int copy_m = -1) {
     std::vector<double> lam(static_cast<std::size_t>(nb), 0.0);
+    if (g_online_mix) {  // the frozen fit is still returned, so answers and samplers that read it are unchanged
+        fit_lambdas(pe, cur, bk, half, nb, lam.data());
+        if (copy_m >= 0) copy_clip(lam.data(), copy_m);
+        online_mix(pe, bk, nb, cur, copy_m);
+        return lam;
+    }
     fit_lambdas(pe, cur, bk, half, nb, lam.data());
     if (copy_m >= 0) copy_clip(lam.data(), copy_m);
     for (std::size_t k = 0; k < cur.size(); ++k) {

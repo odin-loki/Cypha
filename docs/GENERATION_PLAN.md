@@ -734,3 +734,35 @@ The dump holds only each expert's probability of the true byte, which is all a l
    - Exchange classes are a candidate for the class expert's classes.
 3. **Stopped for generation:** the fuzzy experts, the self-organising structure moves, and extra gates or layers in the mixer. Their code and results stay in `bench/fuzzy/` as the record. Nothing is deleted.
 4. **Waiting:** N0 and Qwen's yardstick (Q0) will show how far neural models on the same data and decoder sit above K5's 0.344.
+
+### 13.12 The online content mixer in `cyphalm_trie` (registered 2026-11-01, before the C++ runs)
+
+**Odin:** "I definitely want to make the mixer online." Then: "Test it and decide whether to make it default, and then write it up."
+
+**The change** (`cyphalm_trie`, `context8k`). Two flags; without them the output is unchanged.
+- `--online-mix`: every stage of the content mixer's chain learns its lambda per bucket online, instead of fitting it on the holdout's first half and freezing it. The stages are Kneser–Ney, InfiniGram 8192, class, similar-context, copy and the document parts.
+  - Each byte is predicted with the current lambda. The lambda then follows its stage's log-loss gradient: AdaGrad per bucket, start 0.05, step 0.05, kept in [0, 0.995]. Copy's short-match buckets stay 0.
+  - The frozen fit is still computed and returned to the answer path and the samplers, so answers do not change.
+- `--online-final`: one gated linear mixer after the chain, over 24 values per byte (every expert and every chain stage).
+  - Its weight sets are chosen by InfiniGram's bucket × the previous byte's class: 80 sets, gated by a small context as gate24 is.
+  - Weights are learned by exponentiated gradient (step 0.05), and every set starts at the chain.
+
+**Evidence before the C++ run** (`glnx.py` on the full dump, second half, block bootstrap):
+- the online chain: −0.0172 [−0.0213, −0.0134];
+- one online layer over the frozen chain: −0.0291 [−0.0334, −0.0254];
+- two layers: −0.0287.
+
+**Arms** (`context8k` on enwik8 + Dolly, the standard command): R0 as it is; R1 `--online-mix`; R2 `--online-mix --online-final`.
+
+**Rule.** The online mixer becomes the default of `context8k` (and of `qa`'s holdout lines, with `--frozen-mix` to restore) if all hold:
+1. R1's final chain line is below R0's by at least 0.01 bits per byte. The glnx bootstrap above gives the interval for the same bytes.
+2. R1's and R0's answer tallies are identical, and so is every line outside the chain.
+3. The wall time is within +10% of R0's.
+4. `cyphalm_trie selftest` passes.
+
+`--online-final` is added to the default if R2's `online_final_bpc` is below R1's final chain line by at least 0.005.
+
+**Predictions.**
+- O1: R1's final chain line is 1.675–1.690 (R0 1.6979).
+- O2: R2's `online_final_bpc` is at least 0.008 below R1's final line.
+- O3: the answer tallies are identical.
