@@ -787,3 +787,21 @@ One online layer on top of the online chain is the best, and a second layer adds
 - Log loss rewards a smooth, hedged distribution. Sampling from it gives average, non-committal text.
 - Human text commits where language is constrained, and its surprise rises only at real choice points (Holtzman et al., 2020; Meister et al., 2023, typical sampling).
 - Next measures: the per-word surprise profile of human, K5 and mixture text; and sampling from a sharpened mixture (geometric mixing, typical sampling) while the hedged mixture still scores and answers.
+
+### 13.13 GLNB: a bitwise gated linear network with an LSTM inside it (exploration, 2026-11-01)
+
+**Odin:** "Make a hybrid model of a proper bitwise GLN with an LSTM capability", in fast mode and in Python. The LSTM is ruled in for this experiment. No bit-level dump and no separate LSTM byte model.
+
+`bench/fuzzy/glnb.py`. Every byte is 8 binary predictions, most significant bit first, with the partial byte as PAQ keeps it.
+- **Base inputs:** bitwise context models of orders 0–5. They hold hashed counts from enwik8's first 7 MiB (CyphaLM's training text) and update online.
+- **The LSTM inside:** a byte LSTM (hidden 64) that learns online from scratch on the stream (truncated BPTT, Adam).
+  - Its state is part of every layer-1 neuron's gate.
+  - Its probability of each bit is one more input.
+- **The GLN:**
+  - layer-1 neurons (16, 32 or 64), each a gated geometric mixer with weights chosen per bit position by half-spaces of the LSTM state and the inputs;
+  - 4 layer-2 neurons;
+  - a final neuron per bit position;
+  - an APM.
+
+  Every neuron learns online from its own log loss.
+- **The read:** the same bytes as `glnx.py --fast`. It learns on 64 KiB of the holdout's first half, then predicts, scores and learns on 64 KiB of its second half. Arms: H16, H32, H64, and H32 without the LSTM.
