@@ -17,6 +17,7 @@ Usage: glnb.py [ENWIK8]
 """
 import json
 import math
+import os
 import sys
 import time
 
@@ -249,8 +250,10 @@ def main():
         Bs = hold[HALF:HALF + size]
         bits = sum(m.code_byte(int(y)) for y in Bs)
         r = dict(bpb=bits / len(Bs), sec=round(time.time() - t1), neurons=32, hs=hs, bytes=size)
-        json.dump(r, open(f"/root/work/glnx/glnb_hs{hs}_{size}.json", "w"))
         print(json.dumps(r), flush=True)
+        out = os.environ.get("GLNB_OUT", "/root/work/glnx")  # GLNB_OUT: where the arm's JSON goes
+        os.makedirs(out, exist_ok=True)
+        json.dump(r, open(os.path.join(out, f"glnb_hs{hs}_{size}.json"), "w"))
         return
     res = {}
     for name, cfg in (("H16", dict(neurons=16)), ("H32", dict(neurons=32)), ("H64", dict(neurons=64)),

@@ -815,6 +815,7 @@ One online layer on top of the online chain is the best, and a second layer adds
 - R0c: `context8k` as it is.
 - R3: `context8k --online-final`, on the frozen chain.
 - R2c: `context8k --dump-experts`. Its dump must match `experts.f32` (sha256 `manifest.txt`) byte for byte. This shows the float arrays change nothing.
+- **Moved to Odin's PC** (Odin, before any result: "Run them both on my PC. Too long"). The PC's chain line differs from this container's (1.6971 against 1.6979), so its dump cannot match `experts.f32`. Instead R2o, the binary from `28dbab6` (before the float change) with `--dump-experts`, runs beside R2c, and the two dumps must match byte for byte. The four arms run side by side, one core each.
 
 **Rule.** `--online-final` becomes the default of `context8k` (`--no-online-final` restores the old output) if all hold:
 1. R3's `online_final_bpc` is below its own final chain line by at least 0.005.
