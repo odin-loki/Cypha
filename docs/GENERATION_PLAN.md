@@ -591,3 +591,38 @@ ALL is reported against K5 by the same measures.
 - **Predictions.**
   - B8: F9 gains more bits than F1 (soft memberships beat hard classes).
   - B9: F10 forms fewer than 3,000 categories and gains less than F9.
+
+### 13.9 Self-organising structure without a network (registered 2026-11-01, before any run)
+
+**Odin:** "The part where you said the NN self-organises its whole structure to learn the data was the important part. How can we replicate that, and test for it?" Then: "Do all of it at once and run it on my PC."
+
+**The idea.** A neural network reshapes every part of itself to lower one number, its prediction loss. A count model can do the same with local moves on its structure, keeping a move only if it lowers bits:
+- **Classes:** words move between classes when that raises the class-bigram likelihood (the exchange algorithm; Kneser and Ney, 1993; Martin, Liermann and Ney, 1998).
+- **Contexts:** each context is kept only if it saves more bits than it costs to store (minimum description length).
+- **Categories:** a category that predicts the true next word worse than the unigram is skipped and split, so new categories form where errors are (fuzzy ARTMAP's match tracking).
+- **Mixture weights:** by EM, as now.
+
+Running the result stays lookups and counts. **Tool:** `bench/fuzzy/so_bench.py`. It uses the bake-off's data, vocabulary, sampler and SCRIBE ladder. Each job runs on one core on Odin's PC.
+
+| Test | Compares | Measured on |
+|---|---|---|
+| SO1 | Exchange classes against k-means classes (512 each), each used by K5 + a class trigram + class-substitution contexts | Val bits per byte, paired; writing |
+| SO2 | At the same stored-pair budget (30% of K5's pairs): K5 pruned by count against contexts from all 80 patterns chosen by bits saved | Val bits, paired; writing |
+| SO3 | Fuzzy ARTMAP categories (error-driven) against k-means categories with the same number, each mixed with K5 | Val bits, paired; writing |
+| SO4 | The whole learner (exchange classes → contexts chosen by bits under the 30% budget → ARTMAP), alone and with K5; and its learning curve at 1, 2, 4 and 8 MB against K5's, with vectors and classes relearned at each size | Val bits; the curve; writing |
+| SO5 | A domain shift: 8 chunks of other text (SO_SHIFT, web text on Odin's PC), each scored and then learned. FIXED (wiki classes and contexts, counts updated) against REORG (2 exchange passes and contexts re-chosen per chunk), with K5 beside them | Bits per byte per chunk |
+| SO6 | Writing: SCRIBE v2 on GEN-A's 250 dev prompts for every SO1–SO4 arm, with K5 from the bake-off | SCRIBE, surface S, copy share, 13-word runs |
+
+**Rule (a screen, as the bake-off's).** A self-organising move goes forward to C++ if its paired difference in val bits favours it with the 95% interval clear of 0, and its dev SCRIBE is not below its comparator's by more than 0.02. SO4 and SO5 are reported against their predictions.
+
+**Predictions.**
+
+| # | Prediction |
+|---|---|
+| S1 | Exchange classes beat k-means classes by at least 0.005 bits per byte (SO1) |
+| S2 | At the same budget, contexts chosen by bits beat count pruning (SO2) |
+| S3 | ARTMAP categories beat k-means categories at the same number (SO3) |
+| S4 | The whole learner with K5 beats K5 by at least 0.02 bits per byte at 8 MB; alone, at 30% of K5's pairs, it is within +0.03 of K5 |
+| S5 | The whole learner's advantage over K5 grows from 1 to 8 MB (the self-organising signature) |
+| S6 | REORG beats FIXED on the shift's mean bits per byte, and the gap widens over the chunks |
+| S7 | No SO arm raises dev SCRIBE over K5 by more than +0.02 at 8 MB |
