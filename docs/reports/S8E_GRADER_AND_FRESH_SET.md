@@ -301,3 +301,35 @@ python3 -I scripts/fresh_slots.py audit-info $ARUN audit.tsv bench/eval/temporal
 - With `--fresh-slots`, `--gen-anomaly` still runs G13's planted and real reads before G3 and stops after G3's pool; G13's outputs are not used.
 - The registration said the set's response cache is committed beside it; it is (0.42 MB). The grader's raw responses (32 MB) are not; the three tables they make are (0.77 MB).
 - The pools were built on this branch's base (`4331619`). On `main`, S11e's variants of G3 and G4 (PLAN ledger 76) sit behind flags (`--g3-weights`, `--g4-date-lambda`), so `main`'s default generators are the ones used here. Other changes on `main` since the base (F2c's `--lexicon-type-check`, off by default; S9b's one-source Wikidata rule) were not run here. S11e's own fresh read uses this set with its variants.
+
+## S8f: rule 5 limited to countries (registered 2026-11-01, before any run)
+
+**Odin Loch** · 2026-11-01 · PLAN Track S, S8f; ledger 93, 95, 96.
+
+**Why.** Odin's ruling (ledger 93, Claude's picks): adopt S8e's grader for S8's reads, with rule 5 dropped for persons; keep the minimum of 10 positives (M); the gate stays on Supported. On dev, rule 5 matched 26 items and at least 4 were wrong (James Joyce "English", Emma Goldman, Gordon Banks and Ian Botham "Scottish").
+
+**The change.** Rule 5 stays for `country` (a place's country): a country-like item inside a true value counts. For `nationality` (a person's), the same match is **ungraded**, like rule 4's finer place. Wikidata gives a person's citizenship, not which part of the country they are from. The new basis is `rule5-person`.
+
+Why ungraded and not false: nationality is closed-world (rule 7). If rule 5 were simply removed, "English" for an English person whose citizenship is the United Kingdom would be graded false. On dev, about 22 of the 26 rule-5 matches are right, so that reading (call it F) would add about 22 errors to remove 4. F is not run. Its effect is reported from the hand check of the items that change.
+
+**Reads.**
+1. **Parity.** `main`'s `pattern_learn` (before the change) reproduces S8e's dev read (`runs/devread3`) and gate read (`runs/gate`) files byte for byte.
+2. **Dev.** The calibration, the choice between M and no minimum, and S8d's 25 promotions graded again, with the new grader. Every verdict that differs from S8e's is listed and checked by hand.
+3. **The audit.** S8e's 100 audited items with the new verdicts. Items that become ungraded leave the graded set. The error is recomputed, with unsure items counted, with a Wilson interval.
+4. **The test read, once** for this change. The five test pools through the source stage with the variant dev chooses, graded with the new grader. S8's gate: at least 20 graded supported hypotheses at precision at least 0.9.
+
+**Rule.** The change is Odin's ruling, so it is adopted for S8's reads unless the audited error (read 3, unsure counted) rises above S8e's 0.040. In that case it goes back to Odin. The test read is reported. It decides nothing beyond S8's gate as before.
+
+**Predictions.**
+
+| # | Prediction | Falsified if |
+|---|---|---|
+| F1 | Read 1 is byte for byte | any file differs |
+| F2 | The only verdicts that change are nationality items with basis `rule5`. Each goes from true to ungraded (`rule5-person`) | any other verdict changes |
+| F3 | No `country` verdict changes | one does |
+| F4 | The audited error falls: Joyce leaves the graded set, so 3 of 99 (0.030), Wilson upper under 0.09 | the error rises above 0.040 |
+| F5 | DB-IB lexical still may carry (LR+ at least 10) | its LR+ falls under 10 |
+| F6 | Dev still chooses M | it does not |
+| F7 | S8d's 25 promotions stay 25 of 25 true | any changes |
+| F8 | The test read under M supports nothing, so S8's gate is not met | anything is supported under M |
+| F9 | `epistemic_test` passes with the updated checks. A planted bug (rule 5 still on for nationality) fails at least one | it passes with the bug |
