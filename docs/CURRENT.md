@@ -120,6 +120,8 @@ Chat must not be poured into those counts. On the 8 MiB split, the 4-byte match 
 
 ## Generated-text quality (SCRIBE v2)
 
+**The plan for coherent text (2026-11-01):** [`GENERATION_PLAN.md`](GENERATION_PLAN.md). It covers everything tried, the data, a generation ladder G0–G5, and phases CT0–CT5 with gates and predictions.
+
 Tool: `native/tools/scribe.cpp` over `native/include/cypha/eval/scribe.hpp` ([report](reports/SCRIBE_V2.md), [paper](../paper/scribe/SCRIBE_paper.md)). Counts only; scores a text by its distance from human reference text of the same genre and length.
 
 | Read | Value |

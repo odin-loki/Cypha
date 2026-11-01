@@ -393,6 +393,8 @@ The pass was one 64-bit trie with no per-category holdout.
 
 ### Track B: CyphaLM model upgrades
 
+**Generation (2026-11-01):** the plan for coherent text is [`GENERATION_PLAN.md`](GENERATION_PLAN.md): a generation ladder G0–G5 and phases CT0–CT5 (foundations, sentences, paragraphs, content, learning, scale).
+
 | ID | Upgrade | Measure | Gate |
 |---|---|---|---|
 | B1 | **Consolidate the trie.** One `native/include/cypha/cyphalm/packed_trie.hpp` + `src/` replaces the 7 forked `trie_*.cpp` tools (1,100–1,600 lines each, 265–730 lines apart) and the 3 test tools. CMake targets, paths as arguments, CTests (self-test, tiny-corpus BPC golden, Q/A probe golden, 8K golden) | Same numbers as the forks to 1e-6 | Exact parity |
@@ -995,6 +997,7 @@ Everything raised on 2026-10-26, and where this plan covers it.
 | 95 | Odin (2026-11-01): the open items become rows in the track tables. BKN4 (fix BKN2's answers with Kneser–Ney kept on) in Track B; S8f (S8e's grader, rule 5 limited to countries) in Track S; M18 (win back `qa`'s RAM headroom) and M18b (the 200 MB limit against the 1 TB trie, Odin's call) in Track P. All not started | §5, Tracks B, S and P |
 | 96 | Odin (2026-11-01): run BKN4, S8f and M18 on his PC, by script, to save usage. BKN4 read on dev from BKN3's rows: no way beats BKN2 (agreement 3 right / 2 wrong, the same as BKN2; agreement with both cuts 2 / 0, the same as off), so BKN2 stays. M18's profile is a script for the PC (`scripts/qa_ram_profile.sh`). S8f waits: its inputs are only in the cloud container | [`reports/BYTE_KN.md`](reports/BYTE_KN.md) BKN4; Tracks B, S and P |
 | 97 | S8f (2026-11-01; Odin's ruling of row 93 carried out, adopted by its registered rule): S8e's grader with rule 5 limited to `country`. For a person's nationality, a country-like part of a true value is ungraded, and this comes before drawn-false (amended on dev, before the test read: "English" also names the Kingdom of England). Dev: 26 verdicts become ungraded (20 right, 4 wrong, 2 unsure). Audited error 0.040 → 0.031 [0.010, 0.086]. Test read once: 0 supported under M, so S8's gate is not met. S8's reads use this grader (`--s8e`) with M, the gate on Supported | [`reports/S8E_GRADER_AND_FRESH_SET.md`](reports/S8E_GRADER_AND_FRESH_SET.md) S8f |
+| 98 | Odin (2026-11-01): "Start doing the plan for research and development to get CyphaLM generating coherent text. Look at everything we have tried and all the data." The plan is [`GENERATION_PLAN.md`](GENERATION_PLAN.md). Diagnosis: sentence form (D_S about 18 of D about 23) binds; reach, sparse word statistics and the data's shape are the causes. A generation ladder G0–G5; phases CT0 (foundations) to CT5 (scale), each item registered before it runs; predictions P-CT1 to P-CT10; five calls for Odin (§12) | [`GENERATION_PLAN.md`](GENERATION_PLAN.md) |
 
 ---
 

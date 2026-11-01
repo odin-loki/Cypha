@@ -9,6 +9,7 @@ milestone or a significant self-contained change.
 ## [Unreleased]
 
 ### Added
+- **The plan for coherent text: [`docs/GENERATION_PLAN.md`](docs/GENERATION_PLAN.md)** (PLAN ledger 98). It covers everything tried for generation (GEN-A to GEN-E, BKN, TEMPS, tokens T0–T4d, the 1 TB trie), the data, a generation ladder G0–G5 and phases CT0–CT5 with gates, predictions and kill criteria.
 - **M18 step 1: `scripts/qa_ram_profile.sh`** (PLAN Track P, ledger 96). It traces built, served and frozen-test `qa` on Odin's PC and names the phase at each peak. Its inputs are `bench/eval/qa_inputs.tar.gz` (3 MB). **BKN4 read on dev** ([report](docs/reports/BYTE_KN.md), BKN4): no way of fixing BKN2's answers beats it, so BKN2 stays; `scripts/bkn4_dev_gate.py` re-reads the gate.
 
 ### Removed

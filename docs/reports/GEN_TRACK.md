@@ -2,6 +2,8 @@
 
 **Odin Loch** · 2026-10-29 · PLAN ledger 72 · Odin's aim: CyphaLM writes coherent text
 
+**The next plan (2026-11-01):** [`../GENERATION_PLAN.md`](../GENERATION_PLAN.md) takes this track forward (phases CT0–CT5). Test reads stay logged in the Reads table below.
+
 **Question.** CyphaLM answers questions, but its open text changes subject every few words and breaks its sentences. Today's default samples score 0.063 on SCRIBE v2 with A4d's prompts and 0.079 [0.064, 0.096] on GEN-A's dev benchmark; sentences shuffled across documents score 0.344; human text 0.923. Can we raise that without giving up rule 10?
 
 ## The four steps
