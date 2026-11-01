@@ -573,3 +573,21 @@ ALL is reported against K5 by the same measures.
 | B5 | ALL raises dev SCRIBE over K5 by at least +0.03 (point estimate) |
 | B6 | K5's dev SCRIBE is in [0.10, 0.20] |
 | B7 | At least 3 techniques pass the screen |
+
+### 13.8 Two more arms, and the bake-off moves to Odin's PC (registered 2026-11-01, before the full run)
+
+**Odin:** "You can implement a NN in fuzzy logic. Let's analyse that. Stop the bake-off and run it on my PC if it's going to take long. Start each job on a single core."
+
+- **The run.** The cloud run was stopped before any arm finished, and no score was read. `bench/fuzzy/run_bake.sh` runs prep, then one job per arm, each pinned to its own core (`taskset`, one BLAS thread), then the report. Outputs go to `D:\cypha_llm\fuzzy\`.
+- **F9: a fuzzy rule base** (zero-order Takagi–Sugeno).
+  - Rules have the form "IF w-1 is A_i AND w-2 is A_j THEN next ~ P_ij".
+  - The fuzzy sets are fuzzy c-means prototypes (256) of our word vectors. Each word belongs to its 3 nearest sets, with c-means memberships.
+  - Firing is the product of memberships. Each rule's output distribution is learned by counting next words, weighted by firing strength, with no gradient. Inference is the firing-weighted average.
+  - This is a normalised radial-basis-function network built by counting: the neural form, without backpropagation.
+- **F10: fuzzy ART** (Carpenter, Grossberg and Rosen, 1991): a self-organising category learner.
+  - The input is the vectors of w-1 and w-2, complement-coded.
+  - A new category is created whenever no existing one matches at vigilance 0.7. That was 0.8 at first, but a smoke test hit the 3,000-category cap. No score was read.
+  - Each category counts next words, and a context reads its 3 best categories.
+- **Predictions.**
+  - B8: F9 gains more bits than F1 (soft memberships beat hard classes).
+  - B9: F10 forms fewer than 3,000 categories and gains less than F9.

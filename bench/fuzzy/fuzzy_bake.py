@@ -12,8 +12,14 @@ class features); F5 random class forest (an approximation of Xu and Jelinek's ra
 of the history, not grown by likelihood); F6 indirect contexts (PAQ); F7 CCA states + kNN; F8a sparse distributed
 memory over the last words; F8b sparse distributed memory over a decayed state of the whole past; ALL.
 
-Usage: fuzzy_bake.py all            (prep, build, fit, score, generate, SCRIBE; resumable)
-       FZ_SMALL=1 fuzzy_bake.py all (a smoke test on a small slice)
+F9 is a zero-order Takagi-Sugeno fuzzy rule base (fuzzy c-means sets, product firing, consequents learned by
+counting: a normalised RBF network without gradient descent); F10 is fuzzy ART, a self-organising category learner.
+
+Usage (one job per arm, each on one core; bench/fuzzy/run_bake.sh runs them all):
+       fuzzy_bake.py prep          data, vocabulary, vectors and classes (shared, cached in FZ_WORK)
+       fuzzy_bake.py arm NAME      K5 + one arm (or ALL): fit, score, generate, SCRIBE -> FZ_WORK/res_NAME.json
+       fuzzy_bake.py report        FZ_WORK/summary.md from every res_*.json
+       FZ_SMALL=1 ...              a smoke test on a small slice
 """
 import json
 import math
@@ -38,7 +44,7 @@ TOKRE = re.compile(r"[A-Za-z]+(?:'[A-Za-z]+)*|[0-9]+(?:[.,][0-9]+)*|\n|[^\sA-Za-
 NO_SPACE_BEFORE = set(".,;:!?)]}%") | {"'s", "'"}
 NO_SPACE_AFTER = set("([{$")
 SEED = 20261101
-ARMS = ["K5", "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8a", "F8b"]
+ARMS = ["K5", "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8a", "F8b", "F9", "F10"]
 
 
 def log(*a):
@@ -150,7 +156,7 @@ def pack1(vals):
 class Table:
     """key -> next-word counts (CSR, keys sorted, next ids sorted within a key)."""
 
-    def __init__(self, keys, nexts):
+    def __init__(self, keys, nexts, weights=None):
         o = np.lexsort((nexts, keys))
         k, w = keys[o], nexts[o]
         if len(k) == 0:
@@ -162,7 +168,7 @@ class Table:
             return
         brk = np.flatnonzero((k[1:] != k[:-1]) | (w[1:] != w[:-1])) + 1
         st = np.concatenate(([0], brk))
-        cnt = np.diff(np.concatenate((st, [len(k)])))
+        cnt = np.diff(np.concatenate((st, [len(k)]))) if weights is None else np.add.reduceat(weights[o], st)
         pk, pw = k[st], w[st]
         kb = np.flatnonzero(pk[1:] != pk[:-1]) + 1
         ks = np.concatenate(([0], kb))
@@ -645,41 +651,151 @@ class SDM:
         return p / p.sum() if p.sum() > 0 else None
 
 
+# ----------------------------------------------------------------------------------------------- F9, F10
+def fcm(X, C, m, seed, iters=15):
+    """Fuzzy c-means (Bezdek) on unit vectors: soft memberships, centres renormalised to the sphere."""
+    rng = np.random.default_rng(seed)
+    Ce = X[rng.choice(len(X), C, replace=False)].copy()
+    for _ in range(iters):
+        d2 = np.maximum(2 - 2 * (X @ Ce.T), 1e-6)
+        inv = d2 ** (-1.0 / (m - 1))
+        U = inv / inv.sum(1, keepdims=True)
+        Um = U ** m
+        Ce = (Um.T @ X) / Um.sum(0)[:, None]
+        Ce /= np.linalg.norm(Ce, axis=1, keepdims=True) + 1e-9
+    return Ce.astype(np.float32)
+
+
+class FuzzyRules:
+    """F9: IF w-1 is A_i AND w-2 is A_j THEN next ~ P_ij. Fuzzy sets are fuzzy c-means prototypes of word vectors;
+    each word belongs to its 3 nearest sets with FCM memberships (m = 2); firing = product (t-norm); consequents are
+    next-word counts weighted by firing, learned by counting; inference is the firing-weighted average."""
+
+    def __init__(self, ids, E, V, C=256, top=3, m=2.0, seed=SEED):
+        self.V = V
+        P = fcm(E[2:], C, m, seed)
+        d2 = np.maximum(2 - 2 * (E @ P.T), 1e-6)
+        mi = np.argpartition(d2, top, axis=1)[:, :top]
+        dd = np.take_along_axis(d2, mi, 1)
+        inv = dd ** (-1.0 / (m - 1))
+        mu = inv / inv.sum(1, keepdims=True)
+        mi[UNK], mi[BOS] = C, C + 1
+        mu[UNK], mu[BOS] = 1.0 / top, 1.0 / top
+        self.mi, self.mu, self.top = mi.astype(np.int64), mu.astype(np.float32), top
+        n = len(ids)
+        w1, w2, nx = ids[1:n - 1], ids[0:n - 2], ids[2:]
+        keys, wts, nxs = [], [], []
+        for a in range(top):
+            for b in range(top):
+                keys.append(self.mi[w1, a].astype(np.uint64) | (self.mi[w2, b].astype(np.uint64) << U16))
+                wts.append(self.mu[w1, a] * self.mu[w2, b])
+                nxs.append(nx)
+        self.tab = Table(np.concatenate(keys), np.concatenate(nxs), np.concatenate(wts))
+
+    def dist(self, ctx):
+        c = (list(ctx[::-1][:2]) + [BOS] * 2)[:2]
+        p, z = np.zeros(self.V), 0.0
+        for a in range(self.top):
+            for b in range(self.top):
+                i = self.tab.find(np.uint64(int(self.mi[c[0], a]) | (int(self.mi[c[1], b]) << 16)))
+                if i >= 0:
+                    phi = float(self.mu[c[0], a] * self.mu[c[1], b])
+                    self.tab.dense_into(i, p, phi)
+                    z += phi
+        return p / z if z > 0 else None
+
+
+class FuzzyART:
+    """F10: fuzzy ART (Carpenter, Grossberg and Rosen, 1991), a self-organising category learner. Input: the vectors
+    of w-1 and w-2 (first 32 dimensions) scaled to [0, 1] and complement-coded. Categories form online on a sample of
+    contexts (a new one whenever none matches at vigilance rho; fast learning). The categories then count next words
+    over a larger sample, and a context reads its 3 best categories by the choice function."""
+
+    def __init__(self, ids, E, V, rho=0.7, alpha=0.001, d=32, learn=150000, count=600000, maxcat=3000, seed=SEED):
+        self.E, self.V, self.rho, self.alpha, self.d = E, V, rho, alpha, d
+        n = len(ids)
+        rng = np.random.default_rng(seed)
+        W = []
+        for t in np.sort(rng.choice(np.arange(2, n), min(learn, n - 2), replace=False)):
+            I = self._input(ids[t - 1], ids[t - 2])
+            if W:
+                Wa = np.array(W)
+                mn = np.minimum(I, Wa).sum(1)
+                T = mn / (alpha + Wa.sum(1))
+                for j in np.argsort(-T):
+                    if mn[j] / I.sum() >= rho:
+                        W[j] = np.minimum(I, W[j])
+                        break
+                else:
+                    if len(W) < maxcat:
+                        W.append(I.copy())
+            else:
+                W.append(I.copy())
+        self.W = np.array(W, np.float32)
+        sel = np.sort(rng.choice(np.arange(2, n), min(count, n - 2), replace=False))
+        cat = np.zeros(len(sel), np.int64)
+        for a in range(0, len(sel), 256):
+            t = sel[a:a + 256]
+            I = self._input(ids[t - 1], ids[t - 2])
+            T = np.minimum(I[:, None, :], self.W[None]).sum(2) / (alpha + self.W.sum(1))
+            cat[a:a + 256] = np.argmax(T, 1)
+        self.tab = Table(cat.astype(np.uint64), ids[sel])
+        self.ncat = len(self.W)
+
+    def _input(self, w1, w2):
+        f = np.concatenate([self.E[w1][..., :self.d], self.E[w2][..., :self.d]], -1)
+        f = np.clip((f * 2.5 + 1) / 2, 0, 1)
+        return np.concatenate([f, 1 - f], -1).astype(np.float32)
+
+    def dist(self, ctx):
+        c = (list(ctx[::-1][:2]) + [BOS] * 2)[:2]
+        I = self._input(c[0], c[1])
+        T = np.minimum(I, self.W).sum(1) / (self.alpha + self.W.sum(1))
+        p, z = np.zeros(self.V), 0.0
+        for j in np.argsort(-T)[:3]:
+            i = self.tab.find(np.uint64(int(j)))
+            if i >= 0:
+                self.tab.dense_into(i, p, float(T[j]))
+                z += float(T[j])
+        return p / z if z > 0 else None
+
+
 # ----------------------------------------------------------------------------------------------- build, fit
-G = {}  # models, shared with forked workers
+G = {}
+NEEDS_BANK = {"F1", "F2", "F4"}
 
 
-def build():
+def shared():
+    """Vectors and classes, computed once by prep and loaded by every arm job."""
     tr = np.load(f"{WORK}/train.npy")
     vocab = json.load(open(f"{WORK}/vocab.json"))
     V = len(vocab)
-    G.update(tr=tr, vocab=vocab, V=V)
+    if not os.path.exists(f"{WORK}/E.npy"):
+        E = embeddings(tr, V)
+        np.save(f"{WORK}/E.npy", E)
+        np.save(f"{WORK}/cls.npy", kmeans(E, 512, SEED))
+    G.update(tr=tr, vocab=vocab, V=V, E=np.load(f"{WORK}/E.npy"), cls=np.load(f"{WORK}/cls.npy"))
+    G["tid"] = {t: i for i, t in enumerate(vocab)}
+
+
+def build(names):
+    tr, V, E, cls = G["tr"], G["V"], G["E"], G["cls"]
     t0 = time.time()
     G["K5"] = KN(tr, V)
-    log("K5 built", round(time.time() - t0))
-    E = embeddings(tr, V)
-    cls = kmeans(E, 512, SEED)
-    G["E"], G["cls"] = E, cls
-    log("vectors and classes", round(time.time() - t0))
-    bank = Bank(tr, cls)
-    log("pattern bank", round(time.time() - t0))
-    # F1: contiguous windows of 2-4 words with one word replaced by its class; F2: word contexts with gaps
+    bank = Bank(tr, cls) if NEEDS_BANK & set(names) else None
     f1 = [tuple(C_ if i == j else W_ for i in range(L)) + (N_,) * (4 - L) for L in (2, 3, 4) for j in range(L)]
     f2 = [(N_, W_, N_, N_), (N_, W_, W_, N_), (W_, N_, W_, N_), (N_, N_, W_, N_), (W_, W_, N_, W_), (W_, N_, W_, W_),
           (N_, W_, W_, W_)]
-    G["F1"] = PatternMix(bank, f1, V)
-    G["F2"] = PatternMix(bank, f2, V)
-    G["F3"] = SimHash(tr, E, V)
-    G["F4"] = IB1(bank, tr, V)
-    G["F5"] = Forest(tr, E, V)
-    log("F1-F5", round(time.time() - t0))
-    G["F6"] = Indirect(tr, V)
-    G["F7"] = CCAkNN(tr, E, V)
-    log("F6-F7", round(time.time() - t0))
-    G["F8a"] = SDM(tr, E, V, long=False)
-    G["F8b"] = SDM(tr, E, V, long=True)
-    log("F8", round(time.time() - t0))
-    G["patterns"] = dict(F1=f1, F2=f2, F4_ig_word=G["F4"].ig_w.tolist(), F4_ig_class=G["F4"].ig_c.tolist())
+    make = {"F1": lambda: PatternMix(bank, f1, V), "F2": lambda: PatternMix(bank, f2, V), "F3": lambda: SimHash(tr, E, V),
+            "F4": lambda: IB1(bank, tr, V), "F5": lambda: Forest(tr, E, V), "F6": lambda: Indirect(tr, V),
+            "F7": lambda: CCAkNN(tr, E, V), "F8a": lambda: SDM(tr, E, V, long=False), "F8b": lambda: SDM(tr, E, V, long=True),
+            "F9": lambda: FuzzyRules(tr, E, V), "F10": lambda: FuzzyART(tr, E, V)}
+    for a in names:
+        if a != "K5":
+            G[a] = make[a]()
+            log(a, "built", round(time.time() - t0))
+    if "F10" in names:
+        G["F10_categories"] = G["F10"].ncat
 
 
 def val_positions():
@@ -697,91 +813,86 @@ def contexts(seq, pos):
     return [[int(x) for x in seq[max(int(lastbos[t]), t - 60):t]] for t in pos]
 
 
-def q_row(args):
-    ctx, y = args
-    out = []
-    for a in ARMS:
-        p = G[a].dist(ctx)
-        out.append(np.nan if p is None else float(p[y]))
-    return out
+def inner_fit(names, ctxs, ys):
+    for a in ("F1", "F2", "F3", "F6"):
+        if a in names:
+            G[a].fit(ctxs, ys)
+    for a, attr, grid in (("F4", "beta", (0.5, 1.0, 2.0)), ("F7", "tau", (0.02, 0.05, 0.1))):
+        if a not in names:
+            continue
+        best = None
+        for v in grid:
+            setattr(G[a], attr, v)
+            ll = 0.0
+            for c, y in zip(ctxs[:1500], ys[:1500]):
+                d = G[a].dist(c)
+                ll += math.log(max(d[y], 1e-12)) if d is not None else 0.0
+            best = max(best or (ll, v), (ll, v))
+        setattr(G[a], attr, best[1])
 
 
-def fit_and_score():
-    if os.path.exists(f"{WORK}/scores.json"):
-        return json.load(open(f"{WORK}/scores.json"))
+def score(names, arm):
     va, vdoc, pos = val_positions()
-    fitm = (vdoc[pos] % 2 == 0)
+    fitm = vdoc[pos] % 2 == 0
     allctx = contexts(va, pos)
     fidx = np.flatnonzero(fitm)[:4000]
-    ctxs = [allctx[i] for i in fidx]
-    ys = [int(va[pos[i]]) for i in fidx]
-    for a in ("F1", "F2", "F3", "F6"):  # inner pattern weights, on the fit half
-        G[a].fit(ctxs, ys)
-    best = None
-    for beta in (0.5, 1.0, 2.0):  # IB1's distance weighting, on the fit half
-        G["F4"].beta = beta
-        ll = 0.0
-        for c, y in zip(ctxs[:1500], ys[:1500]):
-            d = G["F4"].dist(c)
-            ll += math.log(max(d[y], 1e-12)) if d is not None else 0.0
-        best = max(best or (ll, beta), (ll, beta))
-    G["F4"].beta = best[1]
-    best = None
-    for tau in (0.02, 0.05, 0.1):
-        G["F7"].tau = tau
-        ll = sum(math.log(max(G["F7"].dist(c)[y], 1e-12)) for c, y in zip(ctxs[:1500], ys[:1500]))
-        best = max(best or (ll, tau), (ll, tau))
-    G["F7"].tau = best[1]
-    log("inner fits", dict(F4_beta=G["F4"].beta, F7_tau=G["F7"].tau))
-    with mp.Pool(4) as pool:
-        Q = np.array(pool.map(q_row, [(c, int(va[t])) for c, t in zip(allctx, pos)], chunksize=64))
+    inner_fit(names, [allctx[i] for i in fidx], [int(va[pos[i]]) for i in fidx])
+    Q = np.full((len(pos), len(names)), np.nan)
+    for r, (c, t) in enumerate(zip(allctx, pos)):
+        for j, a in enumerate(names):
+            d = G[a].dist(c)
+            if d is not None:
+                Q[r, j] = d[int(va[t])]
     vocab = G["vocab"]
     nbytes = np.array([len(piece(vocab[va[t]], vocab[va[t - 1]] if va[t - 1] != BOS else None).encode()) for t in pos])
-    A = ~np.isnan(Q)
-    Qz = np.nan_to_num(Q)
-    lam = {}
-    for j, a in enumerate(ARMS[1:], 1):  # K5 + one fuzzy model, weight on the fit half
-        q0, q1, av = Qz[fitm, 0], Qz[fitm, j], A[fitm, j]
-        l = 0.2
+    A, Qz = ~np.isnan(Q), np.nan_to_num(Q)
+    cfg = {"names": names}
+    if arm == "ALL":
+        cfg["w"] = dict(zip(names, sleeping_em(Qz[fitm], A[fitm]).tolist()))
+    elif arm != "K5":
+        q0, q1, av = Qz[fitm, 0], Qz[fitm, 1], A[fitm, 1]
+        lam = 0.2
         for _ in range(40):
-            r = l * q1[av] / np.maximum((1 - l) * q0[av] + l * q1[av], 1e-300)
-            l = float(r.mean()) if av.any() else 0.0
-        lam[a] = l
-    w_all = sleeping_em(Qz[fitm], A[fitm])
+            r = lam * q1[av] / np.maximum((1 - lam) * q0[av] + lam * q1[av], 1e-300)
+            lam = float(r.mean()) if av.any() else 0.0
+        cfg["lambda"] = lam
     ev = ~fitm
-    res = {"lambda": lam, "w_all": dict(zip(ARMS, w_all.tolist())), "coverage": dict(zip(ARMS, A[ev].mean(0).tolist())),
-           "F4_beta": G["F4"].beta, "F7_tau": G["F7"].tau}
-
-    def mix_q(j):
-        if j == "ALL":
-            wa = A[ev] * w_all
-            return (wa * Qz[ev]).sum(1) / wa.sum(1)
-        if j == "K5":
-            return Qz[ev, 0]
-        k = ARMS.index(j)
-        return np.where(A[ev, k], (1 - lam[j]) * Qz[ev, 0] + lam[j] * Qz[ev, k], Qz[ev, 0])
-
-    docs = vdoc[pos][ev]
+    if arm == "ALL":
+        w = np.array([cfg["w"][a] for a in names])
+        wa = A[ev] * w
+        qm = (wa * Qz[ev]).sum(1) / wa.sum(1)
+    elif arm == "K5":
+        qm = Qz[ev, 0]
+    else:
+        qm = np.where(A[ev, 1], (1 - cfg["lambda"]) * Qz[ev, 0] + cfg["lambda"] * Qz[ev, 1], Qz[ev, 0])
+    bits, base, by, docs = -np.log2(np.maximum(qm, 1e-12)), -np.log2(np.maximum(Qz[ev, 0], 1e-12)), nbytes[ev], vdoc[pos][ev]
     ud = np.unique(docs)
+    arr = np.array([(bits[docs == u].sum(), base[docs == u].sum(), by[docs == u].sum()) for u in ud])
     rng = np.random.default_rng(SEED)
-    base = -np.log2(np.maximum(mix_q("K5"), 1e-12))
-    by = nbytes[ev]
-    bpb = {}
-    for a in ARMS + ["ALL"]:
-        bits = -np.log2(np.maximum(mix_q(a), 1e-12))
-        d = np.zeros(len(ud))
-        boots = []
-        bd = {u: (bits[docs == u].sum(), base[docs == u].sum(), by[docs == u].sum()) for u in ud}
-        arr = np.array([bd[u] for u in ud])
-        for _ in range(2000):
-            s = arr[rng.integers(0, len(ud), len(ud))].sum(0)
-            boots.append((s[0] - s[1]) / s[2])
-        bpb[a] = dict(bpb=float(bits.sum() / by.sum()), minus_K5=float((bits.sum() - base.sum()) / by.sum()),
-                      ci=[float(np.percentile(boots, 2.5)), float(np.percentile(boots, 97.5))])
-    res["bpb"] = bpb
-    json.dump(res, open(f"{WORK}/scores.json", "w"), indent=1)
-    log("scores", json.dumps(bpb))
-    return res
+    boots = [(lambda s: (s[0] - s[1]) / s[2])(arr[rng.integers(0, len(ud), len(ud))].sum(0)) for _ in range(2000)]
+    cfg.update(bpb=float(bits.sum() / by.sum()), K5_bpb=float(base.sum() / by.sum()),
+               minus_K5=float((bits.sum() - base.sum()) / by.sum()),
+               ci=[float(np.percentile(boots, 2.5)), float(np.percentile(boots, 97.5))],
+               coverage=float(A[ev, -1].mean()) if arm not in ("K5", "ALL") else 1.0,
+               F4_beta=getattr(G.get("F4"), "beta", None), F7_tau=getattr(G.get("F7"), "tau", None))
+    return cfg
+
+
+def mixed(arm, ctx, cfg):
+    p = G["K5"].dist(ctx)
+    if arm == "K5":
+        return p
+    if arm == "ALL":
+        w = cfg["w"]
+        acc, z = w["K5"] * p, w["K5"]
+        for a in cfg["names"][1:]:
+            q = G[a].dist(ctx)
+            if q is not None:
+                acc = acc + w[a] * q
+                z += w[a]
+        return acc / z
+    q = G[arm].dist(ctx)
+    return p if q is None else (1 - cfg["lambda"]) * p + cfg["lambda"] * q
 
 
 # ----------------------------------------------------------------------------------------------- generation
@@ -813,24 +924,6 @@ class RepeatBan:
                 local.add((k, c))
             w = w + bytes([c])
         return False
-
-
-def mixed(arm, ctx, cfg):
-    p = G["K5"].dist(ctx)
-    if arm == "K5":
-        return p
-    if arm == "ALL":
-        w = cfg["w_all"]
-        acc, z = w["K5"] * p, w["K5"]
-        for a in ARMS[1:]:
-            q = G[a].dist(ctx)
-            if q is not None:
-                acc = acc + w[a] * q
-                z += w[a]
-        return acc / z
-    q = G[arm].dist(ctx)
-    lam = cfg["lambda"][arm]
-    return p if q is None else (1 - lam) * p + lam * q
 
 
 def generate_one(args):
@@ -887,43 +980,35 @@ def cont_bits(args):
     return bits, nb
 
 
-def gen_and_scribe(cfg):
+def gen_and_scribe(arm, cfg):
     rows = [l.split("\t") for l in open(f"{ROOT}/bench/eval/gen_prompts_dev.tsv", encoding="utf-8").read().split("\n")[1:] if l]
     if SMALL:
         rows = rows[:20]
-    prompts = [unesc(r[2]) for r in rows]
-    conts = [unesc(r[3]) for r in rows]
+    prompts, conts = [unesc(r[2]) for r in rows], [unesc(r[3]) for r in rows]
+    os.makedirs(f"{WORK}/gen", exist_ok=True)
+    gf = f"{WORK}/gen/{arm}.gen.txt"
+    if not os.path.exists(gf + ".cont.json"):
+        outs = [generate_one((arm, i, p, cfg))[1] for i, p in enumerate(prompts)]
+        with open(gf, "w", encoding="utf-8") as f:
+            f.write(f"MODEL\tfuzzy_bake\t{arm}\n")
+            for i, p in enumerate(prompts):
+                f.write(f"PROMPT\t{i}\t{esc(p)}\nGEN\ttrie_T1.0\t{esc(outs[i])}\n")
+        json.dump([cont_bits((arm, p, c, cfg)) for p, c in zip(prompts, conts)], open(gf + ".cont.json", "w"))
+    md = f"{WORK}/gen/{arm}.scribe.md"
+    if not os.path.exists(md):
+        with open(md, "w") as f:
+            subprocess.run([SCRIBE, "ladder", "--pack", f"enwik:{E8}:16:48", "--ref", f"enwik:{E8}:48:56", "--test",
+                            f"enwik:{E8}:56:64", "--vectors", SCRIBE_VEC, "--profile", "v2", "--seed", "20261027",
+                            "--gen-trie", gf, "--label", arm], stdout=f, stderr=subprocess.DEVNULL, check=True)
+    gens = [unesc(l.split("\t", 2)[2]) for l in open(gf, encoding="utf-8").read().split("\n") if l.startswith("GEN\t")]
+    cb = json.load(open(gf + ".cont.json"))
     trainb = open(f"{WORK}/train.txt", "rb").read()
-    copy_index = window_hashes(np.frombuffer(trainb, np.uint8), 32)
-    tr = G["tr"]
-    gram13 = ngram_hashes(tr, 13)
-    summary = {}
-    for arm in ARMS + ["ALL"]:
-        gf = f"{WORK}/gen/{arm}.gen.txt"
-        os.makedirs(f"{WORK}/gen", exist_ok=True)
-        if not os.path.exists(gf):
-            with mp.Pool(4) as pool:
-                outs = dict(pool.map(generate_one, [(arm, i, p, cfg) for i, p in enumerate(prompts)], chunksize=4))
-                cb = pool.map(cont_bits, [(arm, p, c, cfg) for p, c in zip(prompts, conts)], chunksize=4)
-            with open(gf, "w", encoding="utf-8") as f:
-                f.write(f"MODEL\tfuzzy_bake\t{arm}\n")
-                for i, p in enumerate(prompts):
-                    f.write(f"PROMPT\t{i}\t{esc(p)}\nGEN\ttrie_T1.0\t{esc(outs[i])}\n")
-            json.dump(cb, open(gf + ".cont.json", "w"))
-        md = f"{WORK}/gen/{arm}.scribe.md"
-        if not os.path.exists(md):
-            with open(md, "w") as f:
-                subprocess.run([SCRIBE, "ladder", "--pack", f"enwik:{E8}:16:48", "--ref", f"enwik:{E8}:48:56", "--test",
-                                f"enwik:{E8}:56:64", "--vectors", SCRIBE_VEC, "--profile", "v2", "--seed", "20261027",
-                                "--gen-trie", gf, "--label", arm], stdout=f, stderr=subprocess.DEVNULL, check=True)
-        gens = [unesc(l.split("\t", 2)[2]) for l in open(gf, encoding="utf-8").read().split("\n") if l.startswith("GEN\t")]
-        cb = json.load(open(gf + ".cont.json"))
-        summary[arm] = dict(scribe_md=md, copy32=copy_share(gens, copy_index),
-                            verbatim13=float(np.mean([has_run(g, gram13) for g in gens])),
-                            cont_bpb=sum(b for b, _ in cb) / sum(n for _, n in cb))
-        log(arm, summary[arm])
-    json.dump(summary, open(f"{WORK}/gen_summary.json", "w"), indent=1)
-    return summary
+    m = re.search(r"\| trie samples \(pooled\) \| (\d+) \| ([0-9.]+) \[([0-9.]+), ([0-9.]+)\] \| [^|]+\| ([0-9.]+) \[([0-9.]+), ([0-9.]+)\]",
+                  open(md).read())
+    return dict(scribe=float(m.group(2)), scribe_ci=[float(m.group(3)), float(m.group(4))], kept=int(m.group(1)),
+                surface_S=float(m.group(5)), copy32=copy_share(gens, window_hashes(np.frombuffer(trainb, np.uint8), 32)),
+                verbatim13=float(np.mean([has_run(g, ngram_hashes(G["tr"], 13)) for g in gens])) if gens else 0.0,
+                cont_bpb=sum(b for b, _ in cb) / sum(n for _, n in cb))
 
 
 def window_hashes(b, w):
@@ -973,16 +1058,56 @@ def has_run(g, index, n=13):
     return bool(((i < len(index)) & (index[np.minimum(i, len(index) - 1)] == h)).any())
 
 
+def report():
+    res = {}
+    for a in ARMS + ["ALL"]:
+        f = f"{WORK}/res_{a}.json"
+        if os.path.exists(f):
+            res[a] = json.load(open(f))
+    k5 = res.get("K5", {}).get("gen", {})
+    lines = ["# Fuzzy bake-off results", "", f"Data: {json.load(open(f'{WORK}/data.json'))}", "",
+             "| Arm | val bits/byte | minus K5 [95%] | weight | coverage | SCRIBE v2 [95%] | minus K5 | surface S | copy32 | 13-word runs | cont bits/byte | screen |",
+             "|---|---:|---|---:|---:|---|---:|---:|---:|---:|---:|---|"]
+    for a, r in res.items():
+        s, g = r["score"], r["gen"]
+        wt = s.get("lambda", "")
+        ds = g["scribe"] - k5.get("scribe", g["scribe"])
+        ok = a not in ("K5",) and s["ci"][1] < 0 and s["minus_K5"] <= -0.01 and ds >= 0.02 and g["copy32"] <= k5.get("copy32", 1) + 0.02
+        lines.append(f"| {a} | {s['bpb']:.4f} | {s['minus_K5']:+.4f} [{s['ci'][0]:+.4f}, {s['ci'][1]:+.4f}] | "
+                     f"{wt if wt == '' else f'{wt:.3f}'} | {s['coverage']:.3f} | {g['scribe']:.3f} [{g['scribe_ci'][0]:.3f}, {g['scribe_ci'][1]:.3f}] | "
+                     f"{ds:+.3f} | {g['surface_S']:.3f} | {g['copy32']:.4f} | {g['verbatim13']:.3f} | {g['cont_bpb']:.4f} | {'PASS' if ok else '-'} |")
+    if "ALL" in res:
+        lines += ["", "ALL weights: " + json.dumps({k: round(v, 4) for k, v in res["ALL"]["score"]["w"].items()})]
+    open(f"{WORK}/summary.md", "w").write("\n".join(lines) + "\n")
+    print("\n".join(lines))
+
+
 def main():
+    cmd = sys.argv[1] if len(sys.argv) > 1 else ""
     t0 = time.time()
-    prep()
-    build()
-    G["tid"] = {t: i for i, t in enumerate(G["vocab"])}
-    cfg = fit_and_score()
-    summ = gen_and_scribe(cfg)
-    json.dump(dict(data=json.load(open(f"{WORK}/data.json")), scores=cfg, gen=summ, patterns=G["patterns"],
-                   seconds=time.time() - t0), open(f"{WORK}/result.json", "w"), indent=1)
-    log("done", round(time.time() - t0), "s")
+    if cmd == "prep":
+        prep()
+        shared()
+        log("prep done", round(time.time() - t0))
+    elif cmd == "arm":
+        arm = sys.argv[2]
+        out = f"{WORK}/res_{arm}.json"
+        if os.path.exists(out):
+            return
+        shared()
+        names = ["K5"] + (ARMS[1:] if arm == "ALL" else ([] if arm == "K5" else [arm]))
+        build(names)
+        cfg = score(names, arm)
+        log(arm, "scored", json.dumps({k: cfg[k] for k in ("bpb", "minus_K5", "ci")}))
+        gen = gen_and_scribe(arm, cfg)
+        json.dump(dict(arm=arm, score=cfg, gen=gen, seconds=time.time() - t0, F10_categories=G.get("F10_categories")),
+                  open(out, "w"), indent=1)
+        log(arm, "done", json.dumps(gen), round(time.time() - t0), "s")
+    elif cmd == "report":
+        report()
+    else:
+        print(__doc__)
+        sys.exit(2)
 
 
 if __name__ == "__main__":
