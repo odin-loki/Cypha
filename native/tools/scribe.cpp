@@ -893,6 +893,7 @@ std::string fmt_ci(double m, std::pair<double, double> ci, int prec = 3) {
 
 struct GenSet {
   std::vector<std::string> texts, kinds;
+  std::vector<std::size_t> line_of;  // the GEN line (0-based, among GEN lines) each kept text came from
   std::size_t lines = 0, dropped = 0;
 };
 
@@ -913,6 +914,7 @@ GenSet load_gen_trie(const std::string& path) {
     }
     g.texts.push_back(text);
     g.kinds.push_back(line.substr(4, t2 - 4));
+    g.line_of.push_back(g.lines - 1);
   }
   return g;
 }
@@ -975,6 +977,8 @@ int cmd_ladder(const Args& a) {
   for (std::size_t i = 0; i < gen.texts.size(); ++i) {
     rungs[R_TRIE].texts.push_back(gen.texts[i]);
     rungs[R_TRIE].kinds.push_back(gen.kinds[i]);
+    // N0 (GENERATION_PLAN §13.3): the export's ids name the GEN line, so per-sample scores pair by prompt.
+    rungs[R_TRIE].ids.push_back(label + "/trie/g" + std::to_string(gen.line_of[i]));
     const int slot = gen.kinds[i] == "trie_T0.6" ? R_T06 : (gen.kinds[i] == "trie_T0.8" ? R_T08 : (gen.kinds[i] == "trie_T1.0" ? R_T10 : -1));
     if (slot >= 0) rungs[static_cast<std::size_t>(slot)].texts.push_back(gen.texts[i]);
   }

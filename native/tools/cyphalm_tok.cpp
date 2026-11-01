@@ -8,7 +8,8 @@
 //   entropy  <enwik8> <out.f32>               the byte model's next-byte entropy over [0, train), each byte scored
 //                                             before it is seen (as in training), float32 bits
 //   train    <enwik8> --arm bpe|uni|spb|ent|wrd --sizes 4096,8192,... --out PREFIX [--entropy FILE] [--mean-len 4.5]
-//                                             learns on [0, train) and writes PREFIX-<arm>-<size>.tok
+//            [--bytes N]                      learns on [0, train) and writes PREFIX-<arm>-<size>.tok; --bytes N learns
+//                                             on the file's first N bytes instead (N0, GENERATION_PLAN §13.3)
 //   baseline <enwik8> --out FILE              the byte model as `cyphalm_trie cls` builds it (wiki only): per-byte bits
 //                                             of the holdout for the trie and for trie + InfiniGram (λ on the first half)
 //   eval     <enwik8> <TOK> --baseline FILE [--order 5] [--cap 64] [--boot 2000] [--dump FILE]
@@ -416,7 +417,8 @@ int cmd_train(const std::vector<std::string>& a) {
     }
     const Config cfg;
     std::vector<std::uint8_t> data;
-    if (!read_corpus(a[1], cfg.train, data)) return 1;
+    const std::size_t nbytes = std::stoull(arg_value(a, "--bytes", std::to_string(cfg.train)));
+    if (!read_corpus(a[1], nbytes, data)) return 1;
     const double t0 = now_s();
     const Kind k = kind_from(arm);
     std::vector<Tokenizer> out;

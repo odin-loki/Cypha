@@ -15,6 +15,9 @@
 //       the match is 5 tokens or longer), --nucleus P and --no-repeat (the byte sampler's rules, lifted to tokens)
 //   check-t4b
 //       checks the lifted no-repeat rule against the byte rule, applied byte by byte, on random texts
+//   n0-encode | n0-score | n0-gen
+//       N0, the neural diagnostic (docs/GENERATION_PLAN.md §13.3): canonical token files, Kneser-Ney bits on a token
+//       file, and T4c's decoder over canonical tokens for Kneser-Ney or a neural arm on a pipe (see cmd_n0_gen)
 //   words <enwik8> <SAMPLE_FILE>...
 //       the invented-word rate of each sample file: the share of generated words (letter runs, lower case)
 //       that never occur in the training slice
@@ -43,6 +46,7 @@
 #include <numeric>
 #include <random>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace br = cypha::cyphalm::bridge;
@@ -655,6 +659,269 @@ int cmd_gen(const std::vector<std::string>& a) {
     return 0;
 }
 
+// ---------------------------------------------------------------- N0 (docs/GENERATION_PLAN.md §13.3)
+// The neural diagnostic's count arms (K5, K8: TOK-A's Kneser-Ney alone, T4c's model) and the one decoder every arm
+// shares. Token ids are uint16 files (the vocabulary is 8,192). Decoding is T4c's rule (sample_t4b with the nucleus
+// and the repeat ban) over canonical tokens: the prompt is encoded as the tokenizer encodes training text and the
+// draws continue from it, with no bridge (a neural arm has no exact byte marginal). The neural arms answer the
+// decoder's requests over a pipe (--pipe): for each step the decoder writes int32 n and n uint32 ids (the whole token
+// history) to stdout and reads V float64 probabilities from stdin. The instruments are never part of CyphaLM.
+std::vector<std::uint32_t> read_u16(const std::string& path) {
+    std::ifstream is(path, std::ios::binary);
+    if (!is) throw std::runtime_error("cannot read " + path);
+    is.seekg(0, std::ios::end);
+    const auto n = static_cast<std::size_t>(is.tellg()) / 2;
+    is.seekg(0);
+    std::vector<std::uint16_t> v(n);
+    is.read(reinterpret_cast<char*>(v.data()), static_cast<std::streamsize>(n * 2));
+    return {v.begin(), v.end()};
+}
+
+// n0-encode <TOK> <IN> <OUT.u16>: IN's bytes as canonical tokens. The text is cut after newlines into 64 pieces encoded
+// in parallel; pretokens never cross a newline's end, so this is the whole text's encoding (checked by --check).
+int cmd_n0_encode(const std::vector<std::string>& a) {
+    if (a.size() < 4) {
+        std::cerr << "usage: cyphalm_tok_gen n0-encode <TOK> <IN> <OUT.u16> [--check]\n";
+        return 2;
+    }
+    std::string text;
+    {
+        std::ifstream is(a[2], std::ios::binary);
+        text.assign(std::istreambuf_iterator<char>(is), {});
+    }
+    const std::size_t P = 64;
+    std::vector<std::size_t> cut{0};
+    for (std::size_t k = 1; k < P; ++k) {
+        std::size_t c = text.size() * k / P;
+        c = text.find('\n', std::max(c, cut.back()));
+        if (c == std::string::npos) break;
+        if (c + 1 > cut.back()) cut.push_back(c + 1);
+    }
+    cut.push_back(text.size());
+    std::vector<std::vector<std::uint32_t>> parts(cut.size() - 1);
+    std::vector<std::thread> th;
+    for (std::size_t k = 0; k + 1 < cut.size(); ++k)
+        th.emplace_back([&, k] {
+            const tk::Tokenizer t = tk::Tokenizer::load(a[1]);
+            t.encode(reinterpret_cast<const std::uint8_t*>(text.data()) + cut[k], cut[k + 1] - cut[k], parts[k]);
+        });
+    for (auto& x : th) x.join();
+    std::vector<std::uint16_t> out;
+    for (const auto& p : parts)
+        for (auto id : p) {
+            if (id > 65535) throw std::runtime_error("token id over 65535");
+            out.push_back(static_cast<std::uint16_t>(id));
+        }
+    if (std::find(a.begin(), a.end(), "--check") != a.end()) {
+        const tk::Tokenizer t = tk::Tokenizer::load(a[1]);
+        const std::vector<std::uint32_t> whole = t.encode(text);
+        const bool same = whole.size() == out.size() && std::equal(whole.begin(), whole.end(), out.begin());
+        std::printf("n0-encode check: parallel %s whole (%zu tokens)\n", same ? "equals" : "DIFFERS FROM", whole.size());
+        if (!same) return 1;
+    }
+    std::ofstream os(a[3], std::ios::binary);
+    os.write(reinterpret_cast<const char*>(out.data()), static_cast<std::streamsize>(out.size() * 2));
+    std::printf("n0-encode %s: %zu bytes, %zu tokens, %.4f bytes per token\n", a[2].c_str(), text.size(), out.size(),
+                static_cast<double>(text.size()) / static_cast<double>(out.size()));
+    return 0;
+}
+
+// n0-score <TRAIN.u16> <V> <K> <IDS.u16>: Kneser-Ney of order K counted on TRAIN; the total bits of IDS[1..), each
+// token given every token before it in IDS (the stream continues across pages; token 0 is skipped, as for every arm).
+int cmd_n0_score(const std::vector<std::string>& a) {
+    if (a.size() < 5) {
+        std::cerr << "usage: cyphalm_tok_gen n0-score <TRAIN.u16> <V> <K> <IDS.u16>\n";
+        return 2;
+    }
+    const auto tr = read_u16(a[1]);
+    const auto V = static_cast<std::uint32_t>(std::stoul(a[2]));
+    const int K = std::stoi(a[3]);
+    const double t0 = now_s();
+    const tk::KneserNey kn(tr.data(), tr.size(), V, K);
+    std::cerr << "KN order " << K << " on " << tr.size() << " tokens: " << static_cast<int>(now_s() - t0) << " s, "
+              << kn.bytes() / 1048576 << " MiB\n";
+    const auto ids = read_u16(a[4]);
+    std::vector<double> part(64, 0.0);
+    std::vector<std::thread> th;
+    for (std::size_t w = 0; w < 64; ++w)
+        th.emplace_back([&, w] {
+            for (std::size_t i = w + (w == 0 ? 64 : 0); i < ids.size(); i += 64) part[w] -= std::log2(kn.prob(ids.data(), i, ids[i]));
+        });
+    for (auto& x : th) x.join();
+    double bits = 0;
+    for (double x : part) bits += x;
+    std::printf("N0_SCORE order %d tokens %zu bits %.3f\n", K, ids.size() - 1, bits);
+    return 0;
+}
+
+// The model the decoder reads: Kneser-Ney in process, or the pipe to a neural arm.
+struct N0Model {
+    std::unique_ptr<tk::KneserNey> kn;
+    std::uint32_t V = 0;
+    void dist(const std::vector<std::uint32_t>& h, std::vector<double>& q) {
+        if (kn) {
+            kn->dist(h.data(), h.size(), q);
+            return;
+        }
+        const auto n = static_cast<std::int32_t>(h.size());
+        if (std::fwrite(&n, 4, 1, stdout) != 1 || std::fwrite(h.data(), 4, h.size(), stdout) != h.size() || std::fflush(stdout) != 0)
+            throw std::runtime_error("pipe write failed");
+        q.resize(V);
+        if (std::fread(q.data(), 8, V, stdin) != V) throw std::runtime_error("pipe read failed");
+    }
+};
+
+// T4c's draw (sample_t4b after healing), over canonical tokens: the same repeat ban, temperature, nucleus and draw.
+std::string n0_sample(N0Model& m, const tk::Tokenizer& tok, const std::string& prompt, std::size_t max_bytes, double T,
+                      double nucleus, bool no_repeat, std::mt19937_64& rng) {
+    std::vector<std::uint32_t> h = tok.encode(prompt);
+    std::string text = prompt;
+    const std::size_t V = m.V;
+    std::uniform_real_distribution<double> U(0.0, 1.0);
+    std::vector<double> q(V), p(V);
+    std::vector<int> order(V);
+    RepeatIndex rep;
+    if (no_repeat) rep.add_all(text);
+    while (text.size() < prompt.size() + max_bytes) {
+        m.dist(h, q);
+        double mass = 0;
+        for (int pass = 0; pass < 2 && !(mass > 0); ++pass) {
+            mass = 0;
+            for (std::size_t k = 0; k < V; ++k) {
+                double x = q[k] > 0 ? (T != 1.0 ? std::pow(q[k], 1.0 / T) : q[k]) : 0.0;
+                if (x > 0 && pass == 0 && no_repeat && rep.banned(text, tok.pieces[k])) x = 0;
+                mass += p[k] = x;
+            }
+        }
+        if (!(mass > 0)) break;
+        std::iota(order.begin(), order.end(), 0);
+        std::sort(order.begin(), order.end(), [&](int x, int y) { return p[static_cast<std::size_t>(x)] > p[static_cast<std::size_t>(y)]; });
+        double acc = 0, km = 0;
+        std::size_t keep = 1;
+        for (std::size_t k = 0; k < V; ++k) {
+            acc += p[static_cast<std::size_t>(order[k])] / mass;
+            keep = k + 1;
+            if (acc >= nucleus) break;
+        }
+        for (std::size_t k = 0; k < keep; ++k) km += p[static_cast<std::size_t>(order[k])];
+        double u = U(rng) * km;
+        int v = order[keep - 1];
+        for (std::size_t k = 0; k < keep; ++k)
+            if ((u -= p[static_cast<std::size_t>(order[k])]) <= 0) {
+                v = order[k];
+                break;
+            }
+        const std::size_t before = text.size();
+        h.push_back(static_cast<std::uint32_t>(v));
+        text.append(tok.pieces[static_cast<std::size_t>(v)]);
+        if (no_repeat) rep.add_from(text, before);
+    }
+    return text.substr(prompt.size());
+}
+
+// n0-gen <TOK> <OUT> --prompts-file F (--kn TRAIN.u16 --order K | --pipe) [--temps 0.8,1.0] [--bytes 600]
+//        [--nucleus 0.9] [--no-repeat] [--shard I/N] [--limit N]
+// GEN-A's harness for N0: PROMPT and GEN lines (kinds trie_T0.8, trie_T1.0, for SCRIBE's rungs), the seeds of
+// cmd_gen (1000003 (k + 1) + 7919 t), and OUT.cont.tsv: each human continuation's bits. The continuation is scored
+// on the canonical tokens of prompt + " " + continuation after their longest common prefix with the prompt's tokens;
+// "bytes" counts the bytes those tokens cover. --shard I/N does the prompts k with k mod N = I (seeds unchanged).
+int cmd_n0_gen(const std::vector<std::string>& a) {
+    const std::string pf = arg(a, "--prompts-file"), knf = arg(a, "--kn");
+    const bool pipe = std::find(a.begin(), a.end(), "--pipe") != a.end();
+    if (a.size() < 3 || pf.empty() || (knf.empty() == !pipe)) {
+        std::cerr << "usage: cyphalm_tok_gen n0-gen <TOK> <OUT> --prompts-file F (--kn TRAIN.u16 --order K | --pipe)\n"
+                     "       [--temps 0.8,1.0] [--bytes 600] [--nucleus 0.9] [--no-repeat] [--shard I/N] [--limit N]\n";
+        return 2;
+    }
+    if (pf.find("gen_prompts_test") != std::string::npos) {
+        std::cerr << "n0-gen: N0 reads the dev prompts only\n";
+        return 2;
+    }
+    const tk::Tokenizer tok = tk::Tokenizer::load(a[1]);
+    std::vector<double> temps;
+    {
+        std::stringstream ss(arg(a, "--temps", "0.8,1.0"));
+        std::string t;
+        while (std::getline(ss, t, ',')) temps.push_back(std::stod(t));
+    }
+    const std::size_t nbytes = std::stoull(arg(a, "--bytes", "600"));
+    const long limit = std::stol(arg(a, "--limit", "-1"));
+    const double nucleus = std::stod(arg(a, "--nucleus", "0.9"));
+    const bool no_repeat = std::find(a.begin(), a.end(), "--no-repeat") != a.end();
+    std::size_t si = 0, sn = 1;
+    if (const std::string s = arg(a, "--shard"); !s.empty()) {
+        si = std::stoull(s.substr(0, s.find('/')));
+        sn = std::stoull(s.substr(s.find('/') + 1));
+    }
+    std::vector<std::string> prompts, conts;
+    {
+        std::ifstream in(pf);
+        std::string line;
+        std::getline(in, line);
+        while (std::getline(in, line)) {
+            std::vector<std::string> f;
+            std::stringstream ss(line);
+            std::string x;
+            while (std::getline(ss, x, '\t')) f.push_back(x);
+            if (f.size() < 4) continue;
+            prompts.push_back(unescape_tsv(f[2]));
+            conts.push_back(" " + unescape_tsv(f[3]));
+        }
+    }
+    const std::size_t np = limit >= 0 ? std::min<std::size_t>(prompts.size(), static_cast<std::size_t>(limit)) : prompts.size();
+    const double t0 = now_s();
+    N0Model m;
+    m.V = static_cast<std::uint32_t>(tok.size());
+    std::string desc = "pipe";
+    if (!pipe) {
+        const auto tr = read_u16(knf);
+        const int K = std::stoi(arg(a, "--order", "5"));
+        m.kn = std::make_unique<tk::KneserNey>(tr.data(), tr.size(), m.V, K);
+        desc = "KN" + std::to_string(K);
+        std::cerr << "KN order " << K << " on " << tr.size() << " tokens: " << static_cast<int>(now_s() - t0) << " s, "
+                  << m.kn->bytes() / 1048576 << " MiB\n";
+    }
+    std::ofstream out(a[2]), ct(a[2] + ".cont.tsv");
+    if (!out || !ct) {
+        std::cerr << "cannot write " << a[2] << "\n";
+        return 1;
+    }
+    out << "MODEL\tn0\t" << a[1] << "\t" << desc << "\tsampling nucleus=" << nucleus << " no_repeat=" << (no_repeat ? 1 : 0)
+        << " canonical prompt tokens\n";
+    ct << "row\tbytes\tbits\n";
+    std::vector<double> q;
+    std::size_t done = 0;
+    for (std::size_t k = 0; k < np; ++k) {
+        if (k % sn != si) continue;
+        out << "PROMPT\t" << k << "\t" << printable(prompts[k]) << "\n";
+        for (std::size_t ti = 0; ti < temps.size(); ++ti) {
+            std::mt19937_64 rng(1000003ull * (k + 1) + ti * 7919ull);
+            const std::string text = n0_sample(m, tok, prompts[k], nbytes, temps[ti], nucleus, no_repeat, rng);
+            char kind[32];
+            std::snprintf(kind, sizeof kind, "trie_T%.1f", temps[ti]);
+            out << "GEN\t" << kind << "\t" << printable(text) << "\n";
+        }
+        const std::vector<std::uint32_t> hp = tok.encode(prompts[k]), hc = tok.encode(prompts[k] + conts[k]);
+        std::size_t L = 0;
+        while (L < hp.size() && L < hc.size() && hp[L] == hc[L]) ++L;
+        double bits = 0;
+        std::size_t covered = 0;
+        std::vector<std::uint32_t> h(hc.begin(), hc.begin() + static_cast<std::ptrdiff_t>(L));
+        for (std::size_t i = L; i < hc.size(); ++i) {
+            m.dist(h, q);
+            bits -= std::log2(q[hc[i]]);
+            covered += tok.pieces[hc[i]].size();
+            h.push_back(hc[i]);
+        }
+        ct << k << "\t" << covered << "\t" << bits << "\n";
+        out.flush();
+        ct.flush();
+        if (++done % 10 == 0) std::cerr << "prompt " << done << " (" << static_cast<int>(now_s() - t0) << " s)\n";
+    }
+    std::cerr << "n0-gen done: " << done << " prompts, " << static_cast<int>(now_s() - t0) << " s\n";
+    return 0;
+}
+
 int cmd_words(const std::vector<std::string>& a) {
     std::string data;
     if (a.size() < 3 || !read_prefix(a[1], kTrain, data)) {
@@ -714,6 +981,9 @@ int main(int argc, char** argv) {
         if (a[0] == "gen") return cmd_gen(a);
         if (a[0] == "check-t4b") return cmd_check_t4b();
         if (a[0] == "words") return cmd_words(a);
+        if (a[0] == "n0-encode") return cmd_n0_encode(a);
+        if (a[0] == "n0-score") return cmd_n0_score(a);
+        if (a[0] == "n0-gen") return cmd_n0_gen(a);
     } catch (const std::exception& e) {
         std::cerr << "error: " << e.what() << "\n";
         return 1;
