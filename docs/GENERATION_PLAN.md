@@ -391,3 +391,98 @@ CT0.1, CT0.2, CT0.5 (cloud, minutes)          CT0.4 clean corpora (PC script)   
 - Chen and Goodman (1999). An empirical study of smoothing techniques for language modeling. Computer Speech and Language.
 - Liu, Min, Zettlemoyer, Choi and Hajishirzi (2024). Infini-gram: scaling unbounded n-gram language models to a trillion tokens. COLM.
 - The repo's own reports: [GEN_TRACK](reports/GEN_TRACK.md), [GEN_B](reports/GEN_B_SENTENCE_GATE.md), [GEN_C](reports/GEN_C_TOPIC_CACHE.md), [GEN_E](reports/GEN_E_CONTENT_PLAN.md), [TEMPS](reports/TEMPS_BYTE_SAMPLER.md), [BYTE_KN](reports/BYTE_KN.md), [TOKENS_T0_T2](reports/TOKENS_T0_T2.md), [TOKENS_T3_T4](reports/TOKENS_T3_T4.md), [SCRIBE_V2](reports/SCRIBE_V2.md), [CYPHALM_1TB_MODEL](reports/CYPHALM_1TB_MODEL.md), [CYPHALM_VS_NEURAL_LM](reports/CYPHALM_VS_NEURAL_LM.md), [TOKENS_PLAN](TOKENS_PLAN.md).
+
+---
+
+## 13. Fuzzy matching: the neural diagnostic and the port (registered 2026-11-01, before any run)
+
+**Odin Loch** · 2026-11-01 · PLAN ledger 99
+
+### 13.1 Odin's rulings on §12
+
+1. **The gate stays as it is:** two independent 95% intervals. No paired gate for defaults.
+2. **Neural:** the NN plan below is approved ("Do it"). Small neural models are trained offline as instruments. The port may use a learned linear map at runtime (route 2) and states distilled offline from a neural model (route 3). No neural network runs inside CyphaLM. No Qwen.
+3. **The copy cap:** no generated run of more than 12 consecutive words verbatim from the training text, beside the copy-share rule.
+4. **RAM:** no hard budget, but keep it down. A change that adds memory is taken only for a big or medium win, meaning its registered gate is met. A near-tie that costs memory is dropped.
+5. Simple English Wikipedia: not decided yet.
+
+### 13.2 The idea
+
+Neural language models do fuzzy pattern matching. Each context becomes a learned state, and contexts with similar states get similar predictions, even when the words never occurred together. CyphaLM does exact matching: it needs the exact string, and when the string is unseen it drops the oldest byte.
+
+Our own results point the same way:
+- The 1 TB run saturates by about 1 GB, because exact long contexts are too rare to count.
+- The two biggest SCRIBE gains both share evidence across contexts: similar-context 0.014 → 0.061, Kneser–Ney 0.079 → 0.125.
+- In the earlier neural comparison, the neural models won on structure (punctuation, markup and spaces) and CyphaLM won on letters and copying.
+
+Fuzzy matching has two parts:
+- **similarity** (what counts as alike);
+- **a state** that carries the whole past (what the match is made on).
+
+N0 measures which part buys more text quality, so the port starts with the right one.
+
+### 13.3 N0: the diagnostic
+
+**Data (W1).** enwik9 bytes [100,000,000, 1,000,000,000), cleaned by SCRIBE's cleaner (`scribe docs`), one page per line.
+- A page is dropped if it holds any 32-byte span of a GEN-A dev or test continuation.
+- SCRIBE's regions and GEN-A's benchmark are in enwik8 (enwik9's first 100 MB), so they are out by construction.
+- **Train:** the first 128 MiB of clean prose. **Val:** the next 4 MiB, for early stopping only.
+
+**Tokens.** One BPE vocabulary with word boundaries, 8,192 tokens, learned by `cyphalm_tok` on the training text and shared by every arm.
+
+**Arms.**
+
+| Arm | Model | Context |
+|---|---|---|
+| K5 | Modified Kneser–Ney, order 5 (`cyphalm_tok_gen`, T4c's model) | 4 tokens |
+| K8 | The same, order 8 (control: counts with a longer window) | 7 tokens |
+| M5 | Feedforward net over the same 4 tokens (Bengio et al., 2003): embeddings 256, hidden 1,024, softmax over the vocabulary | 4 tokens |
+| TR | Transformer: 6 layers, d 384, 6 heads, pre-LN, tied embeddings, context 256 tokens | 256 tokens |
+
+M5 and TR each train on the same number of tokens (two passes over train), AdamW, cosine schedule. The best checkpoint is kept by val loss.
+
+**Decoding, the same for every arm.** T4c's decoder: nucleus 0.9 and the repeat ban, at T 1.0 and T 0.8. The same 250 GEN-A **dev** prompts, 600 bytes, fixed seeds. No test read: N0 changes no default.
+
+**Measures.**
+- SCRIBE v2, pooled and for each temperature, with intervals, and its axes (D_L, D_S, D_C, D_I);
+- surface S, invented words and mean length;
+- copy share against the 128 MiB training text, and the 12-word verbatim cap;
+- bits per byte on val and on the GEN-A dev continuations after their prompts. Every arm is scored in bytes: total bits divided by bytes.
+
+**What it settles.**
+- Δsim = M5 − K5 (SCRIBE pooled, dev): what similarity buys at the same window.
+- Δstate = TR − M5: what the long state buys.
+- Both come with a bootstrap over prompts, paired by prompt (a diagnostic, not a gate).
+- The larger one, if its interval excludes 0, is ported first. If neither does, the result is reported and the port waits for Odin.
+
+**What the instruments may not do.**
+- They are never part of CyphaLM, and never a default.
+- Their text is never training text.
+- They are deleted or archived after the report.
+
+**Predictions.**
+
+| # | Prediction | Falsified if |
+|---|---|---|
+| N1 | Bits per byte on val: M5 below K5 by at least 0.05; TR below M5 by at least 0.15 | either gap is smaller |
+| N2 | K8's SCRIBE is within ±0.02 of K5's: counts cannot use the longer window | outside |
+| N3 | M5's SCRIBE is at least K5's + 0.05, with D_S at least 15% lower | smaller |
+| N4 | TR's SCRIBE is at least M5's + 0.10, mostly from D_S and D_C | smaller |
+| N5 | TR's dev SCRIBE is in [0.30, 0.60] | outside |
+| N6 | Δstate > Δsim | Δsim ≥ Δstate |
+| N7 | The neural arms copy less than the count arms (32-byte copy share) | they copy as much or more |
+
+**Where, cost.** Odin's PC by script: data about 1 h, tokens and K5 / K8 about 1 h, M5 a few hours, TR 4–8 h, sampling and SCRIBE about 1 h. Outputs go to `D:\cypha_llm\nn_diag\`. Code goes on branch `wip/nn-diag` until it is reviewed.
+
+### 13.4 The port (registered when N0 is read)
+
+- **P1, similarity first** (if Δsim wins): fuzzy backoff at the word level.
+  - Back off from exact tokens to tags, classes and vectors, not only by dropping the oldest token (factored backoff, Bilmes and Kirchhoff, 2003).
+  - Find the nearest training positions by a count-derived state of the last few words: the similar-context expert, moved to words.
+- **P2, state first** (if Δstate wins): a running state of the whole past, and next tokens taken from the training positions whose state is nearest. The state is built from:
+  - a topic vector;
+  - an entity register;
+  - the part-of-speech and clause history.
+
+  It is either learned to predict (route 2: a linear map, e.g. CCA between past and future features) or distilled (route 3: TR's hidden states clustered into a few thousand discrete states, with transitions learned as counts).
+- **Either way:** exact matching stays for facts and copying, where it is better (rule 9: a fuzzy match blends facts). Fuzzy matching is for form.
