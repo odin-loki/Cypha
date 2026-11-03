@@ -6,10 +6,12 @@ Odin asked for Cypha to be reorganised into modules: online learning, classifica
 The native code is now grouped by what it does. Each module keeps its headers in `native/include/cypha/<module>/`, its
 sources in `native/src/<module>/` and its tools in `native/tools/<module>/`.
 
-Nothing else changed. The files were moved with `git mv`, so `git log --follow` shows each file's history. The
-outputs are the same: the build, the tests and a full `context8k` run match before and after. There is still one
-library, `cypha_core`. The modules are folders, not separate libraries. The C++ namespaces did not change either:
-the language model is still `cypha::cyphalm`, and the classifier types are still in `cypha`.
+The behaviour did not change. The files were moved with `git mv`, so `git log --follow` shows each file's history.
+The build, the tests and a full `context8k` run give the same results before and after. The libraries are the same
+as before (`cypha_core` and `cypha_bench_native`). The modules are folders, not separate libraries. The C++
+namespaces did not change with the folders. The language model is still `cypha::cyphalm`, the classifier is still in
+`cypha`, and the discovery-track headers now in `knowledge/` are still in `cypha::eval`. The one new namespace is
+`cypha::online`, for the content mixer.
 
 ---
 
@@ -73,9 +75,10 @@ The content mixer is `include/cypha/online/content_mixer.hpp`. It is header-only
 - **The hybrid-era code stays where it was.** That is `include/cypha/cyphalm/` (33 headers), `src/cyphalm/` (27
   sources) and 13 tools left in `native/tools/`: GRIA, the LSTM, the SSM and CellAI cells, the Hebbian layers, the NIG
   cells and the PGM cell. No target builds its sources. Its 12 tools build only with `CYPHA_BUILD_LEGACY_CYPHALM`,
-  which is off, and `kernel_llm_h04_smoke` has no build at all. So there is no `research` module. Some of these
-  headers are still read: `lm/cyphalm_model.hpp` includes `cyphalm/cyphalm_ewc_regularizer.hpp`, which brings in the
-  cell headers. If these models are built again, they can move to a `research` module.
+  which is off, and `kernel_llm_h04_smoke` has no build at all. So there is no `research` module. Nine of its headers
+  are still compiled, because `lm/cyphalm_model.hpp` includes `cyphalm/cyphalm_ewc_regularizer.hpp`, which brings in
+  the LSTM, GRIA, CellAI and Hebbian headers it names. None of its sources is. If these models are built again, they
+  can move to a `research` module.
 - **`tests/`** stays: the goldens, their driver `cypha_golden_run` (it came from `apps/`) and `rest_schema_contract`.
 - **`qt/`** (the Studio shell) stays.
 - **`forecast/`, `som/` and `semantics/`** were already modules. They keep their folders.
