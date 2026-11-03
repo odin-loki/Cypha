@@ -367,6 +367,7 @@ struct Args {
     bool no_gln = false;                          // context8k: --no-gln leaves the GLN out
     bool gln = false, gln_feedback = false;       // §13.15: sample --gln (off: it lowers SCRIBE); --gln-feedback
     std::string gln_mix = "lin", gln_clean;       // §13.16: sample's GLN mixing (lin, after, geo) and clean-prose text
+    std::string gln_load;                         // §13.17: a GLN trained at scale (gln-train), for context8k and sample
     double dk_plain = 0;                          // DK2: share of don't-know training turns with no token
     std::string fam_ent_at = "all";               // DK2: where --fam-ent's frames go (all | answer | start)
     bool copy_frame = false;                      // DK2: copy a frame's entity, not its end; the tag may repeat the message
@@ -455,6 +456,7 @@ Args parse(int argc, char** argv, int from) {
         else if (s == "--no-gln") a.no_gln = true;                // §13.15
         else if (s == "--gln-mix") a.gln_mix = next(), a.gln = true;     // §13.16
         else if (s == "--gln-clean") a.gln_clean = next(), a.gln = true; // §13.16
+        else if (s == "--gln-load") a.gln_load = next();                // §13.17
         else if (s == "--gln") a.gln = true;                      // §13.15
         else if (s == "--gln-feedback") a.gln = a.gln_feedback = true;  // §13.15
         else if (s == "--dk-plain") a.dk_plain = std::atof(next());  // DK2
@@ -1106,8 +1108,18 @@ int cmd_context8k(const Args& a) {
     if (!a.no_gln) {  // the default in context8k (§13.15, C3)
         cypha::online::BitwiseGLN::Params gp;
         gp.extra = a.gln_feedback ? 2 : 0;
-        cypha::online::BitwiseGLN gl(gp);
-        gl.pretrain(data.data(), kTrain);
+        std::unique_ptr<cypha::online::BitwiseGLN> glp;
+        if (!a.gln_load.empty()) {  // §13.17: trained at scale by gln-train; it keeps learning online over the holdout
+            glp = cypha::online::BitwiseGLN::load_file(a.gln_load, gp.extra);
+            if (!glp) {
+                std::cerr << "--gln-load: cannot read " << a.gln_load << " (or its feedback setting differs)\n";
+                return 2;
+            }
+        } else {
+            glp = std::make_unique<cypha::online::BitwiseGLN>(gp);
+            glp->pretrain(data.data(), kTrain);
+        }
+        cypha::online::BitwiseGLN& gl = *glp;
         pgln.resize(H);
         double lm = 8, lg = 8, gb = 0;
         for (std::size_t k = 0; k < H; ++k) {
@@ -1593,7 +1605,15 @@ int cmd_sample(const Args& a) {
         if (dt) ldoc = fit_doc(*dt, data.data(), cfg.train, half, pt);
         if (cps) lpl = mix_plan_into(*cps, frames, data.data(), cfg.train, half, pt);  // GEN-E: mixed last
         if (a.gln) {  // §13.15: the bitwise GLN after every expert, one lambda over the chain, fit on the first half
-            gln = std::make_unique<cypha::online::BitwiseGLN>(cypha::online::BitwiseGLN::Params{});
+            if (!a.gln_load.empty()) {  // §13.17: trained at scale by gln-train
+                gln = cypha::online::BitwiseGLN::load_file(a.gln_load);
+                if (!gln) {
+                    std::cerr << "--gln-load: cannot read " << a.gln_load << "\n";
+                    return 2;
+                }
+            } else {
+                gln = std::make_unique<cypha::online::BitwiseGLN>(cypha::online::BitwiseGLN::Params{});
+            }
             // §13.16 --gln-clean FILE: the GLN learns clean prose (its counts over the file, then online over its last
             // MiB, which trains the LSTM) and reads the holdout without learning, so it stays a model of prose.
             std::vector<std::uint8_t> clean;
@@ -1607,7 +1627,7 @@ int cmd_sample(const Args& a) {
                 gln->pretrain(clean.data(), clean.size());
                 for (std::size_t k = clean.size() - std::min<std::size_t>(clean.size(), 1u << 20); k < clean.size(); ++k)
                     gln->code(clean[k]);
-            } else {
+            } else if (a.gln_load.empty()) {
                 gln->pretrain(data.data(), cfg.train);
             }
             std::vector<double> pg(span);
@@ -6812,6 +6832,60 @@ void usage() {
 
 }  // namespace
 
+// §13.17 (Odin: "it hasn't been trained at scale"): gln-train TEXT OUT [--bytes N] [--tb N] [--online-mb N]. The GLN's
+// bit counts over the first N bytes of TEXT (all of it by default), at 2^tb slots per order (default 24), then the
+// whole network learning online over the last --online-mb MiB of those bytes (default 64): the LSTM, every neuron and
+// the APM. Saved to OUT, for context8k and sample --gln-load. Prints the online bits per byte, MiB by MiB.
+int cmd_gln_train(const std::vector<std::string>& args) {
+    if (args.size() < 2) {
+        std::cerr << "usage: cyphalm_trie gln-train TEXT OUT [--bytes N] [--tb N] [--online-mb N]\n";
+        return 2;
+    }
+    std::uint64_t limit = 0, online_mb = 64;
+    cypha::online::BitwiseGLN::Params p;
+    p.tb = 24;
+    for (std::size_t i = 2; i + 1 < args.size(); i += 2) {
+        if (args[i] == "--bytes") limit = std::strtoull(args[i + 1].c_str(), nullptr, 10);
+        else if (args[i] == "--tb") p.tb = std::atoi(args[i + 1].c_str());
+        else if (args[i] == "--online-mb") online_mb = std::strtoull(args[i + 1].c_str(), nullptr, 10);
+        else {
+            std::cerr << "gln-train: unknown " << args[i] << "\n";
+            return 2;
+        }
+    }
+    std::ifstream f(args[0], std::ios::binary);
+    if (!f) {
+        std::cerr << "gln-train: cannot read " << args[0] << "\n";
+        return 2;
+    }
+    f.seekg(0, std::ios::end);
+    std::uint64_t n = static_cast<std::uint64_t>(f.tellg());
+    if (limit && limit < n) n = limit;
+    f.seekg(0);
+    std::vector<std::uint8_t> text(static_cast<std::size_t>(n));
+    f.read(reinterpret_cast<char*>(text.data()), static_cast<std::streamsize>(n));
+    const auto t0 = std::chrono::steady_clock::now();
+    auto secs = [&] { return std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count(); };
+    cypha::online::BitwiseGLN g(p);
+    g.pretrain(text.data(), text.size());
+    std::cerr << "counts over " << n << " bytes at tb " << p.tb << " in " << secs() << " s\n";
+    const std::size_t on = std::min<std::size_t>(text.size(), static_cast<std::size_t>(online_mb) << 20);
+    double bits = 0;
+    for (std::size_t k = text.size() - on, j = 0; k < text.size(); ++k, ++j) {
+        bits += g.code(text[k]);
+        if ((j + 1) % (1u << 20) == 0) {
+            std::cout << "online MiB " << (j + 1) / (1u << 20) << " bpc " << bits / (1u << 20) << " (" << secs() << " s)\n" << std::flush;
+            bits = 0;
+        }
+    }
+    if (!g.save_file(args[1])) {
+        std::cerr << "gln-train: cannot write " << args[1] << "\n";
+        return 1;
+    }
+    std::cout << "saved " << args[1] << " (" << g.bytes() / 1e6 << " MB) after " << secs() << " s\n";
+    return 0;
+}
+
 int main(int argc, char** argv) {
     std::ios::sync_with_stdio(false);
     if (argc < 2) {
@@ -6821,6 +6895,7 @@ int main(int argc, char** argv) {
     const std::string cmd = argv[1];
     if (cmd == "selftest") return cmd_selftest();
     if (cmd == "simpair") return cmd_simpair(std::vector<std::string>(argv + 2, argv + argc));  // A4e
+    if (cmd == "gln-train") return cmd_gln_train(std::vector<std::string>(argv + 2, argv + argc));  // §13.17
     Args a = parse(argc, argv, 2);
     if (!a.ok) {
         usage();

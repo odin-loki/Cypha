@@ -1097,3 +1097,27 @@ None of this changes what the sampler writes. That needs the GLN and the online 
   - Read both its bits per byte alone and the 250-prompt SCRIBE with `geo` and `gate`.
   - Fit its writing lambda on clean prose, not on the raw holdout.
   - The registered rule above stays the test.
+
+### 13.17 The GLN trained on 1 GB (registered 2026-11-04, before the run; Odin's PC)
+
+**Odin:** "It hasn't been trained at scale. With the GLN the algorithm can scale." Then: "My PC is running. Run that test on 1 GB and check it." On the GPU: "They are slow. Don't use them yet." So it runs on the CPU only.
+
+**Tools** (`cyphalm_trie`, this change):
+- `gln-train TEXT OUT [--bytes N] [--tb N] [--online-mb N]` builds the GLN's bit counts over the first N bytes of TEXT, at 2^tb slots per order. The whole network (the LSTM, every neuron and the APM) then learns online over the last `--online-mb` MiB. The GLN is saved to OUT (format "GLN1").
+- `context8k --gln-load FILE` and `sample --gln-load FILE` read it instead of building the GLN from wiki train's 7 MiB.
+- The gates' fixed parts (the LSTM state and the extra values) are now dotted once per byte, not once per bit. The output is identical (1.9435 on the holdout) and 28% faster.
+
+**The run** (Odin's PC, one core per job):
+1. G1: `gln-train` over the first 1 GiB of the web text the 1 TB trie learned (no Wikipedia), `--tb 24 --online-mb 32`.
+2. Prediction: `context8k` as it is (the 7 MiB GLN), and `context8k --gln-load G1`, side by side.
+3. Writing, all 250 GEN-A dev prompts, SCRIBE v2: W0 (`sample`), `--gln-load G1 --gln-mix geo` and `--gln-load G1 --gln-mix gate`.
+
+**Rules:**
+- G1 becomes `context8k`'s GLN if its `online_final_bpc` is at least 0.005 below the 7 MiB GLN's on the same machine.
+- Writing: §13.16's rule. A GLN arm reconciles the two if its best temperature is at least W0's best minus 0.02.
+
+**Predictions:**
+- G1's online bits per byte, on its own last MiB of web text, end below 2.0.
+- On the enwik8 holdout, `gln_alone_bpc` is 1.80–1.95: web text is not Wikipedia, but the GLN keeps learning online over the holdout.
+- `online_final_bpc` falls by 0.005–0.015.
+- In writing, `geo` is non-inferior and `gate` is not.

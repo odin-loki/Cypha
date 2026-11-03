@@ -23,10 +23,34 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <fstream>
+#include <memory>
 #include <random>
+#include <string>
 #include <vector>
 
 namespace cypha::online {
+
+// Binary save and load of vectors and plain values (the GLN's file, "GLN1": a learned model can be trained once, at
+// scale, and read by every run, §13.17).
+namespace gln_io {
+template <class T>
+void put(std::ostream& o, const T& v) { o.write(reinterpret_cast<const char*>(&v), sizeof v); }
+template <class T>
+void get(std::istream& i, T& v) { i.read(reinterpret_cast<char*>(&v), sizeof v); }
+template <class T>
+void put_vec(std::ostream& o, const std::vector<T>& v) {
+    put(o, static_cast<std::uint64_t>(v.size()));
+    o.write(reinterpret_cast<const char*>(v.data()), static_cast<std::streamsize>(v.size() * sizeof(T)));
+}
+template <class T>
+void get_vec(std::istream& i, std::vector<T>& v) {
+    std::uint64_t n = 0;
+    get(i, n);
+    v.resize(static_cast<std::size_t>(n));
+    i.read(reinterpret_cast<char*>(v.data()), static_cast<std::streamsize>(v.size() * sizeof(T)));
+}
+}  // namespace gln_io
 
 inline double gln_squash(double x) { return 1.0 / (1.0 + std::exp(-std::clamp(x, -30.0, 30.0))); }
 inline double gln_stretch(double p) {
@@ -90,6 +114,26 @@ public:
     struct State {
         std::array<double, H> h, c;
     };
+    void write(std::ostream& o) const {
+        using namespace gln_io;
+        for (const auto* v : {&Em_, &W_, &b_, &Wo_, &bo_}) put_vec(o, *v);
+        for (const auto& v : m_) put_vec(o, v);
+        for (const auto& v : v_) put_vec(o, v);
+        put(o, t_);
+        put(o, h_);
+        put(o, c_);
+    }
+    void read(std::istream& i) {
+        using namespace gln_io;
+        for (auto* v : {&Em_, &W_, &b_, &Wo_, &bo_}) get_vec(i, *v);
+        for (auto& v : m_) get_vec(i, v);
+        for (auto& v : v_) get_vec(i, v);
+        get(i, t_);
+        get(i, h_);
+        get(i, c_);
+        buf_.clear();
+        cache_ = forward(32);  // a fresh read of a space after the stored state
+    }
     State save() const { return {h_, c_}; }
     // Restores the recurrent state (for writing: no learning happens between save and restore).
     void restore(const State& s) {
@@ -317,6 +361,36 @@ public:
         lstm_.restore(s.lstm);
     }
 
+    // The whole learned model, to a file and back (§13.17). load() returns false on a bad file.
+    bool save_file(const std::string& path) const {
+        using namespace gln_io;
+        std::ofstream o(path, std::ios::binary);
+        o.write("GLN1", 4);
+        put(o, p_);
+        for (int k = 0; k < kOrders; ++k) put_vec(o, n1_[k]), put_vec(o, n_[k]);
+        for (const auto* v : {&H1_, &H2_, &W1_, &W2_, &W3_, &apm_}) put_vec(o, *v);
+        put(o, hist_);
+        lstm_.write(o);
+        return static_cast<bool>(o);
+    }
+    static std::unique_ptr<BitwiseGLN> load_file(const std::string& path, int extra = 0) {
+        using namespace gln_io;
+        std::ifstream i(path, std::ios::binary);
+        char magic[4] = {0, 0, 0, 0};
+        i.read(magic, 4);
+        if (!i || std::memcmp(magic, "GLN1", 4) != 0) return nullptr;
+        Params p;
+        get(i, p);
+        if (p.extra != extra) return nullptr;  // the side vector's size is fixed by the stored half-spaces
+        auto g = std::make_unique<BitwiseGLN>(p);
+        for (int k = 0; k < kOrders; ++k) get_vec(i, g->n1_[k]), get_vec(i, g->n_[k]);
+        for (auto* v : {&g->H1_, &g->H2_, &g->W1_, &g->W2_, &g->W3_, &g->apm_}) get_vec(i, *v);
+        get(i, g->hist_);
+        g->lstm_.read(i);
+        return i ? std::move(g) : nullptr;
+    }
+    const Params& params() const { return p_; }
+
     std::size_t bytes() const {
         return 2 * kOrders * (std::size_t{1} << p_.tb) * sizeof(std::uint16_t) +
                (H1_.size() + H2_.size() + W1_.size() + W2_.size() + W3_.size() + apm_.size()) * sizeof(double);
@@ -326,7 +400,9 @@ private:
     struct Ctx {
         std::uint64_t hh[kOrders];
         double cum[257];
-        std::vector<double> z;  // side vector: LSTM state, then inputs (filled per bit), then extra
+        std::vector<double> z;   // side vector: LSTM state, then inputs (filled per bit), then extra
+        std::vector<double> g1;  // each layer-1 half-space's dot with the parts of z fixed for the byte (state, extra)
+        std::vector<double> g2;  // the same for layer 2
     };
     struct Fwd {
         std::size_t keys[kOrders];
@@ -358,6 +434,19 @@ private:
             std::copy(lstm_.h().begin(), lstm_.h().end(), cx.z.begin());
         }
         std::copy(extra_.begin(), extra_.end(), cx.z.end() - p_.extra);
+        // The LSTM state and the extra values are fixed for the whole byte; only the K inputs change bit by bit. So each
+        // half-space's dot with the fixed parts is taken once here, and bit_p adds the inputs' part (about 9x less work).
+        const int off = p_.lstm ? ByteLSTM::H : 0;
+        auto fixed_dot = [&](const double* hp) {
+            double s = 0;
+            for (int d = 0; d < off; ++d) s += hp[d] * cx.z[static_cast<std::size_t>(d)];
+            for (int d = off + K_; d < D_; ++d) s += hp[d] * cx.z[static_cast<std::size_t>(d)];
+            return s;
+        };
+        cx.g1.resize(static_cast<std::size_t>(p_.neurons) * p_.hs);
+        for (std::size_t q = 0; q < cx.g1.size(); ++q) cx.g1[q] = fixed_dot(&H1_[q * D_]);
+        cx.g2.resize(8);
+        for (std::size_t q = 0; q < 8; ++q) cx.g2[q] = fixed_dot(&H2_[q * D_]);
         return cx;
     }
 
@@ -375,14 +464,13 @@ private:
             f.x[q++] = gln_stretch((cx.cum[hi] - cx.cum[mid]) / std::max(tot, 1e-12));
         }
         f.x[q] = 1.0;
-        for (int k = 0; k < K; ++k) cx.z[static_cast<std::size_t>(off + k)] = f.x[k];
-        const double* z = cx.z.data();
         for (int n = 0; n < N; ++n) {
             int g = 0;
             for (int m = 0; m < p_.hs; ++m) {
-                const double* hp = &H1_[(static_cast<std::size_t>(n) * p_.hs + m) * D_];
-                double s = 0;
-                for (int d = 0; d < D_; ++d) s += hp[d] * z[d];
+                const std::size_t q = static_cast<std::size_t>(n) * p_.hs + m;
+                const double* hp = &H1_[q * D_ + off];
+                double s = cx.g1[q];
+                for (int k = 0; k < K; ++k) s += hp[k] * f.x[k];
                 if (s > 0) g |= 1 << m;
             }
             f.g1[n] = g;
@@ -396,9 +484,10 @@ private:
         for (int i = 0; i < 4; ++i) {
             int g = 0;
             for (int m = 0; m < 2; ++m) {
-                const double* hp = &H2_[(static_cast<std::size_t>(i) * 2 + m) * D_];
-                double s = 0;
-                for (int d = 0; d < D_; ++d) s += hp[d] * z[d];
+                const std::size_t q = static_cast<std::size_t>(i) * 2 + m;
+                const double* hp = &H2_[q * D_ + off];
+                double s = cx.g2[q];
+                for (int k = 0; k < K; ++k) s += hp[k] * f.x[k];
                 if (s > 0) g |= 1 << m;
             }
             f.g2[i] = g;
