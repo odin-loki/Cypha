@@ -1001,3 +1001,14 @@ None of this changes what the sampler writes. That needs the GLN and the online 
 - W0: `sample` as it is. W1: `sample --gln`. GEN-A dev's first 10 prompts, T 0.6, 0.8 and 1.0, scored by SCRIBE v2 (GEN_TRACK's ladder).
 - **Rule:** a screen. The GLN goes to all 250 dev prompts if W1's best temperature beats W0's best by at least 0.03 SCRIBE on these 10 prompts.
 - **Prediction:** no gain (the difference is under 0.03). The GLN helps prediction most where the text is most predictable, and smoothing in a fifth model's mass is what has lowered SCRIBE before (§13.11).
+
+**Writing screen result** (2026-11-03, this container). SCRIBE v2 on GEN-A dev's first 10 prompts, by temperature:
+
+| Arm | T 0.6 | T 0.8 | T 1.0 | Surface S at T 0.6 |
+|---|---:|---:|---:|---:|
+| W0: `sample` | **0.256** [0.112, 0.425] | 0.075 | 0.032 | 0.937 |
+| W1: `sample --gln` (lambda 0.245) | 0.020 [0.008, 0.034] | 0.031 | 0.065 | 0.928 |
+
+- The GLN makes the writing much worse: the best arm falls from 0.256 to 0.065. By the rule it does not go to the 250 prompts, and `sample` stays without it. The prediction (no gain) was right in direction but too mild.
+- It pulls the text into markup. It learned on raw enwik8, XML and all, and one lambda gives it a quarter of the mass at every byte. Prompt 0 at T 0.6 with it: "The and [[Protestant and have been contributor>\n <comment>*</comment>\n <text xml:space="preserve">{{Otherusesabout|…".
+- So the GLN stays in prediction (`context8k --gln`) and out of writing. Two ways it could enter writing later, each to be registered: learn on clean prose (SCRIBE's cleaner) rather than raw enwik8; and a lambda per position class (word starts, inside words) learned for writing, as §13.14 asks.
