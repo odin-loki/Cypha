@@ -981,3 +981,23 @@ So in four of six stages a few bytes set the step size for the rest of the strea
 **Predictions** (from the dump): C1 near 1.669; C2 near 1.654; C3 and C4 near 1.62; C5 near 1.643.
 
 None of this changes what the sampler writes. That needs the GLN and the online mixer in `sample`, and a SCRIBE test on GEN-A dev.
+
+**The GLN replicates in C++, and the loop adds nothing** (`gln_mix.py` on the C++ GLN's output, same bytes):
+
+| Arm | Bits per byte | Against [95%] |
+|---|---:|---|
+| M0: the online chain (exponentiated gradient, short copies on) | 1.6692 | the frozen chain 1.6979: −0.0287 [−0.0356, −0.0224] |
+| M1: M0 plus the GLN stage | 1.6425 | M0: **−0.0267 [−0.0308, −0.0227]** |
+| M2: M0 plus the final layer | 1.6538 | M0: −0.0154 [−0.0169, −0.0139] |
+| M3: M1 plus the final layer, the GLN an input | **1.6198** | M2: **−0.0341 [−0.0400, −0.0288]** |
+| M4: M3 with the mixer's feedback into the GLN | 1.6197 | M3: −0.0001 [−0.0003, +0.0001] |
+
+- By the rule, the GLN goes into C++ as a chain stage (M1 − M0 is far below −0.005). The registered read on Python's GLNB follows when its stream finishes.
+- Against today's default (the frozen chain), M3 is −0.078 bits per byte.
+- The feedback loop does not help: the GLN already sees the same text the mixer sees. It stays a flag (`--gln-feedback`), off.
+- The predictions were too small: M1 − M0 was predicted at −0.005 to −0.015 and is −0.027; M3 − M2 was predicted at −0.005 and is −0.034. M4 − M3 (predicted at most −0.002) is 0.
+
+**Does it write better? The writing screen** (registered before the run). `cyphalm_trie sample --gln` mixes the GLN's whole byte distribution in last, with one lambda fit on the holdout's first half over the sampler's own chain. For each prompt the GLN reads the prompt and every byte written, learning nothing, and returns to its state after.
+- W0: `sample` as it is. W1: `sample --gln`. GEN-A dev's first 10 prompts, T 0.6, 0.8 and 1.0, scored by SCRIBE v2 (GEN_TRACK's ladder).
+- **Rule:** a screen. The GLN goes to all 250 dev prompts if W1's best temperature beats W0's best by at least 0.03 SCRIBE on these 10 prompts.
+- **Prediction:** no gain (the difference is under 0.03). The GLN helps prediction most where the text is most predictable, and smoothing in a fifth model's mass is what has lowered SCRIBE before (§13.11).

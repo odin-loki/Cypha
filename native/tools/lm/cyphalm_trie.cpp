@@ -784,7 +784,7 @@ std::string sample_with_class(const PackedModel& model, const double w[6], std::
                               const DocTopic* dt = nullptr, const std::vector<std::vector<double>>* ldoc = nullptr,
                               const ContentPlanStore::Plan* pl = nullptr, const double* lpl = nullptr,
                               const cypha::cyphalm::bkn::ByteKN* kn = nullptr, const double* lkn = nullptr,
-                              bool kn_replace = false);
+                              bool kn_replace = false, cypha::online::BitwiseGLN* gln = nullptr, double lgln = 0);
 void sample_mix(const PackedModel& model, const double w[6], std::size_t limit, const ClassContext* cc, const double* lam,
                 const std::vector<std::uint8_t>& seq, const SimilarContext* sc, const double* lsm, const double* lcp,
                 double M[256], const cypha::cyphalm::bkn::ByteKN* kn = nullptr, const double* lkn = nullptr,
@@ -1547,6 +1547,8 @@ int cmd_sample(const Args& a) {
     const auto dt = make_doc(a.doc, data.data(), cfg.train, rc);  // GEN-C: nullptr without --doc
     if (rc) return rc;
     double lsm[SimilarContext::kBuckets] = {0};
+    std::unique_ptr<cypha::online::BitwiseGLN> gln;  // §13.15: --gln
+    double lgln = 0;
     std::vector<double> lcl, lcp, lpl;
     std::vector<std::vector<double>> ldoc;
     if (cc || sc || !a.no_copy || dt || cps || kn) {
@@ -1580,8 +1582,17 @@ int cmd_sample(const Args& a) {
         if (!a.no_copy) lcp = mix_copy_into(data.data(), cfg.train, half, a.copy_min, pt);
         if (dt) ldoc = fit_doc(*dt, data.data(), cfg.train, half, pt);
         if (cps) lpl = mix_plan_into(*cps, frames, data.data(), cfg.train, half, pt);  // GEN-E: mixed last
+        if (a.gln) {  // §13.15: the bitwise GLN after every expert, one lambda over the chain, fit on the first half
+            gln = std::make_unique<cypha::online::BitwiseGLN>(cypha::online::BitwiseGLN::Params{});
+            gln->pretrain(data.data(), cfg.train);
+            std::vector<double> pg(span);
+            for (std::size_t k = 0; k < span; ++k) pg[k] = std::exp2(-gln->code(data[cfg.train + k]));
+            const std::vector<int> one(span, 0);
+            fit_lambdas(pg, pt, one, half, 1, &lgln);
+            std::cerr << "gln lambda " << lgln << " (" << gln->bytes() / 1e6 << " MB)\n";
+        }
     }
-    const bool experts = cc || sc || !lcp.empty() || dt || cps || kn;
+    const bool experts = cc || sc || !lcp.empty() || dt || cps || kn || gln;
     std::string model_line = std::string("MODEL\ttrie") + (kn ? (kn_rep ? "=bkn" : "+bkn") : "") + (cc ? "+cls" : "") + (sc ? "+sim" : "") + (lcp.empty() ? "" : "+copy") +
                              "\t" + (sc ? (a.sims.empty() ? std::string("default") : a.sims[0]) : std::string("-"));
     if (cc) model_line += "\tcls=" + default_cls_spec(a);
@@ -1590,6 +1601,7 @@ int cmd_sample(const Args& a) {
     if (cps) model_line += "\tplan=" + a.plan;
     if (kn) model_line += "\tbkn=" + a.bkn + ":" + a.bkn_way;  // BKN
     if (gate.k > 0) model_line += "\tgate=" + a.gate;  // GEN-B
+    if (gln) model_line += "\tgln=" + std::to_string(lgln);  // §13.15
     if (!a.temps.empty()) model_line += "\ttemps=" + a.temps;  // TEMPS
     std::vector<std::vector<std::string>> gens(nt);  // GEN-A: the generated texts by temperature (--prompts-file)
     std::vector<int> planned(nfiles, 0);
@@ -1631,7 +1643,7 @@ int cmd_sample(const Args& a) {
                                                   seed32, sc.get(), lsm, temps[ti], lcp.empty() ? nullptr : lcp.data(),
                                                   dt.get(), dt ? &ldoc : nullptr, plan.facts.empty() ? nullptr : &plan,
                                                   lpl.empty() ? nullptr : lpl.data(), kn.get(), lkn.empty() ? nullptr : lkn.data(),
-                                                  kn_rep)
+                                                  kn_rep, gln.get(), lgln)
                               : sample_continuation(pm, w, p, cfg.train, a.bytes, seed32, opt);
                 gen_bytes += text.size();
                 out << "GEN\ttrie_T" << temp_label(temps[ti]) << "\t" << printable(text) << "\n";
@@ -2459,8 +2471,14 @@ std::string sample_with_class(const PackedModel& model, const double w[6], std::
                               const double* lcp = nullptr, const DocTopic* dt,
                               const std::vector<std::vector<double>>* ldoc, const ContentPlanStore::Plan* pl,
                               const double* lpl, const cypha::cyphalm::bkn::ByteKN* kn, const double* lkn,
-                              bool kn_replace) {
+                              bool kn_replace, cypha::online::BitwiseGLN* gln, double lgln) {
     std::vector<std::uint8_t> seq(prompt.begin(), prompt.end());
+    // §13.15: the GLN reads the prompt and every byte written (learning nothing), and comes back to its state after.
+    cypha::online::BitwiseGLN::State gst{};
+    if (gln) {
+        gst = gln->save();
+        for (const std::uint8_t b : seq) gln->code(b, false);
+    }
     std::string gen_folded;  // GEN-E: the generated text, folded, for the plan's "expressed" test
     std::vector<int> active;
     std::mt19937 rng(seed);
@@ -2493,11 +2511,18 @@ std::string sample_with_class(const PackedModel& model, const double w[6], std::
                 for (int s = 0; s < 256; ++s) M[s] = l * P[s] + (1 - l) * M[s];
             }
         }
+        if (gln) {  // §13.15: the bitwise GLN, last, its whole byte distribution
+            double G[256];
+            gln->byte_dist(G);
+            for (int s = 0; s < 256; ++s) M[s] = lgln * G[s] + (1 - lgln) * M[s];
+        }
         const int pick = pick_byte(M, seq, temperature, rng, U);
         seq.push_back(static_cast<std::uint8_t>(pick));
         ContentPlanStore::fold_into(gen_folded, static_cast<unsigned char>(pick));
         if (ds) ds->feed(static_cast<std::uint8_t>(pick));
+        if (gln) gln->code(static_cast<std::uint8_t>(pick), false);
     }
+    if (gln) gln->restore(gst);
     return std::string(seq.begin() + static_cast<std::ptrdiff_t>(prompt.size()), seq.end());
 }
 
