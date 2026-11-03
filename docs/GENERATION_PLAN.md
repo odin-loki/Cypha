@@ -1035,3 +1035,26 @@ None of this changes what the sampler writes. That needs the GLN and the online 
 **The new default of `context8k`** reports 1.6214 bits per byte, against 1.6979 before: −0.0765. `--frozen-mix --no-online-final --no-gln` gives the old lines. `qa`, `sample` and every answer are unchanged. `glnx_prep.sh` passes those three flags, so the dump keeps the frozen chain's columns.
 
 **What did not change: writing.** The sampler still reads the frozen chain, without the GLN, because the GLN lowered SCRIBE (above). Odin asked for "online on every part". The online parts now cover prediction. For writing, online learning still has to be shown to help on GEN-A, as §13.14 asks.
+
+### 13.16 Reconciling the GLN with the sampler (registered 2026-11-03, before the runs)
+
+**Odin:** "The GLN shouldn't drop SCRIBE. It hasn't been trained at scale. With the GLN the algorithm can scale. Find a way to reconcile the GLN and the change that gave the +2 to SCRIBE without the GLN. They are incompatible." Then: "Find some simple but elegant way to reconcile them. Do a google search."
+
+**The clash.** Temperature 0.6 is what lifts the byte sampler: on the screen's 10 prompts, 0.032 at T 1.0 becomes 0.256 at T 0.6. With the GLN it does the opposite: 0.065 at T 1.0 becomes 0.020 at T 0.6.
+- The GLN reads 5 bytes and a small LSTM, so it is sometimes confidently wrong. After "contributor" it puts most of its mass on ">", because in raw enwik8 the word mostly sits in XML headers.
+- Mixed in linearly with a quarter of the weight, that one peak can outrank the chain's mass spread over good words.
+- Temperature 0.6 raises every probability to the power 1/0.6, which sharpens that peak until it wins. Nucleus 0.9 then keeps it.
+
+**The fix from the literature.** Contrastive decoding (Li et al., 2023) uses an *adaptive plausibility constraint*: the strong model says which tokens are possible, namely those with at least α (0.1) of its top token's probability, and only those are scored. DExperts (Liu et al., 2021) combines models as a product of experts, so a token needs every expert's support. Both stop a weaker model from putting mass where the strong one says no. Here the strong model is the chain, which writes well at T 0.6; the GLN is the one that learns and scales.
+
+**Arms** (`sample --gln-mix MODE`, GEN-A dev's first 10 prompts, the screen's seeds, T 0.6, 0.8 and 1.0, SCRIBE v2):
+- R1 `after`: the temperature sharpens the chain only, then the GLN is mixed in at its lambda.
+- R2 `geo`: a product of experts, chain^(1 − λ) × GLN^λ, then the temperature.
+- R3 `gate`: the plausibility constraint. Candidates are the bytes the chain gives at least 0.1 of its top byte; the GLN and the chain mix inside that set; then the temperature. α = 0.1 is the paper's value, not tuned.
+- R4 `gate` with `--gln-clean`: the GLN learns clean prose instead of raw enwik8. Its counts come from the 7 MB of SCRIBE-cleaned enwik8 that K5 used, then it learns online over that text's last MiB, then reads the holdout without learning.
+- R5 `geo` with `--gln-clean`.
+- References, same prompts and seeds: W0 (no GLN) 0.256 at T 0.6; W1 (`lin`) 0.065 at best.
+
+**Rule.** An arm reconciles the two if its best temperature scores at least W0's best minus 0.03 (≥ 0.226) while the GLN is in. The best such arm goes to all 250 dev prompts against W0. It becomes the sampler's default only on that read's rules (GEN_TRACK: dev SCRIBE with 95% intervals, copy share within the limit).
+
+**Predictions.** R3 (`gate`) reconciles them: 0.22–0.30 at T 0.6. R2 (`geo`) is above W1 but below W0. R1 (`after`) stays near W1. Clean prose (R4, R5) adds at least 0.02 to its pair.

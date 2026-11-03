@@ -366,6 +366,7 @@ struct Args {
     bool online_final = true;                     // GLNX: one online gated mixer over every stage, after the chain
     bool no_gln = false;                          // context8k: --no-gln leaves the GLN out
     bool gln = false, gln_feedback = false;       // §13.15: sample --gln (off: it lowers SCRIBE); --gln-feedback
+    std::string gln_mix = "lin", gln_clean;       // §13.16: sample's GLN mixing (lin, after, geo) and clean-prose text
     double dk_plain = 0;                          // DK2: share of don't-know training turns with no token
     std::string fam_ent_at = "all";               // DK2: where --fam-ent's frames go (all | answer | start)
     bool copy_frame = false;                      // DK2: copy a frame's entity, not its end; the tag may repeat the message
@@ -452,6 +453,8 @@ Args parse(int argc, char** argv, int from) {
         else if (s == "--frozen-mix") a.online_mix = false;       // §13.15: the frozen chain lines
         else if (s == "--no-online-final") a.online_final = false;  // §13.15
         else if (s == "--no-gln") a.no_gln = true;                // §13.15
+        else if (s == "--gln-mix") a.gln_mix = next(), a.gln = true;     // §13.16
+        else if (s == "--gln-clean") a.gln_clean = next(), a.gln = true; // §13.16
         else if (s == "--gln") a.gln = true;                      // §13.15
         else if (s == "--gln-feedback") a.gln = a.gln_feedback = true;  // §13.15
         else if (s == "--dk-plain") a.dk_plain = std::atof(next());  // DK2
@@ -790,7 +793,8 @@ std::string sample_with_class(const PackedModel& model, const double w[6], std::
                               const DocTopic* dt = nullptr, const std::vector<std::vector<double>>* ldoc = nullptr,
                               const ContentPlanStore::Plan* pl = nullptr, const double* lpl = nullptr,
                               const cypha::cyphalm::bkn::ByteKN* kn = nullptr, const double* lkn = nullptr,
-                              bool kn_replace = false, cypha::online::BitwiseGLN* gln = nullptr, double lgln = 0);
+                              bool kn_replace = false, cypha::online::BitwiseGLN* gln = nullptr, double lgln = 0,
+                              int gmode = 0);
 void sample_mix(const PackedModel& model, const double w[6], std::size_t limit, const ClassContext* cc, const double* lam,
                 const std::vector<std::uint8_t>& seq, const SimilarContext* sc, const double* lsm, const double* lcp,
                 double M[256], const cypha::cyphalm::bkn::ByteKN* kn = nullptr, const double* lkn = nullptr,
@@ -1590,9 +1594,24 @@ int cmd_sample(const Args& a) {
         if (cps) lpl = mix_plan_into(*cps, frames, data.data(), cfg.train, half, pt);  // GEN-E: mixed last
         if (a.gln) {  // §13.15: the bitwise GLN after every expert, one lambda over the chain, fit on the first half
             gln = std::make_unique<cypha::online::BitwiseGLN>(cypha::online::BitwiseGLN::Params{});
-            gln->pretrain(data.data(), cfg.train);
+            // §13.16 --gln-clean FILE: the GLN learns clean prose (its counts over the file, then online over its last
+            // MiB, which trains the LSTM) and reads the holdout without learning, so it stays a model of prose.
+            std::vector<std::uint8_t> clean;
+            if (!a.gln_clean.empty()) {
+                std::ifstream cf(a.gln_clean, std::ios::binary);
+                clean.assign(std::istreambuf_iterator<char>(cf), std::istreambuf_iterator<char>());
+                if (clean.size() < 4096) {
+                    std::cerr << "--gln-clean: cannot read " << a.gln_clean << "\n";
+                    return 2;
+                }
+                gln->pretrain(clean.data(), clean.size());
+                for (std::size_t k = clean.size() - std::min<std::size_t>(clean.size(), 1u << 20); k < clean.size(); ++k)
+                    gln->code(clean[k]);
+            } else {
+                gln->pretrain(data.data(), cfg.train);
+            }
             std::vector<double> pg(span);
-            for (std::size_t k = 0; k < span; ++k) pg[k] = std::exp2(-gln->code(data[cfg.train + k]));
+            for (std::size_t k = 0; k < span; ++k) pg[k] = std::exp2(-gln->code(data[cfg.train + k], clean.empty()));
             const std::vector<int> one(span, 0);
             fit_lambdas(pg, pt, one, half, 1, &lgln);
             std::cerr << "gln lambda " << lgln << " (" << gln->bytes() / 1e6 << " MB)\n";
@@ -1607,7 +1626,12 @@ int cmd_sample(const Args& a) {
     if (cps) model_line += "\tplan=" + a.plan;
     if (kn) model_line += "\tbkn=" + a.bkn + ":" + a.bkn_way;  // BKN
     if (gate.k > 0) model_line += "\tgate=" + a.gate;  // GEN-B
-    if (gln) model_line += "\tgln=" + std::to_string(lgln);  // §13.15
+    if (gln) model_line += "\tgln=" + std::to_string(lgln) + ":" + a.gln_mix + (a.gln_clean.empty() ? "" : ":clean");  // §13.15-16
+    const int gmode = a.gln_mix == "gate" ? 3 : a.gln_mix == "geo" ? 2 : a.gln_mix == "after" ? 1 : 0;
+    if (a.gln_mix != "lin" && a.gln_mix != "after" && a.gln_mix != "geo" && a.gln_mix != "gate") {
+        std::cerr << "--gln-mix lin|after|geo|gate\n";
+        return 2;
+    }
     if (!a.temps.empty()) model_line += "\ttemps=" + a.temps;  // TEMPS
     std::vector<std::vector<std::string>> gens(nt);  // GEN-A: the generated texts by temperature (--prompts-file)
     std::vector<int> planned(nfiles, 0);
@@ -1649,7 +1673,7 @@ int cmd_sample(const Args& a) {
                                                   seed32, sc.get(), lsm, temps[ti], lcp.empty() ? nullptr : lcp.data(),
                                                   dt.get(), dt ? &ldoc : nullptr, plan.facts.empty() ? nullptr : &plan,
                                                   lpl.empty() ? nullptr : lpl.data(), kn.get(), lkn.empty() ? nullptr : lkn.data(),
-                                                  kn_rep, gln.get(), lgln)
+                                                  kn_rep, gln.get(), lgln, gmode)
                               : sample_continuation(pm, w, p, cfg.train, a.bytes, seed32, opt);
                 gen_bytes += text.size();
                 out << "GEN\ttrie_T" << temp_label(temps[ti]) << "\t" << printable(text) << "\n";
@@ -2477,7 +2501,7 @@ std::string sample_with_class(const PackedModel& model, const double w[6], std::
                               const double* lcp = nullptr, const DocTopic* dt,
                               const std::vector<std::vector<double>>* ldoc, const ContentPlanStore::Plan* pl,
                               const double* lpl, const cypha::cyphalm::bkn::ByteKN* kn, const double* lkn,
-                              bool kn_replace, cypha::online::BitwiseGLN* gln, double lgln) {
+                              bool kn_replace, cypha::online::BitwiseGLN* gln, double lgln, int gmode) {
     std::vector<std::uint8_t> seq(prompt.begin(), prompt.end());
     // §13.15: the GLN reads the prompt and every byte written (learning nothing), and comes back to its state after.
     cypha::online::BitwiseGLN::State gst{};
@@ -2517,12 +2541,32 @@ std::string sample_with_class(const PackedModel& model, const double w[6], std::
                 for (int s = 0; s < 256; ++s) M[s] = l * P[s] + (1 - l) * M[s];
             }
         }
+        double temp = temperature;
         if (gln) {  // §13.15: the bitwise GLN, last, its whole byte distribution
             double G[256];
             gln->byte_dist(G);
-            for (int s = 0; s < 256; ++s) M[s] = lgln * G[s] + (1 - lgln) * M[s];
+            if (gmode == 3) {  // §13.16 gate: the chain says what is possible, the GLN reranks inside that set. Candidates
+                // are bytes the chain gives at least 0.1 of its top byte (Li et al. 2023's adaptive plausibility constraint),
+                // so the GLN can never bring in a byte the chain finds implausible; the temperature then applies as usual.
+                double mx = 0, z = 0;
+                for (int s = 0; s < 256; ++s) mx = std::max(mx, M[s]);
+                for (int s = 0; s < 256; ++s) z += M[s] = M[s] >= 0.1 * mx ? lgln * G[s] + (1 - lgln) * M[s] : 0.0;
+                for (int s = 0; s < 256; ++s) M[s] /= z;
+            } else if (gmode == 2) {  // §13.16 geo: M^(1 - lambda) G^lambda, so a byte needs both to agree
+                double z = 0;
+                for (int s = 0; s < 256; ++s)
+                    z += M[s] = std::exp((1 - lgln) * std::log(std::max(M[s], 1e-300)) + lgln * std::log(std::max(G[s], 1e-300)));
+                for (int s = 0; s < 256; ++s) M[s] /= z;
+            } else if (gmode == 1) {  // §13.16 after: the temperature sharpens the chain only, then the GLN is mixed in
+                double z = 0;
+                for (int s = 0; s < 256; ++s) z += M[s] = std::pow(M[s], 1.0 / temperature);
+                for (int s = 0; s < 256; ++s) M[s] = lgln * G[s] + (1 - lgln) * M[s] / z;
+                temp = 1.0;
+            } else {
+                for (int s = 0; s < 256; ++s) M[s] = lgln * G[s] + (1 - lgln) * M[s];
+            }
         }
-        const int pick = pick_byte(M, seq, temperature, rng, U);
+        const int pick = pick_byte(M, seq, temp, rng, U);
         seq.push_back(static_cast<std::uint8_t>(pick));
         ContentPlanStore::fold_into(gen_folded, static_cast<unsigned char>(pick));
         if (ds) ds->feed(static_cast<std::uint8_t>(pick));
