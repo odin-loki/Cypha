@@ -1058,3 +1058,24 @@ None of this changes what the sampler writes. That needs the GLN and the online 
 **Rule.** An arm reconciles the two if its best temperature scores at least W0's best minus 0.03 (≥ 0.226) while the GLN is in. The best such arm goes to all 250 dev prompts against W0. It becomes the sampler's default only on that read's rules (GEN_TRACK: dev SCRIBE with 95% intervals, copy share within the limit).
 
 **Predictions.** R3 (`gate`) reconciles them: 0.22–0.30 at T 0.6. R2 (`geo`) is above W1 but below W0. R1 (`after`) stays near W1. Clean prose (R4, R5) adds at least 0.02 to its pair.
+
+**Screen results** (10 prompts, SCRIBE v2 by temperature; the GLN's lambda in brackets):
+
+| Arm | T 0.6 | T 0.8 | T 1.0 |
+|---|---:|---:|---:|
+| W0: no GLN | **0.256** [0.112, 0.425] | 0.075 | 0.032 |
+| W1: `lin` (0.245) | 0.020 | 0.031 | 0.065 |
+| R1: `after` (0.245) | 0.157 | 0.195 | 0.065 |
+| R2: `geo` (0.245) | 0.192 [0.024, 0.410] | 0.018 | 0.011 |
+| R3: `gate` (0.245) | 0.130 [0.032, 0.258] | 0.080 | 0.088 |
+| R4: `gate` + clean (0.015) | 0.131 | 0.097 | 0.118 |
+| R5: `geo` + clean (0.015) | 0.049 [0.017, 0.101] | 0.252 | **0.263** [0.071, 0.542] |
+
+- Every new mix beats the plain linear one (W1's best is 0.065; theirs are 0.13–0.26). The clash is real, and the way the GLN is mixed in matters.
+- By the rule, R5 reconciles (0.263 ≥ 0.226). But its GLN has lambda 0.015, so it writes almost as W0 does. Yet it scores 0.049 at T 0.6 against W0's 0.256. On 10 prompts the same sampler can swing by 0.2, so this screen cannot rank the arms.
+- The prediction failed: the gate (R3) scores 0.130, not 0.22–0.30.
+- The clean GLN's lambda is 0.015 because it is fit on the raw holdout, XML and all, where a model of clean prose does badly. For writing, the lambda should be fit on the kind of text to be written.
+
+**The 250-prompt read** (registered before it). W0, R2, R3 and R5 on all 250 GEN-A dev prompts, T 0.6, 0.8 and 1.0, side by side. R5 goes by the rule; R2 and R3 go as exploration, since the screen cannot separate them.
+- **Rule:** a GLN arm reconciles the two if its best temperature is at least W0's best minus 0.02 (non-inferior), with copy share within GEN_TRACK's limit. Among those, the one with the highest SCRIBE becomes `sample`'s way of mixing the GLN, while `--gln` stays off by default until the GLN is trained at scale (Odin: "it hasn't been trained at scale").
+- **Prediction:** R2 and R5 are non-inferior; R3 is not.
