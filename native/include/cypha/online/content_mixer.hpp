@@ -65,22 +65,41 @@ inline void fit_lambdas(const std::vector<double>& pe, const std::vector<double>
 // becomes lam pe + (1 - lam) cur. Returns the lambdas, one a bucket.
 // GLNX (docs/GENERATION_PLAN.md §13.12; Odin: "don't freeze the mixer"): with g_online_mix the same chain stage learns
 // its lambda per bucket online instead of fitting it on the first half and freezing it. Each byte is predicted with the
-// current lambda, then the lambda follows the gradient of its stage's log loss (AdaGrad per bucket, start 0.05, step 0.05,
-// kept in [0, 0.995]); the copy stage's short-match buckets stay 0 as copy_clip sets them. cur becomes the online mix.
+// current lambda, then the lambda learns from that byte. cur becomes the online mix.
+// §13.15 (Odin: "fix the spike in the learning on the content mixer; it's overfiltered"): the update is exponentiated
+// gradient on the pair (lambda, 1 - lambda), step 0.02, the exponent capped at 30, a floor of 1e-4 on each weight.
+// AdaGrad was used before; its step shrank by the square root of every squared gradient seen, and a few bytes the mixture
+// gave almost nothing to (gradients up to 29,088) set that sum, so a bucket stopped learning after one spike. A spike
+// moves exponentiated gradient's weights once and never shrinks later steps (-0.0074 bits per byte on the dump).
+// copy_m >= 0 holds the copy stage's short-match buckets at 0 (B4B, for writing); the online path only scores, so
+// mix_into passes -1 and the online chain takes short copies too (-0.023 on the dump). The frozen fit mix_into returns
+// to answers and samplers keeps B4B's clip.
 inline bool g_online_mix = false;
 inline std::vector<double> online_mix(const std::vector<double>& pe, const std::vector<int>& bk, int nb,
                                       std::vector<double>& cur, int copy_m = -1) {
-    std::vector<double> lam(static_cast<std::size_t>(nb), 0.05), g2(static_cast<std::size_t>(nb), 1e-3);
-    if (copy_m >= 0) cyphalm::copy_clip(lam.data(), copy_m);
+    std::vector<double> we(static_cast<std::size_t>(nb), 0.05), wc(static_cast<std::size_t>(nb), 0.95);
+    std::vector<char> dead(static_cast<std::size_t>(nb), 0);
+    if (copy_m >= 0) {
+        std::vector<double> one(static_cast<std::size_t>(nb), 1.0);
+        cyphalm::copy_clip(one.data(), copy_m);
+        for (std::size_t b = 0; b < one.size(); ++b) dead[b] = one[b] == 0.0;
+    }
+    std::vector<double> lam(static_cast<std::size_t>(nb));
     for (std::size_t k = 0; k < cur.size(); ++k) {
         const std::size_t b = static_cast<std::size_t>(bk[k]);
-        const double prev = cur[k], p = lam[b] * pe[k] + (1 - lam[b]) * prev;
+        if (dead[b]) continue;  // lambda 0: cur stays
+        const double prev = cur[k], l = we[b], p = l * pe[k] + (1 - l) * prev;
         cur[k] = p;
-        const double g = (pe[k] - prev) / std::max(p, 1e-12);
-        g2[b] += g * g;
-        lam[b] = std::min(0.995, std::max(0.0, lam[b] + 0.05 * g / std::sqrt(g2[b])));
-        if (copy_m >= 0) cyphalm::copy_clip(lam.data(), copy_m);
+        const double pp = std::max(p, 1e-300);
+        double e = we[b] * std::exp(0.02 * std::min(pe[k] / pp, 30.0)), c = wc[b] * std::exp(0.02 * std::min(prev / pp, 30.0));
+        double z = e + c;
+        e = std::max(e / z, 1e-4);
+        c = std::max(c / z, 1e-4);
+        z = e + c;
+        we[b] = e / z;
+        wc[b] = c / z;
     }
+    for (std::size_t b = 0; b < lam.size(); ++b) lam[b] = dead[b] ? 0.0 : we[b];
     return lam;
 }
 inline std::vector<double> mix_into(const std::vector<double>& pe, const std::vector<int>& bk, std::size_t half, int nb,
@@ -89,7 +108,7 @@ inline std::vector<double> mix_into(const std::vector<double>& pe, const std::ve
     if (g_online_mix) {  // the frozen fit is still returned, so answers and samplers that read it are unchanged
         fit_lambdas(pe, cur, bk, half, nb, lam.data());
         if (copy_m >= 0) cyphalm::copy_clip(lam.data(), copy_m);
-        online_mix(pe, bk, nb, cur, copy_m);
+        online_mix(pe, bk, nb, cur);  // §13.15: the online path takes short copies
         return lam;
     }
     fit_lambdas(pe, cur, bk, half, nb, lam.data());

@@ -958,3 +958,26 @@ So in four of six stages a few bytes set the step size for the rest of the strea
 - M4: M3 with GLNB fed back from the mixer. Two more side values gate every GLNB neuron: the mixer's recent loss, and GLNB's recent loss against it. So the GLN reads the mixer and the mixer reads the GLN: one recurrent loop, online on every part.
 - **Predictions:** M1 − M0 is −0.005 to −0.015 (GLNB alone is far worse, but it is a different kind of model, and a mixture gains from that). M3 − M2 is about −0.005. M4 − M3 is at most −0.002.
 - **Rule:** GLNB is ported to C++ (the online module) as a chain stage if M1 − M0 ≤ −0.005 with its 95% interval below 0. Then a writing test (SCRIBE on GEN-A dev) decides whether the sampler reads it.
+
+**In C++** (2026-11-03, after the module reorganisation). Both are in the online module:
+- `online_mix` (`native/include/cypha/online/content_mixer.hpp`) now learns by exponentiated gradient. In the online path, copy's short matches are no longer held at 0. The frozen lambdas that answers and samplers read keep B4B's clip.
+- `BitwiseGLN` (`native/include/cypha/online/bitwise_gln.hpp`) is GLNB in C++. On the holdout's second half it scores 1.9435 bits per byte (Python 1.9422 with feedback; C++ with feedback 1.9412). It streams 1 MiB in about 4 minutes and holds 101 MB; its counts are 16-bit fixed point.
+- `cyphalm_trie context8k --gln` adds it as the chain's last stage (a lambda per InfiniGram bucket) and as one more input of `--online-final`, before the chain. `--gln-feedback` closes the loop with the chain's recent loss. It prints `gln_alone_bpc`.
+
+**C++ runs** (registered before them; this container, one core per arm, side by side):
+- C0: `context8k` as it is.
+- C1: `--online-mix`.
+- C2: `--online-mix --online-final`.
+- C3: `--online-mix --online-final --gln`.
+- C4: `--online-mix --online-final --gln-feedback`.
+- C5: `--online-mix --gln` (the GLN stage without the final layer).
+
+**Rules for the defaults of `context8k`** (each needs identical answer tallies to C0 and a passing selftest):
+1. `--online-mix` becomes the default if C1's last chain line is at least 0.01 below C0's, with wall time within +10% (§13.12's rule).
+2. `--online-final` becomes the default if C2's `online_final_bpc` is at least 0.005 below C1's last chain line.
+3. `--gln` becomes the default if C3's `online_final_bpc` is at least 0.02 below C2's (a big win, since it adds about 100 MB), with wall time within +35% of C2's.
+4. `--gln-feedback` replaces `--gln` if C4 is at least 0.002 below C3.
+
+**Predictions** (from the dump): C1 near 1.669; C2 near 1.654; C3 and C4 near 1.62; C5 near 1.643.
+
+None of this changes what the sampler writes. That needs the GLN and the online mixer in `sample`, and a SCRIBE test on GEN-A dev.

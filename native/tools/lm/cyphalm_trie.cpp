@@ -272,6 +272,7 @@
 #include "cypha/eval/lci.hpp"
 #include "cypha/eval/scribe.hpp"
 #include "cypha/knowledge/unknown_signals.hpp"
+#include "cypha/online/bitwise_gln.hpp"
 #include "cypha/online/content_mixer.hpp"
 
 #include <cctype>
@@ -361,6 +362,7 @@ struct Args {
     std::string dump_experts;                     // GLNX: context8k writes every expert's per-byte probability here
     bool online_mix = false;                      // GLNX: the content mixer's lambdas learn online (context8k, qa holdout)
     bool online_final = false;                    // GLNX: one online gated mixer over every stage, after the chain
+    bool gln = false, gln_feedback = false;       // §13.15: the bitwise GLN with an LSTM as a chain stage (+ the mixer's feedback)
     double dk_plain = 0;                          // DK2: share of don't-know training turns with no token
     std::string fam_ent_at = "all";               // DK2: where --fam-ent's frames go (all | answer | start)
     bool copy_frame = false;                      // DK2: copy a frame's entity, not its end; the tag may repeat the message
@@ -444,6 +446,8 @@ Args parse(int argc, char** argv, int from) {
         else if (s == "--dump-experts") a.dump_experts = next();  // GLNX (docs/GENERATION_PLAN.md §13.10)
         else if (s == "--online-mix") a.online_mix = true;        // GLNX, §13.12
         else if (s == "--online-final") a.online_final = true;    // GLNX, §13.12
+        else if (s == "--gln") a.gln = true;                      // §13.15
+        else if (s == "--gln-feedback") a.gln = a.gln_feedback = true;  // §13.15
         else if (s == "--dk-plain") a.dk_plain = std::atof(next());  // DK2
         else if (s == "--fam-ent-at") a.fam_ent_at = next();         // DK2
         else if (s == "--copy-frame") a.copy_frame = true;           // DK2
@@ -1083,6 +1087,37 @@ int cmd_context8k(const Args& a) {
             }
         }
     }
+    // §13.15 (Odin: "have the GLN feed into the mixers ... recurrent and online on every part"): --gln adds the bitwise
+    // GLN with a byte LSTM inside it (cypha::online::BitwiseGLN; pretrained bit counts on wiki train, then learning online
+    // over the holdout, every byte predicted before it is learned) as the chain's last stage, a lambda per InfiniGram
+    // bucket, and as one more input of --online-final. --gln-feedback closes the loop: two more side values gate every GLN
+    // neuron, the chain's recent loss and the GLN's loss against it (moving averages over about 32 bytes already seen).
+    std::vector<double> pgln;
+    if (a.gln) {
+        cypha::online::BitwiseGLN::Params gp;
+        gp.extra = a.gln_feedback ? 2 : 0;
+        cypha::online::BitwiseGLN gl(gp);
+        gl.pretrain(data.data(), kTrain);
+        pgln.resize(H);
+        double lm = 8, lg = 8, gb = 0;
+        for (std::size_t k = 0; k < H; ++k) {
+            if (a.gln_feedback) {
+                const double e[2] = {(lm - 2) / 2, (lg - lm) / 2};
+                gl.set_extra(e);
+            }
+            const double b = gl.code(data[kTrain + k]);
+            pgln[k] = std::exp2(-b);
+            if (k >= half) gb += b;
+            if (a.gln_feedback) {
+                lm += (-std::log2(std::max(base[k], 1e-12)) - lm) / 32;
+                lg += (b - lg) / 32;
+            }
+        }
+        std::cout << "gln_alone_bpc " << gb / static_cast<double>(H - half) << (a.gln_feedback ? " (feedback)" : "") << "\n";
+        std::cerr << "gln " << gl.bytes() / 1e6 << " MB\n";
+        mix_into(pgln, bk8k, half, kBuckets, base);
+        chain_line("_gln");
+    }
     if (dump || a.online_final) {
         // GLNX (docs/GENERATION_PLAN.md §13.10): one row of float32 per holdout byte. Columns, in order: the byte; the trie's
         // 5 experts' probability of it and the match (hit, present); the trie mixture; Kneser-Ney (prob, bucket);
@@ -1099,6 +1134,7 @@ int cmd_context8k(const Args& a) {
         // (cypha::online::OnlineFinal; kIn picks its inputs from the row, the chain last).
         static const int kIn[24] = {1, 2, 3, 4, 5, 6, 8, 9, 11, 12, 13, 14, 15, 18, 20, 22, 25, 27, 29, 31, 32, 33, 34, 35};
         cypha::online::OnlineFinal<24> fin(80);
+        cypha::online::OnlineFinal<25> fin25(80);  // §13.15: with the GLN before the chain
         double fin_bits = 0, chain_bits = 0;
         for (std::size_t k = 0; k < H; ++k) {
             const std::size_t i = kTrain + k;
@@ -1144,14 +1180,20 @@ int cmd_context8k(const Args& a) {
             if (a.online_final) {
                 const unsigned char pb = i ? data[i - 1] : ' ';
                 const int g = std::min(static_cast<int>(bk8k[k]), 15) * 5 + cypha::online::OnlineFinal<24>::byte_class(pb);
-                double q[24];
-                for (int j = 0; j < 24; ++j) q[j] = std::max(1e-9, static_cast<double>(row[kIn[j]]));
-                const double p = fin.predict(g, q);
+                double q[25];
+                int nq = 0;
+                for (int j = 0; j < 23; ++j) q[nq++] = std::max(1e-9, static_cast<double>(row[kIn[j]]));
+                if (!pgln.empty()) q[nq++] = std::max(1e-9, pgln[k]);
+                q[nq++] = std::max(1e-9, static_cast<double>(row[kIn[23]]));
+                const double p = pgln.empty() ? fin.predict(g, q) : fin25.predict(g, q);
                 if (k >= half) {
                     fin_bits += -std::log2(std::max(p, 1e-12));
                     chain_bits += -std::log2(std::max(base[k], 1e-12));
                 }
-                fin.update(g, q, p);
+                if (pgln.empty())
+                    fin.update(g, q, p);
+                else
+                    fin25.update(g, q, p);
             }
         }
         if (dump) std::cerr << "dumped " << H << " rows of " << C << " columns to " << a.dump_experts << " (half " << half << ")\n";
