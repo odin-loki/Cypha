@@ -1,0 +1,14 @@
+{
+ "arm": "tr",
+ "params": 13891584,
+ "steps": 4160,
+ "batch": 64,
+ "hp": {
+  "batch": 64,
+  "lr": 0.001,
+  "wd": 0.1,
+  "warmup": 200,
+  "evals": 24
+ },
+ "train_tokens": 34083756
+}

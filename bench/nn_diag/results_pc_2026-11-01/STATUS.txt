@@ -1,0 +1,29 @@
+2026-11-01 14:40:11 N0 start (TINY=0) out=/mnt/d/cypha_llm/nn_diag commit=1caef2f
+2026-11-01 14:40:11 docs: scribe docs enwik9 [95.37, 953.67) MiB
+2026-11-01 14:41:00 data: drop pages holding a dev continuation span; train 134217728, val 4194304 bytes
+2026-11-01 14:42:20 tokenizer: cyphalm_tok train (BPE 8192)
+2026-11-01 14:42:30 encode train
+2026-11-01 14:42:35 encode val
+2026-11-01 14:42:36 K5: val bits per byte
+2026-11-01 14:43:16 K5: sampling
+2026-11-01 14:47:51 K8: val bits per byte
+2026-11-01 14:49:12 K8: sampling
+2026-11-01 14:54:31 M5: training (progress in /mnt/d/cypha_llm/nn_diag/m5.progress)
+2026-11-01 14:54:53 N0 start (TINY=0) out=/mnt/d/cypha_llm/nn_diag commit=1caef2f
+2026-11-01 14:54:53 M5: training (progress in /mnt/d/cypha_llm/nn_diag/m5.progress)
+2026-11-01 17:21:13 M5: val bits per byte
+2026-11-01 17:21:49 TR: training (progress in /mnt/d/cypha_llm/nn_diag/tr.progress)
+2026-11-01 20:45:59 TR: val bits per byte
+2026-11-01 20:48:03 Q0: starting a private ollama server (port 11535)
+2026-11-01 20:48:03 M5: sampling (8 shards x 3 threads)
+2026-11-01 20:48:05 Q0: sampling
+2026-11-01 20:50:02 TR: sampling (8 shards x 3 threads)
+2026-11-01 23:25:56 Q0: done
+2026-11-01 23:25:56 K5: SCRIBE ladder
+2026-11-01 23:25:56 K8: SCRIBE ladder
+2026-11-01 23:25:56 M5: SCRIBE ladder
+2026-11-01 23:25:56 TR: SCRIBE ladder
+2026-11-01 23:25:56 Q0: SCRIBE ladder
+2026-11-01 23:26:09 measures
+2026-11-01 23:30:41 summary
+2026-11-01 23:30:43 N0 done: /mnt/d/cypha_llm/nn_diag/NN_DIAG_N0.draft.md

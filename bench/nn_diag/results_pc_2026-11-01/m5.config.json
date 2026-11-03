@@ -1,0 +1,14 @@
+{
+ "arm": "m5",
+ "params": 11543552,
+ "steps": 33284,
+ "batch": 2048,
+ "hp": {
+  "batch": 2048,
+  "lr": 0.001,
+  "wd": 0.01,
+  "warmup": 500,
+  "evals": 24
+ },
+ "train_tokens": 34083756
+}

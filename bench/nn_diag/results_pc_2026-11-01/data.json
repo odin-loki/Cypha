@@ -1,0 +1,8 @@
+{
+ "pages_read": 38383,
+ "pages_dropped": 889,
+ "train_bytes": 134217700,
+ "val_bytes": 4181633,
+ "train_pages": 28413,
+ "val_pages": 1473
+}
