@@ -67,8 +67,9 @@ The content mixer is `include/cypha/online/content_mixer.hpp`. It is header-only
 
 ## 4. What stayed where, and why
 
-- **`native/tools/trie_stream_train.cpp`** stays. Odin's standing rule: it is not to be moved or changed.
-  `scripts/run_train.sh` and `scripts/build_1tb_tools.sh` build it by that path.
+- **`native/tools/trie_stream_train.cpp`** stays, byte for byte. Odin's standing rule: it is not to be moved or
+  changed. `scripts/run_train.sh` and `scripts/build_1tb_tools.sh` build it by that path. It includes only standard
+  headers. One of its comments still names `cypha/cyphalm/stream_trie.hpp`, which is now `cypha/lm/stream_trie.hpp`.
 - **The hybrid-era code stays where it was.** That is `include/cypha/cyphalm/` (33 headers), `src/cyphalm/` (27
   sources) and 13 tools left in `native/tools/`: GRIA, the LSTM, the SSM and CellAI cells, the Hebbian layers, the NIG
   cells and the PGM cell. No target builds its sources. Its 12 tools build only with `CYPHA_BUILD_LEGACY_CYPHALM`,
