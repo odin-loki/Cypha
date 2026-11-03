@@ -47,7 +47,7 @@ Build one module's tools: `cmake --build <build> --target cypha_<module>_tools` 
 
 | Target | Sources |
 |--------|---------|
-| **`cypha_core`** | `src/core`, `src/classify`, `src/online`, `src/lm`, `src/knowledge`, `src/forecast`, `src/som`, `src/eval/bench_paths.cpp`, `src/cypha.cpp` — one Cypha (classify/regress/sample/tokens) |
+| **`cypha_core`** | `src/cypha.cpp` and most of `src/core`, `src/classify`, `src/online`, `src/lm`, `src/knowledge`, `src/forecast`, `src/som`, with `src/eval/bench_paths.cpp` and `text_algebraic_fingerprint.cpp` — one Cypha (classify/regress/sample/tokens). Not in it: `src/serve` (`cypha_rest`), `src/eval/bench_*` (`cypha_bench_native`), `src/core/experiment_db*` (the SQLite tools), `src/lm/fm_infinigram.cpp` (compiled into the trie tools) |
 | **`cypha_lm_native`** | INTERFACE alias of `cypha_core` (compat for existing link lines) |
 | **`cypha_bench_native`** | `src/eval/bench_*.cpp` — benchmark engine |
 

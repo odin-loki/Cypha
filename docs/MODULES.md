@@ -117,3 +117,22 @@ A few places compute a path instead of naming one. Each was changed so it finds 
   JSON keys name the new paths.
 - `cypha_rest` looks for the web UI in `tools/serve/static` when it runs from the source tree.
 - Usage lines and comments that name a source file name its new path.
+
+## 7. How it was checked
+
+Before (commit `7fec276`) and after, on Linux with GCC 13, `cmake -S native -B <dir> -G Ninja
+-DCMAKE_BUILD_TYPE=Release` (Qt is not installed here, so the Qt targets were not built).
+
+| Check | Before | After |
+|-------|--------|-------|
+| Build | 177 executables, 2 libraries | the same 177 executables, 2 libraries |
+| CTest, CI's broad set (`-R native_ -LE cypha_slow`, 146 tests) | 144 passed, 2 skipped (no CUDA, no OpenSSL) | the same 144 passed, the same 2 skipped |
+| CTest, CI's corpus smokes | 2 passed | 2 passed |
+| `cyphalm_trie selftest` | ok | ok, the same output |
+| `epistemic_test` | 1,484 checks, 0 failed | 1,484 checks, 0 failed, the same output |
+| `cyphalm_trie context8k enwik8 dolly.jsonl` | 226 lines | the same 226 lines, byte for byte |
+| the same with `--online-mix --online-final` | 228 lines, `online_final_bpc 1.6683 (chain 1.6977)` | the same 228 lines, byte for byte |
+
+The two `context8k` runs' stderr differs only in timings. The after runs used a `cyphalm_trie` byte-identical to the
+final build's. The build with `CYPHA_BUILD_LEGACY_CYPHALM=ON` and `CYPHA_BUILD_EXPERIMENT_DB=ON` configures the same 195
+executables before and after, and the experiment database tests pass.
