@@ -106,6 +106,7 @@ cmake --build native/build --target cyphalm_generate -j$(nproc)
 | Path | Role |
 |------|------|
 | [`native/`](native/) | C++ runtime, CMake, CTests |
+| [`forge/`](forge/README.md) | FORGE, Odin's C++23 library for running AI models on CPUs and GPUs (git subtree, builds on its own; [`docs/FORGE.md`](docs/FORGE.md)) |
 | [`fixtures/`](fixtures/) | Parity goldens |
 | [`bench/`](bench/) | Living lock (`BASELINE_LOCK.json`), profiles, corpora |
 | [`data/`](data/README.md) | Historical XOR / D17 traces (committed archive) |
