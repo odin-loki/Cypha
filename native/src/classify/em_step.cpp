@@ -1,4 +1,4 @@
-#include "cypha/em_step.hpp"
+#include "cypha/classify/em_step.hpp"
 
 #include <algorithm>
 #include <cmath>

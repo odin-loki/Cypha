@@ -1,4 +1,4 @@
-#include "cypha/intelligence/soft_world_monitor.hpp"
+#include "cypha/knowledge/soft_world_monitor.hpp"
 
 #include <algorithm>
 

@@ -1,13 +1,13 @@
-#include "cypha/memory_train.hpp"
+#include "cypha/classify/memory_train.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <limits>
 #include <stdexcept>
 
-#include "cypha/class_gmm.hpp"
-#include "cypha/em_step.hpp"
-#include "cypha/load_cypha.hpp"
+#include "cypha/classify/class_gmm.hpp"
+#include "cypha/classify/em_step.hpp"
+#include "cypha/classify/load_cypha.hpp"
 
 namespace cypha {
 

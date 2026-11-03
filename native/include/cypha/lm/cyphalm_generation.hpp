@@ -8,8 +8,8 @@
 
 #include <nlohmann/json.hpp>
 
-#include "cypha/cyphalm/cyphalm_model.hpp"
-#include "cypha/intelligence/epistemic_threshold.hpp"
+#include "cypha/lm/cyphalm_model.hpp"
+#include "cypha/knowledge/epistemic_threshold.hpp"
 
 namespace cypha::intelligence {
 class IntelligenceProfiler;

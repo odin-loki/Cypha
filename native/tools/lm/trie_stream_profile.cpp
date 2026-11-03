@@ -1,5 +1,5 @@
 // Profile a streaming-trie checkpoint: TR64 (native/tools/trie_stream_train.cpp), or TRI1 / TRI2
-// (trie_stream_train_v2) read through cypha/cyphalm/stream_trie.hpp with their counts widened.
+// (trie_stream_train_v2) read through cypha/lm/stream_trie.hpp with their counts widened.
 //
 // Structural counts, packed-size estimate, and next-byte scores on a text
 // file. The fit slice teaches mixture weights only. Counts stay frozen.
@@ -7,7 +7,7 @@
 // score [7340032, 8388608). A second 1 MiB slice at 200 MiB is scored
 // with those same weights when the file is long enough.
 
-#include "cypha/cyphalm/stream_trie.hpp"
+#include "cypha/lm/stream_trie.hpp"
 
 #include <algorithm>
 #include <chrono>

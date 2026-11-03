@@ -1,4 +1,4 @@
-#include "cypha/cyphalm/bpe_tokenizer.hpp"
+#include "cypha/lm/bpe_tokenizer.hpp"
 
 #include <algorithm>
 #include <cctype>

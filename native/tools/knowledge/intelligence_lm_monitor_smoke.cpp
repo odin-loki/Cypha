@@ -3,9 +3,9 @@
 #include <cstdio>
 #include <vector>
 
-#include "cypha/cyphalm/lm_intelligence_monitor.hpp"
-#include "cypha/intelligence/intelligence_profiler.hpp"
-#include "cypha/intelligence/profile_completeness.hpp"
+#include "cypha/knowledge/lm_intelligence_monitor.hpp"
+#include "cypha/knowledge/intelligence_profiler.hpp"
+#include "cypha/knowledge/profile_completeness.hpp"
 
 namespace {
 

@@ -2,7 +2,7 @@
 // docs/reports/TOKENS_T3_T4.md). A byte-level Markov chain is tokenized four ways; the exact
 // token model of each is built by enumeration; the bridge, given only that token model and the
 // tokenizer, must recover the chain's next-byte probabilities to 1e-9.
-#include "cypha/cyphalm/token_bridge.hpp"
+#include "cypha/lm/token_bridge.hpp"
 
 #include <array>
 #include <cmath>

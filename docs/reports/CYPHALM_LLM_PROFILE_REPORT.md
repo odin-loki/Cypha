@@ -4,7 +4,7 @@
 
 **Date:** 2026-09-19  
 **Commit:** `bbf385360abcd48319b44ae9afd923e9d0422102` (main after PR #1 hp integration)  
-**Harness:** `native/tools/cyphalm_llm_profile.cpp` + `scripts/cyphalm_llm_profile.sh`
+**Harness:** `native/tools/lm/cyphalm_llm_profile.cpp` + `scripts/cyphalm_llm_profile.sh`
 
 ---
 
@@ -73,7 +73,7 @@ Online training on 32 WikiText bytes **lowers BPC by ~1.3 bits** vs cold start o
 
 ## Architecture — living API (Cypha main)
 
-### Adapter: `HpSequenceBackend` (`native/include/cypha/cyphalm/hp_backend.hpp`, `native/src/cyphalm/hp_backend.cpp`)
+### Adapter: `HpSequenceBackend` (`native/include/cypha/lm/hp_backend.hpp`, `native/src/lm/hp_backend.cpp`)
 
 Wraps vendored `hp::Predictor` (integer-exact context mixer). Key paths:
 
@@ -84,7 +84,7 @@ Wraps vendored `hp::Predictor` (integer-exact context mixer). Key paths:
 | `observe_next_byte` | Score + update main predictor on the observed byte (train / compress-equivalent BPC path) |
 | `log_prob_byte` / `sample_next_byte` | Single-clone O(8) bit path (train fast path / bit-serial generation) |
 
-```7:9:native/include/cypha/cyphalm/hp_backend.hpp
+```7:9:native/include/cypha/lm/hp_backend.hpp
 /// RAM note: holds two ``hp::Predictor`` instances (``pred_`` + ``scratch_``).
 /// ``next_byte_log_probs()`` clones ``*pred_`` once per vocab byte — a known
 /// RAM/CPU hotspot at large vocab; not optimized in the default integration.

@@ -26,11 +26,11 @@
 
 #include <nlohmann/json.hpp>
 
-#include "cypha/branch_a_router.hpp"
-#include "cypha/create_model.hpp"
+#include "cypha/classify/branch_a_router.hpp"
+#include "cypha/classify/create_model.hpp"
 #include "cypha/cypha.hpp"
-#include "cypha/load_cypha.hpp"
-#include "cypha/nig_field.hpp"
+#include "cypha/classify/load_cypha.hpp"
+#include "cypha/classify/nig_field.hpp"
 
 namespace fs = std::filesystem;
 

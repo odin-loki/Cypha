@@ -15,7 +15,7 @@
 #include <set>
 #include <string>
 
-#include "cypha/cyphalm/bpe_tokenizer.hpp"
+#include "cypha/lm/bpe_tokenizer.hpp"
 
 namespace {
 

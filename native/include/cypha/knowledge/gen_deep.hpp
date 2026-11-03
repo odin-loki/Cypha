@@ -30,10 +30,10 @@
 #include <utility>
 #include <vector>
 
-#include "cypha/eval/gen_rules.hpp"
-#include "cypha/eval/hypothesis.hpp"
+#include "cypha/knowledge/gen_rules.hpp"
+#include "cypha/knowledge/hypothesis.hpp"
 #include "cypha/eval/lci.hpp"
-#include "cypha/eval/worlds.hpp"
+#include "cypha/knowledge/worlds.hpp"
 
 namespace cypha::eval::deep {
 

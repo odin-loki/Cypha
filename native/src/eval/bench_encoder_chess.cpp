@@ -1,4 +1,4 @@
-#include "cypha/bench/bench_encoder_chess.hpp"
+#include "cypha/eval/bench_encoder_chess.hpp"
 
 #include <algorithm>
 #include <cmath>

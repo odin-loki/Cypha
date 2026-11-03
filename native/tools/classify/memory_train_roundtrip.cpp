@@ -12,9 +12,9 @@
 
 #include <nlohmann/json.hpp>
 
-#include "cypha/load_cypha.hpp"
-#include "cypha/memory_train.hpp"
-#include "cypha/nig_field.hpp"
+#include "cypha/classify/load_cypha.hpp"
+#include "cypha/classify/memory_train.hpp"
+#include "cypha/classify/nig_field.hpp"
 
 namespace {
 

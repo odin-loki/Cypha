@@ -1,4 +1,4 @@
-#include "cypha/generation.hpp"
+#include "cypha/classify/generation.hpp"
 
 #include <algorithm>
 #include <cassert>
@@ -7,7 +7,7 @@
 #include <random>
 #include <stdexcept>
 
-#include "cypha/nig_field.hpp"
+#include "cypha/classify/nig_field.hpp"
 
 namespace cypha {
 

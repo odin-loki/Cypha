@@ -1,22 +1,22 @@
-// Known-answer tests for cypha/eval/epistemic.hpp (docs/DISCOVERY.md sections 2.1-2.3, 3.1, 3.3, 10), hypothesis.hpp
+// Known-answer tests for cypha/knowledge/epistemic.hpp (docs/DISCOVERY.md sections 2.1-2.3, 3.1, 3.3, 10), hypothesis.hpp
 // (S5: 4, 6.3, 7.2-7.5; invariants I1, I4, I7, I8; S7: 7.1-7.3, I5, I6; S7b: three-way likelihoods, the batch step
 // among the supported), gap_map.hpp (S3: 3.2, 3.5), gen_links.hpp (S8b: G6, G7), gen_rules.hpp (S8a: G2, G14), sources.hpp
 // (S8c: evidence sources), worlds.hpp (S9) and curiosity.hpp (S10); S7c's batch rules.
 // Returns nonzero if any check fails.
-#include "cypha/eval/abc_closed.hpp"
-#include "cypha/eval/curiosity.hpp"
-#include "cypha/eval/epistemic.hpp"
-#include "cypha/eval/gap_map.hpp"
-#include "cypha/eval/gen_concepts.hpp"
-#include "cypha/eval/gen_deep.hpp"
-#include "cypha/eval/gen_laws.hpp"
-#include "cypha/eval/gen_analogy.hpp"
-#include "cypha/eval/gen_links.hpp"
-#include "cypha/eval/gen_rules.hpp"
-#include "cypha/eval/hypothesis.hpp"
-#include "cypha/eval/sources.hpp"
-#include "cypha/eval/unknown_signals.hpp"
-#include "cypha/eval/worlds.hpp"
+#include "cypha/knowledge/abc_closed.hpp"
+#include "cypha/knowledge/curiosity.hpp"
+#include "cypha/knowledge/epistemic.hpp"
+#include "cypha/knowledge/gap_map.hpp"
+#include "cypha/knowledge/gen_concepts.hpp"
+#include "cypha/knowledge/gen_deep.hpp"
+#include "cypha/knowledge/gen_laws.hpp"
+#include "cypha/knowledge/gen_analogy.hpp"
+#include "cypha/knowledge/gen_links.hpp"
+#include "cypha/knowledge/gen_rules.hpp"
+#include "cypha/knowledge/hypothesis.hpp"
+#include "cypha/knowledge/sources.hpp"
+#include "cypha/knowledge/unknown_signals.hpp"
+#include "cypha/knowledge/worlds.hpp"
 #include "cypha/eval/wd_grader.hpp"
 
 #include <cmath>

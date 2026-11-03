@@ -1,4 +1,4 @@
-#include "cypha/cyphalm/infinigram.hpp"
+#include "cypha/lm/infinigram.hpp"
 
 #include "libsais.h"
 

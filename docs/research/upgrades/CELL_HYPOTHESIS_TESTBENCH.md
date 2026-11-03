@@ -106,7 +106,7 @@ Run **H04** (Pure CyphaDIF LM) in parallel with Tier 1 — high variance.
 
 All variants implement `BaseCyphaCell.forward(x, h_prev, c_prev) → (h, c)` wrapped by a common `CyphaLM` training loop (embed → cell → linear head). H04 runs standalone via native CyphaDIF path.
 
-Native implementation: `native/tools/cypha_cell_hypothesis_sweep.cpp` and `cyphalm_bench_native --cell-variant H06` map each variant to a bench mode plus `CyphaLMConfig` flags (`apply_cell_variant` in `cypha_cell_hypothesis.cpp`).
+Native implementation: `native/tools/lm/cypha_cell_hypothesis_sweep.cpp` and `cyphalm_bench_native --cell-variant H06` map each variant to a bench mode plus `CyphaLMConfig` flags (`apply_cell_variant` in `cypha_cell_hypothesis.cpp`).
 
 | Test | Command |
 |------|---------|

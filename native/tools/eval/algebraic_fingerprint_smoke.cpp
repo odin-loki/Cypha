@@ -8,8 +8,8 @@
 
 #include <nlohmann/json.hpp>
 
-#include "cypha/bench/bench_paths.hpp"
-#include "cypha/bench/bench_tune.hpp"
+#include "cypha/eval/bench_paths.hpp"
+#include "cypha/eval/bench_tune.hpp"
 
 namespace fs = std::filesystem;
 using Json = nlohmann::json;

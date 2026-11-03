@@ -12,9 +12,9 @@
 
 #include <nlohmann/json.hpp>
 
-#include "cypha/generation.hpp"
-#include "cypha/infer_cpu.hpp"
-#include "cypha/load_cypha.hpp"
+#include "cypha/classify/generation.hpp"
+#include "cypha/classify/infer_cpu.hpp"
+#include "cypha/classify/load_cypha.hpp"
 
 namespace fs = std::filesystem;
 using json = nlohmann::json;

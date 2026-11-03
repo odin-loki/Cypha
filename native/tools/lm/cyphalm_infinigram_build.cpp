@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-#include "cypha/cyphalm/infinigram.hpp"
+#include "cypha/lm/infinigram.hpp"
 
 int main(int argc, char** argv) {
     std::string text, out;

@@ -151,7 +151,7 @@ Time per sample (single thread), pack build time, peak RAM, per-component share 
 
 | Stream | Owner | Files |
 |---|---|---|
-| SCRIBE library and tool | main session | `native/include/cypha/eval/scribe.hpp`, `native/tools/scribe.cpp` (replaces `scribe_ladder.cpp`), CMake block |
+| SCRIBE library and tool | main session | `native/include/cypha/eval/scribe.hpp`, `native/tools/eval/scribe.cpp` (replaces `scribe_ladder.cpp`), CMake block |
 | Datasets | agent | `scripts/scribe_eval/data.py` |
 | Generations | agent | `scripts/scribe_eval/generate.py` |
 | Baselines and LLM judge | agent | `scripts/scribe_eval/baselines.py`, `scripts/scribe_eval/judge.py` |

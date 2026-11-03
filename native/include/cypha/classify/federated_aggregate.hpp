@@ -1,6 +1,6 @@
 #pragma once
 
-#include "cypha/memory_train.hpp"
+#include "cypha/classify/memory_train.hpp"
 
 #include <string>
 #include <vector>

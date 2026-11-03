@@ -1,4 +1,4 @@
-#include "cypha/encoder_contrastive.hpp"
+#include "cypha/classify/encoder_contrastive.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -6,7 +6,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "cypha/mt19937_rng.hpp"
+#include "cypha/core/mt19937_rng.hpp"
 
 namespace cypha {
 

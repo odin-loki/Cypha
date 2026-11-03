@@ -32,7 +32,7 @@ Order-4 backoff takes 92–100% of the mixture weight. The 4-byte match keeps on
 
 ## Packed trie (8 MiB enwik9 slice)
 
-Tools: `native/tools/cyphalm_trie.cpp` (`bpc`, `chat`, `probe`, `context8k`, `sample`, `selftest`) over the one model in `native/include/cypha/cyphalm/packed_trie.hpp`. On 2026-10-27 it replaced the forked `trie_*.cpp` tools and reproduces their numbers to the printed digit. The experiments behind the 2.286, 2.642 and word-trie rows (`trie_together`, `trie_gria_gate`) were retired; their results and the git commits that hold them are in [`reports/B1_TRIE_CONSOLIDATION.md`](reports/B1_TRIE_CONSOLIDATION.md). Surface score: `native/tools/surface_score.cpp`.
+Tools: `native/tools/lm/cyphalm_trie.cpp` (`bpc`, `chat`, `probe`, `context8k`, `sample`, `selftest`) over the one model in `native/include/cypha/lm/packed_trie.hpp`. On 2026-10-27 it replaced the forked `trie_*.cpp` tools and reproduces their numbers to the printed digit. The experiments behind the 2.286, 2.642 and word-trie rows (`trie_together`, `trie_gria_gate`) were retired; their results and the git commits that hold them are in [`reports/B1_TRIE_CONSOLIDATION.md`](reports/B1_TRIE_CONSOLIDATION.md). Surface score: `native/tools/eval/surface_score.cpp`.
 
 Protocol for the numbers below: enwik9 bytes `[0, 7340032)` train, `[7340032, 8388608)` frozen holdout, unless a row says otherwise.
 
@@ -124,7 +124,7 @@ Chat must not be poured into those counts. On the 8 MiB split, the 4-byte match 
 
 **The plan for coherent text (2026-11-01):** [`GENERATION_PLAN.md`](GENERATION_PLAN.md). It covers everything tried, the data, a generation ladder G0–G5, and phases CT0–CT5 with gates and predictions.
 
-Tool: `native/tools/scribe.cpp` over `native/include/cypha/eval/scribe.hpp` ([report](reports/SCRIBE_V2.md), [paper](../paper/scribe/SCRIBE_paper.md)). Counts only; scores a text by its distance from human reference text of the same genre and length.
+Tool: `native/tools/eval/scribe.cpp` over `native/include/cypha/eval/scribe.hpp` ([report](reports/SCRIBE_V2.md), [paper](../paper/scribe/SCRIBE_paper.md)). Counts only; scores a text by its distance from human reference text of the same genre and length.
 
 | Read | Value |
 |---|---|
@@ -164,7 +164,7 @@ Tool: `cyphalm_trie qa` (dev 130 questions, frozen test 200; coverage at a 2% wr
 
 ## Word vectors
 
-PPMI-SVD (`native/tools/ppmi_svd.cpp`) stays the source: WordSim-353 0.672, SimLex-999 0.255, MEN 0.637 on all of enwik8 (C1 pairs). Cypha's own learner, `cypha_word_classes train --method sgns --epochs 5 --var0 0.3` ([S-1b](reports/S1B_LEARNED_CONTEXTS.md)): 0.683 / 0.246 / 0.669 on the same pairs, 0.750 / 0.270 / 0.756 on the top-10,000 pairs; no worse on common words, worse on rare ones. S-1c (2026-10-29): a context prior lifts Cypha's own vectors on rare words (Card-660 +0.098 over (b)), and on common nouns they are above PPMI-SVD (MTurk-287 +0.066), but verbs fail the margin (VERB-143), so PPMI-SVD stays the source; the §4.2 step is 1.42× faster, bit-identical.
+PPMI-SVD (`native/tools/semantics/ppmi_svd.cpp`) stays the source: WordSim-353 0.672, SimLex-999 0.255, MEN 0.637 on all of enwik8 (C1 pairs). Cypha's own learner, `cypha_word_classes train --method sgns --epochs 5 --var0 0.3` ([S-1b](reports/S1B_LEARNED_CONTEXTS.md)): 0.683 / 0.246 / 0.669 on the same pairs, 0.750 / 0.270 / 0.756 on the top-10,000 pairs; no worse on common words, worse on rare ones. S-1c (2026-10-29): a context prior lifts Cypha's own vectors on rare words (Card-660 +0.098 over (b)), and on common nouns they are above PPMI-SVD (MTurk-287 +0.066), but verbs fail the margin (VERB-143), so PPMI-SVD stays the source; the §4.2 step is 1.42× faster, bit-identical.
 
 ## Embedding teacher (weights only in the container)
 
@@ -172,7 +172,7 @@ Qwen3-Embedding is its base plus a low-rank change: 3.3% of the linear weights' 
 
 ## Fact store and fact text (for CyphaLM to learn from)
 
-Tool: `native/tools/pattern_learn.cpp` ([D4 report](reports/D4_WIKIDATA_SEEDS_AND_FACT_SHARD.md), 2026-10-28). These facts never answer anything. They become training text for CyphaLM (PLAN rule 10).
+Tool: `native/tools/knowledge/pattern_learn.cpp` ([D4 report](reports/D4_WIKIDATA_SEEDS_AND_FACT_SHARD.md), 2026-10-28). These facts never answer anything. They become training text for CyphaLM (PLAN rule 10).
 
 | Read | Value |
 |---|---|

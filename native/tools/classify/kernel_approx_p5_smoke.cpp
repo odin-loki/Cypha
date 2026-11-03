@@ -7,8 +7,8 @@
 #include <string>
 #include <vector>
 
-#include "cypha/kernel_memory.hpp"
-#include "cypha/rff_features.hpp"
+#include "cypha/classify/kernel_memory.hpp"
+#include "cypha/classify/rff_features.hpp"
 
 namespace {
 

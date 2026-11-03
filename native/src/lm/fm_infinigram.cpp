@@ -1,4 +1,4 @@
-#include "cypha/cyphalm/fm_infinigram.hpp"
+#include "cypha/lm/fm_infinigram.hpp"
 
 #include <algorithm>
 #include <cstring>

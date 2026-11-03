@@ -19,9 +19,9 @@
 
 #include <nlohmann/json.hpp>
 
-#include "cypha/infer_cpu.hpp"
-#include "cypha/load_cypha.hpp"
-#include "cypha/onnx_min_writer.hpp"
+#include "cypha/classify/infer_cpu.hpp"
+#include "cypha/classify/load_cypha.hpp"
+#include "cypha/core/onnx_min_writer.hpp"
 
 namespace {
 

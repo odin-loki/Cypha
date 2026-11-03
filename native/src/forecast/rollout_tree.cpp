@@ -1,7 +1,7 @@
 #include "cypha/forecast/rollout_tree.hpp"
 
-#include "cypha/cyphalm/hp_backend.hpp"
-#include "cypha/infer_cpu.hpp"
+#include "cypha/lm/hp_backend.hpp"
+#include "cypha/classify/infer_cpu.hpp"
 
 #include <algorithm>
 #include <cmath>

@@ -358,7 +358,7 @@ G4 scores 35% of the `b` facts and puts 3.7% at rank 1 (base rate 0.8%). G2 deri
 ## How to reproduce
 
 ```bash
-g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp -o pattern_learn   # add -pthread on glibc < 2.34
+g++ -O2 -std=c++20 -I native/include native/tools/knowledge/pattern_learn.cpp -o pattern_learn   # add -pthread on glibc < 2.34
 F=/root/work/f2; E=enwik8; V=ppmi_svd_output/enwik8   # ppmi_svd's 300-dimension vectors (data/cyphalm/README.md)
 # dev
 ./pattern_learn --gen-anomaly $E $F/v2/aug/seeds.tsv $F/v2/aug/facts_f2.tsv $F/wikidata/wd_values.tsv $F/v2/aug/patterns.tsv bench/eval dev/a
@@ -532,7 +532,7 @@ Dev only, f = 0.25 of the pool's cost, 1,000 draws × 5 seeds, as S10. V = confi
 #### How to reproduce (S11e)
 
 ```bash
-g++ -O2 -std=c++20 -I native/include -pthread native/tools/pattern_learn.cpp -o pattern_learn
+g++ -O2 -std=c++20 -I native/include -pthread native/tools/knowledge/pattern_learn.cpp -o pattern_learn
 F=/root/work/f2; E=enwik8; V=ppmi_svd_output/enwik8
 ./pattern_learn --gen-anomaly $E $F/v2/aug/seeds.tsv $F/v2/aug/facts_f2.tsv $F/wikidata/wd_values.tsv $F/v2/aug/patterns.tsv bench/eval pdev/a --fresh-dev --g3-weights --g13-questions
 ./pattern_learn --gen-analogy $E $F/v2/aug/seeds.tsv $F/v2/aug/facts_f2.tsv $F/wikidata/wd_values.tsv $F/v2/aug/patterns.tsv bench/eval $V data/cyphalm/simvec_ppmi32.bin pdev/g --fresh-dev --g4-date-lambda

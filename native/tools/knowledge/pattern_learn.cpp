@@ -153,7 +153,7 @@
 //   the grader that knows Wikidata's names and places (tables from scripts/fresh_slots.py grader), calibration on S8d's set
 //   and the fresh dev pools, variant M (>= 10 positives) chosen on dev, and S8's gate read once on the test pools.
 //
-// Build: g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp -o pattern_learn
+// Build: g++ -O2 -std=c++20 -I native/include native/tools/knowledge/pattern_learn.cpp -o pattern_learn
 // Usage: pattern_learn <enwik8> <outdir> [--cv] [--folds K] [--min-train N] [--base-rate A] [--sample N] [--seed S]
 //          [--wikidata FILE [--wikidata-gold-only]] [--phi FILE] [--shard FILE --dev DEV --test TEST [--slice-end B] [--holdout-from B]]
 //          [--raw] [--join FACTS] [--reach PARSE] [--gaps FILE [--demand ROWS,...] [--parse PARSE] [--gap-floor F] [--demand-weight W] [--gaps-spof SPOF]]
@@ -167,21 +167,21 @@
 //
 // Author: Odin Loch
 
-#include "cypha/eval/abc_closed.hpp"
-#include "cypha/eval/curiosity.hpp"
+#include "cypha/knowledge/abc_closed.hpp"
+#include "cypha/knowledge/curiosity.hpp"
 #include "cypha/eval/ecs.hpp"
-#include "cypha/eval/epistemic.hpp"
-#include "cypha/eval/gap_map.hpp"
-#include "cypha/eval/gen_concepts.hpp"
-#include "cypha/eval/gen_deep.hpp"
-#include "cypha/eval/gen_analogy.hpp"
-#include "cypha/eval/gen_links.hpp"
-#include "cypha/eval/gen_laws.hpp"
-#include "cypha/eval/gen_rules.hpp"
-#include "cypha/eval/sources.hpp"
+#include "cypha/knowledge/epistemic.hpp"
+#include "cypha/knowledge/gap_map.hpp"
+#include "cypha/knowledge/gen_concepts.hpp"
+#include "cypha/knowledge/gen_deep.hpp"
+#include "cypha/knowledge/gen_analogy.hpp"
+#include "cypha/knowledge/gen_links.hpp"
+#include "cypha/knowledge/gen_laws.hpp"
+#include "cypha/knowledge/gen_rules.hpp"
+#include "cypha/knowledge/sources.hpp"
 #include "cypha/eval/wd_grader.hpp"
-#include "cypha/eval/unknown_signals.hpp"
-#include "cypha/eval/worlds.hpp"
+#include "cypha/knowledge/unknown_signals.hpp"
+#include "cypha/knowledge/worlds.hpp"
 
 #include <sys/resource.h>
 
@@ -1586,7 +1586,7 @@ bool take_flags(int& argc, char** argv, const std::vector<string>* cand_override
         else {
             if (const char* e = std::getenv("CYPHA_F2C_TYPES")) cand.push_back(e);
             const string src = __FILE__;
-            const std::size_t cut = src.rfind("native/tools/pattern_learn.cpp");
+            const std::size_t cut = src.rfind("native/tools/knowledge/pattern_learn.cpp");
             if (cut != string::npos) cand.push_back(src.substr(0, cut) + "data/f2c/wd_seed_types.tsv");
             cand.push_back("data/f2c/wd_seed_types.tsv");
         }
@@ -12613,7 +12613,7 @@ int run(int argc, char** argv) {
 }  // namespace s11a
 
 // ============================================================ S11c: G13 anomalies, G3 abduction, G4 and G5 analogy
-// (docs/reports/S11C_ANALOGY_ANOMALY_ABDUCTION.md; native/include/cypha/eval/gen_analogy.hpp)
+// (docs/reports/S11C_ANALOGY_ANOMALY_ABDUCTION.md; native/include/cypha/knowledge/gen_analogy.hpp)
 //
 // pattern_learn --gen-anomaly ENWIK8 SEEDS.tsv FACTS_F2.tsv WD_VALUES.tsv PATTERNS.tsv S15_DIR OUT_PREFIX [--read-test] [--fresh-dev | --fresh-test]
 //   G13 on planted corruptions of store K and on store T's own anomalies (graded by Wikidata); G3 on planted deletions
@@ -14080,7 +14080,7 @@ int run_grade(int argc, char** argv) {
 }  // namespace s11c
 
 // ============================================================ S12a: G1 deep deduction, G15 numeric laws, G20 the wild tier
-// (docs/reports/S12A_DEDUCTION_LAWS_REFINEMENT.md; native/include/cypha/eval/gen_laws.hpp, gen_deep.hpp)
+// (docs/reports/S12A_DEDUCTION_LAWS_REFINEMENT.md; native/include/cypha/knowledge/gen_laws.hpp, gen_deep.hpp)
 // pattern_learn --gen-laws ENWIK8 SEEDS.tsv FACTS_F2.tsv OUT_PREFIX [--read-test] [--power-min-exp] [--order-relaxed M]
 //                [--s12c-dev] [--s12c-fresh write|read]
 //   the planted-law gate (dev replicates; the test replicates once, with --read-test) and G15's real read (the country

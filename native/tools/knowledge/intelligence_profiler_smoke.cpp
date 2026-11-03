@@ -4,9 +4,9 @@
 #include <cstdio>
 #include <vector>
 
-#include "cypha/intelligence/intelligence_profiler.hpp"
-#include "cypha/intelligence/measurers.hpp"
-#include "cypha/intelligence/nig_statistic_state.hpp"
+#include "cypha/knowledge/intelligence_profiler.hpp"
+#include "cypha/knowledge/measurers.hpp"
+#include "cypha/knowledge/nig_statistic_state.hpp"
 
 namespace {
 

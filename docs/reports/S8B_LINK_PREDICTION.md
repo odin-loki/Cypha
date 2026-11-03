@@ -199,7 +199,7 @@ Hits@10 of the combination (the chosen generator), all targets and among the rea
 ## How to reproduce
 
 ```bash
-g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp -o pattern_learn
+g++ -O2 -std=c++20 -I native/include native/tools/knowledge/pattern_learn.cpp -o pattern_learn
 F=/root/work/f2   # D4's and F2's run outputs (see the D4 and F2R reports)
 ./pattern_learn --gen-links enwik8 $F/v2/aug/seeds.tsv $F/v2/aug/facts_f2.tsv $F/wikidata/wd_values.tsv \
   $F/v2/aug/patterns.tsv bench/eval out                 # dev only

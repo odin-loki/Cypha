@@ -241,8 +241,8 @@ port, where it is still present and still named after its Python original:
 | Current file | Line | Content |
 |---|---|---|
 | [`native/include/cypha/cypha.hpp`](../../native/include/cypha/cypha.hpp) | 34–35 | `double deliberation_lo{kDeliberationLoDefault};` / `_hi` |
-| [`native/include/cypha/infer_cpu.hpp`](../../native/include/cypha/infer_cpu.hpp) | 19 | `/// Python `` CyphaDIF.deliberation_lo/hi `` defaults (disabled: lo >= hi).` |
-| [`native/include/cypha/infer_cpu.hpp`](../../native/include/cypha/infer_cpu.hpp) | 129 | `/// Python `` deliberation_lo `` / `` deliberation_hi `` (defaults disable abstention).` |
+| [`native/include/cypha/classify/infer_cpu.hpp`](../../native/include/cypha/classify/infer_cpu.hpp) | 19 | `/// Python `` CyphaDIF.deliberation_lo/hi `` defaults (disabled: lo >= hi).` |
+| [`native/include/cypha/classify/infer_cpu.hpp`](../../native/include/cypha/classify/infer_cpu.hpp) | 129 | `/// Python `` deliberation_lo `` / `` deliberation_hi `` (defaults disable abstention).` |
 | [`native/src/cypha.cpp`](../../native/src/cypha.cpp) | 441–442 | forwards both into the inference options |
 
 `deliberation_lo` appears 43 times and `deliberation_hi` 42 times across `native/`, and the
@@ -268,7 +268,7 @@ otherwise:
 constexpr double kDeliberateLo = 1.0;
 constexpr double kDeliberateHi = 0.0;
 ```
-— `native/src/train_step_vector.cpp:24-27`
+— `native/src/classify/train_step_vector.cpp:24-27`
 
 The 0.25–0.40 band is exactly the root monolith's `_DELIBERATE_LO` / `_DELIBERATE_HI`, so the
 port carried the Python values across and then turned them off — **for floating-point

@@ -9,7 +9,7 @@
 
 #include <cstdio>
 
-#include "cypha/load_cypha.hpp"
+#include "cypha/classify/load_cypha.hpp"
 
 extern "C" int cypha_core_mke_scalar_train_step_link_touch();
 

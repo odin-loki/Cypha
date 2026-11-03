@@ -1,4 +1,4 @@
-#include "cypha/kernel_memory.hpp"
+#include "cypha/classify/kernel_memory.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -7,8 +7,8 @@
 #include <stdexcept>
 #include <utility>
 
-#include "cypha/load_cypha.hpp"
-#include "cypha/rff_features.hpp"
+#include "cypha/classify/load_cypha.hpp"
+#include "cypha/classify/rff_features.hpp"
 
 namespace cypha {
 

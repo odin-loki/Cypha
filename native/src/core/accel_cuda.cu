@@ -6,7 +6,7 @@
 #include <cstdio>
 #include <cstring>
 
-#include "cypha/bessel_table.hpp"
+#include "cypha/classify/bessel_table.hpp"
 
 namespace {
 
@@ -145,8 +145,8 @@ __device__ double d_np_interp_k0k1(const double* tab, double x) {
 }
 
 // Mirrors cypha::detail::k0k1_small_x / k0k1_large_x / k0k1_blend and the host k0k1_lut. Keep the
-// constants and the branch structure identical to native/src/nig_gig_score_match.cpp and
-// native/src/nig_gig_math.cpp -- a divergence here is invisible to CPU/GPU parity tests, which
+// constants and the branch structure identical to native/src/classify/nig_gig_score_match.cpp and
+// native/src/classify/nig_gig_math.cpp -- a divergence here is invisible to CPU/GPU parity tests, which
 // compare the two paths against each other rather than against a reference.
 __device__ double d_k0k1_small_x(double x) {
   const double kEulerGamma = 0.5772156649015329;

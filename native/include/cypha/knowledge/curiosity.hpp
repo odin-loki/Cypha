@@ -15,7 +15,7 @@
 #pragma once
 
 #include "cypha/eval/ecs.hpp"
-#include "cypha/eval/hypothesis.hpp"
+#include "cypha/knowledge/hypothesis.hpp"
 
 #include <algorithm>
 #include <cmath>

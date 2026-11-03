@@ -1,4 +1,4 @@
-#include "cypha/cyphalm/cyphalm_rest.hpp"
+#include "cypha/serve/cyphalm_rest.hpp"
 
 #include <chrono>
 #include <filesystem>
@@ -12,8 +12,8 @@
 #include <nlohmann/json.hpp>
 
 #include "cypha/cypha.hpp"
-#include "cypha/cyphalm/cyphalm_generation.hpp"
-#include "cypha/cyphalm/predictive_codec.hpp"
+#include "cypha/lm/cyphalm_generation.hpp"
+#include "cypha/lm/predictive_codec.hpp"
 #include "cypha/forecast/forecast_pipeline.hpp"
 #include "cypha/forecast/gdelt_monitor.hpp"
 #include "cypha/forecast/views_baselines.hpp"

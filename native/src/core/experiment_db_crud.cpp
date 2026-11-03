@@ -1,6 +1,6 @@
-#include "cypha/experiment_db_crud.hpp"
+#include "cypha/core/experiment_db_crud.hpp"
 
-#include "cypha/experiment_db.hpp"
+#include "cypha/core/experiment_db.hpp"
 
 #include <sqlite3.h>
 

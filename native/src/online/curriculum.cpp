@@ -1,8 +1,8 @@
-#include "cypha/curriculum.hpp"
+#include "cypha/online/curriculum.hpp"
 
 #include <algorithm>
 
-#include "cypha/portable_shuffle.hpp"
+#include "cypha/core/portable_shuffle.hpp"
 
 namespace cypha {
 

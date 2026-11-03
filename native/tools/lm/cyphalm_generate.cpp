@@ -7,12 +7,12 @@
 #include <string>
 #include <vector>
 
-#include "cypha/cyphalm/cyphalm_checkpoint.hpp"
-#include "cypha/cyphalm/cyphalm_config.hpp"
-#include "cypha/cyphalm/cyphalm_generation.hpp"
-#include "cypha/cyphalm/cyphalm_model.hpp"
-#include "cypha/cyphalm/hp_backend.hpp"
-#include "cypha/cyphalm/infinigram.hpp"
+#include "cypha/lm/cyphalm_checkpoint.hpp"
+#include "cypha/lm/cyphalm_config.hpp"
+#include "cypha/lm/cyphalm_generation.hpp"
+#include "cypha/lm/cyphalm_model.hpp"
+#include "cypha/lm/hp_backend.hpp"
+#include "cypha/lm/infinigram.hpp"
 
 namespace {
 

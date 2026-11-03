@@ -162,7 +162,7 @@ Tool: `topic_bench` at `d1f9a1c`, with `TOPIC_BENCH_CACHE` (numbers identical wi
 
 ### Branch A: the router backend, built and checked, then reverted by rule 3
 
-- **Built and checked** (commits `ede6846`, `d1f9a1c`): a `count_vectors` backend for `BranchARouter` on the shared featuriser `native/include/cypha/text_features.hpp`, routing with `Cypha::predict` as measured, plus `topic_bench export-router` and `route-eval`.
+- **Built and checked** (commits `ede6846`, `d1f9a1c`): a `count_vectors` backend for `BranchARouter` on the shared featuriser `native/include/cypha/classify/text_features.hpp`, routing with `Cypha::predict` as measured, plus `topic_bench export-router` and `route-eval`.
   - The exported C7 router reproduced the measured test predictions **document for document: 0 of 7,532 differ**, accuracy 0.6131.
   - Routing took 2.9 ms a document at a peak of 97 MB.
   - At the router's default epistemic threshold (entropy > 0.5 nats) it abstains on 92% of documents with 20 classes, so that threshold would need setting for 20-way routing.

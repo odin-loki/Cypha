@@ -35,10 +35,10 @@
 #include <string>
 #include <vector>
 
-#include "cypha/cyphalm/fm_infinigram.hpp"
-#include "cypha/cyphalm/packed_trie.hpp"
-#include "cypha/cyphalm/token_model.hpp"
-#include "cypha/cyphalm/tokenizer.hpp"
+#include "cypha/lm/fm_infinigram.hpp"
+#include "cypha/lm/packed_trie.hpp"
+#include "cypha/lm/token_model.hpp"
+#include "cypha/lm/tokenizer.hpp"
 
 using namespace cypha::cyphalm;
 using namespace cypha::cyphalm::tok;

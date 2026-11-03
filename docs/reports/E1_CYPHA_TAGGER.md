@@ -66,7 +66,7 @@ For token *i* with word *w*:
 
 ## The comparisons
 
-1. **The perceptron** (`native/tools/pos_tagger.cpp`, E1's baseline), retrained here with its own protocol: dev and test UPOS.
+1. **The perceptron** (`native/tools/classify/pos_tagger.cpp`, E1's baseline), retrained here with its own protocol: dev and test UPOS.
 2. **Counts alone, no learning:** argmax over tags of the sum of B1–B14 (uniform weights). It shows what the classifier adds.
 3. **Exact class means (diagnostic, not a candidate):** the same standardised input, class means and a shared diagonal variance computed in one batch. It is the ceiling of Cypha's scoring rule, as in E4, and separates the cost of the online updates from the cost of the model family.
 
@@ -233,7 +233,7 @@ build/cypha_tagger selftest
 build/cypha_tagger run --train en_ewt-ud-train.conllu --dev en_ewt-ud-dev.conllu --test en_ewt-ud-test.conllu --read-test \
   --alpha 0.5 --vec simvec --simvec data/cyphalm/simvec_ppmi32.bin --whiten 0.1 --delta-lr 0.03 --world-lr 0.008 --passes 2 --diag --out final
 # the perceptron's per-token scores
-g++ -O2 -std=c++20 native/tools/pos_tagger.cpp -o pos_tagger
+g++ -O2 -std=c++20 native/tools/classify/pos_tagger.cpp -o pos_tagger
 ./pos_tagger train en_ewt-ud-train.conllu en_ewt-ud-dev.conllu model.bin
 ./pos_tagger eval model.bin en_ewt-ud-test.conllu --scores test_scores.tsv
 ```

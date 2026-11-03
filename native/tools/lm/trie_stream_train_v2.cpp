@@ -2,7 +2,7 @@
 // native/tools/trie_stream_train.cpp.
 //
 // The same model, the same corpus files and the same per-file checkpoint and resume as the live trainer, through
-// cypha/cyphalm/stream_trie.hpp, with these changes:
+// cypha/lm/stream_trie.hpp, with these changes:
 //   - counts never wrap: a count about to pass 2^32 - 1 halves its table (the node's followers, the order-1 row or
 //     the unigram), so ratios stay right on a 1 TB corpus (the live trainer's 32-bit counts wrap);
 //   - checkpoints are "TRI2" (the live layout plus a trailer: the cap and the number of halvings);
@@ -16,7 +16,7 @@
 //
 // Usage: trie_stream_train_v2 ROOT [--out DIR] [--once] [--snapshots LIST] [--cap N] [--threads N]
 
-#include "cypha/cyphalm/stream_trie.hpp"
+#include "cypha/lm/stream_trie.hpp"
 
 #include <algorithm>
 #include <chrono>

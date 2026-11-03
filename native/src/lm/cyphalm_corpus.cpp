@@ -1,4 +1,4 @@
-#include "cypha/cyphalm/cyphalm_corpus.hpp"
+#include "cypha/lm/cyphalm_corpus.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -12,8 +12,8 @@
 #include <memory>
 #include <unordered_map>
 
-#include "cypha/cyphalm/bpe_tokenizer.hpp"
-#include "cypha/bench/bench_paths.hpp"
+#include "cypha/lm/bpe_tokenizer.hpp"
+#include "cypha/eval/bench_paths.hpp"
 
 namespace fs = std::filesystem;
 

@@ -1,8 +1,8 @@
 /// Train hybrid production recipe briefly, then measure predictive arithmetic coding
 /// (model BPC vs coded BPC) on a WikiText slice or synthetic fallback.
-#include "cypha/cyphalm/cyphalm_config.hpp"
-#include "cypha/cyphalm/cyphalm_model.hpp"
-#include "cypha/cyphalm/predictive_codec.hpp"
+#include "cypha/lm/cyphalm_config.hpp"
+#include "cypha/lm/cyphalm_model.hpp"
+#include "cypha/lm/predictive_codec.hpp"
 
 #include <algorithm>
 #include <cstdint>

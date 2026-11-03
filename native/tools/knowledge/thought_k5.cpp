@@ -23,7 +23,7 @@
 #include <string>
 #include <vector>
 
-#include "cypha/thought/bindings_cypha.hpp"
+#include "cypha/knowledge/bindings_cypha.hpp"
 
 using namespace cypha::thought;
 namespace bd = cypha::thought::bind;

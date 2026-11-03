@@ -1,7 +1,7 @@
 #pragma once
 
-#include "cypha/infer_cpu.hpp"
-#include "cypha/intelligence/epistemic_threshold.hpp"
+#include "cypha/classify/infer_cpu.hpp"
+#include "cypha/knowledge/epistemic_threshold.hpp"
 
 namespace cypha::intelligence {
 

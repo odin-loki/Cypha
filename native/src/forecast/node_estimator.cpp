@@ -1,11 +1,11 @@
 #include "cypha/forecast/node_estimator.hpp"
 
-#include "cypha/create_model.hpp"
-#include "cypha/infer_cpu.hpp"
-#include "cypha/memory_train.hpp"
-#include "cypha/replay_buffer.hpp"
-#include "cypha/sync_infer.hpp"
-#include "cypha/train_step_vector.hpp"
+#include "cypha/classify/create_model.hpp"
+#include "cypha/classify/infer_cpu.hpp"
+#include "cypha/classify/memory_train.hpp"
+#include "cypha/online/replay_buffer.hpp"
+#include "cypha/classify/sync_infer.hpp"
+#include "cypha/classify/train_step_vector.hpp"
 
 #include <algorithm>
 #include <cmath>

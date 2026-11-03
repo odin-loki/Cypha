@@ -1,6 +1,6 @@
-#include "cypha/intelligence/intelligence_profile_json.hpp"
+#include "cypha/knowledge/intelligence_profile_json.hpp"
 
-#include "cypha/intelligence/criticality_vector.hpp"
+#include "cypha/knowledge/criticality_vector.hpp"
 
 namespace cypha::intelligence {
 

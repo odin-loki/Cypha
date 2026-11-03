@@ -2,7 +2,7 @@
 
 Odin Loch, 2026-10-27
 
-Tool: `native/tools/cypha_word_classes.cpp` (subcommand `s1`), linked against the built core library.
+Tool: `native/tools/semantics/cypha_word_classes.cpp` (subcommand `s1`), linked against the built core library.
 Design: [SEMANTICS.md](../SEMANTICS.md) §2–3, experiments S-1 to S-3 in §7. Plan: Track C, row C5.
 Baseline: [C1_PPMI_SVD_VECTORS.md](C1_PPMI_SVD_VECTORS.md).
 
@@ -29,7 +29,7 @@ Each of the top 10,000 enwik8 words became a Cypha class. Each of its 9.87 milli
 
 | item | value |
 |---|---|
-| Corpus | `/root/cdata/enwik8`, cleaned and tokenised by the code copied verbatim from `native/tools/ppmi_svd.cpp`: 11,226,546 tokens, 265,565 types |
+| Corpus | `/root/cdata/enwik8`, cleaned and tokenised by the code copied verbatim from `native/tools/semantics/ppmi_svd.cpp`: 11,226,546 tokens, 265,565 types |
 | Stream | Top 50,000 words kept, others deleted before windowing (as C1). A line ends a window |
 | Classes | Top 10,000 words; 9,866,716 class tokens (87.9% of all tokens) |
 | Observation | `h_i = Σ_{0<|j−i|≤5} r(w_j)/|j−i|`, where `r(w)` is a fixed random index vector with d = 256 and 8 entries of ±1 (seed 1). The PPMI-SVD vectors are not used as input |
@@ -276,4 +276,4 @@ cypha_word_classes s1 $ARGS --enc-lr 0 --sched inv --world-lr 0.00005 --no-bench
 cypha_word_classes s1 $ARGS --no-bench                                            # contrastive encoder on
 ```
 
-The PPMI-SVD inputs come from `native/tools/ppmi_svd.cpp` (C1). The results are deterministic: the final runs reproduced the earlier builds' similarity and hypernymy numbers to the last digit.
+The PPMI-SVD inputs come from `native/tools/semantics/ppmi_svd.cpp` (C1). The results are deterministic: the final runs reproduced the earlier builds' similarity and hypernymy numbers to the last digit.

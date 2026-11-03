@@ -10,7 +10,7 @@
 
 ## Change
 
-1. `native/include/cypha/parallel_rows.hpp` — `parallel_for_score_rows` (OpenMP when `_OPENMP`, else `std::thread`).
+1. `native/include/cypha/core/parallel_rows.hpp` — `parallel_for_score_rows` (OpenMP when `_OPENMP`, else `std::thread`).
 2. Gates: `n >= 16` **and** `n*d*K >= 1e6` (avoids OpenMP fork overhead on tiny product fixtures).
 3. `rpsm::batched_llr_gemm` + GMM branch in `score_matrix_use_field` use the helper.
 4. CTest `native_score_matrix_parallel_parity` — serial vs parallel on synth d=256 K=32 at n=128/256, tol `1e-12`.

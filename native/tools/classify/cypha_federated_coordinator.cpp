@@ -11,7 +11,7 @@
 
 #include <nlohmann/json.hpp>
 
-#include "cypha/federated_aggregate.hpp"
+#include "cypha/classify/federated_aggregate.hpp"
 #include "httplib.h"
 
 namespace fs = std::filesystem;

@@ -36,7 +36,7 @@
 #include <utility>
 #include <vector>
 
-#include "cypha/eval/epistemic.hpp"
+#include "cypha/knowledge/epistemic.hpp"
 #include "cypha/eval/lci.hpp"
 
 namespace cypha::eval {

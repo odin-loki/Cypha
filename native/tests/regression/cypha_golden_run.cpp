@@ -15,7 +15,7 @@
 #include <windows.h>
 #endif
 
-#include "cypha/infer_cpu.hpp"
+#include "cypha/classify/infer_cpu.hpp"
 
 namespace fs = std::filesystem;
 

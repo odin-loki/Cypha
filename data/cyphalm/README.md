@@ -13,7 +13,7 @@ Runtime data for `cyphalm_trie`. Report: [`docs/reports/A4_SIMILAR_CONTEXT_EXPER
 **Rebuild** (from the repository root; `enwik8` is the 100 MB file, 85 s and about 0.6 GB for the vectors, 30 s for the file):
 
 ```bash
-g++ -O2 -std=c++20 native/tools/ppmi_svd.cpp -o ppmi_svd
+g++ -O2 -std=c++20 native/tools/semantics/ppmi_svd.cpp -o ppmi_svd
 head -c 7340032 enwik8 > enwik8_noeval && tail -c +9437185 enwik8 >> enwik8_noeval   # no BPC holdout, no fresh text
 ./ppmi_svd enwik8_noeval none none - ppmi_noeval --no-ri --no-ablation
 ./cyphalm_trie simvec enwik8 --sim default,vec=ppmi_noeval,dim=32 --out data/cyphalm/simvec_ppmi32.bin

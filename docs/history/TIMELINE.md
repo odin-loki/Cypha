@@ -355,7 +355,7 @@ gains the `field_W_T` name in the root monolith, and ships today as
 /// Causal `W_T` SGD step + spectral-radius trim + refresh `a_eff` (Python `update_causal`).
 void nig_field_update_causal(...)
 ```
-— `native/include/cypha/nig_field.hpp:26`
+— `native/include/cypha/classify/nig_field.hpp:26`
 
 So v8 discarded family A's *code* wholesale while keeping at least one of its mechanisms. A
 second family-A idea, GRIA, took a stranger route back — see

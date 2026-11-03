@@ -6,8 +6,8 @@
 #include <string>
 #include <vector>
 
-#include "cypha/cyphalm/cyphalm_config.hpp"
-#include "cypha/cyphalm/cyphalm_model.hpp"
+#include "cypha/lm/cyphalm_config.hpp"
+#include "cypha/lm/cyphalm_model.hpp"
 
 #if defined(__linux__)
 #include <fstream>

@@ -49,9 +49,9 @@ ctest --test-dir native/build_onnx -R "native_onnx_export" --output-on-failure
 
 ## Files
 
-- `native/include/cypha/onnx_min_writer.hpp` — writer + `parse_model` / `validate_cypha_infer_model`
-- `native/tools/cypha_onnx_export.cpp` — existing CLI (additive; default still LLR-only)
-- `native/tools/onnx_export_smoke.cpp` — CTest structural smoke
+- `native/include/cypha/core/onnx_min_writer.hpp` — writer + `parse_model` / `validate_cypha_infer_model`
+- `native/tools/classify/cypha_onnx_export.cpp` — existing CLI (additive; default still LLR-only)
+- `native/tools/classify/onnx_export_smoke.cpp` — CTest structural smoke
 - `native/CMakeLists.txt` — `onnx_export_smoke` target + `native_onnx_export_validate`
 
 ## Follow-up (not in this slice)

@@ -11,11 +11,11 @@
 
 #include <nlohmann/json.hpp>
 
-#include "cypha/bench/bench_paths.hpp"
-#include "cypha/cyphalm/cyphalm_config.hpp"
-#include "cypha/cyphalm/cyphalm_generation.hpp"
-#include "cypha/cyphalm/cyphalm_model.hpp"
-#include "cypha/cyphalm/text_algebraic_fingerprint.hpp"
+#include "cypha/eval/bench_paths.hpp"
+#include "cypha/lm/cyphalm_config.hpp"
+#include "cypha/lm/cyphalm_generation.hpp"
+#include "cypha/lm/cyphalm_model.hpp"
+#include "cypha/eval/text_algebraic_fingerprint.hpp"
 
 namespace fs = std::filesystem;
 using Json = nlohmann::json;
@@ -177,7 +177,7 @@ Json run_ms2_experiment(const Args& args) {
 }
 
 fs::path default_results_path() {
-    const fs::path native = fs::path(__FILE__).parent_path().parent_path();
+    const fs::path native = fs::path(__FILE__).parent_path().parent_path().parent_path();
     return native.parent_path() / "bench" / "results" / "algebraic_fingerprint_ms2.json";
 }
 
@@ -201,7 +201,7 @@ int main(int argc, char** argv) {
         write_json_file(out, report);
 
         if (args.write_table) {
-            const fs::path table = fs::path(__FILE__).parent_path().parent_path().parent_path() /
+            const fs::path table = fs::path(__FILE__).parent_path().parent_path().parent_path().parent_path() /
                                    "bench" / "report" / "tables" / "algebraic_fingerprint_ms2.json";
             write_json_file(table, report);
         }

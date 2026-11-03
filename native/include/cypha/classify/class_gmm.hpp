@@ -6,8 +6,8 @@
 /// When enabled, ``D`` is ``K×maxM×d`` row-major with ``class_pi`` (``K×maxM``) and
 /// ``class_n_comp[k]`` in ``[1, kClassGmmMaxM]``.
 
-#include "cypha/em_step.hpp"
-#include "cypha/load_cypha.hpp"
+#include "cypha/classify/em_step.hpp"
+#include "cypha/classify/load_cypha.hpp"
 
 #include <cmath>
 #include <cstddef>

@@ -1,11 +1,11 @@
 #pragma once
 
-#include "cypha/class_gmm.hpp"
-#include "cypha/ewc_regularizer.hpp"
-#include "cypha/encoder_contrastive.hpp"
-#include "cypha/infer_cpu.hpp"
-#include "cypha/memory_train.hpp"
-#include "cypha/replay_buffer.hpp"
+#include "cypha/classify/class_gmm.hpp"
+#include "cypha/online/ewc_regularizer.hpp"
+#include "cypha/classify/encoder_contrastive.hpp"
+#include "cypha/classify/infer_cpu.hpp"
+#include "cypha/classify/memory_train.hpp"
+#include "cypha/online/replay_buffer.hpp"
 
 #include <limits>
 #include <random>

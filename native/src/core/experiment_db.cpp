@@ -1,4 +1,4 @@
-#include "cypha/experiment_db.hpp"
+#include "cypha/core/experiment_db.hpp"
 
 #include <cstdio>
 #include <sqlite3.h>

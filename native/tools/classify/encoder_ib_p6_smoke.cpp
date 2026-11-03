@@ -6,14 +6,14 @@
 #include <string>
 #include <vector>
 
-#include "cypha/create_model.hpp"
-#include "cypha/encoder_contrastive.hpp"
-#include "cypha/infer_cpu.hpp"
-#include "cypha/memory_train.hpp"
-#include "cypha/mt19937_rng.hpp"
-#include "cypha/replay_buffer.hpp"
-#include "cypha/sync_infer.hpp"
-#include "cypha/train_step_vector.hpp"
+#include "cypha/classify/create_model.hpp"
+#include "cypha/classify/encoder_contrastive.hpp"
+#include "cypha/classify/infer_cpu.hpp"
+#include "cypha/classify/memory_train.hpp"
+#include "cypha/core/mt19937_rng.hpp"
+#include "cypha/online/replay_buffer.hpp"
+#include "cypha/classify/sync_infer.hpp"
+#include "cypha/classify/train_step_vector.hpp"
 
 namespace {
 

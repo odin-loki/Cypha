@@ -253,7 +253,7 @@ One read, 2026-10-29, `--read-test`, commit 10bef62, logged in the S15 report.
 ## How to reproduce
 
 ```
-g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp -o pattern_learn
+g++ -O2 -std=c++20 -I native/include native/tools/knowledge/pattern_learn.cpp -o pattern_learn
 F=/root/work/f2/v2/aug
 ./pattern_learn --gen-rules enwik8 $F/seeds.tsv $F/facts_f2.tsv /root/work/f2/wikidata/wd_values.tsv $F/patterns.tsv bench/eval OUT   # dev
 ./pattern_learn --gen-rules enwik8 $F/seeds.tsv $F/facts_f2.tsv /root/work/f2/wikidata/wd_values.tsv $F/patterns.tsv bench/eval OUT --read-test   # the one test read

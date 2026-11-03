@@ -4,10 +4,10 @@
 #include <stdexcept>
 #include <string>
 
-#include "cypha/bench/bench_cross_domain.hpp"
-#include "cypha/bench/bench_figures.hpp"
-#include "cypha/bench/bench_paths.hpp"
-#include "cypha/bench/bench_report.hpp"
+#include "cypha/eval/bench_cross_domain.hpp"
+#include "cypha/eval/bench_figures.hpp"
+#include "cypha/eval/bench_paths.hpp"
+#include "cypha/eval/bench_report.hpp"
 
 namespace {
 

@@ -162,7 +162,7 @@ Cypha Tests.txt
 
 docs/site/
 *.html
-!native/tools/static/*.html
+!native/tools/serve/static/*.html
 !paper/arxiv_bundle/*.html
 *.md.html
 *_test.html

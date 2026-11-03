@@ -24,7 +24,7 @@
 
 | **P0** | Core DIF infer/train, `.cypha` v3, REST, Qt shell, bench d01–d17 | ✅ SHIPPED |
 
-| **P1** | Intelligence Profiler (`cypha/intelligence/`) | 🔄 **Started** — smoke + CTest |
+| **P1** | Intelligence Profiler (`cypha/knowledge/`) | 🔄 **Started** — smoke + CTest |
 
 | **P2** | XOR / kernel LLR end-to-end (train + batch + persist + bench d03_xor) | ✅ Nyström + train wire + `xor_kernel_bench` + CTests + `cypha_bench_run --domain-tag d03_xor` + validate smoke |
 
@@ -56,7 +56,7 @@
 
 | `cypha_som/` | `native/src/som/` (smoke only) | ✅ **Removed** — archived |
 
-| `cypha_accel/` | `native/src/accel_cuda.cu` | ✅ Native CUDA/CPU accel |
+| `cypha_accel/` | `native/src/core/accel_cuda.cu` | ✅ Native CUDA/CPU accel |
 
 | `cypha_views/` | — | Dropped |
 

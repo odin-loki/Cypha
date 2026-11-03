@@ -1,7 +1,7 @@
 // M6: apply Python-canonical experiment DDL; insert/update/select; optional on-disk reopen check.
 // Usage: experiment_db_smoke <experiment_ddl.sql> [db_path]
 //        — omit db_path for :memory:; with db_path, file is removed first, then reopened read-only.
-#include "cypha/experiment_db.hpp"
+#include "cypha/core/experiment_db.hpp"
 
 #include <sqlite3.h>
 

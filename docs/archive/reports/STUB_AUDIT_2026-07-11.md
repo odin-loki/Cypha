@@ -6,7 +6,7 @@
 
 **HEAD at start:** `e951f73`. Fresh build dir: `native/build_stubs` (Ninja, `-DCMAKE_BUILD_TYPE=Release`,
 MinGW/Strawberry `c++.exe`). Did not touch `native/build_math`, `native/build_scale`,
-`bench/BASELINE_LOCK.json`, overnight orchestration scripts, `native/src/intelligence/measurers.*`,
+`bench/BASELINE_LOCK.json`, overnight orchestration scripts, `native/src/knowledge/measurers.*`,
 `--lstm-hidden` parsing, or `self_correcting_infer.*`/`epistemic_threshold.*` (a sibling agent was
 concurrently editing `epistemic_threshold`-adjacent code in `cyphalm_config.hpp`/`cyphalm_model.hpp`/
 `cyphalm_bench_native.cpp` during this session — confirmed via `git diff` and left untouched).
@@ -64,7 +64,7 @@ Grepped `native/src/**`, `native/tools/**`, `native/tests/**` for `ReversibleSSM
 `H11`, and the config flag it's actually gated by (`use_reversible_cell`, not the class name directly —
 `cyphalm_generation.cpp` and `branch_a_router.cpp` do **not** reference this class at all, contrary to
 what a prior grep apparently suggested; the only file that constructs/calls it is
-`native/src/cyphalm/cyphalm_model.cpp`):
+`native/src/lm/cyphalm_model.cpp`):
 
 - **Construction:** `cyphalm_model.cpp:318`, gated by `cfg_.use_reversible_cell`.
 - **`forward()`:** `cyphalm_model.cpp:547-550`, inside the SSM context pipeline — this *is* on the live
@@ -114,9 +114,9 @@ what a prior grep apparently suggested; the only file that constructs/calls it i
 - `native/include/cypha/cyphalm/reversible_ssm_cell.hpp` / `.cpp`: renamed `backward_stub()` →
   `reconstruct()`, rewrote the docstrings/comments to state the exact-inverse derivation instead of
   calling it a stub.
-- `native/src/cyphalm/cyphalm_model.cpp`: updated the call site + added a comment explaining the
+- `native/src/lm/cyphalm_model.cpp`: updated the call site + added a comment explaining the
   discarded-return-value/dead-compute situation.
-- `native/src/cyphalm/cypha_cell_hypothesis.cpp`: updated H11's `notes` string.
+- `native/src/lm/cypha_cell_hypothesis.cpp`: updated H11's `notes` string.
 - New regression test: `native/tools/reversible_ssm_cell_smoke.cpp` (registered as ctest
   `native_reversible_ssm_cell_smoke`) — covers the basic round trip, saturated deltas, zero-padded
   short `delta`, `reset()`, and sequential `forward()` calls, asserting `reconstruct()` recovers the
@@ -130,7 +130,7 @@ what a prior grep apparently suggested; the only file that constructs/calls it i
 
 ### 1. What the stub actually computes
 
-`native/src/ewc_regularizer.cpp`'s `build_diagonal_fisher()` set `F_i = anchor_i² + ε`, i.e. the
+`native/src/online/ewc_regularizer.cpp`'s `build_diagonal_fisher()` set `F_i = anchor_i² + ε`, i.e. the
 squared **parameter value** at snapshot time, not `F_i = E[(∂ log p/∂θ_i)²]` (squared **gradient**,
 the standard diagonal-Fisher EWC formula). These are unrelated quantities: a parameter with a large
 value but a near-zero gradient (i.e. not contributing to the loss around the anchor) would be
@@ -144,7 +144,7 @@ distinguish it from the unrelated, separately-implemented `CyphaLMEwcRegularizer
 `HybridEwcRegularizer` in `cyphalm_ewc_regularizer.hpp/.cpp`, which is a different class entirely and
 out of scope here). `cypha::EwcRegularizer` (the audited class) is used in:
 
-- **`native/src/bench/bench_domains.cpp`** — D16 domain, two live experiments:
+- **`native/src/eval/bench_domains.cpp`** — D16 domain, two live experiments:
   - `16B_forgetting_resistance` (`run_d16_ewc_probe`): trains iris → snapshot → trains wine/digits →
     re-evaluates iris, comparing `forgetting_score` baseline-vs-EWC, reporting
     `ewc_reduces_forgetting` / `forgetting_delta`. **This is exactly the kind of catastrophic-forgetting
@@ -155,11 +155,11 @@ out of scope here). `cypha::EwcRegularizer` (the audited class) is used in:
     never the `D` pull. Pre-existing behavior, unrelated to the Fisher formula itself; left as-is
     (not a Part B target — real-Fisher calibration requires post-training data to calibrate against,
     which doesn't exist before training starts).
-- **`native/apps/cypha_rest.cpp`** (`g_ewc`) — the REST server's `POST /train` endpoint: a client can
+- **`native/tools/serve/cypha_rest.cpp`** (`g_ewc`) — the REST server's `POST /train` endpoint: a client can
   set `"ewc_snapshot": true` and `"ewc_lambda": <λ>` in the request body to snapshot/activate EWC live,
   in production request-serving code. **This is a genuinely live, user-facing path**, not just a bench
   domain.
-- **`native/tools/ewc_smoke.cpp`, `native/tools/ewc_d16b_smoke.cpp`** — existing regression tests
+- **`native/tools/online/ewc_smoke.cpp`, `native/tools/online/ewc_d16b_smoke.cpp`** — existing regression tests
   exercising `snapshot()`/`penalty()`/`apply_pull()` (unchanged, still pass).
 
 **Verdict: EWC is live, in two places.** Per the task's decision tree this requires an actual fix, not
@@ -172,7 +172,7 @@ just a documentation correction.
 hand-derived closed-form update rules already in this codebase, and in both cases the update rule
 *is* (up to a learning-rate factor) the gradient of a loss this codebase already computes explicitly:
 
-1. **`D`:** `CyphaDifMemoryState::memory_train` (`native/src/memory_train.cpp`) returns the scalar loss
+1. **`D`:** `CyphaDifMemoryState::memory_train` (`native/src/classify/memory_train.cpp`) returns the scalar loss
    `-log_norm + 0.5·r·h_mu0 - cross_k + 0.5·d_sq_k`, where (for the true-label row `k`)
    `cross_k = Σ_j D[k,j]·r[j]` and `d_sq_k = Σ_j D[k,j]²·world_inv_v[j]`, `r[j] = (h[j]-mu0[j])·world_inv_v[j]`.
    Only row `k` appears in the loss, so `∂loss/∂D[k,j] = D[k,j]·world_inv_v[j] - r[j]`, and `0` for
@@ -181,7 +181,7 @@ hand-derived closed-form update rules already in this codebase, and in both case
    all-zero at creation (`create_model.cpp`) and is **never mutated** anywhere in `native/src/*.cpp`
    (grepped for assignments — only ever read) — so the field-correction term is provably zero here, not
    just ignored as an approximation.
-2. **`enc_w`:** `contrastive_update_encoder_w` (`native/src/encoder_contrastive.cpp`) is already
+2. **`enc_w`:** `contrastive_update_encoder_w` (`native/src/classify/encoder_contrastive.cpp`) is already
    *documented* as a "Fisher-Rao-style encoder update": `W[i,j] += lr·weight·diff[i]·f[j]` where
    `diff = r_pred - r_true` are Fisher-Rao residuals `(h-mu)/max(v,ε)`. The per-step contribution
    before the `lr` scale — `weight·diff[i]·f[j]` — *is* `∂loss/∂W[i,j]`, and it's zero for
@@ -211,7 +211,7 @@ explicitly opts in.
 
 ### 5. Measured effect (small scale)
 
-Ran the new `native/tools/ewc_real_fisher_smoke.cpp` (mirrors `ewc_d16b_smoke.cpp`'s synthetic 3-task
+Ran the new `native/tools/online/ewc_real_fisher_smoke.cpp` (mirrors `ewc_d16b_smoke.cpp`'s synthetic 3-task
 setup) comparing `snapshot()` vs. `snapshot_calibrated()` on identical post-training state:
 
 ```
@@ -231,15 +231,15 @@ this cleanup pass's scope.
 
 ### 6. Changes made
 
-- `native/include/cypha/ewc_regularizer.hpp` / `native/src/ewc_regularizer.cpp`: added
+- `native/include/cypha/online/ewc_regularizer.hpp` / `native/src/online/ewc_regularizer.cpp`: added
   `EwcRegularizer::snapshot_calibrated(mem, infer, calib_x, calib_labels)` (real diagonal Fisher via
   calibration-batch squared gradients, derived as above); corrected the class-level docstring to
   clearly distinguish the legacy anchor-squared proxy (still `snapshot()`'s behavior, kept for the REST
   endpoint and every other existing caller) from the new calibrated estimate.
-- `native/src/bench/bench_domains.cpp`: added `d16_real_fisher_enabled()` env-gate helper; wired
+- `native/src/eval/bench_domains.cpp`: added `d16_real_fisher_enabled()` env-gate helper; wired
   `snapshot_calibrated` into `run_d16_ewc_probe`'s EWC arm behind `CYPHA_D16_REAL_FISHER=1`; added
   `ewc_real_fisher` to that experiment's JSON output.
-- New regression test: `native/tools/ewc_real_fisher_smoke.cpp` (ctest `native_ewc_real_fisher_smoke`)
+- New regression test: `native/tools/online/ewc_real_fisher_smoke.cpp` (ctest `native_ewc_real_fisher_smoke`)
   — asserts both `snapshot()` and `snapshot_calibrated()` produce zero penalty immediately after
   snapshot, that the empty-calibration-batch fallback exactly reproduces legacy behavior, and that the
   real-Fisher and anchor-squared penalties are genuinely different (not a no-op rename) after further

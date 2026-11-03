@@ -27,7 +27,7 @@
 //   S-1b (a2)         projected PPMI rows (count mean of them: 0.351 / 0.126 / 0.376)  0.256 / 0.082 / 0.241
 //   S-1b (b)          sgns, Sigma0 0.3, 5 epochs, words + contexts         0.750 / 0.270 / 0.756  (1,542 s, 316 MB)
 //   S-1b (c)          pullpush from random, 1 epoch: MEN 0.073 (no structure; 110 us per library step)
-//   PPMI-SVD 300 d (native/tools/ppmi_svd.cpp)                              0.723 / 0.265 / 0.732
+//   PPMI-SVD 300 d (native/tools/semantics/ppmi_svd.cpp)                              0.723 / 0.265 / 0.732
 //   Reports: docs/reports/C5_WORDS_AS_CLASSES.md, docs/reports/S1B_LEARNED_CONTEXTS.md
 //
 // Usage (each subcommand prints its own usage line when called without arguments):
@@ -49,7 +49,7 @@
 //   g++ -O3 -DNDEBUG -std=c++20 -msse4.1 -fopenmp -DCYPHA_ACCEL_GPU_MIN_BATCH_ROWS=1 -DCYPHA_HP_GATE24=1
 //       -DCYPHA_HP_SLOT_MAX=24 -DCYPHA_LLM_ALGORITHM_HP=1 -DHP_SLOT_MAX=24 -DHP_XSIMD=1
 //       -Inative/third_party/hp/include -Inative/third_party/hp/third_party/xsimd/include -Inative/include
-//       -Inative/third_party native/tools/cypha_word_classes.cpp /root/cb_core/libcypha_core.a -lpthread
+//       -Inative/third_party native/tools/semantics/cypha_word_classes.cpp /root/cb_core/libcypha_core.a -lpthread
 //       -o cypha_word_classes
 
 #include <algorithm>
@@ -80,12 +80,12 @@
 
 #include <unistd.h>
 
-#include "cypha/create_model.hpp"
+#include "cypha/classify/create_model.hpp"
 #include "cypha/cypha.hpp"
-#include "cypha/encoder_contrastive.hpp"
-#include "cypha/infer_cpu.hpp"
-#include "cypha/memory_train.hpp"
-#include "cypha/regression.hpp"
+#include "cypha/classify/encoder_contrastive.hpp"
+#include "cypha/classify/infer_cpu.hpp"
+#include "cypha/classify/memory_train.hpp"
+#include "cypha/classify/regression.hpp"
 #include "cypha/semantics/geometry.hpp"
 
 namespace {
@@ -119,7 +119,7 @@ constexpr uint16_t kSep = 0xFFFF;
 constexpr uint32_t kSep32 = 0xFFFFFFFFu;
 
 // ---------------------------------------------------------------------------------------------
-// 1. Cleaning and tokenising: copied verbatim from native/tools/ppmi_svd.cpp (lines 107-437), so the
+// 1. Cleaning and tokenising: copied verbatim from native/tools/semantics/ppmi_svd.cpp (lines 107-437), so the
 //    token stream is the one the PPMI-SVD vectors were built on.
 // ---------------------------------------------------------------------------------------------
 
@@ -456,7 +456,7 @@ Corpus clean_and_tokenize(const std::string& raw, const std::string& dump_path) 
 
 
 
-// Spearman rank correlation, copied verbatim from native/tools/ppmi_svd.cpp (lines 980-1014).
+// Spearman rank correlation, copied verbatim from native/tools/semantics/ppmi_svd.cpp (lines 980-1014).
 std::vector<double> rank_avg(const std::vector<double>& v) {
     const size_t n = v.size();
     std::vector<size_t> idx(n);
@@ -601,7 +601,7 @@ IndexVecs make_index(int V, int d, int nnz, uint64_t seed) {
     return iv;
 }
 
-// S-1b (a): word-context PPMI exactly as native/tools/ppmi_svd.cpp builds it (window W, weight 1/distance,
+// S-1b (a): word-context PPMI exactly as native/tools/semantics/ppmi_svd.cpp builds it (window W, weight 1/distance,
 // min_count 1, context smoothing alpha, marginals from all pairs), kept as sorted CSR rows for the first R targets.
 // With nw (the word counts) each value is PPMI(t, c) * n_t / C(t, c) instead, so that the plain mean of a word's
 // observations is exactly the random projection of its PPMI row (--obs ppmi-row).

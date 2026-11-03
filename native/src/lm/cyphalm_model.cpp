@@ -1,4 +1,4 @@
-#include "cypha/cyphalm/cyphalm_model.hpp"
+#include "cypha/lm/cyphalm_model.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -9,11 +9,11 @@
 
 #include <nlohmann/json.hpp>
 
-#include "cypha/cyphalm/cyphalm_checkpoint.hpp"
-#include "cypha/cyphalm/cyphalm_views.hpp"
-#include "cypha/cyphalm/infinigram.hpp"
+#include "cypha/lm/cyphalm_checkpoint.hpp"
+#include "cypha/lm/cyphalm_views.hpp"
+#include "cypha/lm/infinigram.hpp"
 #include "hp/shard_merge.hpp"  // Predictor::reset_stream_state
-#include "cypha/intelligence/intelligence_profiler.hpp"
+#include "cypha/knowledge/intelligence_profiler.hpp"
 
 namespace cypha {
 namespace cyphalm {

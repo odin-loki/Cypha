@@ -14,7 +14,7 @@ rm -f "$here"/SCRIBE_code_v1.0.zip "$here"/SCRIBE_results_v1.0.zip "$here"/SCRIB
 c="$stage/SCRIBE_code_v1.0"
 mkdir -p "$c/native/include/cypha/eval" "$c/native/tools" "$c/scripts" "$c/docs/reports" "$c/paper"
 cp "$repo/native/include/cypha/eval/scribe.hpp" "$c/native/include/cypha/eval/"
-cp "$repo/native/tools/scribe.cpp" "$repo/native/tools/ppmi_svd.cpp" "$c/native/tools/"
+cp "$repo/native/tools/eval/scribe.cpp" "$repo/native/tools/semantics/ppmi_svd.cpp" "$c/native/tools/"
 cp -r "$repo/scripts/scribe_eval" "$c/scripts/"
 find "$c/scripts" -name "__pycache__" -type d -prune -exec rm -rf {} +
 cp "$repo/docs/SCRIBE_PAPER_PLAN.md" "$c/docs/"

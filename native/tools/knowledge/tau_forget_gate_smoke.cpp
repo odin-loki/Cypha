@@ -3,8 +3,8 @@
 #include <cstdio>
 #include <vector>
 
-#include "cypha/cyphalm/cyphalm_math_integration.hpp"
-#include "cypha/cyphalm/cyphalm_model.hpp"
+#include "cypha/lm/cyphalm_math_integration.hpp"
+#include "cypha/lm/cyphalm_model.hpp"
 
 int main() {
   cypha::cyphalm::CyphaLMConfig cfg;

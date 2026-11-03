@@ -35,7 +35,7 @@
 #include <vector>
 
 #include "../eval/lci.hpp"
-#include "cypha/thought/learners.hpp"
+#include "cypha/knowledge/learners.hpp"
 
 namespace cypha::thought::mine {
 

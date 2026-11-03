@@ -4,7 +4,7 @@
 /// bytes, or a question's entity, were seen. A card is made after the answer, from an FM-index with locate
 /// (fm_infinigram.hpp). Nothing here feeds an answer, a gate or a tag.
 
-#include "cypha/cyphalm/fm_infinigram.hpp"
+#include "cypha/lm/fm_infinigram.hpp"
 
 #include <algorithm>
 #include <cstddef>

@@ -10,7 +10,7 @@
 
 ## 1. K4: the bindings (fixed before any code)
 
-One header, `native/include/cypha/thought/bindings.hpp`, binds every primitive the library uses (33 ops over 813 primitive steps in 144 processes) to an implementation. Each binding reads and writes named keys of the working memory, so one binding serves every process that uses the op. A process step can still be bound on its own (`<process>.<step>`), which wins.
+One header, `native/include/cypha/knowledge/bindings.hpp`, binds every primitive the library uses (33 ops over 813 primitive steps in 144 processes) to an implementation. Each binding reads and writes named keys of the working memory, so one binding serves every process that uses the op. A process step can still be bound on its own (`<process>.<step>`), which wins.
 
 | Primitive | Bound to | Working-memory contract (main keys) |
 |---|---|---|
@@ -19,7 +19,7 @@ One header, `native/include/cypha/thought/bindings.hpp`, binds every primitive t
 | `generate` | CyphaLM sampling (`sample_continuation`), seeded | `prompt` → `generated` |
 | `retrieve` | Fact store opinions (ECS, `ecs.hpp`); in answer mode the result is marked gate-only | `query` → `opinion` |
 | `score`, `evaluate` | ECS fusion of evidence items into an opinion and grade (`ecs.hpp`) | `evidence` → `opinion` |
-| `classify` | Epistemic state of an opinion (`epistemic.hpp`); the Cypha DIF classifier when one is attached (`thought/bindings_cypha.hpp`, links `cypha_core`) | `opinion` → `state`; `features` → `label`, `confidence`, `ood` |
+| `classify` | Epistemic state of an opinion (`epistemic.hpp`); the Cypha DIF classifier when one is attached (`knowledge/bindings_cypha.hpp`, links `cypha_core`) | `opinion` → `state`; `features` → `label`, `confidence`, `ood` |
 | `explain`, `communicate` | Answer and "I don't know" cards with reason codes (`epistemic.hpp`); the rule-10 guard | `answer` {text, source}, `reason` → `card` |
 | `test`, `verify`, `falsify` | A hypothesis test with three-way likelihoods and its Bayes factor (`hypothesis.hpp`) | `hypothesis`, `outcome` → `posterior` |
 | `update` | Posterior update from a Bayes factor, or a Beta update | `posterior`, `bf` → `posterior` |
@@ -94,7 +94,7 @@ THOUGHT §3.1 asks for a Cypha DIF classifier per process, trained online on sit
 
 ## Results (run 2026-10-29)
 
-Code: `native/include/cypha/thought/bindings.hpp`, `bindings_cypha.hpp`, the hook in `interpreter.hpp`, `native/tools/thought_bindings_test.cpp` (CTest `native_thought_bindings_test`) and `native/tools/thought_k5.cpp`. The machine was shared with many other runs.
+Code: `native/include/cypha/knowledge/bindings.hpp`, `bindings_cypha.hpp`, the hook in `interpreter.hpp`, `native/tools/knowledge/thought_bindings_test.cpp` (CTest `native_thought_bindings_test`) and `native/tools/knowledge/thought_k5.cpp`. The machine was shared with many other runs.
 
 ### K4: the bindings
 

@@ -36,49 +36,49 @@
 
 #include <nlohmann/json.hpp>
 
-#include "cypha/bench/bench_paths.hpp"
+#include "cypha/eval/bench_paths.hpp"
 #include "cypha/forecast/forecast_pipeline.hpp"
 #include "cypha/forecast/dispute_data.hpp"
 #include "cypha/forecast/views_baselines.hpp"
-#include "cypha/bench/bench_encoder_chess.hpp"
-#include "cypha/bench/bench_encoder_document.hpp"
-#include "cypha/bench/bench_encoder_go.hpp"
-#include "cypha/bench/bench_encoder_image.hpp"
-#include "cypha/bench/bench_encoder_poker.hpp"
-#include "cypha/bench/bench_encoder_text.hpp"
-#include "cypha/bench/bench_encoder_timeseries.hpp"
-#include "cypha/bench/bench_baselines.hpp"
-#include "cypha/bench/bench_figures.hpp"
-#include "cypha/bench/bench_metrics.hpp"
-#include "cypha/bench/bench_profile.hpp"
-#include "cypha/bench/bench_report_json.hpp"
-#include "cypha/bench/bench_cross_domain.hpp"
-#include "cypha/bench/bench_report.hpp"
-#include "cypha/bench/bench_tune.hpp"
-#include "cypha/create_model.hpp"
-#include "cypha/csv_ingest.hpp"
-#include "cypha/curriculum.hpp"
-#include "cypha/env.hpp"
-#include "cypha/ewc_regularizer.hpp"
-#include "cypha/cyphalm/cypha_cell_hypothesis.hpp"
-#include "cypha/cyphalm/cyphalm_config.hpp"
-#include "cypha/cyphalm/cyphalm_corpus.hpp"
-#include "cypha/cyphalm/cyphalm_model.hpp"
-#include "cypha/cyphalm/cyphalm_parallel.hpp"
-#include "cypha/cyphalm/cyphalm_views.hpp"
-#include "cypha/intelligence/profile_from_model.hpp"
-#include "cypha/infer_cpu.hpp"
-#include "cypha/kernel_memory.hpp"
-#include "cypha/memory_train.hpp"
-#include "cypha/portable_shuffle.hpp"
-#include "cypha/preprocessor.hpp"
-#include "cypha/regression.hpp"
-#include "cypha/replay_buffer.hpp"
-#include "cypha/rff_features.hpp"
-#include "cypha/sync_infer.hpp"
-#include "cypha/train_step_vector.hpp"
+#include "cypha/eval/bench_encoder_chess.hpp"
+#include "cypha/eval/bench_encoder_document.hpp"
+#include "cypha/eval/bench_encoder_go.hpp"
+#include "cypha/eval/bench_encoder_image.hpp"
+#include "cypha/eval/bench_encoder_poker.hpp"
+#include "cypha/eval/bench_encoder_text.hpp"
+#include "cypha/eval/bench_encoder_timeseries.hpp"
+#include "cypha/eval/bench_baselines.hpp"
+#include "cypha/eval/bench_figures.hpp"
+#include "cypha/eval/bench_metrics.hpp"
+#include "cypha/eval/bench_profile.hpp"
+#include "cypha/eval/bench_report_json.hpp"
+#include "cypha/eval/bench_cross_domain.hpp"
+#include "cypha/eval/bench_report.hpp"
+#include "cypha/eval/bench_tune.hpp"
+#include "cypha/classify/create_model.hpp"
+#include "cypha/core/csv_ingest.hpp"
+#include "cypha/online/curriculum.hpp"
+#include "cypha/core/env.hpp"
+#include "cypha/online/ewc_regularizer.hpp"
+#include "cypha/lm/cypha_cell_hypothesis.hpp"
+#include "cypha/lm/cyphalm_config.hpp"
+#include "cypha/lm/cyphalm_corpus.hpp"
+#include "cypha/lm/cyphalm_model.hpp"
+#include "cypha/lm/cyphalm_parallel.hpp"
+#include "cypha/lm/cyphalm_views.hpp"
+#include "cypha/knowledge/profile_from_model.hpp"
+#include "cypha/classify/infer_cpu.hpp"
+#include "cypha/classify/kernel_memory.hpp"
+#include "cypha/classify/memory_train.hpp"
+#include "cypha/core/portable_shuffle.hpp"
+#include "cypha/classify/preprocessor.hpp"
+#include "cypha/classify/regression.hpp"
+#include "cypha/online/replay_buffer.hpp"
+#include "cypha/classify/rff_features.hpp"
+#include "cypha/classify/sync_infer.hpp"
+#include "cypha/classify/train_step_vector.hpp"
 
-#include "cypha/bench/bench_domains.hpp"
+#include "cypha/eval/bench_domains.hpp"
 
 #include "d01_synthetic_golden.inc"
 
@@ -391,7 +391,7 @@ void fit_apply_preprocessor(std::vector<std::vector<double>>& train_x, std::vect
 
 // Phase 2 (multi-view online training for CyphaDIF, see docs/reports/MULTI_VIEW_DIF_PHASE2_PLAN.md):
 // D03-only opt-in pilot. Reuses the exact same pure, format-agnostic transforms Phase 1 built for
-// CyphaLM (`cypha/cyphalm/cyphalm_views.hpp`) -- they operate on plain `vector<int>`, so feeding a
+// CyphaLM (`cypha/lm/cyphalm_views.hpp`) -- they operate on plain `vector<int>`, so feeding a
 // sample-index vector instead of a token-id vector reorders (x, y) pairs instead of tokens, with no
 // changes to those functions. Off (empty/"same_order") reproduces the pre-existing per-pass
 // `cypha::portable_shuffle(..., make_rng(42 + p))` order exactly.
@@ -2550,7 +2550,7 @@ Json run_d16_ewc_probe() {
 // also reports task B's own post-training accuracy (wine, digits) alongside task A's
 // before/after — not just a single forgetting_score number. Not part of `all_domains()` / the
 // default bench report: called only from the standalone `ewc_d16b_sweep` tool
-// (native/tools/ewc_d16b_sweep.cpp) so it never touches `bench/report/tables/` or
+// (native/tools/online/ewc_d16b_sweep.cpp) so it never touches `bench/report/tables/` or
 // `bench/BASELINE_REPORT.md`.
 Json run_d16_ewc_sweep_impl() {
     const cypha::bench::ProfileJson profile = cypha::bench::load_profile();
@@ -2650,7 +2650,7 @@ Json run_d16_ewc_sweep_impl() {
         {"rows", rows},
         {"n_train_steps_per_task", steps},
         {"note",
-         "Standalone sweep, not part of the default bench report -- see native/tools/ewc_d16b_sweep.cpp and "
+         "Standalone sweep, not part of the default bench report -- see native/tools/online/ewc_d16b_sweep.cpp and "
          "docs/reports/EWC_D16B_SCOPING_2026-07-12.md"},
     };
 }
@@ -5980,8 +5980,8 @@ Json run_d42_math_integration_production_validation() {
     const fs::path native_root = repo / "native";
 
     const std::array<const char*, 2> required_sources{
-        "include/cypha/cyphalm/cyphalm_math_integration.hpp",
-        "src/cyphalm/cyphalm_math_integration.cpp",
+        "include/cypha/lm/cyphalm_math_integration.hpp",
+        "src/lm/cyphalm_math_integration.cpp",
     };
     Json math_sources = Json::object();
     for (const char* rel : required_sources) {
@@ -5993,8 +5993,8 @@ Json run_d42_math_integration_production_validation() {
         }
     }
 
-    const fs::path pgl_hpp = native_root / "include/cypha/intelligence/profile_guided_loss.hpp";
-    const fs::path pgl_cpp = native_root / "src/intelligence/profile_guided_loss.cpp";
+    const fs::path pgl_hpp = native_root / "include/cypha/knowledge/profile_guided_loss.hpp";
+    const fs::path pgl_cpp = native_root / "src/knowledge/profile_guided_loss.cpp";
     const bool pgl_present = fs::is_regular_file(pgl_hpp) && fs::is_regular_file(pgl_cpp);
     const bool pgl_math_ready = pgl_present && profile_guided_loss_math_ready(pgl_hpp);
     math_sources["native/profile_guided_loss_present"] = pgl_present;
@@ -6178,9 +6178,9 @@ Json run_d43_math_integration_lock_validation() {
     const fs::path repo = cypha::bench::bench_root().parent_path();
     const fs::path native_root = repo / "native";
 
-    const fs::path baseline_lock_cpp = native_root / "tools" / "cypha_baseline_lock.cpp";
+    const fs::path baseline_lock_cpp = native_root / "tools" / "eval" / "cypha_baseline_lock.cpp";
     if (!fs::is_regular_file(baseline_lock_cpp)) {
-        throw std::runtime_error("missing native/tools/cypha_baseline_lock.cpp");
+        throw std::runtime_error("missing native/tools/eval/cypha_baseline_lock.cpp");
     }
     const bool baseline_lock_source_has_d17_math =
         script_text_contains(baseline_lock_cpp, "d17-math");
@@ -6357,7 +6357,7 @@ Json run_cell_sweep_bench_subprocess(const fs::path& sweep_exe, bool math_integr
 Json run_d56_cell_sweep_math_integration_validation() {
     const fs::path repo = cypha::bench::bench_root().parent_path();
     const fs::path native_root = repo / "native";
-    const fs::path sweep_cpp = native_root / "tools/cypha_cell_hypothesis_sweep.cpp";
+    const fs::path sweep_cpp = native_root / "tools/lm/cypha_cell_hypothesis_sweep.cpp";
     if (!fs::is_regular_file(sweep_cpp) ||
         !script_text_contains(sweep_cpp, "--math-integration") ||
         !script_text_contains(sweep_cpp, "apply_math_integration_preset")) {
@@ -6368,7 +6368,7 @@ Json run_d56_cell_sweep_math_integration_validation() {
         !script_text_contains(overnight_script, "--math-integration")) {
         throw std::runtime_error("run_d17_overnight.ps1 missing cell sweep --math-integration");
     }
-    const fs::path lock_cpp = native_root / "tools/cypha_baseline_lock.cpp";
+    const fs::path lock_cpp = native_root / "tools/eval/cypha_baseline_lock.cpp";
     if (!fs::is_regular_file(lock_cpp) ||
         !script_text_contains(lock_cpp, "math_integration")) {
         throw std::runtime_error("cypha_baseline_lock missing cell sweep math integration");
@@ -6495,7 +6495,7 @@ Json run_d56_cell_sweep_math_integration_validation() {
 Json run_d57_production_cell_sweep_math_certificate_validation() {
     const fs::path repo = cypha::bench::bench_root().parent_path();
     const fs::path native_root = repo / "native";
-    const fs::path sweep_cpp = native_root / "tools/cypha_cell_hypothesis_sweep.cpp";
+    const fs::path sweep_cpp = native_root / "tools/lm/cypha_cell_hypothesis_sweep.cpp";
     if (!fs::is_regular_file(sweep_cpp) ||
         !script_text_contains(sweep_cpp, "--math-integration") ||
         !script_text_contains(sweep_cpp, "apply_math_integration_preset")) {

@@ -1,4 +1,4 @@
-#include "cypha/cyphalm/cyphalm_config.hpp"
+#include "cypha/lm/cyphalm_config.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -10,7 +10,7 @@
 
 #include <nlohmann/json.hpp>
 
-#include "cypha/env.hpp"
+#include "cypha/core/env.hpp"
 #include "hp/predictor.hpp"
 
 namespace cypha::cyphalm {

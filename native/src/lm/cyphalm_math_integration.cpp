@@ -1,13 +1,13 @@
-#include "cypha/cyphalm/cyphalm_math_integration.hpp"
+#include "cypha/lm/cyphalm_math_integration.hpp"
 
 #include <algorithm>
 
 #include <nlohmann/json.hpp>
 
-#include "cypha/cyphalm/cyphalm_intelligence_hook.hpp"
-#include "cypha/intelligence/intelligence_profiler.hpp"
-#include "cypha/intelligence/profile_completeness.hpp"
-#include "cypha/intelligence/profile_guided_loss.hpp"
+#include "cypha/knowledge/cyphalm_intelligence_hook.hpp"
+#include "cypha/knowledge/intelligence_profiler.hpp"
+#include "cypha/knowledge/profile_completeness.hpp"
+#include "cypha/knowledge/profile_guided_loss.hpp"
 
 namespace cypha::cyphalm {
 

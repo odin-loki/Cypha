@@ -11,9 +11,9 @@
 #include <string>
 #include <vector>
 
-#include "cypha/cyphalm/cyphalm_config.hpp"
-#include "cypha/cyphalm/cyphalm_corpus.hpp"
-#include "cypha/cyphalm/cyphalm_model.hpp"
+#include "cypha/lm/cyphalm_config.hpp"
+#include "cypha/lm/cyphalm_corpus.hpp"
+#include "cypha/lm/cyphalm_model.hpp"
 
 using cypha::cyphalm::apply_bench_mode;
 using cypha::cyphalm::apply_bench_profile;

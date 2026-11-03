@@ -11,10 +11,10 @@
 
 #include <nlohmann/json.hpp>
 
-#include "cypha/bench/bench_domains.hpp"
-#include "cypha/bench/bench_paths.hpp"
-#include "cypha/bench/bench_report_json.hpp"
-#include "cypha/bench/bench_tune.hpp"
+#include "cypha/eval/bench_domains.hpp"
+#include "cypha/eval/bench_paths.hpp"
+#include "cypha/eval/bench_report_json.hpp"
+#include "cypha/eval/bench_tune.hpp"
 
 namespace fs = std::filesystem;
 using Json = nlohmann::json;

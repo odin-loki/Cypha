@@ -7,7 +7,7 @@
 // verifier detects in its checkpoints.
 //
 // Checkpoint files: "TRI1" is the live trainer's old 32-bit layout, read as is. "TRI2" is the same layout followed by
-// a trailer (cap and the number of halvings), written by native/tools/trie_stream_train_v2.cpp. "TR64" is the live
+// a trailer (cap and the number of halvings), written by native/tools/lm/trie_stream_train_v2.cpp. "TR64" is the live
 // trainer's layout since 2026-10-28: the same fields with 64-bit counts (unigram, order 1, node totals, follower
 // counts), 32-byte nodes and 16-byte followers, no trailer.
 //
@@ -20,7 +20,7 @@
 
 #pragma once
 
-#include "cypha/cyphalm/packed_trie.hpp"
+#include "cypha/lm/packed_trie.hpp"
 
 #include <algorithm>
 #include <cstddef>

@@ -1,11 +1,11 @@
-#include "cypha/cyphalm/lm_intelligence_monitor.hpp"
+#include "cypha/knowledge/lm_intelligence_monitor.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <numeric>
 
-#include "cypha/intelligence/criticality_vector.hpp"
-#include "cypha/intelligence/measurers.hpp"
+#include "cypha/knowledge/criticality_vector.hpp"
+#include "cypha/knowledge/measurers.hpp"
 
 namespace cypha::cyphalm {
 

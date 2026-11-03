@@ -7,8 +7,8 @@
 // selection benchmark over three processes with different success rates and costs; d) a trace
 // replay. Returns nonzero if any check fails. Author: Odin Loch.
 #include "cypha/eval/ecs.hpp"
-#include "cypha/thought/interpreter.hpp"
-#include "cypha/thought/learners.hpp"
+#include "cypha/knowledge/interpreter.hpp"
+#include "cypha/knowledge/learners.hpp"
 
 #include <cmath>
 #include <cstdio>

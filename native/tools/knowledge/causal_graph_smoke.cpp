@@ -13,8 +13,8 @@
 #include <cstdio>
 #include <random>
 
-#include "cypha/intelligence/causal_graph.hpp"
-#include "cypha/intelligence/profile_observation.hpp"
+#include "cypha/knowledge/causal_graph.hpp"
+#include "cypha/knowledge/profile_observation.hpp"
 
 int main() {
     using cypha::intelligence::CausalGraphMonitor;

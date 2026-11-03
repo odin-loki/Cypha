@@ -1,6 +1,6 @@
 #pragma once
 
-#include "cypha/nig_gig_score_match.hpp"
+#include "cypha/classify/nig_gig_score_match.hpp"
 
 namespace cypha {
 

@@ -2,9 +2,9 @@
 #include <cstdio>
 #include <vector>
 
-#include "cypha/cyphalm/cyphalm_generation.hpp"
-#include "cypha/cyphalm/cyphalm_model.hpp"
-#include "cypha/intelligence/epistemic_threshold.hpp"
+#include "cypha/lm/cyphalm_generation.hpp"
+#include "cypha/lm/cyphalm_model.hpp"
+#include "cypha/knowledge/epistemic_threshold.hpp"
 
 int main() {
   cypha::cyphalm::CyphaLMConfig cfg;

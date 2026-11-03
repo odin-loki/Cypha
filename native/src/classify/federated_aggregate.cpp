@@ -1,4 +1,4 @@
-#include "cypha/federated_aggregate.hpp"
+#include "cypha/classify/federated_aggregate.hpp"
 
 #include <algorithm>
 #include <cmath>

@@ -14,7 +14,7 @@
 2. Strict (slice-only test): 2 right / 194 abstained / 4 wrong, as in `T_QA_WIKI_200.md`. Knowledge-source (Dolly is the evidence): 5 right / 194 abstained / 1 wrong. Only the Don Quixote answer is truly wrong.
 3. Yes. `epistemic.hpp` is header-only, reuses the `Opinion` and `Grade` types from `ecs.hpp`, and has 195 known-answer checks that pass under g++ and clang++. One number in the brief did not match its formula (see Ambiguities).
 
-Files: [`chat_index.cpp`](../../native/tools/chat_index.cpp), [`epistemic.hpp`](../../native/include/cypha/eval/epistemic.hpp), [`epistemic_test.cpp`](../../native/tools/epistemic_test.cpp), the S2 block at the end of [`native/CMakeLists.txt`](../../native/CMakeLists.txt). Spec: [`DISCOVERY.md`](../DISCOVERY.md) sections 2.1-2.3, 3.1, 3.3, 10 and PLAN rule 9. Earlier results: [`B7_CHAT_INDEX.md`](B7_CHAT_INDEX.md), [`T_QA_WIKI_200.md`](T_QA_WIKI_200.md).
+Files: [`chat_index.cpp`](../../native/tools/chat_index.cpp), [`epistemic.hpp`](../../native/include/cypha/knowledge/epistemic.hpp), [`epistemic_test.cpp`](../../native/tools/knowledge/epistemic_test.cpp), the S2 block at the end of [`native/CMakeLists.txt`](../../native/CMakeLists.txt). Spec: [`DISCOVERY.md`](../DISCOVERY.md) sections 2.1-2.3, 3.1, 3.3, 10 and PLAN rule 9. Earlier results: [`B7_CHAT_INDEX.md`](B7_CHAT_INDEX.md), [`T_QA_WIKI_200.md`](T_QA_WIKI_200.md).
 
 ---
 
@@ -112,7 +112,7 @@ Both readings, same decisions:
 
 ## S2. The epistemic library
 
-`native/include/cypha/eval/epistemic.hpp`, namespace `cypha::eval`, header-only, includes `ecs.hpp`. 195 checks in `native/tools/epistemic_test.cpp`; it returns nonzero on failure. Built and run with the brief's commands: `cmake -S native -B /root/cb_ecs`, `cmake --build /root/cb_ecs --target epistemic_test`, `ctest --test-dir /root/cb_ecs -R native_epistemic_test` (passes in 0.00 s). It is warning-free under `-Wall -Wextra -Wpedantic` with g++ 13 and with clang++ 18. A deliberately wrong expected value (185.45 for Chapman) makes it fail, so the checks do bite.
+`native/include/cypha/knowledge/epistemic.hpp`, namespace `cypha::eval`, header-only, includes `ecs.hpp`. 195 checks in `native/tools/knowledge/epistemic_test.cpp`; it returns nonzero on failure. Built and run with the brief's commands: `cmake -S native -B /root/cb_ecs`, `cmake --build /root/cb_ecs --target epistemic_test`, `ctest --test-dir /root/cb_ecs -R native_epistemic_test` (passes in 0.00 s). It is warning-free under `-Wall -Wextra -Wpedantic` with g++ 13 and with clang++ 18. A deliberately wrong expected value (185.45 for Chapman) makes it fail, so the checks do bite.
 
 | Part | Spec | What it provides |
 |---|---|---|

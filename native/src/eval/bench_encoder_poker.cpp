@@ -1,4 +1,4 @@
-#include "cypha/bench/bench_encoder_poker.hpp"
+#include "cypha/eval/bench_encoder_poker.hpp"
 
 #include <algorithm>
 #include <cmath>

@@ -12,19 +12,19 @@
 #include <unordered_map>
 #include <vector>
 
-#include "cypha/cyphalm/cyphalm_generation.hpp"
-#include "cypha/cyphalm/cyphalm_model.hpp"
-#include "cypha/cyphalm/predictive_codec.hpp"
-#include "cypha/ewc_regularizer.hpp"
-#include "cypha/generation.hpp"
-#include "cypha/infer_cpu.hpp"
-#include "cypha/intelligence/epistemic_threshold.hpp"
-#include "cypha/load_cypha.hpp"
-#include "cypha/memory_train.hpp"
-#include "cypha/preprocessor.hpp"
-#include "cypha/replay_buffer.hpp"
-#include "cypha/retrieval.hpp"
-#include "cypha/train_step_vector.hpp"
+#include "cypha/lm/cyphalm_generation.hpp"
+#include "cypha/lm/cyphalm_model.hpp"
+#include "cypha/lm/predictive_codec.hpp"
+#include "cypha/online/ewc_regularizer.hpp"
+#include "cypha/classify/generation.hpp"
+#include "cypha/classify/infer_cpu.hpp"
+#include "cypha/knowledge/epistemic_threshold.hpp"
+#include "cypha/classify/load_cypha.hpp"
+#include "cypha/classify/memory_train.hpp"
+#include "cypha/classify/preprocessor.hpp"
+#include "cypha/online/replay_buffer.hpp"
+#include "cypha/classify/retrieval.hpp"
+#include "cypha/classify/train_step_vector.hpp"
 
 namespace cypha {
 

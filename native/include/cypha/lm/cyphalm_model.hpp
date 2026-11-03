@@ -10,13 +10,13 @@
 
 #include <nlohmann/json.hpp>
 
-#include "cypha/cyphalm/bpe_tokenizer.hpp"
-#include "cypha/cyphalm/cyphalm_alpha_spectrum.hpp"
-#include "cypha/cyphalm/cyphalm_config.hpp"
+#include "cypha/lm/bpe_tokenizer.hpp"
+#include "cypha/lm/cyphalm_alpha_spectrum.hpp"
+#include "cypha/lm/cyphalm_config.hpp"
 #include "cypha/cyphalm/cyphalm_ewc_regularizer.hpp"
-#include "cypha/cyphalm/hp_backend.hpp"
-#include "cypha/intelligence/intelligence_profiler.hpp"
-#include "cypha/intelligence/profile_guided_loss.hpp"
+#include "cypha/lm/hp_backend.hpp"
+#include "cypha/knowledge/intelligence_profiler.hpp"
+#include "cypha/knowledge/profile_guided_loss.hpp"
 
 namespace cypha::intelligence {
 class IntelligenceProfiler;

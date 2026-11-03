@@ -7,7 +7,7 @@
 #include <vector>
 
 #include "cypha/cypha.hpp"
-#include "cypha/cyphalm/predictive_codec.hpp"
+#include "cypha/lm/predictive_codec.hpp"
 
 int main(int argc, char** argv) {
   std::string cypha_path;

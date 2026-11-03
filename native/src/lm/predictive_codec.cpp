@@ -1,7 +1,7 @@
-#include "cypha/cyphalm/predictive_codec.hpp"
+#include "cypha/lm/predictive_codec.hpp"
 
-#include "cypha/cyphalm/adaptive_predictor_mixer.hpp"
-#include "cypha/cyphalm/arithmetic_coder.hpp"
+#include "cypha/online/adaptive_predictor_mixer.hpp"
+#include "cypha/lm/arithmetic_coder.hpp"
 
 #include <algorithm>
 #include <cmath>

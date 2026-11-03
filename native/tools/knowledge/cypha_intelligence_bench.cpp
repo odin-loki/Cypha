@@ -6,8 +6,8 @@
 
 #include <nlohmann/json.hpp>
 
-#include "cypha/bench/bench_paths.hpp"
-#include "cypha/intelligence/profile_from_model.hpp"
+#include "cypha/eval/bench_paths.hpp"
+#include "cypha/knowledge/profile_from_model.hpp"
 
 namespace fs = std::filesystem;
 

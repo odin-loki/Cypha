@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Odin Loch
 //
-// cypha/eval/gen_concepts.hpp
+// cypha/knowledge/gen_concepts.hpp
 //
 // DISCOVERY 5's G9 (concept formation) and G11 (open relations), S11a (docs/reports/S11A_CONCEPTS_AND_OPEN_RELATIONS.md).
 //
@@ -34,7 +34,7 @@
 #include <vector>
 
 #include "cypha/eval/ecs.hpp"
-#include "cypha/eval/gen_rules.hpp"
+#include "cypha/knowledge/gen_rules.hpp"
 #include "cypha/eval/lci.hpp"
 
 namespace cypha::eval::concepts {

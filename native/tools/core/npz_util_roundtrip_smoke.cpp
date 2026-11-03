@@ -9,7 +9,7 @@
 #include <filesystem>
 #include <vector>
 
-#include "cypha/cyphalm/npz_util.hpp"
+#include "cypha/core/npz_util.hpp"
 
 int main() {
     namespace fs = std::filesystem;

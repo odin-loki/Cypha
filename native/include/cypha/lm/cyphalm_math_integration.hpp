@@ -10,9 +10,9 @@
 
 
 
-#include "cypha/cyphalm/cyphalm_config.hpp"
+#include "cypha/lm/cyphalm_config.hpp"
 
-#include "cypha/intelligence/profile_guided_loss.hpp"
+#include "cypha/knowledge/profile_guided_loss.hpp"
 
 
 

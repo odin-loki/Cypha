@@ -231,13 +231,13 @@ constexpr double kDeliberationLoDefault = 1.0;
 constexpr double kDeliberationHiDefault = 0.0;
 /// Python ``CyphaDIF.deliberation_lo/hi`` defaults (disabled: lo >= hi).
 ```
-— `native/include/cypha/infer_cpu.hpp:19-21`
+— `native/include/cypha/classify/infer_cpu.hpp:19-21`
 
 The Python ancestor shipped it **on** (`_DELIBERATE_LO = 0.25`, `_DELIBERATE_HI = 0.40` in
 `archive/root-monolith/Cypha.py`). The native port kept the mechanism and the parameter
 names, and inverted the sentinel.
 
-The stated reason is not the sweep, though. `native/src/train_step_vector.cpp:24-27` records
+The stated reason is not the sweep, though. `native/src/classify/train_step_vector.cpp:24-27` records
 that "the old hardcoded 0.25–0.40 band re-enabled deliberation during train and amplified
 MSVC/MinGW FP drift" — it was switched off for cross-compiler floating-point reproducibility.
 
@@ -316,10 +316,10 @@ Normal-Inverse-**Gaussian**. Both expansions are in use in the product, for diff
 
 | | what it is | where |
 |---|---|---|
-| `NIGField` | a bank of four exponential decays with a learned `W_T` — **no NIG mathematics at all**; `alpha`, `beta`, `kappa` occur zero times in its 95 lines, and zero times in its C++ port | v8, root, `native/src/nig_field.cpp` |
+| `NIGField` | a bank of four exponential decays with a learned `W_T` — **no NIG mathematics at all**; `alpha`, `beta`, `kappa` occur zero times in its 95 lines, and zero times in its C++ port | v8, root, `native/src/classify/nig_field.cpp` |
 | the Normal-Inverse-**Gaussian** world gate | a mixing-variable gate over GIG moments. Its `gig_e_inv_v_lam_neg1` evaluates GIG(λ = −1) — which *is* NIG: λ = −½ is the prior index, and the callers form the conjugate update `χ + innovation²/R` before evaluating, which takes λ to −1 | C++ only, no Python ancestor |
 | Normal-Inverse-**Gamma**, as `NIGExpert` | the conjugate prior over (μ, σ²), fully parameterised `(κ₀, α₀, β₀)` with per-dimension `kappa_n_`, `alpha_n_`, `beta_n_` | `native/include/cypha/cyphalm/cyphalm_nig_expert.hpp:12,27-33` — the **language model**, not the classifier |
-| Normal-Inverse-**Gamma**, as a posterior scale | `nig_delta_posterior_scale`, τ = `v_mean/(n_obs+1)` — the Normal half only, no α or β anywhere — inherited verbatim from v8's `u_k` (`archive/cypha-v8/Cypha.py:631`), but reached only when `CYPHA_USE_NIG_BMA` is set; `use_nig_bma` is `false` by default | `native/src/nig_gig_math.cpp:141-143` |
+| Normal-Inverse-**Gamma**, as a posterior scale | `nig_delta_posterior_scale`, τ = `v_mean/(n_obs+1)` — the Normal half only, no α or β anywhere — inherited verbatim from v8's `u_k` (`archive/cypha-v8/Cypha.py:631`), but reached only when `CYPHA_USE_NIG_BMA` is set; `use_nig_bma` is `false` by default | `native/src/classify/nig_gig_math.cpp:141-143` |
 
 Only the last is continuous with the archive — and v8 names it: `Cypha.py:410` calls `WorldPrior`
 "shared NIG base distribution θ₀". The Gaussian gate is native-only, so "arrived fully formed in v8"
@@ -335,7 +335,7 @@ file that implements it:
 /// `field_h += strength * (‖field_h‖/‖signal‖) * signal` with L2 cap (Python `NIGField.inject`).
 /// Causal `W_T` SGD step + spectral-radius trim + refresh `a_eff` (Python `update_causal`).
 ```
-— `native/include/cypha/nig_field.hpp:9,20,26`
+— `native/include/cypha/classify/nig_field.hpp:9,20,26`
 
 Around it sit `nig_gig_math.hpp`, `nig_gig_score_match.hpp` and `bessel_table.hpp`. Those
 three are **not** part of this continuity: across all 175 archived files — including the
@@ -349,7 +349,7 @@ What the GIG layer inherits is a **slot, not a method**. The root monolith alrea
 (`archive/root-monolith/Cypha.py:548-557`), as a plain sigmoid of a Mahalanobis margin. The C++
 keeps all three names and the same composition and replaces only the body — a substitution its
 own error message records, throwing `legacy sigmoid gate removed` at
-`native/src/infer_cpu.cpp:1158`. The name `world_gate` does not appear in v8 at all; it enters
+`native/src/classify/infer_cpu.cpp:1158`. The name `world_gate` does not appear in v8 at all; it enters
 with the root monolith.
 
 So `NIGField` is the strongest line of continuity in the project — and it is **three days long**
@@ -404,7 +404,7 @@ if self._total_steps % 50 == 0:
 ```
 — `archive/root-monolith/Cypha.py:1814-1818`; identical in shape at
 `archive/cypha-v8/Cypha.py:1161-1166` (every 10 steps) and
-`native/src/train_step_vector.cpp:205-211`
+`native/src/classify/train_step_vector.cpp:205-211`
 
 But `evolve` applies `A_eff`, and `A_eff = diag(a) + W_T`. So the residual the update descends
 on is
@@ -443,8 +443,8 @@ the rule is data-dependent but not causal.
 field→world coupling `F_field`, is defined at `archive/cypha-v8/Cypha.py:479` and
 `archive/root-monolith/Cypha.py:364` and has **zero call sites** in either file or anywhere
 under `native/`. The latent→field map `w_inject` has no training write site either: it is
-created as zeros (`native/src/create_model.cpp:123`) and read back
-(`native/src/infer_cpu.cpp:497-503`), with the only other write being an explicit seed in
+created as zeros (`native/src/classify/create_model.cpp:123`) and read back
+(`native/src/classify/infer_cpu.cpp:497-503`), with the only other write being an explicit seed in
 `multilabel_dif.cpp:139-140`.
 
 That makes a fresh C++ model's field inert by construction, and the source comment beside it
@@ -453,10 +453,10 @@ describes a bootstrap that cannot happen:
 ```cpp
 // Zeros will give zero signal → field stays at rest until training updates W_T.
 ```
-— `native/src/create_model.cpp:125`
+— `native/src/classify/create_model.cpp:125`
 
 With `w_inject` zero the signal is zero, and `nig_field_inject` returns early on `s_sq == 0.0`
-(`native/src/nig_field.cpp:100-102`), so `field_h` never leaves zero — and `update_causal`,
+(`native/src/classify/nig_field.cpp:100-102`), so `field_h` never leaves zero — and `update_causal`,
 bilinear in `h_t`, can never move `W_T` from it. Training cannot start the field, because the
 thing that would start it is not what training updates. The path carries signal only for models
 loaded from a Python-derived checkpoint or seeded through `initial_w_inject`.
@@ -487,7 +487,7 @@ root  ‖h‖:  3.9e-10 (step 1) → 4.0e-9 (100) → 3.4e-7 (600) → 8.9e-4 (1
 not need. So the root monolith's field saturates its own clamp within a few thousand steps,
 and the clamp is the only thing bounding it — while v8's sits at the ε scale forever. **A
 result measured on v8's field does not transfer to the root monolith's**, and the root
-monolith is what the C++ ported: `native/src/nig_field.cpp:19-41` reproduces the five-group set
+monolith is what the C++ ported: `native/src/classify/nig_field.cpp:19-41` reproduces the five-group set
 including 0.99, and `:15` carries `kHCap = 50.0`.
 
 What the saturated field then perturbs is the world-prior mean, through `F_field` — the matrix
@@ -498,7 +498,7 @@ the ratio moved between 18% and 49% across the datasets tried. What survives is 
 a number.
 
 **One qualification, and it points back to the C++.** The instability needs τ = 0.99 *and* the
-random `W_T`. Zeroing `W_T` — which is exactly what `native/src/create_model.cpp:106` does —
+random `W_T`. Zeroing `W_T` — which is exactly what `native/src/classify/create_model.cpp:106` does —
 gives ρ = 0.9900 and the field stays at 2.7 × 10⁻⁹ after 6,000 steps. A freshly created native
 model is therefore stable for the same reason it is inert, and the divergence reaches the
 product only through a model imported from a Python-trained checkpoint.

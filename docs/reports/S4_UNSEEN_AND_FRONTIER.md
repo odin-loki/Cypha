@@ -250,7 +250,7 @@ Where better extraction (or another source) teaches the most (unseen slots on pa
 ## Reproduce
 
 ```bash
-g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp -o pattern_learn
+g++ -O2 -std=c++20 -I native/include native/tools/knowledge/pattern_learn.cpp -o pattern_learn
 E=/root/cdata/enwik8; W=/root/work/f2/wikidata/wd_values.tsv; DEV=bench/eval/t_qa_wiki_dev.tsv
 A=/root/work/answer; Q=/root/work/qa2/runs
 D=$A/d_rows.tsv,$A/d2_rows.tsv,$Q/E1a.rows.tsv,$Q/E1b.rows.tsv,$Q/E1c.rows.tsv,$Q/E1d.rows.tsv
@@ -259,7 +259,7 @@ O=/root/work/s4/runs; mkdir -p $O/dev2 $O/test
 ./pattern_learn $E $O/dev2 --cv --wikidata $W --dev $DEV --gaps $O/dev2/gap_map.tsv --demand $D --parse $A/parse_dev.tsv --frontier $O/dev2/frontier.tsv
 # the test half (read once; it was read with the first frontier definition, which does not touch the estimates)
 ./pattern_learn $E $O/test --cv --wikidata $W --dev $DEV --gaps $O/test/gap_map.tsv --demand $D --parse $A/parse_dev.tsv --frontier $O/test/frontier.tsv --frontier-test
-g++ -O2 -std=c++20 -I native/include native/tools/epistemic_test.cpp -o epistemic_test && ./epistemic_test   # 536 checks
+g++ -O2 -std=c++20 -I native/include native/tools/knowledge/epistemic_test.cpp -o epistemic_test && ./epistemic_test   # 536 checks
 ```
 
 - sha256 prefix of the frontier file: `frontier.tsv` 4306e17a24633044.
@@ -501,7 +501,7 @@ The first detection of each planted pool is in `signal_gaps.tsv.planted.tsv` (3 
 
 ```bash
 cmake -S native -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --target cyphalm_trie epistemic_test -j1
-g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp -o pattern_learn
+g++ -O2 -std=c++20 -I native/include native/tools/knowledge/pattern_learn.cpp -o pattern_learn
 R=/root/work/s4b/runs; mkdir -p $R/sig $R/pl/full
 python3 scripts/s4b_dolly_pages.py /root/cdata/dolly.jsonl $R/dolly_pages.xml        # 616 pages
 for k in 0 1; do   # from the repository root (the similar-context vectors); the two parts can run in parallel
@@ -759,8 +759,8 @@ Dev read, π = 1, 200 replicates each. "Stream alarms" is the dev stream (C's se
 ## S4c reproduce
 
 ```bash
-g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp -o pattern_learn
-g++ -O2 -std=c++20 -I native/include native/tools/epistemic_test.cpp -o epistemic_test && ./epistemic_test   # 1,119 checks
+g++ -O2 -std=c++20 -I native/include native/tools/knowledge/pattern_learn.cpp -o pattern_learn
+g++ -O2 -std=c++20 -I native/include native/tools/knowledge/epistemic_test.cpp -o epistemic_test && ./epistemic_test   # 1,119 checks
 R=/root/work/s4c/runs; S4B=/root/work/s4b/runs   # S4b's Dolly pages and surprise files (S4b reproduce)
 python3 scripts/s4c_plain_pages.py /root/cdata/enwik8 $R/plain_pages.xml   # 1,022 pages
 E=/root/cdata/enwik8; W=/root/work/f2/wikidata/wd_values.tsv; DEV=bench/eval/t_qa_wiki_dev.tsv
@@ -892,7 +892,7 @@ S4b's `--signals` run (C, S, D, L) with S4b's inputs and the changed U. It resta
 ### Reproduce
 
 ```bash
-g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp -o pattern_learn
+g++ -O2 -std=c++20 -I native/include native/tools/knowledge/pattern_learn.cpp -o pattern_learn
 E=/root/cdata/enwik8; W=/root/work/f2/wikidata/wd_values.tsv; DEV=bench/eval/t_qa_wiki_dev.tsv; A=/root/work/answer; Q=/root/work/qa2/runs
 D=$A/d_rows.tsv,$A/d2_rows.tsv,$Q/E1a.rows.tsv,$Q/E1b.rows.tsv,$Q/E1c.rows.tsv,$Q/E1d.rows.tsv
 ./pattern_learn $E OUT --cv --wikidata $W --dev $DEV --gaps OUT/gap_map.tsv --demand $D --parse $A/parse_dev.tsv \
@@ -1169,8 +1169,8 @@ Notes for the proposal:
 ### S4d reproduce
 
 ```bash
-g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp -o pattern_learn
-g++ -O2 -std=c++20 -I native/include native/tools/epistemic_test.cpp -o epistemic_test && ./epistemic_test   # 1,306 checks
+g++ -O2 -std=c++20 -I native/include native/tools/knowledge/pattern_learn.cpp -o pattern_learn
+g++ -O2 -std=c++20 -I native/include native/tools/knowledge/epistemic_test.cpp -o epistemic_test && ./epistemic_test   # 1,306 checks
 # oasst1 (Hugging Face OpenAssistant/oasst1 at fdf72ae0827c1cda404aff25b6603abec9e3399b), file 2023-04-12_oasst_ready.messages.jsonl.gz
 P=POOLS; mkdir -p $P
 python3 -I scripts/s4d_pools.py oasst 2023-04-12_oasst_ready.messages.jsonl.gz $P/oasst_dev.xml $P/oasst_test.xml

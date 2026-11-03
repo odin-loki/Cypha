@@ -1,9 +1,9 @@
-#include "cypha/create_model.hpp"
+#include "cypha/classify/create_model.hpp"
 
 #include <cmath>
 #include <stdexcept>
 
-#include "cypha/nig_field.hpp"
+#include "cypha/classify/nig_field.hpp"
 
 namespace cypha {
 

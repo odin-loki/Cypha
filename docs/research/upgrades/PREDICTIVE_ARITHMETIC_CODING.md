@@ -7,8 +7,8 @@
 
 | Piece | Location |
 |-------|----------|
-| 32-bit range coder | `native/include/cypha/cyphalm/arithmetic_coder.hpp` |
-| Predictive stream | `native/include/cypha/cyphalm/predictive_codec.hpp` |
+| 32-bit range coder | `native/include/cypha/lm/arithmetic_coder.hpp` |
+| Predictive stream | `native/include/cypha/lm/predictive_codec.hpp` |
 | Product API | `Cypha::compress_tokens` / `decompress_tokens` / `generate_via_bits` |
 | REST | `POST /sequence/compress`, `POST /sequence/decompress` (bytes hex) |
 | Default model | Hybrid GRIA+LSTM via `apply_hybrid_production_recipe` |

@@ -4,13 +4,13 @@
 #include <cstring>
 #include <vector>
 
-#include "cypha/bench/bench_paths.hpp"
-#include "cypha/infer_cpu.hpp"
-#include "cypha/intelligence/criticality_vector.hpp"
-#include "cypha/intelligence/intelligence_profiler.hpp"
-#include "cypha/intelligence/profile_from_model.hpp"
-#include "cypha/load_cypha.hpp"
-#include "cypha/regression.hpp"
+#include "cypha/eval/bench_paths.hpp"
+#include "cypha/classify/infer_cpu.hpp"
+#include "cypha/knowledge/criticality_vector.hpp"
+#include "cypha/knowledge/intelligence_profiler.hpp"
+#include "cypha/knowledge/profile_from_model.hpp"
+#include "cypha/classify/load_cypha.hpp"
+#include "cypha/classify/regression.hpp"
 
 namespace {
 

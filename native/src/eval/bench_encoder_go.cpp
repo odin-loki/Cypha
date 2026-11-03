@@ -1,4 +1,4 @@
-#include "cypha/bench/bench_encoder_go.hpp"
+#include "cypha/eval/bench_encoder_go.hpp"
 
 #include <algorithm>
 #include <random>

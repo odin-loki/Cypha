@@ -1,10 +1,10 @@
-#include "cypha/cyphalm/cyphalm_alpha_spectrum.hpp"
+#include "cypha/lm/cyphalm_alpha_spectrum.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <numeric>
 
-#include "cypha/cyphalm/cyphalm_model.hpp"
+#include "cypha/lm/cyphalm_model.hpp"
 
 namespace cypha::cyphalm {
 

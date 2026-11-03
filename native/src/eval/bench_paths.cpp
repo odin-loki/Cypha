@@ -1,10 +1,10 @@
-#include "cypha/bench/bench_paths.hpp"
+#include "cypha/eval/bench_paths.hpp"
 
 #include <algorithm>
 #include <cstdlib>
 #include <filesystem>
 
-#include "cypha/env.hpp"
+#include "cypha/core/env.hpp"
 
 namespace cypha::bench {
 

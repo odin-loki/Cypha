@@ -1,11 +1,11 @@
-#include "cypha/nig_gig_math.hpp"
+#include "cypha/classify/nig_gig_math.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
 
-#include "cypha/bessel_table.hpp"
-#include "cypha/nig_gig_score_match.hpp"
+#include "cypha/classify/bessel_table.hpp"
+#include "cypha/classify/nig_gig_score_match.hpp"
 
 namespace cypha {
 

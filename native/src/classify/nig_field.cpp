@@ -1,6 +1,6 @@
-#include "cypha/nig_field.hpp"
+#include "cypha/classify/nig_field.hpp"
 
-#include "cypha/load_cypha.hpp"
+#include "cypha/classify/load_cypha.hpp"
 
 #include <algorithm>
 #include <cmath>

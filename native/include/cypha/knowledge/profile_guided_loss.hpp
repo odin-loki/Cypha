@@ -2,7 +2,7 @@
 
 #include <vector>
 
-#include "cypha/intelligence/intelligence_profiler.hpp"
+#include "cypha/knowledge/intelligence_profiler.hpp"
 
 namespace cypha::intelligence {
 

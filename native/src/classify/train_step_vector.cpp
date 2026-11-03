@@ -1,15 +1,15 @@
-#include "cypha/train_step_vector.hpp"
+#include "cypha/classify/train_step_vector.hpp"
 
 #include <limits>
 #include <stdexcept>
 
-#include "cypha/class_gmm.hpp"
-#include "cypha/encoder_contrastive.hpp"
-#include "cypha/infer_cpu.hpp"
-#include "cypha/kernel_memory.hpp"
-#include "cypha/memory_train.hpp"
-#include "cypha/nig_field.hpp"
-#include "cypha/sync_infer.hpp"
+#include "cypha/classify/class_gmm.hpp"
+#include "cypha/classify/encoder_contrastive.hpp"
+#include "cypha/classify/infer_cpu.hpp"
+#include "cypha/classify/kernel_memory.hpp"
+#include "cypha/classify/memory_train.hpp"
+#include "cypha/classify/nig_field.hpp"
+#include "cypha/classify/sync_infer.hpp"
 
 #include <cmath>
 #include <unordered_map>

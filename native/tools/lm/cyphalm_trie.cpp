@@ -5,7 +5,7 @@
 // and the experiments trie_together, trie_adaptive, trie_gria_gate and
 // trie_online_holdout (retired; results and recovery commits are in
 // docs/reports/B1_TRIE_CONSOLIDATION.md). The model itself is
-// native/include/cypha/cyphalm/packed_trie.hpp (namespace cypha::cyphalm::trie).
+// native/include/cypha/lm/packed_trie.hpp (namespace cypha::cyphalm::trie).
 // trie_stream_train.cpp still carries its own copy of the model.
 // After training, every subcommand serves from PackedModel (packed_trie.hpp; docs/reports/RAM_PROFILE.md M4),
 // which gives the training Model's Synth distributions bit for bit, and frees the training form (bpc keeps it
@@ -251,7 +251,7 @@
 // Build (from the repo root):
 //   gcc -O2 -c native/third_party/libsais/libsais.c -o libsais.o
 //   g++ -O2 -std=c++20 -I native/include -I native/third_party -I native/third_party/libsais
-//       native/tools/cyphalm_trie.cpp native/src/cyphalm/fm_infinigram.cpp libsais.o -o cyphalm_trie
+//       native/tools/lm/cyphalm_trie.cpp native/src/lm/fm_infinigram.cpp libsais.o -o cyphalm_trie
 //   (one command line; the two lines above are split for width)
 // Usage:
 //   ./cyphalm_trie bpc /root/cdata/enwik8
@@ -259,18 +259,18 @@
 //   ./cyphalm_trie sample /root/cdata/enwik8 gen_dev.txt gen_fresh.txt
 //   ./cyphalm_trie selftest
 
-#include "cypha/cyphalm/byte_kn.hpp"
-#include "cypha/cyphalm/class_context.hpp"
-#include "cypha/cyphalm/content_plan.hpp"
-#include "cypha/cyphalm/doc_cache.hpp"
-#include "cypha/cyphalm/evidence.hpp"
-#include "cypha/cyphalm/fm_infinigram.hpp"
-#include "cypha/cyphalm/packed_trie.hpp"
-#include "cypha/cyphalm/similar_context.hpp"
-#include "cypha/cyphalm/token_model.hpp"  // BKN selftest: the reference Kneser-Ney
+#include "cypha/lm/byte_kn.hpp"
+#include "cypha/lm/class_context.hpp"
+#include "cypha/lm/content_plan.hpp"
+#include "cypha/lm/doc_cache.hpp"
+#include "cypha/knowledge/evidence.hpp"
+#include "cypha/lm/fm_infinigram.hpp"
+#include "cypha/lm/packed_trie.hpp"
+#include "cypha/lm/similar_context.hpp"
+#include "cypha/lm/token_model.hpp"  // BKN selftest: the reference Kneser-Ney
 #include "cypha/eval/lci.hpp"
 #include "cypha/eval/scribe.hpp"
-#include "cypha/eval/unknown_signals.hpp"
+#include "cypha/knowledge/unknown_signals.hpp"
 
 #include <cctype>
 #include <chrono>

@@ -1,4 +1,4 @@
-#include "cypha/intelligence/profile_guided_loss.hpp"
+#include "cypha/knowledge/profile_guided_loss.hpp"
 
 #include <algorithm>
 #include <cmath>

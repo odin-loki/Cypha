@@ -15,8 +15,8 @@
 #include <numeric>
 #include <vector>
 
-#include "cypha/infer_cpu.hpp"
-#include "cypha/kernel_memory.hpp"
+#include "cypha/classify/infer_cpu.hpp"
+#include "cypha/classify/kernel_memory.hpp"
 
 namespace {
 

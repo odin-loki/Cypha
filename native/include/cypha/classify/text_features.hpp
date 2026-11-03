@@ -1,6 +1,6 @@
 #pragma once
 // Count-based text features for Core Cypha's topic routing (PLAN C0/C7; docs/reports/C0_C7_BASELINES_AND_ROUTING.md).
-// Used by native/tools/topic_bench.cpp. Kept as a header with a checked file format so Branch A's router can
+// Used by native/tools/classify/topic_bench.cpp. Kept as a header with a checked file format so Branch A's router can
 // compute exactly the measured features: a `count_vectors` router backend built on it reproduced the measured
 // test predictions document for document (commit ede6846 on the C0/C7 work), but it is not adopted, because
 // C7's registered LCI came out at 0.5 (the calibration term; see the report). No neural network: hashing,

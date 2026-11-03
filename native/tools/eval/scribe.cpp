@@ -1410,7 +1410,7 @@ int selftest() {
 int main(int argc, char** argv) {
   if (argc < 2) {
     std::fprintf(stderr,
-                 "usage: scribe <docs|prompts|samples|prepare|ladder|score|selftest> ...  (see the header of native/tools/scribe.cpp)\n");
+                 "usage: scribe <docs|prompts|samples|prepare|ladder|score|selftest> ...  (see the header of native/tools/eval/scribe.cpp)\n");
     return 2;
   }
   const std::string cmd = argv[1];

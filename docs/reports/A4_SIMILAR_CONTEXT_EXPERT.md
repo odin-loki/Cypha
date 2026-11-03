@@ -20,7 +20,7 @@ PLAN rule 10 holds by design. The expert is one more next-byte expert inside Cyp
 
 ## The expert (design, fixed before the runs)
 
-`native/include/cypha/cyphalm/similar_context.hpp`, header-only.
+`native/include/cypha/lm/similar_context.hpp`, header-only.
 
 - **Keys.** At every word end in the stored text (a word is a run of ASCII letters, digits or apostrophes, as in the class expert), the vector of the previous W words: the SIF-weighted mean (weight a / (a + p(w)), a = 10⁻³, p from the stored text's own word counts) of unit word vectors, centred, projected on principal components (the first one dropped, as SIF drops the common component), unit-normalised and stored as int8. Each key points at the byte after its word.
 - **Query.** At the current position: the end of the last completed word (the anchor), and the bytes written since (the tail: separators and the partial word, at most 32). The k nearest keys by cosine, from an inverted-file index over spherical k-means centroids (a few lists probed). One query per word; the result is cached while the tail grows.
@@ -1004,7 +1004,7 @@ The numbers come from `cyphalm_trie` at sha256 `8af187a0…b30948` plus this rep
 ```bash
 gcc -O2 -c native/third_party/libsais/libsais.c -o libsais.o
 g++ -O2 -std=c++20 -I native/include -I native/third_party -I native/third_party/libsais \
-    native/tools/cyphalm_trie.cpp native/src/cyphalm/infinigram.cpp libsais.o -o cyphalm_trie
+    native/tools/lm/cyphalm_trie.cpp native/src/lm/infinigram.cpp libsais.o -o cyphalm_trie
 ./cyphalm_trie selftest                     # includes the similar-context checks
 
 # PPMI-SVD without the BPC holdout and the fresh text (C1's tool; 85 s, 602 MB)

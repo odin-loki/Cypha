@@ -10,7 +10,7 @@
 
 **Rule 10.** These are next-byte experts. Each proposes one byte of a word that the document makes likely; the mixture decides. None writes a word or a passage. They are off inside `qa` and chat answers: only `sample` takes `--doc`, so answers are unchanged.
 
-## The experts (`native/include/cypha/cyphalm/doc_cache.hpp`)
+## The experts (`native/include/cypha/lm/doc_cache.hpp`)
 
 - **Words.** Runs of ASCII letters, compared without case. **Content words** have at least 3 letters and are not among the 200 words that most training documents contain (a stop list from counts).
 - **Documents.** The text from one `<page>` to the next. A reader (stream) starts again after `<page>`.

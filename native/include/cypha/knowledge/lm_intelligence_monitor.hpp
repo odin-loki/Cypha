@@ -3,9 +3,9 @@
 #include <cstdint>
 #include <vector>
 
-#include "cypha/intelligence/causal_graph.hpp"
-#include "cypha/intelligence/criticality_vector.hpp"
-#include "cypha/intelligence/intelligence_profiler.hpp"
+#include "cypha/knowledge/causal_graph.hpp"
+#include "cypha/knowledge/criticality_vector.hpp"
+#include "cypha/knowledge/intelligence_profiler.hpp"
 
 namespace cypha::cyphalm {
 

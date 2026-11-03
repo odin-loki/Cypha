@@ -1,13 +1,13 @@
-// M4 — mixture-of-experts regression helpers (see `include/cypha/regression.hpp`).
+// M4 — mixture-of-experts regression helpers (see `include/cypha/classify/regression.hpp`).
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <vector>
 
-#include "cypha/infer_cpu.hpp"
-#include "cypha/regression.hpp"
+#include "cypha/classify/infer_cpu.hpp"
+#include "cypha/classify/regression.hpp"
 
-#include "cypha/em_step.hpp"
+#include "cypha/classify/em_step.hpp"
 
 namespace {
 

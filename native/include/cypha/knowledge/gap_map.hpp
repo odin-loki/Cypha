@@ -23,7 +23,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "cypha/eval/hypothesis.hpp"
+#include "cypha/knowledge/hypothesis.hpp"
 
 namespace cypha::eval {
 

@@ -16,10 +16,10 @@
 #include <string>
 #include <vector>
 
-#include "cypha/create_model.hpp"
+#include "cypha/classify/create_model.hpp"
 #include "cypha/cypha.hpp"
-#include "cypha/load_cypha.hpp"
-#include "cypha/thought/bindings.hpp"
+#include "cypha/classify/load_cypha.hpp"
+#include "cypha/knowledge/bindings.hpp"
 
 namespace cypha::thought::bind {
 

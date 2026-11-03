@@ -1,17 +1,17 @@
-#include "cypha/intelligence_rest.hpp"
+#include "cypha/serve/intelligence_rest.hpp"
 
 #include <mutex>
 
 #include "httplib.h"
 #include <nlohmann/json.hpp>
 
-#include "cypha/bench/bench_paths.hpp"
-#include "cypha/intelligence/causal_graph.hpp"
-#include "cypha/intelligence/criticality_vector.hpp"
-#include "cypha/intelligence/intelligence_profile_json.hpp"
-#include "cypha/intelligence/intelligence_profiler.hpp"
-#include "cypha/intelligence/profile_completeness.hpp"
-#include "cypha/intelligence/profile_from_model.hpp"
+#include "cypha/eval/bench_paths.hpp"
+#include "cypha/knowledge/causal_graph.hpp"
+#include "cypha/knowledge/criticality_vector.hpp"
+#include "cypha/knowledge/intelligence_profile_json.hpp"
+#include "cypha/knowledge/intelligence_profiler.hpp"
+#include "cypha/knowledge/profile_completeness.hpp"
+#include "cypha/knowledge/profile_from_model.hpp"
 
 namespace cypha {
 

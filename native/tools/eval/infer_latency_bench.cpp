@@ -9,14 +9,14 @@
 
 #include <nlohmann/json.hpp>
 
-#include "cypha/bench/bench_paths.hpp"
-#include "cypha/cyphalm/cyphalm_config.hpp"
-#include "cypha/cyphalm/cyphalm_corpus.hpp"
-#include "cypha/cyphalm/cyphalm_generation.hpp"
-#include "cypha/cyphalm/cyphalm_model.hpp"
-#include "cypha/infer_cpu.hpp"
-#include "cypha/load_cypha.hpp"
-#include "cypha/parallel_rows.hpp"
+#include "cypha/eval/bench_paths.hpp"
+#include "cypha/lm/cyphalm_config.hpp"
+#include "cypha/lm/cyphalm_corpus.hpp"
+#include "cypha/lm/cyphalm_generation.hpp"
+#include "cypha/lm/cyphalm_model.hpp"
+#include "cypha/classify/infer_cpu.hpp"
+#include "cypha/classify/load_cypha.hpp"
+#include "cypha/core/parallel_rows.hpp"
 #include <cstdlib>
 
 namespace {

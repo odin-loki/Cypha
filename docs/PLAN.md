@@ -397,7 +397,7 @@ The pass was one 64-bit trie with no per-category holdout.
 
 | ID | Upgrade | Measure | Gate |
 |---|---|---|---|
-| B1 | **Consolidate the trie.** One `native/include/cypha/cyphalm/packed_trie.hpp` + `src/` replaces the 7 forked `trie_*.cpp` tools (1,100–1,600 lines each, 265–730 lines apart) and the 3 test tools. CMake targets, paths as arguments, CTests (self-test, tiny-corpus BPC golden, Q/A probe golden, 8K golden) | Same numbers as the forks to 1e-6 | Exact parity |
+| B1 | **Consolidate the trie.** One `native/include/cypha/lm/packed_trie.hpp` + `src/` replaces the 7 forked `trie_*.cpp` tools (1,100–1,600 lines each, 265–730 lines apart) and the 3 test tools. CMake targets, paths as arguments, CTests (self-test, tiny-corpus BPC golden, Q/A probe golden, 8K golden) | Same numbers as the forks to 1e-6 | Exact parity |
 | B2 | **8K count-context expert in the mixture.** InfiniGram over training bytes, λ per (match length × count) bucket, fit on a dev slice | Held-out BPC (measured 2.32 → 2.06 at 8 MiB) | LCI ≥ 0.95 at 64 MiB and 1 GB |
 | B3 | **Word-level count model.** Trie over lexicon IDs (orders 1–5), mixed into byte prediction through a spelling model `P(bytes | word)`. The old word trie fell to weight 0.0005 because it was an extra byte expert. This one predicts words and conditions bytes on them | BPC, word-level perplexity, T-QA | LCI ≥ 0.95 or kill |
 | B4 | **Class-level counts.** Brown clusters (hierarchical, built from counts by mutual information) and WordNet/concept classes. Counts over class sequences generalise across synonyms. This is the statistics-to-semantics bridge | BPC on rare-word contexts, T-words | Beats B3 on rare contexts |

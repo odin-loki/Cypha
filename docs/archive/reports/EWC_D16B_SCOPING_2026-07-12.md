@@ -17,8 +17,8 @@ Bench D16B trains a **shared** CyphaDIF classifier on three sequential tasks (ir
 
 | Item | Location |
 |------|----------|
-| Prefix-only `D` compare/pull | `native/src/ewc_regularizer.cpp` |
-| Opt-in `set_protect_world_field()` | `native/include/cypha/ewc_regularizer.hpp` |
+| Prefix-only `D` compare/pull | `native/src/online/ewc_regularizer.cpp` |
+| Opt-in `set_protect_world_field()` | `native/include/cypha/online/ewc_regularizer.hpp` |
 | D16B EWC λ sweep (standalone, no bench report) | `run_d16_ewc_sweep()` in `bench_domains.cpp`, `ewc_d16b_sweep` tool |
 | Regression tests | `native_ewc_growable_d_smoke`, `native_ewc_d16b_sweep` CTests |
 

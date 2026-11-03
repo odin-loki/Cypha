@@ -397,7 +397,7 @@ Two configurations are recommended as defaults, and each was read once on the fr
 
 ## Code
 
-`native/tools/cyphalm_trie.cpp`: 2,868 → 3,093 lines (43 of them from the SCRIBE merge in `cls`; this work +182). `packed_trie.hpp`, `class_context.hpp` and `infinigram.cpp` unchanged.
+`native/tools/lm/cyphalm_trie.cpp`: 2,868 → 3,093 lines (43 of them from the SCRIBE merge in `cls`; this work +182). `packed_trie.hpp`, `class_context.hpp` and `infinigram.cpp` unchanged.
 
 **Kept:**
 - entity candidates in the parse's entity column (`a|b|c`): per-statistic best, and the token's entity by `--fam-stat`;

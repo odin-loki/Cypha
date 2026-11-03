@@ -1,4 +1,4 @@
-#include "cypha/intelligence/measurers.hpp"
+#include "cypha/knowledge/measurers.hpp"
 
 #include <algorithm>
 #include <cmath>

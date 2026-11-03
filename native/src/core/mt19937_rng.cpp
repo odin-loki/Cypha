@@ -1,4 +1,4 @@
-#include "cypha/mt19937_rng.hpp"
+#include "cypha/core/mt19937_rng.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -7,7 +7,7 @@
 #include <stdexcept>
 #include <vector>
 
-#include "../third_party/numpy_rng/ziggurat_constants.h"
+#include "../../third_party/numpy_rng/ziggurat_constants.h"
 
 namespace cypha {
 namespace {

@@ -131,7 +131,7 @@ This is PLAN §3.2's context hierarchy, built.
 
 ## 8. Order and dependencies
 
-1. **Built as its own library and tool** (`native/include/cypha/cyphalm/tokenizer.hpp`, `token_model.hpp`, tool `cyphalm_tok`), clear of the GEN agents' work in `cyphalm_trie.cpp`.
+1. **Built as its own library and tool** (`native/include/cypha/lm/tokenizer.hpp`, `token_model.hpp`, tool `cyphalm_tok`), clear of the GEN agents' work in `cyphalm_trie.cpp`.
 2. T0 → T1 → T2 → T3 → T4 is the spine. T5–T8 follow T4. T9 needs the GEN track. T10 needs T3. T11 is on Odin's PC.
 3. Agents can split it: one for T1 (tokenizers), one for T2 and T3 (models and bridge), then T4 onward.
 

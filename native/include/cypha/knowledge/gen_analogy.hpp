@@ -36,8 +36,8 @@
 #include <utility>
 #include <vector>
 
-#include "cypha/eval/gen_rules.hpp"
-#include "cypha/eval/hypothesis.hpp"
+#include "cypha/knowledge/gen_rules.hpp"
+#include "cypha/knowledge/hypothesis.hpp"
 
 namespace cypha::eval::analogy {
 

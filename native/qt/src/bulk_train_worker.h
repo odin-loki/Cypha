@@ -12,10 +12,10 @@
 #include <string>
 #include <vector>
 
-#include "cypha/csv_ingest.hpp"
-#include "cypha/preprocessor.hpp"
-#include "cypha/replay_buffer.hpp"
-#include "cypha/train_step_vector.hpp"
+#include "cypha/core/csv_ingest.hpp"
+#include "cypha/classify/preprocessor.hpp"
+#include "cypha/online/replay_buffer.hpp"
+#include "cypha/classify/train_step_vector.hpp"
 
 namespace cypha {
 class CyphaDifMemoryState;

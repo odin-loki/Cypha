@@ -44,7 +44,7 @@
 //
 // Also here: a Wikipedia markup cleaner (human text), clean_generated_text (model continuations), a
 // sentence splitter, a word tokenizer, the old surface score S = H*D*L (ported from
-// native/tools/surface_score.cpp), and the small statistics helpers the ladder needs (bootstrap
+// native/tools/eval/surface_score.cpp), and the small statistics helpers the ladder needs (bootstrap
 // interval, pairwise ordering accuracy, Pearson and Spearman correlation).
 //
 // Independence (PLAN V5): the lexicon, the trigram, the IDF and the word vectors come from text the caller
@@ -1061,7 +1061,7 @@ class ScribeModel {
 };
 
 // ===========================================================================
-// C6: word vectors (PPMI-SVD, native/tools/ppmi_svd.cpp) and SIF sentence vectors
+// C6: word vectors (PPMI-SVD, native/tools/semantics/ppmi_svd.cpp) and SIF sentence vectors
 // ===========================================================================
 
 // Word vectors from counts only. File format = ppmi_svd's output: <prefix>.vectors.f32 is V x dim
@@ -2643,7 +2643,7 @@ inline void scribe_v2_selftest(int& checks, int& fails) {
 }
 
 // ===========================================================================
-// Old surface score S = H*D*L (native/tools/surface_score.cpp), for comparison
+// Old surface score S = H*D*L (native/tools/eval/surface_score.cpp), for comparison
 // ===========================================================================
 
 struct SurfaceRef {

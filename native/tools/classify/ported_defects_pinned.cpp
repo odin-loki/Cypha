@@ -9,14 +9,14 @@
 // while the parity question was open. That question is settled; it now asserts the CORRECT
 // behaviour instead.
 //
-// R3 - compute_ece_bins (native/src/infer_cpu.cpp)
+// R3 - compute_ece_bins (native/src/classify/infer_cpu.cpp)
 //      was: bins are [lo, hi) throughout, so confidence exactly 1.0 fell in no bin and was
 //           dropped from the numerator while n still counted it; NaN was dropped the same way,
 //           so an all-NaN evaluation scored a perfect 0.0 and WON the temperature search.
 //      now: the top bin is closed at 1.0; non-finite confidences are excluded from both
 //           numerator and denominator; an evaluation with no finite sample returns +infinity.
 //
-// R4 - adapt_temperature_ece (native/src/infer_cpu.cpp)
+// R4 - adapt_temperature_ece (native/src/classify/infer_cpu.cpp)
 //      was: best_ece seeded at +infinity, so the incumbent temperature was never scored and the
 //           first grid point beat it unconditionally - the routine could install a worse
 //           temperature and report success.
@@ -31,11 +31,11 @@
 #include <string>
 #include <vector>
 
-#include "cypha/infer_cpu.hpp"
+#include "cypha/classify/infer_cpu.hpp"
 
 namespace {
 
-// Calls the REAL compute_ece_bins from native/src/infer_cpu.cpp - not a copy of it.
+// Calls the REAL compute_ece_bins from native/src/classify/infer_cpu.cpp - not a copy of it.
 double ece_bins(const std::vector<double>& confs, const std::vector<double>& correct, int n_bins) {
   return cypha::compute_ece_bins(confs.data(), correct.data(), static_cast<int>(confs.size()), n_bins);
 }

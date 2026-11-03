@@ -54,9 +54,9 @@
 #include <unistd.h>
 #endif
 
-#include "cypha/create_model.hpp"
+#include "cypha/classify/create_model.hpp"
 #include "cypha/cypha.hpp"
-#include "cypha/load_cypha.hpp"
+#include "cypha/classify/load_cypha.hpp"
 
 namespace {
 

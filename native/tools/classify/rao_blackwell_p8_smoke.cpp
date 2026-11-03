@@ -6,8 +6,8 @@
 #include <string>
 #include <vector>
 
-#include "cypha/generation.hpp"
-#include "cypha/replay_buffer.hpp"
+#include "cypha/classify/generation.hpp"
+#include "cypha/online/replay_buffer.hpp"
 
 namespace {
 

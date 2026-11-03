@@ -16,7 +16,7 @@ PLAN rule 10 holds. The expert predicts the next byte inside CyphaLM's mixture; 
 
 ## The expert
 
-`native/include/cypha/cyphalm/class_context.hpp` (200 lines, header-only).
+`native/include/cypha/lm/class_context.hpp` (200 lines, header-only).
 
 - **Context.** The classes of the last two completed words, plus the bytes typed since the last word ended (at most `tail` bytes, default 6). A word is a run of ASCII letters, digits or apostrophes.
 - **Classes.** A `word<TAB>class` table, looked up in lower case. A word not in the table gets one of three shape classes: lower case, capitalised, number. With no table at all, every word is a shape class.
@@ -135,7 +135,7 @@ Intervals are 95% block bootstraps over 4 KiB blocks (4,000 resamples). Each gai
 
 ```bash
 g++ -O2 -std=c++20 -I native/include -I native/third_party -I native/third_party/libsais \
-    native/tools/cyphalm_trie.cpp native/src/cyphalm/infinigram.cpp libsais.o -o cyphalm_trie
+    native/tools/lm/cyphalm_trie.cpp native/src/lm/infinigram.cpp libsais.o -o cyphalm_trie
 ./cyphalm_trie selftest        # includes fixed-input checks of the expert
 
 # the tag table (E1 model as in docs/reports/E1_POS_TAGGER.md)

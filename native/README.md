@@ -6,7 +6,7 @@ Monorepo C++ core for **One Cypha** -- public type **`cypha::Cypha`** (classify 
 
 **Sequence / CyphaLM (hp gate24):** living byte **LLM** — train (`train_step`, BPC eval) + serve (`serve_predict_next`, `generate_decode`, `cyphalm_generate`). **Inference latency first.** gate24 only (v78 + `HP_SLOT_MAX=24`). Quality bar **~1.61 BPC** enwik observe. Legacy Hybrid GRIA+LSTM not linked by default — [`docs/history/LEGACY_LLM.md`](../docs/history/LEGACY_LLM.md). Serve API: [`docs/native/CYPHALM_SERVE.md`](../docs/native/CYPHALM_SERVE.md).
 
-**Accel** (`cypha/accel_backend.hpp`): optional **CUDA infer** (`-DCYPHA_ENABLE_CUDA=ON`); otherwise **ISO C++** parallel CPU via `std::thread`. Training stays on CPU (GPU train is slower here). Future CPU SIMD: xsimd — [`docs/FUTURE.md`](../docs/FUTURE.md) §1b. **`cuda_smoke`** checks infer correctness vs a serial reference; **`cuda_smoke --bench`** compares CUDA vs CPU when a GPU is present (exit 2 skip otherwise).
+**Accel** (`cypha/core/accel_backend.hpp`): optional **CUDA infer** (`-DCYPHA_ENABLE_CUDA=ON`); otherwise **ISO C++** parallel CPU via `std::thread`. Training stays on CPU (GPU train is slower here). Future CPU SIMD: xsimd — [`docs/FUTURE.md`](../docs/FUTURE.md) §1b. **`cuda_smoke`** checks infer correctness vs a serial reference; **`cuda_smoke --bench`** compares CUDA vs CPU when a GPU is present (exit 2 skip otherwise).
 
 ## Repo layout (paths native code resolves)
 
@@ -17,42 +17,50 @@ Monorepo C++ core for **One Cypha** -- public type **`cypha::Cypha`** (classify 
 | **`data/archive/`** | Historical XOR / D17 traces (committed). New captures go to repo-root **`artifacts/`**. |
 | **`native/`** | This C++ tree (CMake source root). |
 
-**Repo root discovery:** `cypha::bench::find_repo_root()` walks upward from the current directory (or **`CYPHA_REPO_ROOT`** if set) until **`fixtures/`**, **`bench/`**, and **`native/`** all exist as directories; otherwise it falls back to the compile-time path derived from `native/src/bench/bench_paths.cpp`. Bench helpers (`bench_root()`, `config_dir()`, …) resolve under **`bench/`**.
+**Repo root discovery:** `cypha::bench::find_repo_root()` walks upward from the current directory (or **`CYPHA_REPO_ROOT`** if set) until **`fixtures/`**, **`bench/`**, and **`native/`** all exist as directories; otherwise it falls back to the compile-time path derived from `native/src/eval/bench_paths.cpp`. Bench helpers (`bench_root()`, `config_dir()`, …) resolve under **`bench/`**.
 
-## Native source layout (Phase B)
+## Native source layout (modules)
 
-| Path | Role |
-|------|------|
-| **`include/`** | Public headers (`cypha/…`, `cypha/cyphalm/…`) — unchanged install / include paths |
-| **`src/`** | Library implementation (`cypha_core`, `cyphalm/*`, `bench/*`, …) |
-| **`apps/`** | Production entrypoint sources (binary names unchanged) |
-| **`tests/parity/`** | Python-vs-native parity harness sources (`*_parity.cpp`, `parity_main.cpp`) |
-| **`tools/`** | Dev smoke, roundtrip, fixture-gen, and LM bench CLIs not tied to CTest parity |
-| **`cmake/`** | `CyphaMinGW.cmake`, `CyphaParity.cmake`, `CyphaApps.cmake` |
+The code is grouped by what it does. Each module has its headers in `include/cypha/<module>/`, its sources in
+`src/<module>/` and its tools in `tools/<module>/`. The full map, and what stayed where and why, is in
+[`docs/MODULES.md`](../docs/MODULES.md).
+
+| Module | What it does |
+|--------|--------------|
+| **`core`** | Shared plumbing: environment, random numbers, portable helpers, row parallelism, the accel backend, registry, CSV, SQLite experiments, NPZ and ONNX writers |
+| **`lm`** | CyphaLM: the byte tries, Kneser–Ney, InfiniGram and the FM index, tokenizers, the class / similar-context / document / copy experts, samplers, hp, the arithmetic coder |
+| **`online`** | Online learning: the content mixer (its lambdas fit or learned online, the online final layer), the adaptive predictor mixer, EWC, replay, curriculum |
+| **`classify`** | Classification: Core Cypha's classifier and regressors (DIF), class GMMs, kernels, encoders, multilabel, the Branch A router, taggers |
+| **`eval`** | SCRIBE, ECS and LCI, the Wikidata grader, the bench suite, report cards and the MC/MG curves |
+| **`knowledge`** | Track S and thought: the epistemic layer, hypotheses and generators, evidence cards, the thought interpreter, the intelligence profiler, `pattern_learn` |
+| **`forecast`**, **`semantics`**, **`som`** | Forecasting; word vectors and embedding geometry; self-organising maps |
+| **`serve`** | The REST server `cypha_rest`, its routes and the Studio web UI |
+
+`include/cypha/cypha.hpp` and `src/cypha.cpp` (the one public type) sit above the modules. `include/cypha/cyphalm/`,
+`src/cyphalm/` and the legacy tools left in `tools/` are the hybrid-era code that no target builds.
+`tests/regression/` holds the goldens and their driver `cypha_golden_run`. `cmake/` holds `CyphaMinGW.cmake`,
+`CyphaRegression.cmake`, `CyphaApps.cmake`, `CyphaCTest.cmake` and the hp flags.
+
+Build one module's tools: `cmake --build <build> --target cypha_<module>_tools` (for example `cypha_lm_tools`).
 
 ### Libraries (`add_library`)
 
 | Target | Sources |
 |--------|---------|
-| **`cypha_core`** | `src/*.cpp`, `src/cyphalm/*`, `src/som/*`, `src/intelligence/*`, `src/cypha.cpp` — one Cypha (classify/regress/sample/tokens) |
+| **`cypha_core`** | `src/core`, `src/classify`, `src/online`, `src/lm`, `src/knowledge`, `src/forecast`, `src/som`, `src/eval/bench_paths.cpp`, `src/cypha.cpp` — one Cypha (classify/regress/sample/tokens) |
 | **`cypha_lm_native`** | INTERFACE alias of `cypha_core` (compat for existing link lines) |
-| **`cypha_bench_native`** | `src/bench/*.cpp` — benchmark engine |
+| **`cypha_bench_native`** | `src/eval/bench_*.cpp` — benchmark engine |
 
-### Apps (`apps/` → executables)
+### Production entrypoints (`cmake/CyphaApps.cmake`)
 
 | Binary | Sources |
 |--------|---------|
-| **`cypha_rest`** | `apps/cypha_rest.cpp` + `cyphalm_rest_routes.cpp` + `branch_a_rest_routes.cpp` + `dif_rest_routes.cpp` |
-| **`cypha_bench_run`** | `apps/cypha_bench_run.cpp` |
-| **`cypha_tune_run`** | `apps/cypha_tune_run.cpp` |
-| **`cypha_diagnostics_run`** | `apps/cypha_diagnostics_run.cpp` |
-| **`cyphalm_train`** | `apps/cyphalm_train.cpp` |
-
-(`cypha_bench_report` also lives under **`apps/`**; same CMake grouping as the runners above.)
-
-### Parity harness (`tests/parity/`)
-
-One executable per `*_parity.cpp` (plus **`parity_main.cpp`** → **`cypha_parity`**). Built via **`cmake/CyphaParity.cmake`**; CTest names and output binary names are unchanged. Remaining dev tools (roundtrip, smoke, **`cypha_fixture_gen`**, **`cyphalm_bench_native`**, …) stay under **`tools/`**.
+| **`cypha_rest`** | `tools/serve/cypha_rest.cpp` + `src/serve/cyphalm_rest_routes.cpp` + `branch_a_rest_routes.cpp` + `dif_rest_routes.cpp` + `intelligence_rest_routes.cpp` |
+| **`cypha_bench_run`** | `tools/eval/cypha_bench_run.cpp` |
+| **`cypha_bench_report`** | `tools/eval/cypha_bench_report.cpp` |
+| **`cypha_tune_run`** | `tools/eval/cypha_tune_run.cpp` |
+| **`cypha_diagnostics_run`** | `tools/eval/cypha_diagnostics_run.cpp` |
+| **`cyphalm_train`** | `tools/lm/cyphalm_train.cpp` |
 
 ## CMake presets (Windows + WSL trees)
 
@@ -137,8 +145,8 @@ Device memory: CUDA accel reuses one **growing device pool** plus a one-time **B
 | **`regression_rff_parity`** | M4 | **`RFFRegressor` / `MKERegressor` math kernels:** `rff_encode_batch_rowmajor`, `ridge_fit_bias`, `linear_predict_with_bias`, `mke_expert_linear_dots` (+ mixture sanity) vs `fixtures/rff_regression/sidecar.json` |
 | **`registry_register`** | M5 | Copy **`model.cypha`** + **`card.json`** (+ optional **`--pre preprocessor.json`**) into `<root>/<name>/<version>/`; **`--and-verify`** runs **`registry_scan`**. CTest **`native_registry_register`**. |
 | **`cypha_rest`** | M5+ | **Cypha** REST routes (see [`PORT_CONTRACT.md`](../docs/port/PORT_CONTRACT.md) §3): **`/health`**, **`/ready`**, **`/metrics`**, **`/predict`**, **`/update`**, **`/adapt_temperature`**, **`/session`**, **`DELETE /session`**, **`/classes`**, **`/models`**, **`/load`**, **`/register`**. Optional **`--regression-json`**. Sequence routes: **`POST /sequence/load`**, **`GET /sequence/metrics`**, **`POST /predict_next`**, **`POST /generate`**, **`POST /generate/stream`**. Latent: **`POST /sample`**, **`POST /retrieve`**. **Branch A** router (optional **`--branch-a-json`**): **`GET /route/health`**, **`POST /route/text`**, **`POST /route/generate`**, **`POST /route/save`**. Smoke: **`native/scripts/smoke_cypha_rest_mingw.ps1`**. |
-| **`experiment_db_smoke`** | M6 | **Optional** — uses embedded experiment DDL at configure time. **SQLite:** system **`find_package(SQLite3)`** or default **`CYPHA_FETCH_SQLITE3_AMALGAMATION=ON`** (downloads official amalgamation). Uses **`cypha/experiment_db.hpp`** (`ExperimentDb`, `experiment_sqlite_exec`, …). CTests **`native_experiment_db_smoke`** / **`native_experiment_db_file`**. |
-| **`experiment_db_crud_parity`** | M6 | **`cypha/experiment_db_crud.hpp`** — insert/finish, append metrics, fail/delete, get/list, best/leaderboard, **`compare_runs`**, **`update_run_notes`** vs canonical DDL; CTest **`native_experiment_db_crud`**. |
+| **`experiment_db_smoke`** | M6 | **Optional** — uses embedded experiment DDL at configure time. **SQLite:** system **`find_package(SQLite3)`** or default **`CYPHA_FETCH_SQLITE3_AMALGAMATION=ON`** (downloads official amalgamation). Uses **`cypha/core/experiment_db.hpp`** (`ExperimentDb`, `experiment_sqlite_exec`, …). CTests **`native_experiment_db_smoke`** / **`native_experiment_db_file`**. |
+| **`experiment_db_crud_parity`** | M6 | **`cypha/core/experiment_db_crud.hpp`** — insert/finish, append metrics, fail/delete, get/list, best/leaderboard, **`compare_runs`**, **`update_run_notes`** vs canonical DDL; CTest **`native_experiment_db_crud`**. |
 | **`cypha_qt_stub`** | M5 | Optional Qt6 **Core** + **`cypha_core`**: optional arg **`reference.cypha`** → **`QFile`** → **`load_cypha_from_buffer`**. **`${BUILD_DIR}/qt/cypha_qt_stub`**. CTest **`native_qt_stub_load_reference`**. |
 | **`cypha_qt_shell`** | M5–M6 | Qt6 **Widgets** + **Network** + **`cypha_core`**: **Dataset panel** — column picker (`QComboBox` target + `QListWidget` feature checkboxes), raw CSV preview table (first 8 rows), val-split % hold-out with post-train accuracy eval; **Fit preprocessor dialog** — scale on/off, PCA dim, fit via `fit_from_design_matrix`, save `preprocessor.json` (no Python needed); train CSV + REST/native bulk; **training progress panel** (per-class accuracy + rolling stats); loss chart REST vs native + optional EMA + **PNG/SVG/CSV** export (optional **`-DCYPHA_QT_CHARTS=ON`**); **`POST /predict`** **`return_explanation`**; **save `.cypha`** (merge + infer snapshot incl. **`feat_dim`**, context, **`mid_trans`**, **`field_W_T`**, **`field_a_eff`**); **train hparams** + auto **`train_hparams.json`**; **`replay_u01`**; MKE regressor loop + `regression_y` bulk; registry + **`POST /load`**; **`GET /health`**, **`/ready`**, **`/models`**; Experiments DB panel (M6: open `.db`, start/finish runs, list table); spawn **`cypha_rest`**; **`--smoke`**. CTest **`native_qt_shell_smoke`**. |
 
@@ -350,7 +358,7 @@ Committed goldens live under **`fixtures/`**. After intentional **`cypha_core`**
 - [`PREPROCESSOR_CONTRACT.md`](../docs/port/PREPROCESSOR_CONTRACT.md) + [`schemas/preprocessor.schema.json`](../docs/port/schemas/preprocessor.schema.json)  
 - [`schemas/regression_head.schema.json`](../docs/port/schemas/regression_head.schema.json) — optional MoE sidecar for `/predict` **`regression_val`**  
 - [`EXPERIMENTS_SCHEMA.md`](../docs/port/EXPERIMENTS_SCHEMA.md) — SQLite (M6). DDL is embedded at CMake configure time. Native **`experiment_db_smoke`** + **`experiment_db_crud_parity`** (CTests **`native_experiment_db_smoke`** / **`native_experiment_db_crud`**) validate DDL and core run/metrics CRUD when SQLite is available.  
-- [`regression.hpp`](include/cypha/regression.hpp) / [`regression.cpp`](src/regression.cpp) — M4 regression stack (`regression_stub.hpp` is a deprecated include alias)  
+- [`regression.hpp`](include/cypha/classify/regression.hpp) / [`regression.cpp`](src/classify/regression.cpp) — M4 regression stack (`regression_stub.hpp` is a deprecated include alias)  
 
 ## Next engineering waves
 

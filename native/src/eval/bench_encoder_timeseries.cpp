@@ -1,7 +1,7 @@
-#include "cypha/bench/bench_encoder_timeseries.hpp"
+#include "cypha/eval/bench_encoder_timeseries.hpp"
 
-#include "cypha/bench/bench_paths.hpp"
-#include "cypha/env.hpp"
+#include "cypha/eval/bench_paths.hpp"
+#include "cypha/core/env.hpp"
 
 #include <algorithm>
 #include <cmath>

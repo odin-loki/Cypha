@@ -10,7 +10,7 @@
 
 #include <nlohmann/json.hpp>
 
-#include "cypha/preprocessor.hpp"
+#include "cypha/classify/preprocessor.hpp"
 
 namespace fs = std::filesystem;
 

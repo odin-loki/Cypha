@@ -7,7 +7,7 @@
 
 | Item | Detail |
 |------|--------|
-| API | `native/include/cypha/cyphalm/adaptive_predictor_mixer.hpp` |
+| API | `native/include/cypha/online/adaptive_predictor_mixer.hpp` |
 | Wire-in | Codec-only (`predictive_codec`); not inside `predict_next` |
 | Experts | Neural; Laplace n-grams (count-gated); longest-match (multi-hit vote); token-hash kNN; optional bias/SSE |
 | Hidden kNN | `CyphaLMModel::hidden_knn_log_probs` blended into neural (`use_hidden_knn`, mix 0.15) |

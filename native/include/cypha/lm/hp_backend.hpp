@@ -27,8 +27,8 @@
 #include <string>
 #include <vector>
 
-#include "cypha/cyphalm/infinigram.hpp"
-#include "cypha/cyphalm/neural_expert.hpp"
+#include "cypha/lm/infinigram.hpp"
+#include "cypha/lm/neural_expert.hpp"
 #include "hp/predictor.hpp"
 #include "hp/undo.hpp"
 

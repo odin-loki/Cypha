@@ -3,11 +3,11 @@
 #include <array>
 #include <optional>
 
-#include "cypha/intelligence/causal_graph.hpp"
-#include "cypha/intelligence/criticality_vector.hpp"
-#include "cypha/intelligence/nig_statistic_state.hpp"
-#include "cypha/intelligence/profile_observation.hpp"
-#include "cypha/intelligence/profile_statistic.hpp"
+#include "cypha/knowledge/causal_graph.hpp"
+#include "cypha/knowledge/criticality_vector.hpp"
+#include "cypha/knowledge/nig_statistic_state.hpp"
+#include "cypha/knowledge/profile_observation.hpp"
+#include "cypha/knowledge/profile_statistic.hpp"
 
 namespace cypha::intelligence {
 

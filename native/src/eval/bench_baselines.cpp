@@ -1,7 +1,7 @@
-#include "cypha/bench/bench_baselines.hpp"
+#include "cypha/eval/bench_baselines.hpp"
 
-#include "cypha/bench/bench_metrics.hpp"
-#include "cypha/regression.hpp"
+#include "cypha/eval/bench_metrics.hpp"
+#include "cypha/classify/regression.hpp"
 
 #include <algorithm>
 #include <cmath>

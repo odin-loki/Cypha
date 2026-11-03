@@ -3,13 +3,13 @@
 #include <cstdio>
 #include <vector>
 
-#include "cypha/bench/bench_paths.hpp"
-#include "cypha/cyphalm/cyphalm_config.hpp"
-#include "cypha/cyphalm/cyphalm_corpus.hpp"
-#include "cypha/cyphalm/cyphalm_model.hpp"
-#include "cypha/intelligence/criticality_vector.hpp"
-#include "cypha/intelligence/intelligence_profiler.hpp"
-#include "cypha/intelligence/profile_from_model.hpp"
+#include "cypha/eval/bench_paths.hpp"
+#include "cypha/lm/cyphalm_config.hpp"
+#include "cypha/lm/cyphalm_corpus.hpp"
+#include "cypha/lm/cyphalm_model.hpp"
+#include "cypha/knowledge/criticality_vector.hpp"
+#include "cypha/knowledge/intelligence_profiler.hpp"
+#include "cypha/knowledge/profile_from_model.hpp"
 
 namespace {
 

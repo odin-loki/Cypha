@@ -26,10 +26,10 @@
 //     P(delta > eps), P(delta > -1 point).
 //   topic_bench selftest
 // Input files: "label<TAB>text" per line (scripts/topic_data.py).
-#include "cypha/create_model.hpp"
+#include "cypha/classify/create_model.hpp"
 #include "cypha/cypha.hpp"
-#include "cypha/load_cypha.hpp"
-#include "cypha/text_features.hpp"
+#include "cypha/classify/load_cypha.hpp"
+#include "cypha/classify/text_features.hpp"
 
 #include <algorithm>
 #include <chrono>

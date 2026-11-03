@@ -1,4 +1,4 @@
-#include "cypha/intelligence/nig_statistic_state.hpp"
+#include "cypha/knowledge/nig_statistic_state.hpp"
 
 #include <algorithm>
 #include <cmath>

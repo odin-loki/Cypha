@@ -3,8 +3,8 @@
 #include <iostream>
 #include <vector>
 
-#include "cypha/mt19937_rng.hpp"
-#include "cypha/preprocessor.hpp"
+#include "cypha/core/mt19937_rng.hpp"
+#include "cypha/classify/preprocessor.hpp"
 
 namespace {
 

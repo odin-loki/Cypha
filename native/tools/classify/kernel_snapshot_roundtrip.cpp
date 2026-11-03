@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-#include "cypha/kernel_memory.hpp"
+#include "cypha/classify/kernel_memory.hpp"
 
 namespace {
 

@@ -36,7 +36,7 @@ Poll watcher reports **4 overnight-related processes** (`poll_finalize.log` hear
 | Last write | 2026-07-17 20:30:30 local (= 10:30:30Z) |
 | Last lines | `2026-07-17T08:27:54Z variant=H16 19/25` → `2026-07-17T10:30:30Z variant=H17 20/25` |
 
-**Interpretation:** Progress is appended at **variant start** (`append_overnight_progress_log` in `native/tools/cypha_cell_hypothesis_sweep.cpp:586`), not on completion. No new line during H17 run is **expected** until H18 starts.
+**Interpretation:** Progress is appended at **variant start** (`append_overnight_progress_log` in `native/tools/lm/cypha_cell_hypothesis_sweep.cpp:586`), not on completion. No new line during H17 run is **expected** until H18 starts.
 
 ### `bench/results/production_overnight_20260711_122145.log`
 

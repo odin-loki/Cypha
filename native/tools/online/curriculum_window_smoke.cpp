@@ -7,7 +7,7 @@
 #include <set>
 #include <vector>
 
-#include "cypha/curriculum.hpp"
+#include "cypha/online/curriculum.hpp"
 
 int main() {
   // Descending confidence by index: row i has confidence (0.9 - 0.1*i), so the hardest-first

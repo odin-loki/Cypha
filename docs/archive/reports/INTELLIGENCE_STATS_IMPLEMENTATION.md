@@ -7,7 +7,7 @@
 
 | Component | Path | CTest |
 |-----------|------|-------|
-| NIG statistic state | `native/include/cypha/intelligence/nig_statistic_state.hpp` | smoke |
+| NIG statistic state | `native/include/cypha/knowledge/nig_statistic_state.hpp` | smoke |
 | 7-stat profile enum | `profile_statistic.hpp` | — |
 | Measurers (D_eff, C, r_eu, α, σ, L, τ) | `measurers.hpp/cpp` | smoke + papers |
 | Intelligence profiler | `intelligence_profiler.hpp/cpp` | smoke |
@@ -107,7 +107,7 @@
 | B0 ngram count prior | `cyphalm_model.cpp` (`ngram_count_table_`, `uses_ngram_count_path`) | hybrid / GRIA-ngram train path |
 | H01 α forget gate | `char_lstm.cpp` (`forget_gate_scale`), `cyphalm_config.hpp` `use_alpha_forget_gate` | cell hypothesis H01 |
 | CyphaLM checkpoint ngram table | `cyphalm_checkpoint.cpp` save/load `ngram_count_table` | B0 count path round-trip |
-| Baseline lock CLI | `tools/cypha_baseline_lock.cpp` | `native_baseline_lock_smoke` |
+| Baseline lock CLI | `tools/eval/cypha_baseline_lock.cpp` | `native_baseline_lock_smoke` |
 | Baseline lock PS wrapper | `scripts/update_baseline_lock.ps1` | manual (`--run d17\|d21\|cell-sweep`) |
 | CI federated TLS mirror | `scripts/ci_federated_tls_linux.sh` | optional CI `federated_tls` job |
 | CTest wiring smoke | `native_d22_cross_smoke` | `ctest -R native_d22` |
@@ -134,7 +134,7 @@
 | Component | Path | CTest / bench |
 |-----------|------|---------------|
 | Hybrid EWC bias + W_slow Fisher | `cyphalm_ewc_regularizer.hpp/cpp` — extend Phase 9 weight Fisher (`d_gria_bias`, `d_ssm_w_slow`; anchor/Fisher on GRIA **bias** + SSM **W_slow**) | `native_ewc_weights_smoke` |
-| Baseline lock `--run all` | `tools/cypha_baseline_lock.cpp` — single CLI chains D17 + d21 + cell-sweep | `native_baseline_lock_smoke` |
+| Baseline lock `--run all` | `tools/eval/cypha_baseline_lock.cpp` — single CLI chains D17 + d21 + cell-sweep | `native_baseline_lock_smoke` |
 | Baseline lock PS wrapper | `scripts/update_baseline_lock.ps1` | manual (`--run d17\|d21\|cell-sweep\|all`) |
 | Production lock validation bench **d24** | `bench_domains.cpp` → `run_d24_production_lock_validation` | `cypha_bench_run --domain-tag d24` |
 | D24 profile config | `bench/config/d24_production_lock_profile.json` | manual |
@@ -150,7 +150,7 @@
 | WikiText-2 download scripts | `scripts/download_wikitext2.ps1`, `scripts/download_wikitext2.sh` | manual |
 | WikiText layout docs | `bench/data/wikitext2/README.md` | manual |
 | Gutenberg fallback for d17/d21 | `cyphalm_corpus.cpp` — `gutenberg_fallback` when WikiText absent (Moby Dick preferred) | `native_corpus_smoke` |
-| Corpus load smoke CLI | `tools/corpus_smoke.cpp` | `native_corpus_smoke` |
+| Corpus load smoke CLI | `tools/lm/corpus_smoke.cpp` | `native_corpus_smoke` |
 | Bench domain **d25** corpus readiness | `bench_domains.cpp` → `run_d25_corpus_readiness` | `cypha_bench_run --domain-tag d25` |
 | D25 profile config | `bench/config/d25_corpus_readiness_profile.json` | manual |
 | D25 readiness report | `bench/report/tables/d25_corpus_readiness.json` | d25 run |
@@ -164,12 +164,12 @@
 | Component | Path | CTest / bench |
 |-----------|------|---------------|
 | Medium overnight tier | `-Medium` on `run_d17_overnight.ps1`, `run_rpsm_overnight.ps1`, `run_overnight_all.ps1`, `update_baseline_lock.ps1` — 5k train / 256 eval, real corpus | manual |
-| `cypha_baseline_lock --medium` | `tools/cypha_baseline_lock.cpp` — `status=medium_smoke` in lock JSON | `native_baseline_lock_smoke` |
+| `cypha_baseline_lock --medium` | `tools/eval/cypha_baseline_lock.cpp` — `status=medium_smoke` in lock JSON | `native_baseline_lock_smoke` |
 | Bench domain **d26** medium overnight validation | `bench_domains.cpp` → `run_d26_medium_overnight_validation` | `cypha_bench_run --domain-tag d26` |
 | D26 profile config | `bench/config/d26_medium_overnight_profile.json` | manual |
 | D26 validation report | `bench/report/tables/d26_medium_overnight_validation.json` | d26 run |
 | Baseline lock PS validator | `scripts/validate_baseline_lock.ps1` (`-LockFile`, `-Strict`) | manual |
-| Baseline lock C++ validator | `tools/baseline_lock_smoke.cpp` → `baseline_lock_validate` | `native_baseline_lock_validate_smoke` |
+| Baseline lock C++ validator | `tools/eval/baseline_lock_smoke.cpp` → `baseline_lock_validate` | `native_baseline_lock_validate_smoke` |
 | Release notes preview | `scripts/publish_release.ps1 -DryRun` / `-NotesOnly` | manual |
 | Optional CI corpus job | `.github/workflows/ci.yml` → `corpus_and_d25` | optional (`continue-on-error`) |
 | Release notes v2.3.12 template | `scripts/create_release_notes.ps1` | manual |
@@ -181,13 +181,13 @@
 | Component | Path | CTest / bench |
 |-----------|------|---------------|
 | Production overnight tier | `-Production` on `run_d17_overnight.ps1`, `run_rpsm_overnight.ps1`, `run_overnight_all.ps1`, `update_baseline_lock.ps1` — 300k train / 2000 eval, real corpus (mutually exclusive with `-Fast`/`-Medium`) | manual |
-| `cypha_baseline_lock --production` | `tools/cypha_baseline_lock.cpp` — `status=production`, `CYPHA_BENCH_FULL_CORPUS=1`, `CYPHA_BENCH_OVERNIGHT=1`, `CYPHA_BENCH_FULL_N_TRAIN=300000` | `native_baseline_lock_smoke` |
+| `cypha_baseline_lock --production` | `tools/eval/cypha_baseline_lock.cpp` — `status=production`, `CYPHA_BENCH_FULL_CORPUS=1`, `CYPHA_BENCH_OVERNIGHT=1`, `CYPHA_BENCH_FULL_N_TRAIN=300000` | `native_baseline_lock_smoke` |
 | Dedicated production runner | `scripts/run_production_overnight.ps1` — chains `run_overnight_all.ps1 -Production`, logs to `bench/results/production_overnight_<timestamp>.log` | manual |
 | Bench domain **d27** production overnight validation | `bench_domains.cpp` → `run_d27_production_lock_validation` | `cypha_bench_run --domain-tag d27` |
 | D27 profile config | `bench/config/d27_production_lock_profile.json` | manual |
 | D27 validation report | `bench/report/tables/d27_production_lock_validation.json` | d27 run |
 | Baseline lock PS production validator | `scripts/validate_baseline_lock.ps1 -Production` — when `n_train >= 300000`, require `status=production` or `completed`, BPC within 0.05 of 2.873 pin | manual |
-| Baseline lock C++ production validator | `tools/baseline_lock_smoke.cpp` → `baseline_lock_validate --production` | `native_baseline_lock_validate_smoke` |
+| Baseline lock C++ production validator | `tools/eval/baseline_lock_smoke.cpp` → `baseline_lock_validate --production` | `native_baseline_lock_validate_smoke` |
 | Release notes v2.3.13 template | `scripts/create_release_notes.ps1` | manual |
 
 **CI gate (Phase 13 shipped):** **104 CTests** (`ctest -R native_`); +1 smoke: **`native_d27_production_lock_smoke`**. Full 300k production overnight is **not** run in CI — maintainer-only via **`run_production_overnight.ps1`**.
@@ -196,7 +196,7 @@
 
 | Component | Path | CTest / bench |
 |-----------|------|---------------|
-| Baseline lock status validator fix | `scripts/validate_baseline_lock.ps1`, `tools/baseline_lock_smoke.cpp` — accept **`medium_smoke`** and **`production`** in addition to **`fast_smoke`** / **`completed`** (fixes production/medium overnight lock validation) | `native_baseline_lock_validate_smoke` |
+| Baseline lock status validator fix | `scripts/validate_baseline_lock.ps1`, `tools/eval/baseline_lock_smoke.cpp` — accept **`medium_smoke`** and **`production`** in addition to **`fast_smoke`** / **`completed`** (fixes production/medium overnight lock validation) | `native_baseline_lock_validate_smoke` |
 | Cell sweep artifact path | `cypha_cell_hypothesis_sweep`, `cypha_baseline_lock --output-dir`, `bench_paths::results_dir()` — default overnight sweep output **`bench/results/cell_sweep`** (was repo-root **`results/`**) | manual |
 | Bench domain **d28** unified overnight completion validation | `bench_domains.cpp` → `run_d28_overnight_complete_validation` | `cypha_bench_run --domain-tag d28` |
 | D28 profile config | `bench/config/d28_overnight_complete_profile.json` | manual |
@@ -402,7 +402,7 @@
 | Profile curriculum re-enabled | `cyphalm_math_integration.cpp` | hardest-first prescan + replay train |
 | Cell sweep κ overlay | `cypha_cell_hypothesis_sweep.cpp` `--intelligence-profile` | per-variant κ + completeness |
 | LM self-correct REST wiring | `cyphalm_rest_routes.cpp` | `self_correct` auto-enables `epistemic_halt` |
-| LM self-correct smoke | `tools/lm_self_correct_smoke.cpp` | `native_lm_self_correct_smoke` |
+| LM self-correct smoke | `tools/knowledge/lm_self_correct_smoke.cpp` | `native_lm_self_correct_smoke` |
 | Validate-all hook | `scripts/cypha_native_validate_all.ps1` — **`CYPHA_VALIDATE_MATH_INTEGRATION_SCALE=1`** | d41 when profile exists |
 
 **CI gate (Phase 27 shipped):** **121 CTests** (`ctest -R native_`); +1 smoke: **`native_d41_math_integration_scale_smoke`**; +1: **`native_lm_self_correct_smoke`**. d41 records **`delta_bpc`** / **`delta_kappa`** at 5k scale; **`math_integration_scale_ready`** when both subprocesses exit 0 with complete profiles + finite BPC.

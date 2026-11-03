@@ -11,9 +11,9 @@
 
 #include <nlohmann/json.hpp>
 
-#include "cypha/load_cypha.hpp"
-#include "cypha/replay_buffer.hpp"
-#include "cypha/train_step_vector.hpp"
+#include "cypha/classify/load_cypha.hpp"
+#include "cypha/online/replay_buffer.hpp"
+#include "cypha/classify/train_step_vector.hpp"
 
 namespace fs = std::filesystem;
 

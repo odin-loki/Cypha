@@ -1,4 +1,4 @@
-#include "cypha/cyphalm/adaptive_predictor_mixer.hpp"
+#include "cypha/online/adaptive_predictor_mixer.hpp"
 
 #include <algorithm>
 #include <cmath>

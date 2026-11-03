@@ -14,9 +14,9 @@
 #include <string>
 #include <vector>
 
-#include "cypha/thought/bindings_cypha.hpp"
-#include "cypha/thought/chunking.hpp"
-#include "cypha/thought/mining.hpp"
+#include "cypha/knowledge/bindings_cypha.hpp"
+#include "cypha/knowledge/chunking.hpp"
+#include "cypha/knowledge/mining.hpp"
 
 using namespace cypha::thought;
 namespace bd = cypha::thought::bind;

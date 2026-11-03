@@ -21,8 +21,8 @@
 #include <nlohmann/json.hpp>
 
 #include "cypha/som/som_encoder.hpp"
-#include "cypha/intelligence/intelligence_profile_json.hpp"
-#include "cypha/intelligence/intelligence_profiler.hpp"
+#include "cypha/knowledge/intelligence_profile_json.hpp"
+#include "cypha/knowledge/intelligence_profiler.hpp"
 
 namespace fs = std::filesystem;
 using Json = nlohmann::json;

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "cypha/infer_cpu.hpp"
+#include "cypha/classify/infer_cpu.hpp"
 
 #include <cstddef>
 #include <string>

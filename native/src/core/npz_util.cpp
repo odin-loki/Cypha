@@ -1,4 +1,4 @@
-#include "cypha/cyphalm/npz_util.hpp"
+#include "cypha/core/npz_util.hpp"
 
 #include <algorithm>
 #include <cstring>

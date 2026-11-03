@@ -33,7 +33,7 @@
 #include <utility>
 #include <vector>
 
-#include "cypha/eval/hypothesis.hpp"
+#include "cypha/knowledge/hypothesis.hpp"
 #include "cypha/eval/lci.hpp"
 
 namespace cypha::eval {

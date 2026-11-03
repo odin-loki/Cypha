@@ -352,7 +352,7 @@ Test abstention by token (trie, chat form):
 
 | Item | Value |
 |---|---|
-| Code | `native/tools/cyphalm_trie.cpp` 779 → 1,765 lines (+986): `qa`, `dktext`, grading, gate, CV, and the selftest checks. `packed_trie.hpp` unchanged |
+| Code | `native/tools/lm/cyphalm_trie.cpp` 779 → 1,765 lines (+986): `qa`, `dktext`, grading, gate, CV, and the selftest checks. `packed_trie.hpp` unchanged |
 | `dktext` | 6 s, reads enwik8 (100 MB) and Dolly; output 3,963 rows (`dk.tsv`, about 0.8 MB) |
 | `qa` run (train + holdout + InfiniGram + 130 questions × 2 forms × 2 models) | 350–400 s wall time on a shared core. With `--test` (330 questions): 331 s (A0) and 370 s (A1b-after) |
 | Peak RSS | 233 MB (A0) to 265 MB (A1b-after) |
@@ -381,7 +381,7 @@ Test abstention by token (trie, chat form):
 ```bash
 gcc -O2 -c native/third_party/libsais/libsais.c -o libsais.o
 g++ -O2 -std=c++20 -I native/include -I native/third_party -I native/third_party/libsais \
-    native/tools/cyphalm_trie.cpp native/src/cyphalm/infinigram.cpp libsais.o -o cyphalm_trie
+    native/tools/lm/cyphalm_trie.cpp native/src/lm/infinigram.cpp libsais.o -o cyphalm_trie
 ./cyphalm_trie selftest
 E=/root/cdata/enwik8; D=/root/cdata/dolly.jsonl; DEV=bench/eval/t_qa_wiki_dev.tsv; TEST=bench/eval/t_qa_wiki.tsv
 ./cyphalm_trie dktext $E $D --dev $DEV --test $TEST --out dk.tsv

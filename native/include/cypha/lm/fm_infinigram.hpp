@@ -27,7 +27,7 @@
 /// Positions (S1, evidence cards): build_locate adds sampled suffix-array
 /// entries, only when asked; queries do not use them.
 
-#include "cypha/cyphalm/infinigram.hpp"
+#include "cypha/lm/infinigram.hpp"
 
 #include <bit>
 #include <cstddef>

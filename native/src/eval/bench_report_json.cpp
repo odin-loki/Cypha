@@ -1,6 +1,6 @@
-#include "cypha/bench/bench_report_json.hpp"
+#include "cypha/eval/bench_report_json.hpp"
 
-#include "cypha/bench/bench_paths.hpp"
+#include "cypha/eval/bench_paths.hpp"
 
 #include <algorithm>
 #include <chrono>

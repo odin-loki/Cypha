@@ -1,4 +1,4 @@
-#include "cypha/cyphalm/cyphalm_generation.hpp"
+#include "cypha/lm/cyphalm_generation.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -9,11 +9,11 @@
 #include <stdexcept>
 #include <utility>
 
-#include "cypha/curriculum.hpp"
-#include "cypha/cyphalm/hp_backend.hpp"
-#include "cypha/cyphalm/cyphalm_intelligence_hook.hpp"
-#include "cypha/cyphalm/lm_intelligence_monitor.hpp"
-#include "cypha/intelligence/measurers.hpp"
+#include "cypha/online/curriculum.hpp"
+#include "cypha/lm/hp_backend.hpp"
+#include "cypha/knowledge/cyphalm_intelligence_hook.hpp"
+#include "cypha/knowledge/lm_intelligence_monitor.hpp"
+#include "cypha/knowledge/measurers.hpp"
 
 namespace cypha::cyphalm {
 

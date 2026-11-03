@@ -24,10 +24,10 @@
 #include <string>
 #include <vector>
 
-#include "cypha/cyphalm/cyphalm_config.hpp"
-#include "cypha/cyphalm/hp_backend.hpp"
-#include "cypha/cyphalm/infinigram.hpp"
-#include "cypha/cyphalm/neural_expert.hpp"
+#include "cypha/lm/cyphalm_config.hpp"
+#include "cypha/lm/hp_backend.hpp"
+#include "cypha/lm/infinigram.hpp"
+#include "cypha/lm/neural_expert.hpp"
 #include "hp/predictor.hpp"
 #include "hp/simd_dot.hpp"
 

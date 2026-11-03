@@ -16,15 +16,15 @@
 
 #include <nlohmann/json.hpp>
 
-#include "cypha/create_model.hpp"
-#include "cypha/cyphalm/cypha_cell_hypothesis.hpp"
-#include "cypha/cyphalm/cyphalm_checkpoint.hpp"
-#include "cypha/intelligence/self_correcting_infer.hpp"
-#include "cypha/kernel_memory.hpp"
-#include "cypha/load_cypha.hpp"
-#include "cypha/mke_scalar_train_step.hpp"
-#include "cypha/regression.hpp"
-#include "cypha/sync_infer.hpp"
+#include "cypha/classify/create_model.hpp"
+#include "cypha/lm/cypha_cell_hypothesis.hpp"
+#include "cypha/lm/cyphalm_checkpoint.hpp"
+#include "cypha/knowledge/self_correcting_infer.hpp"
+#include "cypha/classify/kernel_memory.hpp"
+#include "cypha/classify/load_cypha.hpp"
+#include "cypha/classify/mke_scalar_train_step.hpp"
+#include "cypha/classify/regression.hpp"
+#include "cypha/classify/sync_infer.hpp"
 
 namespace fs = std::filesystem;
 

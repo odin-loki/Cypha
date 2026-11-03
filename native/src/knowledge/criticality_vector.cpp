@@ -1,13 +1,13 @@
-#include "cypha/intelligence/criticality_vector.hpp"
+#include "cypha/knowledge/criticality_vector.hpp"
 
 #include <algorithm>
 #include <cmath>
 
 #include <nlohmann/json.hpp>
 
-#include "cypha/env.hpp"
-#include "cypha/intelligence/intelligence_profiler.hpp"
-#include "cypha/intelligence/soft_world_monitor.hpp"
+#include "cypha/core/env.hpp"
+#include "cypha/knowledge/intelligence_profiler.hpp"
+#include "cypha/knowledge/soft_world_monitor.hpp"
 
 namespace cypha::intelligence {
 

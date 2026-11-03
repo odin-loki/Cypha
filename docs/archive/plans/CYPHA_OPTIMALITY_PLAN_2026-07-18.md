@@ -77,8 +77,8 @@ Each phase is self-contained and Cursor-actionable:
 **Bound saturated:** EM monotonically increases the mixture log-likelihood; E-step responsibilities are the exact posterior over latent assignment (Tier 1 — argmax of a stated functional).
 
 **Files (new):**
-- `native/include/cypha/em_step.hpp`
-- `native/src/em_step.cpp`
+- `native/include/cypha/classify/em_step.hpp`
+- `native/src/classify/em_step.cpp`
 
 **Change:** Implement `responsibilities(loglik[], prior[], K, temperature, eps) -> r[]` (log-sum-exp normalised) and `weighted_moment_update(...)` helpers. Diagonal-Gaussian component likelihoods reuse the existing `score_matrix_use_field` math. Keep it allocation-light and header-declared for inlining on the hot path.
 
@@ -87,7 +87,7 @@ Each phase is self-contained and Cursor-actionable:
 **Risk / goldens:** None yet — new module, no callers changed.
 
 **Cursor prompt:**
-> Create `native/include/cypha/em_step.hpp` and `native/src/em_step.cpp` implementing a reusable EM step for diagonal-Gaussian mixtures: (1) `responsibilities()` computing `r_i ∝ prior_i · exp(loglik_i)` with log-sum-exp normalisation, temperature, and an epsilon floor; (2) `weighted_moment_update()` for weighted mean/variance accumulation. Reuse the diagonal-Gaussian log-likelihood convention from `score_matrix_use_field`. Add a CTest that recovers two separated Gaussians from synthetic data and asserts the mixture log-likelihood is monotonically non-decreasing.
+> Create `native/include/cypha/classify/em_step.hpp` and `native/src/classify/em_step.cpp` implementing a reusable EM step for diagonal-Gaussian mixtures: (1) `responsibilities()` computing `r_i ∝ prior_i · exp(loglik_i)` with log-sum-exp normalisation, temperature, and an epsilon floor; (2) `weighted_moment_update()` for weighted mean/variance accumulation. Reuse the diagonal-Gaussian log-likelihood convention from `score_matrix_use_field`. Add a CTest that recovers two separated Gaussians from synthetic data and asserts the mixture log-likelihood is monotonically non-decreasing.
 
 ---
 
@@ -100,8 +100,8 @@ Each phase is self-contained and Cursor-actionable:
 **Bound saturated:** same as Phase 1 — the router now targets the E-step posterior instead of confirming its own prior.
 
 **Files:**
-- `native/src/mke_scalar_train_step.cpp` (`mke_scalar_train_step_from_phi`)
-- `native/include/cypha/mke_scalar_train_step.hpp`
+- `native/src/classify/mke_scalar_train_step.cpp` (`mke_scalar_train_step_from_phi`)
+- `native/include/cypha/classify/mke_scalar_train_step.hpp`
 
 **Change (four edits, all local to the train step):**
 1. **Responsibilities, not routing probs.** You already compute `dp = w_i·φ` in the `y_hat` loop — reuse it: `r_i ∝ p_i · exp(−(y − w_i·φ)² / 2σ²)`, normalised. This is the E-step.
@@ -114,7 +114,7 @@ Each phase is self-contained and Cursor-actionable:
 **Risk / goldens:** Breaks `mke_train_step_golden` (was `_parity`) — correct, since it froze collapsing behaviour. Regenerate the golden from the fixed native code.
 
 **Cursor prompt:**
-> In `native/src/mke_scalar_train_step.cpp::mke_scalar_train_step_from_phi`, replace the current router training with EM using `native/cypha/em_step.hpp`: compute per-expert responsibilities `r_i ∝ p_i · exp(−(y − w_i·φ)²/2σ²)` reusing the `dp = w_i·φ` values already computed for `y_hat`; train the DIF router toward `argmax r` (not `argmax p`); pass `r_i` into `mke_expert_rls_scalar_step` and replace the hard `pi_floor` skip with an epsilon floor; add random per-expert initialisation of `w_by_label` and a routing-temperature warmup anneal. Then regenerate the `mke_train_step_golden` fixture from the updated native output and add an expert-utilisation assertion (no expert exceeds ~60% of routing mass at convergence).
+> In `native/src/classify/mke_scalar_train_step.cpp::mke_scalar_train_step_from_phi`, replace the current router training with EM using `native/cypha/classify/em_step.hpp`: compute per-expert responsibilities `r_i ∝ p_i · exp(−(y − w_i·φ)²/2σ²)` reusing the `dp = w_i·φ` values already computed for `y_hat`; train the DIF router toward `argmax r` (not `argmax p`); pass `r_i` into `mke_expert_rls_scalar_step` and replace the hard `pi_floor` skip with an epsilon floor; add random per-expert initialisation of `w_by_label` and a routing-temperature warmup anneal. Then regenerate the `mke_train_step_golden` fixture from the updated native output and add an expert-utilisation assertion (no expert exceeds ~60% of routing mass at convergence).
 
 ---
 
@@ -127,8 +127,8 @@ Each phase is self-contained and Cursor-actionable:
 **Bound saturated:** mixture log-likelihood via EM (Tier 1). **Why this is the real fix:** one diagonal Gaussian cannot cover two disconnected lobes — that is a representational impossibility, which is why kernels only patched XOR to ~76%. A 2–3 component class model occupies both lobes directly.
 
 **Files:**
-- `native/include/cypha/memory_train.hpp`, `native/src/` DIFMemory/ClassDifferential internals
-- `native/include/cypha/nig_field.hpp` (component gate reuse)
+- `native/include/cypha/classify/memory_train.hpp`, `native/src/` DIFMemory/ClassDifferential internals
+- `native/include/cypha/classify/nig_field.hpp` (component gate reuse)
 - consumes `em_step.hpp`
 
 **Change:** Generalise `Δk` from `(μ_k, v_k)` to `{(π_{k,m}, μ_{k,m}, v_{k,m})}` for a small `M_k` (start `M=2`, cap `M=4`). `score k = log Σ_m π_{k,m} · p(h | N(μ_{k,m}, v_{k,m}))` (log-sum-exp). Fit components online by the Phase-1 EM step. Keep `‖Δk‖_F ≤ C` MDL cap per component so simple classes stay single-mode (Solomonoff prior still holds; cold-start unchanged).
@@ -138,7 +138,7 @@ Each phase is self-contained and Cursor-actionable:
 **Risk / goldens:** Changes `.cypha` v3 serialisation (class now stores M components). Bump format version, add migration for single-component load, regenerate affected golden fixtures.
 
 **Cursor prompt:**
-> Generalise `ClassDifferential` in the DIFMemory path so each class holds a small Gaussian mixture `{(π, μ, v)}_m` (default M=2, cap 4) instead of a single diagonal Gaussian. Change the class score to `log Σ_m π_m · N(h | μ_m, v_m)` via log-sum-exp, fit components online using `cypha/em_step.hpp`, and keep the `‖Δk‖_F ≤ C` MDL cap per component. Bump the `.cypha` format version with a migration that loads legacy single-component classes as M=1. Add a CTest showing XOR (S3) exceeds 75% with multimodal classes and no kernel, and assert Wine and Digits accuracy do not regress.
+> Generalise `ClassDifferential` in the DIFMemory path so each class holds a small Gaussian mixture `{(π, μ, v)}_m` (default M=2, cap 4) instead of a single diagonal Gaussian. Change the class score to `log Σ_m π_m · N(h | μ_m, v_m)` via log-sum-exp, fit components online using `cypha/classify/em_step.hpp`, and keep the `‖Δk‖_F ≤ C` MDL cap per component. Bump the `.cypha` format version with a migration that loads legacy single-component classes as M=1. Add a CTest showing XOR (S3) exceeds 75% with multimodal classes and no kernel, and assert Wine and Digits accuracy do not regress.
 
 ---
 
@@ -151,7 +151,7 @@ Each phase is self-contained and Cursor-actionable:
 **Bound saturated:** BMA minimises expected log loss / is the admissible predictor under KL (Tier 1). No sampling — conjugacy makes the average analytic.
 
 **Files:**
-- `native/include/cypha/nig_field.hpp`, `native/include/cypha/nig_gig_math.hpp`
+- `native/include/cypha/classify/nig_field.hpp`, `native/include/cypha/classify/nig_gig_math.hpp`
 - inference path in `infer_cpu.hpp` / `dif_rest.hpp`
 
 **Change:** At inference, integrate the class score over the NIG posterior rather than plugging the MAP `Δk`. Emit a posterior credible interval as `confidence` and `r_eff`, replacing the heuristic confidence scalar. Strengthens the OOD/calibration story you already lead with.
@@ -196,7 +196,7 @@ Each phase is self-contained and Cursor-actionable:
 **Bound saturated:** variational IB bound (Alemi et al.) — a proper `argmin I(X;T) − β·I(T;Y)` (Tier 1). A nonlinear IB encoder also attacks nonlinear boundaries from the encoder side.
 
 **Files:**
-- `native/include/cypha/encoder_contrastive.hpp`, EncoderProjection update
+- `native/include/cypha/classify/encoder_contrastive.hpp`, EncoderProjection update
 
 **Change:** Replace the contrastive Fisher–Rao residual gradient with the variational IB loss; keep the `‖W‖_F ≤ 8.0` cap for stability. Report the `β` trade-off point.
 
@@ -218,7 +218,7 @@ Each phase is self-contained and Cursor-actionable:
 **Bound saturated:** score matching minimises Fisher divergence and is a consistent estimator — no normalising constant required (Tier 1).
 
 **Files:**
-- `native/include/cypha/bessel_table.hpp`, `bessel_ratios.npz` (delete), NIG gate fit path
+- `native/include/cypha/classify/bessel_table.hpp`, `bessel_ratios.npz` (delete), NIG gate fit path
 
 **Change:** Fit the heavy-tailed gate by score matching (Hyvärinen). Remove the 300 KB LUT and the Bessel-accuracy constraint entirely.
 
@@ -240,7 +240,7 @@ Each phase is self-contained and Cursor-actionable:
 **Bound saturated:** Rao–Blackwell theorem — conditioning on a sufficient statistic *never increases* variance (Tier 1, unconditional improvement).
 
 **Files:**
-- `native/include/cypha/generation.hpp`, `replay_buffer.hpp`
+- `native/include/cypha/classify/generation.hpp`, `replay_buffer.hpp`
 
 **Change:** Where the replay/KDE paths average samples, substitute the analytic conditional expectation using the sufficient statistics you already carry.
 
@@ -271,8 +271,8 @@ Tag every field with its Tier so the readout never conflates "how far from optim
 - **Cold / on demand only:** full leverage-score recompute, full kernel reconstruction, OT coupling suboptimality.
 
 **Files:**
-- `native/include/cypha/intelligence/intelligence_profiler.hpp`, `soft_world_monitor.hpp`, `cyphalm/lm_intelligence_monitor.hpp`
-- `cyphalm/cyphalm_alpha_spectrum.hpp` (already reports `mean_alpha`, `fraction_near_edge_of_chaos`)
+- `native/include/cypha/knowledge/intelligence_profiler.hpp`, `soft_world_monitor.hpp`, `knowledge/lm_intelligence_monitor.hpp`
+- `lm/cyphalm_alpha_spectrum.hpp` (already reports `mean_alpha`, `fraction_near_edge_of_chaos`)
 - sinks: `intelligence_rest.hpp` metrics field + optional `experiment_db` ring buffer for history
 
 **Change:** Add a `CriticalityVector` struct (per-field: value, tier tag, target-or-bound, cadence). Populate hot fields from existing state; add mid estimators behind a subsample gate. Expose read-only via REST; optional SQLite ring buffer.

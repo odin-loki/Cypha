@@ -1,4 +1,4 @@
-#include "cypha/registry.hpp"
+#include "cypha/core/registry.hpp"
 
 #include <cstring>
 #include <filesystem>

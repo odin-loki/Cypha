@@ -262,13 +262,13 @@ The final A1c configuration is run D′: `ent_title` token after `Assistant: `, 
 
 | Item | Value |
 |---|---|
-| Code | `native/tools/cyphalm_trie.cpp` 1,765 → 2,542 lines (+777, shared with A2/A3): parse loading, 7 familiarity statistics, AUROC with bootstrap, Youden cut, `--fam-train`, the copy expert, `--mention`, selftest checks. `packed_trie.hpp` and `infinigram.cpp` unchanged |
+| Code | `native/tools/lm/cyphalm_trie.cpp` 1,765 → 2,542 lines (+777, shared with A2/A3): parse loading, 7 familiarity statistics, AUROC with bootstrap, Youden cut, `--fam-train`, the copy expert, `--mention`, selftest checks. `packed_trie.hpp` and `infinigram.cpp` unchanged |
 | `qa` run | 7.3–8.4 min wall time on a shared core (A0: 7.5 min); `--fam-only` 1.2 min |
 | Peak RSS | not measured separately (`/usr/bin/time` is not installed); the lowered index adds 4 bytes a byte over about 20 MB while it is built |
 | `dktext --mention` | 6 s; 6,583 rows |
 | E1 parse | 1.1 s for 15,015 Dolly instructions (external, `pos_tagger question --tsv`) |
 | `selftest` | 0.12 s; the golden BPC is unchanged |
-| Surface score | skipped: `native/tools/surface_score.cpp` takes no input (fixed built-in samples, a hard-coded `/mnt/d` path), so it cannot score these answers without editing it |
+| Surface score | skipped: `native/tools/eval/surface_score.cpp` takes no input (fixed built-in samples, a hard-coded `/mnt/d` path), so it cannot score these answers without editing it |
 
 ---
 
@@ -277,7 +277,7 @@ The final A1c configuration is run D′: `ent_title` token after `Assistant: `, 
 ```bash
 gcc -O2 -c native/third_party/libsais/libsais.c -o libsais.o
 g++ -O2 -std=c++20 -I native/include -I native/third_party -I native/third_party/libsais \
-    native/tools/cyphalm_trie.cpp native/src/cyphalm/infinigram.cpp libsais.o -o cyphalm_trie
+    native/tools/lm/cyphalm_trie.cpp native/src/lm/infinigram.cpp libsais.o -o cyphalm_trie
 ./cyphalm_trie selftest
 E=/root/cdata/enwik8; D=/root/cdata/dolly.jsonl; DEV=bench/eval/t_qa_wiki_dev.tsv; TEST=bench/eval/t_qa_wiki.tsv
 ./cyphalm_trie dktext $E $D --dev $DEV --test $TEST --out dk.tsv                      # A1's rows (parity)

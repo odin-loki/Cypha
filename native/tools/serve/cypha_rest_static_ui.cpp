@@ -27,13 +27,13 @@ std::string resolve_static_dir(const char* argv0) {
     try {
       const fs::path exe = fs::absolute(fs::path(argv0));
       candidates.push_back(exe.parent_path() / "static");
-      candidates.push_back(exe.parent_path() / "tools" / "static");
-      candidates.push_back(exe.parent_path().parent_path() / "tools" / "static");
+      candidates.push_back(exe.parent_path() / "tools" / "serve" / "static");
+      candidates.push_back(exe.parent_path().parent_path() / "tools" / "serve" / "static");
     } catch (...) {
     }
   }
-  candidates.push_back(fs::current_path() / "native" / "tools" / "static");
-  candidates.push_back(fs::current_path() / "tools" / "static");
+  candidates.push_back(fs::current_path() / "native" / "tools" / "serve" / "static");
+  candidates.push_back(fs::current_path() / "tools" / "serve" / "static");
   for (const auto& p : candidates) {
     std::error_code ec;
     if (fs::is_directory(p, ec) && fs::exists(p / "index.html", ec)) {

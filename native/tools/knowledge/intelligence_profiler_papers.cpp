@@ -8,15 +8,15 @@
 #include <limits>
 #include <vector>
 
-#include "cypha/bench/bench_paths.hpp"
-#include "cypha/intelligence/causal_graph.hpp"
-#include "cypha/intelligence/epistemic_threshold.hpp"
-#include "cypha/intelligence/intelligence_profiler.hpp"
-#include "cypha/intelligence/measurers.hpp"
-#include "cypha/intelligence/profile_from_model.hpp"
-#include "cypha/intelligence/profile_guided_loss.hpp"
-#include "cypha/intelligence/self_correcting_infer.hpp"
-#include "cypha/intelligence/soft_world_monitor.hpp"
+#include "cypha/eval/bench_paths.hpp"
+#include "cypha/knowledge/causal_graph.hpp"
+#include "cypha/knowledge/epistemic_threshold.hpp"
+#include "cypha/knowledge/intelligence_profiler.hpp"
+#include "cypha/knowledge/measurers.hpp"
+#include "cypha/knowledge/profile_from_model.hpp"
+#include "cypha/knowledge/profile_guided_loss.hpp"
+#include "cypha/knowledge/self_correcting_infer.hpp"
+#include "cypha/knowledge/soft_world_monitor.hpp"
 
 namespace {
 
@@ -580,7 +580,7 @@ void test_trace_frobenius_participation_ratio() {
   assert(near(small_eigen, small_trace_frob, 1e-6));
 
   // Large case: n_dims=300 is above the old hard `n_dims > 256` guard
-  // (native/src/intelligence/measurers.cpp) that used to silently swap in the cheaper,
+  // (native/src/knowledge/measurers.cpp) that used to silently swap in the cheaper,
   // different VarianceProxy metric with no signal. Use a deterministic LCG so the
   // activations have realistic cross-dimension correlation structure (not degenerate
   // like a pure identity matrix), and keep n_samples small (48) to match the LSTM

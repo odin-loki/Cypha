@@ -1,4 +1,4 @@
-#include "cypha/branch_a_router.hpp"
+#include "cypha/classify/branch_a_router.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -9,8 +9,8 @@
 #include <stdexcept>
 #include <unordered_map>
 
-#include "cypha/create_model.hpp"
-#include "cypha/load_cypha.hpp"
+#include "cypha/classify/create_model.hpp"
+#include "cypha/classify/load_cypha.hpp"
 
 namespace cypha {
 namespace {

@@ -10,7 +10,7 @@
 //
 // Reads "TRI1" (the live trainer's old 32-bit layout), "TRI2" (trie_stream_train_v2) and "TR64" (the live trainer
 // native/tools/trie_stream_train.cpp since 2026-10-28, 64-bit counts) checkpoints through
-// cypha/cyphalm/stream_trie.hpp. verify checks the file's size and structure, whether 32-bit counts wrapped (TRI1),
+// cypha/lm/stream_trie.hpp. verify checks the file's size and structure, whether 32-bit counts wrapped (TRI1),
 // that every total is its counts' sum (TR64), and with --corpus whether every finished corpus file was trained. bpc
 // scores held-out bytes with today's fixed backoff (packed_trie.hpp Model::mix, Mode::Full and Mode::Synth, the 4-byte
 // match folded in); given a stored packed model (pack's output, "CYPHAPK") it prints the fixed backoff in Synth and the
@@ -20,7 +20,7 @@
 // training text; the six mixture weights are fit by exponentiated gradient over --fit's bytes (default: the
 // experts' starting weights), with the counts frozen. Scoring only: it answers nothing (PLAN rule 10).
 
-#include "cypha/cyphalm/stream_trie.hpp"
+#include "cypha/lm/stream_trie.hpp"
 
 #include <algorithm>
 #include <cmath>

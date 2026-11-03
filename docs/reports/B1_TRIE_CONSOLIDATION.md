@@ -14,8 +14,8 @@
 
 | New | Lines | What it holds |
 |---|---:|---|
-| `native/include/cypha/cyphalm/packed_trie.hpp` | 1,293 | Header-only, `namespace cypha::cyphalm::trie`. Quantiser, `Node`/`Fol`/`Hit`, `Model` (observe, fill_experts, mix, mix_dist, compact_match, and the PPMD / chain / inheritance negatives), `eg_update`, `train_span`, layout measurement (`measure`, `hash_*`, `trie_stats`), `entropy_u`, the Dolly loader, `printable`, `self_test`, sampling with the no-repeat rule. Paths and constants are `Config` fields whose defaults equal the old constants |
-| `native/tools/cyphalm_trie.cpp` | 779 | Subcommands `bpc`, `chat`, `probe`, `context8k`, `sample`, `selftest`. Paths are arguments (`--wiki`, `--dolly` or positional), then `$CYPHA_WIKI` / `$CYPHA_DOLLY`, then the old defaults |
+| `native/include/cypha/lm/packed_trie.hpp` | 1,293 | Header-only, `namespace cypha::cyphalm::trie`. Quantiser, `Node`/`Fol`/`Hit`, `Model` (observe, fill_experts, mix, mix_dist, compact_match, and the PPMD / chain / inheritance negatives), `eg_update`, `train_span`, layout measurement (`measure`, `hash_*`, `trie_stats`), `entropy_u`, the Dolly loader, `printable`, `self_test`, sampling with the no-repeat rule. Paths and constants are `Config` fields whose defaults equal the old constants |
+| `native/tools/lm/cyphalm_trie.cpp` | 779 | Subcommands `bpc`, `chat`, `probe`, `context8k`, `sample`, `selftest`. Paths are arguments (`--wiki`, `--dolly` or positional), then `$CYPHA_WIKI` / `$CYPHA_DOLLY`, then the old defaults |
 
 PLAN rule 10 still holds: there is no string-search answering in either file. `probe` and `context8k` use `find` only to *grade* what the model wrote, as the old tools did.
 
@@ -58,7 +58,7 @@ Setup:
 
 `selftest` needs no data files. It runs `self_test()` and then trains on a 40,000-byte built-in corpus (train 36,000, holdout 4,000). It fails if either BPC is more than 1e-6 from its golden value, or if the weights do not sum to 1. It takes 0.07–0.25 s. The golden values also hold for a `-std=c++23 -O3 -march=native` build.
 
-**Not carried, on purpose.** `trie_fold_lm` prints 12 more lines: the surface score `S` (H, D, L, d4, loop8) and one sample text for each of the PPMD, chain and inheritance variants. Their BPC rows are carried under `--negative`. The surface lines and the samples of those three negative variants are not. Surface scoring lives in `native/tools/surface_score.cpp`, and samples come from `cyphalm_trie sample`.
+**Not carried, on purpose.** `trie_fold_lm` prints 12 more lines: the surface score `S` (H, D, L, d4, loop8) and one sample text for each of the PPMD, chain and inheritance variants. Their BPC rows are carried under `--negative`. The surface lines and the samples of those three negative variants are not. Surface scoring lives in `native/tools/eval/surface_score.cpp`, and samples come from `cyphalm_trie sample`.
 
 The old tools also printed `match_filled 4 …` and `self-test ok` on stderr. Those were progress lines, not numbers. The self-test still runs before every subcommand, but it is now silent.
 
@@ -113,7 +113,7 @@ The old tools read `/mnt/d/cypha_llm/enwik9` (and `/mnt/d/cypha_llm/chat/dolly.j
 ## Build and run
 
 ```bash
-gcc -O2 -c native/third_party/libsais/libsais.c -o libsais.o && g++ -O2 -std=c++20 -I native/include -I native/third_party -I native/third_party/libsais native/tools/cyphalm_trie.cpp native/src/cyphalm/infinigram.cpp libsais.o -o cyphalm_trie
+gcc -O2 -c native/third_party/libsais/libsais.c -o libsais.o && g++ -O2 -std=c++20 -I native/include -I native/third_party -I native/third_party/libsais native/tools/lm/cyphalm_trie.cpp native/src/lm/infinigram.cpp libsais.o -o cyphalm_trie
 
 ./cyphalm_trie selftest
 ./cyphalm_trie bpc       enwik8 --negative              # fold_lm + online_mix numbers
@@ -129,12 +129,12 @@ Options: `--wiki P`, `--dolly P`, `--train N`, `--sample N` (bytes; the defaults
 
 ```cmake
 # --- B1: CyphaLM packed trie, one library and one tool (PLAN Track B1) ----------------------------
-# Header-only library include/cypha/cyphalm/packed_trie.hpp. cyphalm_trie replaces trie_fold_lm,
+# Header-only library include/cypha/lm/packed_trie.hpp. cyphalm_trie replaces trie_fold_lm,
 # trie_online_mix, trie_chat, trie_qa_probe, trie_context_8k and trie_sample. Only the selftest is a
 # CTest (no corpus); bpc/chat/probe/context8k/sample need enwik8 and Dolly and are run by hand.
 add_executable(cyphalm_trie
-  tools/cyphalm_trie.cpp
-  src/cyphalm/infinigram.cpp
+  tools/lm/cyphalm_trie.cpp
+  src/lm/infinigram.cpp
   third_party/libsais/libsais.c)
 target_include_directories(cyphalm_trie PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}/include"

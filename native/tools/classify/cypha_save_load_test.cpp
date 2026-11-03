@@ -29,11 +29,11 @@
 #include <unordered_map>
 #include <vector>
 
-#include "cypha/create_model.hpp"
+#include "cypha/classify/create_model.hpp"
 #include "cypha/cypha.hpp"
-#include "cypha/kernel_memory.hpp"
-#include "cypha/load_cypha.hpp"
-#include "cypha/nig_field.hpp"
+#include "cypha/classify/kernel_memory.hpp"
+#include "cypha/classify/load_cypha.hpp"
+#include "cypha/classify/nig_field.hpp"
 
 namespace fs = std::filesystem;
 

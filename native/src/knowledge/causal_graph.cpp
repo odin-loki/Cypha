@@ -1,4 +1,4 @@
-#include "cypha/intelligence/causal_graph.hpp"
+#include "cypha/knowledge/causal_graph.hpp"
 
 #include <algorithm>
 #include <cmath>

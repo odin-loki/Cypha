@@ -1,6 +1,6 @@
-#include "cypha/bench/bench_cross_domain.hpp"
+#include "cypha/eval/bench_cross_domain.hpp"
 
-#include "cypha/bench/bench_report_json.hpp"
+#include "cypha/eval/bench_report_json.hpp"
 
 #include <algorithm>
 #include <cmath>

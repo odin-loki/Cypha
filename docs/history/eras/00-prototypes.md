@@ -153,7 +153,7 @@ Sixteen months later the current tree carries a graph cell again:
 {"H23", "PGM cell", 3, true, "hybrid",
  "Plastic Graph Machine: hierarchical log-N address + sparse slot graph (no dense attn)"},
 ```
-— `native/src/cyphalm/cypha_cell_hypothesis.cpp:37-38`
+— `native/src/lm/cypha_cell_hypothesis.cpp:37-38`
 
 It is implemented rather than declared — `native/src/cyphalm/pgm_cell.cpp`, plus four
 unified-context variants built on it (U04 PGM→LSTM, U05 PGM→GRIA, U06 PGM→logits, U09
@@ -164,7 +164,7 @@ production recipe does not merely leave it at its default; it writes the flag of
 cfg.use_pgm_cell = false;
 cfg.use_unified_context = false;
 ```
-— `native/src/cyphalm/cyphalm_config.cpp:97-98`
+— `native/src/lm/cyphalm_config.cpp:97-98`
 
 and it did not win its bake-off. The 2026-07-18 head-to-head reports H23 as indistinguishable
 from the hybrid baseline — the report's own conclusion is that "PGM is **not yet a BPC

@@ -1,4 +1,4 @@
-#include "cypha/rff_features.hpp"
+#include "cypha/classify/rff_features.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -7,7 +7,7 @@
 #include <random>
 #include <stdexcept>
 
-#include "cypha/regression.hpp"
+#include "cypha/classify/regression.hpp"
 
 namespace cypha {
 

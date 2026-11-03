@@ -2,7 +2,7 @@
 
 **Status:** Planning only. No implementation in this document's scope.
 **Priority:** P1 in `docs/reports/DEV_PLAN_2026-07-11.md:126` ("Hidden-dim scale experiment (512 → 1024) — Paper IV: κ ≥ 0.91 achievable with no new theory, purely a scale-up").
-**Relationship to the parallel P0 work:** independent. This plan does not touch `scripts/run_production_overnight.ps1`, `scripts/run_d17_overnight.ps1`, `native/tools/cypha_cell_hypothesis_sweep.cpp`, or `bench/BASELINE_LOCK.json`. All verification commands below use `native/build_scale` (a separate scratch build dir) or read-only inspection, to avoid colliding with the live 300k overnight run in `native/build_math`.
+**Relationship to the parallel P0 work:** independent. This plan does not touch `scripts/run_production_overnight.ps1`, `scripts/run_d17_overnight.ps1`, `native/tools/lm/cypha_cell_hypothesis_sweep.cpp`, or `bench/BASELINE_LOCK.json`. All verification commands below use `native/build_scale` (a separate scratch build dir) or read-only inspection, to avoid colliding with the live 300k overnight run in `native/build_math`.
 
 ---
 
@@ -28,8 +28,8 @@ The "hidden dimension" in this codebase is `CyphaLMConfig::lstm_hidden` — the 
 
 | Location | Value | Note |
 |---|---|---|
-| `native/include/cypha/cyphalm/cyphalm_config.hpp:78` | `int lstm_hidden = 128;` | struct default |
-| `bench/config/profiles/cyphalm_d17_wikitext.json:25` | `"lstm_hidden": 128` | D17 production profile (loaded by `apply_bench_profile("d17", cfg)`, `native/src/cyphalm/cyphalm_config.cpp:242`) |
+| `native/include/cypha/lm/cyphalm_config.hpp:78` | `int lstm_hidden = 128;` | struct default |
+| `bench/config/profiles/cyphalm_d17_wikitext.json:25` | `"lstm_hidden": 128` | D17 production profile (loaded by `apply_bench_profile("d17", cfg)`, `native/src/lm/cyphalm_config.cpp:242`) |
 | `bench/config/profiles/cyphalm_d17_hybrid.json:25` | `"lstm_hidden": 128` | alias of the above (`:43` `"alias_of": "cyphalm_d17_wikitext.json"`) |
 
 **Confirmed: the D17 300k production benchmark trains at hidden dim = 128**, not 256 as Paper IV's own "Full self-correcting Cypha, 256-dim" reference point assumes (`cypha_self_correcting_paper4.md:654,662`, cross-referenced in `DEV_PLAN_2026-07-11.md:92`). This is itself worth flagging: **the codebase is currently one scale step behind even Paper IV's stated starting point.** The practical scale-up path is therefore 128 → 256 → 512 → 1024, not 256 → 512 → 1024 as the paper implicitly assumes — see the phase table in §7.
@@ -40,17 +40,17 @@ The "hidden dimension" in this codebase is `CyphaLMConfig::lstm_hidden` — the 
 
 ## 3. What Paper IV Phase 1–4 architecture already exists (context for Phase 5)
 
-Before scaling, it's worth confirming how much of Paper IV's *own* prerequisite stack (Phases 1–4) is already shipped, since Phase 5 (hidden-dim scale) assumes it as a starting point. Mapping Paper IV §3.2/§7 mechanisms to this codebase's math-integration preset (`native/src/cyphalm/cyphalm_math_integration.cpp:101-139`, `apply_math_integration_preset`):
+Before scaling, it's worth confirming how much of Paper IV's *own* prerequisite stack (Phases 1–4) is already shipped, since Phase 5 (hidden-dim scale) assumes it as a starting point. Mapping Paper IV §3.2/§7 mechanisms to this codebase's math-integration preset (`native/src/lm/cyphalm_math_integration.cpp:101-139`, `apply_math_integration_preset`):
 
 | Paper IV mechanism | Codebase equivalent | Status |
 |---|---|---|
 | τ-aware forget gate (`cypha_self_correcting_paper4.md:255-280`) | `cfg.use_tau_forget_gate`, `cfg.use_reu_forget_gate` (`cyphalm_math_integration.cpp:128-130`) | shipped |
-| D_eff participation-ratio regularizer (`:208-226`) | `cfg.use_lstm_d_eff_hidden_nudge` (`:124`), `lstm_hidden_d_eff()` (`native/src/cyphalm/cyphalm_model.cpp:642-659`) | shipped (variance-proxy method; see §5 for the eigenvalue-method gap) |
+| D_eff participation-ratio regularizer (`:208-226`) | `cfg.use_lstm_d_eff_hidden_nudge` (`:124`), `lstm_hidden_d_eff()` (`native/src/lm/cyphalm_model.cpp:642-659`) | shipped (variance-proxy method; see §5 for the eigenvalue-method gap) |
 | σ_branch spectral-norm regularizer (`:235-244`) | not found as a standalone regularizer; `sigma_branch` is measured (`measurers.hpp:38`) but no spectral-norm-toward-1.0 backprop term located in `cyphalm_model.cpp` | **partially shipped** — measured, not directly regularized as a Wh spectral norm; flagged for confirmation, not blocking Phase 5 |
 | NIG output layer / r_eu (`:284-317`) | `use_reu_forget_gate`, DIF `NIGExpert` (`cyphalm_nig_expert.hpp`), `compute_epistemic_ratio` (`measurers.hpp:24`) | shipped |
 | Lipschitz regularizer (`:319-344`) | `compute_lipschitz_sensitivity` measured (`measurers.hpp:34`); no explicit backprop regularizer term found | measured only |
 | Online temperature calibration (`:348-372`) | `compute_calibration` (`measurers.hpp:21`); navigation-loss calibration lambda exists via `use_full_navigation_loss` | shipped as a loss term, not as a literal `OnlineCalibration` module |
-| Epistemic feedback loop / `SelfCorrectingCypha` wrapper (§2, §4.2) | `native/include/cypha/intelligence/self_correcting_infer.hpp`, `epistemic_threshold.hpp` | present as headers — **not verified wired into the D17 train/eval loop in this pass; needs a follow-up read of `self_correcting_infer.hpp` + its .cpp before Phase 5 sign-off** |
+| Epistemic feedback loop / `SelfCorrectingCypha` wrapper (§2, §4.2) | `native/include/cypha/knowledge/self_correcting_infer.hpp`, `epistemic_threshold.hpp` | present as headers — **not verified wired into the D17 train/eval loop in this pass; needs a follow-up read of `self_correcting_infer.hpp` + its .cpp before Phase 5 sign-off** |
 
 None of these are blockers for Phase 5 specifically (hidden-dim scale is orthogonal to whether σ_branch/Lipschitz have literal regularizer terms vs. measured-only), but the "self-correcting" wrapper gap is worth a follow-up ticket since Paper IV's κ=0.89 estimate assumes it's active.
 
@@ -92,9 +92,9 @@ The hybrid blend that combines the GRIA/DIF path and the LSTM path happens at th
 
 ### 4.3 The one genuine blocker found: D_eff eigenvalue measurement caps at 256 dims
 
-`participation_ratio_covariance_eigenvalue` (`native/src/intelligence/measurers.cpp:137-197`) has a hard guard:
+`participation_ratio_covariance_eigenvalue` (`native/src/knowledge/measurers.cpp:137-197`) has a hard guard:
 
-```137:141:native/src/intelligence/measurers.cpp
+```137:141:native/src/knowledge/measurers.cpp
 double participation_ratio_covariance_eigenvalue(const double* activations, int n_samples,
                                                  int n_dims) {
   if (n_samples < 2 || n_dims <= 0 || n_dims > 256) {
@@ -157,9 +157,9 @@ Applying the compute ratios above, assuming the LSTM matvec/gradient path is rou
 
 ## 6. What's measurable today vs. not (D_eff tooling)
 
-Confirmed: `native/include/cypha/intelligence/measurers.hpp` is exactly the "intelligence-stats" tool the task expected, and it does have D_eff:
+Confirmed: `native/include/cypha/knowledge/measurers.hpp` is exactly the "intelligence-stats" tool the task expected, and it does have D_eff:
 
-```5:18:native/include/cypha/intelligence/measurers.hpp
+```5:18:native/include/cypha/knowledge/measurers.hpp
 /// Participation ratio computation method (Paper IV D_eff).
 enum class ParticipationRatioMethod {
   /// Column-variance proxy (fast; legacy default).
@@ -246,19 +246,19 @@ Get-Item bench/results/overnight_d17_20260628_170701.log | Select-Object LastWri
 - `docs/reports/DEV_PLAN_2026-07-11.md` (§2–3)
 - `docs/research/intelligence_stats/cypha_self_correcting_paper4.md` (full read)
 - `docs/research/intelligence_stats/soft_world_paper5.md` (§5, D_eff/κ figures)
-- `native/include/cypha/cyphalm/cyphalm_config.hpp`
-- `native/src/cyphalm/cyphalm_config.cpp`
+- `native/include/cypha/lm/cyphalm_config.hpp`
+- `native/src/lm/cyphalm_config.cpp`
 - `native/include/cypha/cyphalm/char_lstm.hpp`, `native/src/cyphalm/char_lstm.cpp`
 - `native/include/cypha/cyphalm/axiom_activation.hpp`
 - `native/include/cypha/cyphalm/cyphalm_dif.hpp`
 - `native/include/cypha/cyphalm/context_bank.hpp`
 - `native/src/cyphalm/cyphalm_gria.cpp`
-- `native/src/cyphalm/cypha_cell_hypothesis.cpp` (read-only; variant table)
-- `native/src/cyphalm/cyphalm_model.cpp` (`lstm_hidden_d_eff`, history buffer, train loop)
-- `native/include/cypha/intelligence/measurers.hpp`, `native/src/intelligence/measurers.cpp`
-- `native/src/cyphalm/cyphalm_math_integration.cpp` (`apply_math_integration_preset`)
-- `native/tools/cyphalm_bench_native.cpp` (CLI `Args`/`parse_args`/`main`)
-- `native/src/bench/bench_domains.cpp` (domain registration table, `d41` pattern, `run_cyphalm_domain`)
+- `native/src/lm/cypha_cell_hypothesis.cpp` (read-only; variant table)
+- `native/src/lm/cyphalm_model.cpp` (`lstm_hidden_d_eff`, history buffer, train loop)
+- `native/include/cypha/knowledge/measurers.hpp`, `native/src/knowledge/measurers.cpp`
+- `native/src/lm/cyphalm_math_integration.cpp` (`apply_math_integration_preset`)
+- `native/tools/lm/cyphalm_bench_native.cpp` (CLI `Args`/`parse_args`/`main`)
+- `native/src/eval/bench_domains.cpp` (domain registration table, `d41` pattern, `run_cyphalm_domain`)
 - `bench/config/profiles/cyphalm_d17_wikitext.json`, `cyphalm_d17_hybrid.json`
 - `bench/config/d17_wikitext_full_profile.json`
 - `bench/BASELINE_LOCK.json` (read-only)
@@ -277,7 +277,7 @@ Added `ParticipationRatioMethod::TraceFrobenius` to `measurers.hpp`/`measurers.c
 Changes:
 - `participation_ratio_covariance_eigenvalue` (the function backing `ParticipationRatioMethod::CovarianceEigenvalue`, i.e. what `cfg.use_eigenvalue_d_eff = true` selects) no longer silently falls back to the cheaper, *numerically different* `VarianceProxy` metric above 256 dims. It now delegates to the new trace/Frobenius path — same `(Σλ)²/Σλ²` quantity, computed without Jacobi diagonalization, valid at any `n_dims`.
 - Below 256 dims the original Jacobi-diagonalization path is unchanged (kept for the existing exact-match unit test against `VarianceProxy`), since it was already affordable there.
-- Added `test_trace_frobenius_participation_ratio` to `native/tools/intelligence_profiler_papers.cpp` (registered CTest `native_intelligence_profiler_papers`): verifies `TraceFrobenius` agrees with the Jacobi `CovarianceEigenvalue` result to `1e-6` at small `n_dims` (algebraic-identity sanity check), then exercises the new >256-dim path directly at `n_dims=300` (above the old hard guard) with a deterministic, non-degenerate synthetic covariance structure, asserting `CovarianceEigenvalue` and `TraceFrobenius` now agree to `1e-9` there too (i.e. the >256-dim path no longer silently returns the different `VarianceProxy` number).
+- Added `test_trace_frobenius_participation_ratio` to `native/tools/knowledge/intelligence_profiler_papers.cpp` (registered CTest `native_intelligence_profiler_papers`): verifies `TraceFrobenius` agrees with the Jacobi `CovarianceEigenvalue` result to `1e-6` at small `n_dims` (algebraic-identity sanity check), then exercises the new >256-dim path directly at `n_dims=300` (above the old hard guard) with a deterministic, non-degenerate synthetic covariance structure, asserting `CovarianceEigenvalue` and `TraceFrobenius` now agree to `1e-9` there too (i.e. the >256-dim path no longer silently returns the different `VarianceProxy` number).
 - `ctest --test-dir native/build_scale -R "intelligence_profiler|measurer|d_eff|deff"` → both `native_intelligence_profiler_smoke` and `native_intelligence_profiler_papers` pass; `native_cyphalm_bench_intelligence_profile` (the CLI-level intelligence-profile smoke test) also still passes.
 
 ### Phase 1 — `--lstm-hidden` CLI override: added
@@ -329,21 +329,21 @@ Both `native/build_scale` sweep runs at `hidden=512` were executed while several
 
 ### What `lstm_hidden_d_eff()` was already doing correctly
 
-Confirmed by reading `CyphaLMModel::lstm_hidden_d_eff()` (`native/src/cyphalm/cyphalm_model.cpp:646-665`) end to end before touching anything: it is **not** a measurement that needed fixing. It:
+Confirmed by reading `CyphaLMModel::lstm_hidden_d_eff()` (`native/src/lm/cyphalm_model.cpp:646-665`) end to end before touching anything: it is **not** a measurement that needed fixing. It:
 
-- Draws its sample matrix from `lstm_h_history_rows_` (`native/include/cypha/cyphalm/cyphalm_model.hpp:218`), a ring buffer of up to `kLstmHiddenHistoryMax = 48` real LSTM hidden-state vectors, appended by `append_lstm_hidden_history(lstm_h_)` every hybrid `predict_next` step (`cyphalm_model.cpp:802`) — i.e. it is fed the actual post-`forward_step` LSTM hidden state (`lstm_h_`), width `lstm_->hidden`, not the GRIA field.
+- Draws its sample matrix from `lstm_h_history_rows_` (`native/include/cypha/lm/cyphalm_model.hpp:218`), a ring buffer of up to `kLstmHiddenHistoryMax = 48` real LSTM hidden-state vectors, appended by `append_lstm_hidden_history(lstm_h_)` every hybrid `predict_next` step (`cyphalm_model.cpp:802`) — i.e. it is fed the actual post-`forward_step` LSTM hidden state (`lstm_h_`), width `lstm_->hidden`, not the GRIA field.
 - Sizes its flattened sample matrix as `rows × hidden` using `lstm_->hidden` directly (`cyphalm_model.cpp:650-659`), so it automatically tracks whatever `--lstm-hidden` is set to, with no hard-coded dimension anywhere in the function.
 - Delegates to `cypha::intelligence::compute_participation_ratio(...)` with `ParticipationRatioMethod::CovarianceEigenvalue` or `VarianceProxy` depending on `cfg_.use_eigenvalue_d_eff` (`cyphalm_model.cpp:660-664`) — the exact same, already-validated participation-ratio machinery the GRIA-field `d_eff` statistic uses, just pointed at a different tensor. Since Phase 0 (this doc, above) fixed `CovarianceEigenvalue` to delegate to the exact `TraceFrobenius` identity above 256 dims instead of silently falling back to `VarianceProxy`, this function is now also safe to call with `--use-eigenvalue-d-eff` at hidden ≥ 256 (not exercised in this pass — see below — but no longer a latent correctness trap if a future run enables it).
 - Returns `-1.0` only when there's no LSTM head or fewer than 4 history rows have been observed yet — a legitimate "not enough data" guard, not a bug.
 
-Its only real gap, exactly as the plan doc identified: it was called from exactly one place, `native/src/cyphalm/cyphalm_model.cpp:1013`, purely to compute a training-time gradient nudge target (`use_lstm_d_eff_hidden_nudge`) — never surfaced anywhere in the bench JSON. No changes were made to its math or its existing call site.
+Its only real gap, exactly as the plan doc identified: it was called from exactly one place, `native/src/lm/cyphalm_model.cpp:1013`, purely to compute a training-time gradient nudge target (`use_lstm_d_eff_hidden_nudge`) — never surfaced anywhere in the bench JSON. No changes were made to its math or its existing call site.
 
 ### Where/how it was exported
 
 Two small, additive changes, no existing behavior touched:
 
-1. `native/include/cypha/cyphalm/cyphalm_model.hpp`: added a public inline accessor `double lstm_hidden_d_eff_report() const { return lstm_hidden_d_eff(); }` next to the other public read-only accessors (`train_step_count()`, etc.), since the existing `lstm_hidden_d_eff()` is private. Zero behavior change — pure visibility wrapper.
-2. `native/tools/cyphalm_bench_native.cpp`: immediately after `out["intelligence_profile"] = export_intelligence_monitor_report(profiler)` (the point where the existing 7-stat GRIA-field profile, including the existing `d_eff`, is serialized), added two new **nested** keys under the same `intelligence_profile` object:
+1. `native/include/cypha/lm/cyphalm_model.hpp`: added a public inline accessor `double lstm_hidden_d_eff_report() const { return lstm_hidden_d_eff(); }` next to the other public read-only accessors (`train_step_count()`, etc.), since the existing `lstm_hidden_d_eff()` is private. Zero behavior change — pure visibility wrapper.
+2. `native/tools/lm/cyphalm_bench_native.cpp`: immediately after `out["intelligence_profile"] = export_intelligence_monitor_report(profiler)` (the point where the existing 7-stat GRIA-field profile, including the existing `d_eff`, is serialized), added two new **nested** keys under the same `intelligence_profile` object:
    - `intelligence_profile.lstm_hidden_d_eff` — the new statistic (`model.lstm_hidden_d_eff_report()`), `null` when the model reports `< 0` (not enough history / no LSTM head).
    - `intelligence_profile.lstm_hidden_d_eff_method` — `"variance_proxy"` or `"covariance_eigenvalue"`, echoing `cfg.use_eigenvalue_d_eff`, so any consumer of the JSON knows which participation-ratio method produced the number without cross-referencing the CLI args.
 
@@ -443,7 +443,7 @@ This is the central, unexpected result of this phase. The Phase 2b medium-tier s
 
 Not only does the hidden=128→512 *direction* reverse between the two scales (up at 5k, down at 300k), the *within-hidden-size* values also move a lot with more training: hidden=128's `lstm_hidden_d_eff` nearly doubles (0.271→0.600) with 60× more steps, while hidden=512's *drops* by nearly half (0.576→0.331). **This directly contradicts this document's own conditional go-ahead for Phase 3** ("Recommend proceeding to Phase 3... condition 2: confirm `lstm_hidden_d_eff` continues its upward trend at production scale") — the trend did not continue; it inverted.
 
-**Root-cause analysis (not fixed in this pass — flagged for a dedicated follow-up):** `lstm_hidden_d_eff()` draws its sample matrix from `lstm_h_history_rows_`, a ring buffer hard-capped at `kLstmHiddenHistoryMax = 48` rows (`native/include/cypha/cyphalm/cyphalm_model.hpp:218`, unchanged by this pass) — **regardless of `lstm_hidden`**. This means the sample-to-dimension ratio for the participation-ratio estimate is:
+**Root-cause analysis (not fixed in this pass — flagged for a dedicated follow-up):** `lstm_hidden_d_eff()` draws its sample matrix from `lstm_h_history_rows_`, a ring buffer hard-capped at `kLstmHiddenHistoryMax = 48` rows (`native/include/cypha/lm/cyphalm_model.hpp:218`, unchanged by this pass) — **regardless of `lstm_hidden`**. This means the sample-to-dimension ratio for the participation-ratio estimate is:
 
 | hidden | n_samples | n_dims | samples/dims ratio |
 |---|---|---|---|
@@ -470,11 +470,11 @@ Phase 3 did exactly what a de-risking phase is supposed to do: it caught a real 
 
 ## Epistemic feedback loop verification (2026-07-11)
 
-**Status:** Investigated end-to-end, wired in behind an opt-in flag, measured, tested, no regressions. This resolves the §3 open question ("present as headers — not verified wired into the D17 train/eval loop... the self-correcting wrapper gap is worth a follow-up ticket since Paper IV's κ=0.89 estimate assumes it's active"). Executed against a fresh `native/build_selfcorrect` scratch build (does not touch `native/build_math`, `bench/BASELINE_LOCK.json`, or the overnight orchestration scripts — verified clean via `git status --short` on those paths throughout). `native/build_scale`'s independent hidden-dim-scale confirmation run and `native/src/intelligence/measurers.*`/`cyphalm_bench_native.cpp`'s `--lstm-hidden` parsing were not touched.
+**Status:** Investigated end-to-end, wired in behind an opt-in flag, measured, tested, no regressions. This resolves the §3 open question ("present as headers — not verified wired into the D17 train/eval loop... the self-correcting wrapper gap is worth a follow-up ticket since Paper IV's κ=0.89 estimate assumes it's active"). Executed against a fresh `native/build_selfcorrect` scratch build (does not touch `native/build_math`, `bench/BASELINE_LOCK.json`, or the overnight orchestration scripts — verified clean via `git status --short` on those paths throughout). `native/build_scale`'s independent hidden-dim-scale confirmation run and `native/src/knowledge/measurers.*`/`cyphalm_bench_native.cpp`'s `--lstm-hidden` parsing were not touched.
 
 ### 1. What `self_correcting_infer.hpp`/`.cpp` and `epistemic_threshold.hpp`/`.cpp` actually do
 
-Read end to end. The mechanism is exactly as advertised: `self_correcting_infer_at_h_impl` (`native/src/intelligence/self_correcting_infer.cpp:16-52`) runs one inference pass, computes `r_eu = 1 − confidence`, and while `EpistemicThreshold::should_correct(r_eu)` (`r_eu > nig_.mean()`, `epistemic_threshold.cpp:8-10`) is true, re-infers up to `max_passes` times with widened "deliberation" bounds (`deliberation_lo *= 0.82` floor `0.05`, `deliberation_hi += 0.05` ceiling `1.0`, `self_correcting_infer.cpp:36-37`), keeping the highest-confidence pass, then calls `threshold.update(r_eu, corrected)` to adapt the learned threshold (lower it after a helpful correction, raise it after a false-positive-shaped one, `epistemic_threshold.cpp:12-18`). This part of the doc's original suspicion — "is the mechanism itself real, or a stub" — is resolved: it is a real, working, correctly-implemented mechanism, not a stub.
+Read end to end. The mechanism is exactly as advertised: `self_correcting_infer_at_h_impl` (`native/src/knowledge/self_correcting_infer.cpp:16-52`) runs one inference pass, computes `r_eu = 1 − confidence`, and while `EpistemicThreshold::should_correct(r_eu)` (`r_eu > nig_.mean()`, `epistemic_threshold.cpp:8-10`) is true, re-infers up to `max_passes` times with widened "deliberation" bounds (`deliberation_lo *= 0.82` floor `0.05`, `deliberation_hi += 0.05` ceiling `1.0`, `self_correcting_infer.cpp:36-37`), keeping the highest-confidence pass, then calls `threshold.update(r_eu, corrected)` to adapt the learned threshold (lower it after a helpful correction, raise it after a false-positive-shaped one, `epistemic_threshold.cpp:12-18`). This part of the doc's original suspicion — "is the mechanism itself real, or a stub" — is resolved: it is a real, working, correctly-implemented mechanism, not a stub.
 
 ### 2. Call-site trace — correcting an inaccuracy in the task's own premise
 
@@ -484,16 +484,16 @@ The task's brief (and, transitively, a prior grep this task inherited) asserted 
 |---|---|---|
 | `cyphalm_generation.cpp` | yes | **yes** — but see below, it reimplements the LM-native analog inline, it doesn't call `self_correcting_infer()` |
 | `intelligence_profiler.cpp` | yes | **no** — `intelligence_profiler.cpp:48`'s `LandscapeSystemClass::SelfCorrectingCypha` is an unrelated static reference-landscape enum case (a hardcoded Paper-IV comparison point for `kappa`), not a call into `self_correcting_infer.hpp`. Its other `epistemic_var`/`r_eu` references are the DIF-measured uncertainty, not this wrapper. |
-| `branch_a_router.cpp` | yes | **no** — its `epistemic_threshold_` is a plain `double` router-config field feeding a simple `shannon_entropy(probs) > threshold` abstention check (`branch_a_router.cpp:270-382`); it does not use the `EpistemicThreshold` class or `self_correcting_infer` at all. (The real caller in this family is `native/apps/branch_a_rest_routes.cpp`, not `branch_a_router.cpp`.) |
+| `branch_a_router.cpp` | yes | **no** — its `epistemic_threshold_` is a plain `double` router-config field feeding a simple `shannon_entropy(probs) > threshold` abstention check (`branch_a_router.cpp:270-382`); it does not use the `EpistemicThreshold` class or `self_correcting_infer` at all. (The real caller in this family is `native/src/serve/branch_a_rest_routes.cpp`, not `branch_a_router.cpp`.) |
 | `cyphalm_model.cpp` (pre-this-change) | yes | **no** — zero references to `self_correct`, `SelfCorrectingResult`, or `EpistemicThreshold` existed before this pass; grep confirmed only unrelated `epistemic_var`/`compute_epistemic_ratio` usage (the DIF measurement feeding `use_reu_forget_gate`, a different, already-shipped Paper IV mechanism). |
 
-The **real** call sites of the literal `self_correcting_infer()`/`self_correcting_infer_at_h()` functions are: `native/apps/cypha_rest.cpp:864` (a REST inference endpoint, opt-in via request-body `self_correct`), and two test/smoke tools (`intelligence_profiler_papers.cpp:137`, and `lm_self_correct_smoke.cpp`, which despite its name only exercises `EpistemicThreshold` directly). **None of these are on the D17 train/eval/bench path.** `cyphalm_generation.cpp` (`generate_decode`/`stream_generate`, the text-generation/decode path — not train/eval) has its own separate, LM-native reimplementation of the same algorithm (`self_correct_predict`, `cyphalm_generation.cpp:236-278`, using the same `EpistemicThreshold` class but operating on `CyphaLMModel`/`PredictNextOutput` directly instead of calling `self_correcting_infer_at_h`), gated by `DecodeParams::self_correct` which **defaults to `false`** (`cyphalm_generation.hpp:35`) and is never set by any D17 bench/train/eval call site.
+The **real** call sites of the literal `self_correcting_infer()`/`self_correcting_infer_at_h()` functions are: `native/tools/serve/cypha_rest.cpp:864` (a REST inference endpoint, opt-in via request-body `self_correct`), and two test/smoke tools (`intelligence_profiler_papers.cpp:137`, and `lm_self_correct_smoke.cpp`, which despite its name only exercises `EpistemicThreshold` directly). **None of these are on the D17 train/eval/bench path.** `cyphalm_generation.cpp` (`generate_decode`/`stream_generate`, the text-generation/decode path — not train/eval) has its own separate, LM-native reimplementation of the same algorithm (`self_correct_predict`, `cyphalm_generation.cpp:236-278`, using the same `EpistemicThreshold` class but operating on `CyphaLMModel`/`PredictNextOutput` directly instead of calling `self_correcting_infer_at_h`), gated by `DecodeParams::self_correct` which **defaults to `false`** (`cyphalm_generation.hpp:35`) and is never set by any D17 bench/train/eval call site.
 
 **Architectural finding, not just a wiring gap:** `self_correcting_infer()`/`self_correcting_infer_at_h()` take a `cypha::CyphaInferModel&` (`infer_cpu.hpp:66`) — a classification model (labels + confidence, `CyphaDIF` + `VectorEncoder`) — not a `cypha::cyphalm::CyphaLMModel&` (the D17 char-LSTM LM, which returns per-token `log_probs`, not a label). These are different, incompatible types. This is why `cyphalm_generation.cpp` had to write its *own* parallel implementation rather than calling the header's functions directly — the literal wrapper cannot be called on the D17 model at all without an adapter. This matters for scoping the fix (§4 below): the "small, low-risk fix" is reusing the existing LM-native pattern in the D17 eval loop, not making `self_correcting_infer()` itself reach D17.
 
 ### 3. Direct evidence: `eval_bpc`/`accumulate_intelligence_profile` (pre-this-change)
 
-The two functions that back every `cyphalm_bench_native --profile d17` BPC/κ/r_eu number call `predict_next(tok)` once per token and use the result as-is — `native/src/cyphalm/cyphalm_model.cpp` (pre-change) `eval_bpc` and `accumulate_intelligence_profile`, both a simple `for` loop with no `EpistemicThreshold`/self-correction of any kind. `cyphalm_bench_native.cpp`'s `main()` calls exactly these two functions (plus `train_sequence`, which also has zero self-correction references). **Conclusion: for the current default D17/math-integration bench profile, Paper IV's κ=0.89 estimate's "self-correcting wrapper active" assumption does NOT hold** — the wrapper exists in the codebase, is correctly implemented, and is active on the REST-serving and (opt-in, off-by-default) text-generation paths, but was completely unreached by the D17 train/eval/bench loop before this pass. This confirms the doc's §3 suspicion.
+The two functions that back every `cyphalm_bench_native --profile d17` BPC/κ/r_eu number call `predict_next(tok)` once per token and use the result as-is — `native/src/lm/cyphalm_model.cpp` (pre-change) `eval_bpc` and `accumulate_intelligence_profile`, both a simple `for` loop with no `EpistemicThreshold`/self-correction of any kind. `cyphalm_bench_native.cpp`'s `main()` calls exactly these two functions (plus `train_sequence`, which also has zero self-correction references). **Conclusion: for the current default D17/math-integration bench profile, Paper IV's κ=0.89 estimate's "self-correcting wrapper active" assumption does NOT hold** — the wrapper exists in the codebase, is correctly implemented, and is active on the REST-serving and (opt-in, off-by-default) text-generation paths, but was completely unreached by the D17 train/eval/bench loop before this pass. This confirms the doc's §3 suspicion.
 
 ### 4. Fix implemented: opt-in `--use-self-correcting-loop`
 
@@ -546,7 +546,7 @@ No regressions. The flag-off path was also directly confirmed bit-identical to t
 
 ### 1. Mechanism
 
-Read `lstm_h_history_rows_`/`kLstmHiddenHistoryMax`/`lstm_hidden_d_eff()` in `native/include/cypha/cyphalm/cyphalm_model.hpp` and `native/src/cyphalm/cyphalm_model.cpp`, and `compute_participation_ratio` in `native/src/intelligence/measurers.cpp` end to end to confirm Finding 2's diagnosis exactly:
+Read `lstm_h_history_rows_`/`kLstmHiddenHistoryMax`/`lstm_hidden_d_eff()` in `native/include/cypha/lm/cyphalm_model.hpp` and `native/src/lm/cyphalm_model.cpp`, and `compute_participation_ratio` in `native/src/knowledge/measurers.cpp` end to end to confirm Finding 2's diagnosis exactly:
 
 - `append_lstm_hidden_history()` is called once per training step (`CyphaLMModel::train_step`, hybrid-mode LSTM path), unconditionally recording the current LSTM hidden state `h` into a ring buffer, evicting the oldest row once the cap is reached. There is no subsampling or step-interval gating — every single training step's hidden state either enters the buffer or evicts the oldest one, so the buffer always holds exactly the *most recent* `min(step_count, cap)` hidden states.
 - `lstm_hidden_d_eff()` flattens the buffer into an `n_samples x n_dims` matrix (`n_samples` = buffer row count, `n_dims` = `lstm_->hidden`) and calls `compute_participation_ratio(..., VarianceProxy or CovarianceEigenvalue)`, which computes `(Σλ)² / Σλ²` from the sample covariance/variance and **divides by `n_dims`** to produce a `[0,1]`-normalized ratio. The pre-fix bug was structural, not a math error in that formula: the cap feeding `n_samples` was a compile-time constant (`kLstmHiddenHistoryMax = 48`) completely decoupled from `n_dims` (`lstm_hidden`), so the *statistical power* of the estimate (how well `n_samples` rows can resolve an `n_dims`-dimensional covariance structure) silently degraded as `lstm_hidden` grew — exactly Finding 2's "explanation 1" (undersampling artifact), confirmed as the operative mechanism by the control-sweep result in §2 below (the fix alone, with no change to training dynamics, restores the expected monotonic trend).

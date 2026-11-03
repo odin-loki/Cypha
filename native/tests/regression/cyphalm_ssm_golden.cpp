@@ -5,7 +5,7 @@
 
 #include "cypha/cyphalm/cellai_ssm.hpp"
 #include "cypha/cyphalm/hybrid_blend_cap.hpp"
-#include "cypha/cyphalm/memory_policy.hpp"
+#include "cypha/lm/memory_policy.hpp"
 
 namespace {
 

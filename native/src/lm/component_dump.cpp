@@ -1,4 +1,4 @@
-#include "cypha/cyphalm/component_dump.hpp"
+#include "cypha/lm/component_dump.hpp"
 
 #include <bit>
 #include <cstring>

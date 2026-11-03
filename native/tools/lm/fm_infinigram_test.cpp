@@ -1,4 +1,4 @@
-// Known-answer test for cypha/cyphalm/fm_infinigram.hpp (RAM_PROFILE M5): the
+// Known-answer test for cypha/lm/fm_infinigram.hpp (RAM_PROFILE M5): the
 // FM-index must give InfiniGram's answer (n, total, all 256 counts) on every
 // query. Random texts over small and full alphabets, byte 0 included; queries
 // with and without hints, min_total above 1, and cursors used right, reset and
@@ -9,8 +9,8 @@
 //
 // fm_infinigram_test [--bench FILE BYTES]   (--bench: time both indexes on a file's prefix)
 
-#include "cypha/cyphalm/fm_infinigram.hpp"
-#include "cypha/cyphalm/infinigram.hpp"
+#include "cypha/lm/fm_infinigram.hpp"
+#include "cypha/lm/infinigram.hpp"
 
 #include <algorithm>
 #include <chrono>

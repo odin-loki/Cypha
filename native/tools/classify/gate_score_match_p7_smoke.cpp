@@ -23,8 +23,8 @@
 #include <random>
 #include <vector>
 
-#include "cypha/nig_gig_math.hpp"
-#include "cypha/nig_gig_score_match.hpp"
+#include "cypha/classify/nig_gig_math.hpp"
+#include "cypha/classify/nig_gig_score_match.hpp"
 
 namespace {
 

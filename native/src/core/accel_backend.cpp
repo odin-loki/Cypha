@@ -1,4 +1,4 @@
-#include "cypha/accel_backend.hpp"
+#include "cypha/core/accel_backend.hpp"
 
 #include <atomic>
 #include <algorithm>
@@ -8,7 +8,7 @@
 #include <thread>
 #include <vector>
 
-#include "cypha/nig_gig_math.hpp"
+#include "cypha/classify/nig_gig_math.hpp"
 
 #ifdef CYPHA_ENABLE_CUDA
 extern "C" {

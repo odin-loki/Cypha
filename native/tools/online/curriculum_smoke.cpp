@@ -3,7 +3,7 @@
 #include <cstdio>
 #include <vector>
 
-#include "cypha/curriculum.hpp"
+#include "cypha/online/curriculum.hpp"
 
 int main() {
   const std::vector<double> confidences = {0.9, 0.2, 0.5, 0.1};

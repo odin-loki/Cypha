@@ -46,7 +46,7 @@ namespace cypha::semantics {
 
 // ---------------------------------------------------------------------------------------------
 // fp16 (IEEE binary16). to-half is the round-to-nearest-even routine of
-// src/cyphalm/component_dump.cpp (internal there, so it is restated here for a header-only build).
+// src/lm/component_dump.cpp (internal there, so it is restated here for a header-only build).
 // ---------------------------------------------------------------------------------------------
 
 inline std::uint16_t fp32_to_fp16(float f) {

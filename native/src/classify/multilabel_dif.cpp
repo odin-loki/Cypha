@@ -1,4 +1,4 @@
-#include "cypha/multilabel_dif.hpp"
+#include "cypha/classify/multilabel_dif.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -6,10 +6,10 @@
 #include <limits>
 #include <stdexcept>
 
-#include "cypha/create_model.hpp"
-#include "cypha/load_cypha.hpp"
-#include "cypha/nig_field.hpp"
-#include "cypha/sync_infer.hpp"
+#include "cypha/classify/create_model.hpp"
+#include "cypha/classify/load_cypha.hpp"
+#include "cypha/classify/nig_field.hpp"
+#include "cypha/classify/sync_infer.hpp"
 
 namespace cypha {
 

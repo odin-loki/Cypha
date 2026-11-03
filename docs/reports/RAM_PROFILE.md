@@ -100,7 +100,7 @@ Wiki model (the B4 protocol), fresh text read once, trie + InfiniGram + class; p
 
 ### M5: InfiniGram over an FM-index (lossless)
 
-`native/include/cypha/cyphalm/fm_infinigram.hpp` and `native/src/cyphalm/fm_infinigram.cpp`. The index keeps the BWT of the training text and of the reversed text, each in a wavelet tree, and nothing else. A query grows the context's suffix to the left one byte a step; the reversed text's rows are kept in step, and its BWT gives the next-byte counts. A cursor lets a caller that reads one byte at a time extend the last match by one step.
+`native/include/cypha/lm/fm_infinigram.hpp` and `native/src/lm/fm_infinigram.cpp`. The index keeps the BWT of the training text and of the reversed text, each in a wavelet tree, and nothing else. A query grows the context's suffix to the left one byte a step; the reversed text's rows are kept in step, and its BWT gives the next-byte counts. A cursor lets a caller that reads one byte at a time extend the last match by one step.
 
 | Read (qa training text, 19.6 MB) | Suffix array (now) | FM-index |
 |---|---:|---:|
@@ -134,7 +134,7 @@ Scratch harness `memprof3.cpp`: the qa model (trie on wiki train + two Dolly pas
 
 ### M4: a packed read-only trie for serving (lossless)
 
-`PackedModel` and `pack(model)` in `native/include/cypha/cyphalm/packed_trie.hpp`. `pack()` reads a trained `Model` after `compact_match()` and keeps only what Synth mode reads:
+`PackedModel` and `pack(model)` in `native/include/cypha/lm/packed_trie.hpp`. `pack()` reads a trained `Model` after `compact_match()` and keeps only what Synth mode reads:
 - **Order 0 and order 1:** the count tables, as trained (264 KB). The KT experts use full counts.
 - **Nodes:** only those Synth can reach, that is a node with a follower seen at least twice, or a node on the path to one (`measure()`'s "useful" nodes). Ids are breadth first: 0 is the root, 1 + b the order-1 node of byte b.
 - **Children:** consecutive ids, sorted by byte. A node keeps a 1-byte edge and the 4-byte id of its first child (orders 0–3). There are no child or sibling links.

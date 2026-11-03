@@ -1,8 +1,8 @@
 # Soft-world causal graph plan (P3) — 2026-07-11
 
 **Status:** Scoped increment implemented and verified (§1–8), followed by a second pass (§9) that wires the causal graph's own fidelity into κ/`criticality_score`, and a third pass (§10) that fixes §9.7's flagged degeneracy by threading a bench-run-persistent `CausalGraphMonitor` through `IntelligenceProfiler` and the report path. No large causal-discovery work in any pass.
-**Priority:** P3 in `docs/reports/DEV_PLAN_2026-07-11.md:153` ("Paper V soft-world / causal graph maturity — next framework beyond 7-stat profile; targets κ 0.90–0.93; independent, longer horizon"). Also referenced at `DEV_PLAN_2026-07-11.md:138,142`: "Paper V causal graph beyond stub (`native/include/cypha/intelligence/causal_graph.hpp:13`)" and listed among "known stub functions."
-**Relationship to the parallel P0 work:** independent. This plan and its implementation do not touch `native/build_math`, `bench/BASELINE_LOCK.json`, or any overnight orchestration script. §1–8's build/verification used a fresh scratch directory, `native/build_softworld`; §9's used a second fresh scratch directory, `native/build_causal_kappa`; §10's used a third fresh scratch directory, `native/build_causal_kappa2` (all built from `HEAD` after the prior pass's commit, per each pass's own constraint to avoid concurrent sibling work in `native/build_rpsm`, a hidden-dim build, a kernel-LLR build, and a multi-view build). Files avoided by all three passes: `native/src/rpsm/*`, `native/src/intelligence/measurers.cpp`, `cyphalm_bench_native.cpp`'s `--lstm-hidden` path, kernel-LLR files, multiview files, `cyphalm_model.cpp`, `char_lstm.cpp`.
+**Priority:** P3 in `docs/reports/DEV_PLAN_2026-07-11.md:153` ("Paper V soft-world / causal graph maturity — next framework beyond 7-stat profile; targets κ 0.90–0.93; independent, longer horizon"). Also referenced at `DEV_PLAN_2026-07-11.md:138,142`: "Paper V causal graph beyond stub (`native/include/cypha/knowledge/causal_graph.hpp:13`)" and listed among "known stub functions."
+**Relationship to the parallel P0 work:** independent. This plan and its implementation do not touch `native/build_math`, `bench/BASELINE_LOCK.json`, or any overnight orchestration script. §1–8's build/verification used a fresh scratch directory, `native/build_softworld`; §9's used a second fresh scratch directory, `native/build_causal_kappa`; §10's used a third fresh scratch directory, `native/build_causal_kappa2` (all built from `HEAD` after the prior pass's commit, per each pass's own constraint to avoid concurrent sibling work in `native/build_rpsm`, a hidden-dim build, a kernel-LLR build, and a multi-view build). Files avoided by all three passes: `native/src/rpsm/*`, `native/src/knowledge/measurers.cpp`, `cyphalm_bench_native.cpp`'s `--lstm-hidden` path, kernel-LLR files, multiview files, `cyphalm_model.cpp`, `char_lstm.cpp`.
 
 ---
 
@@ -12,7 +12,7 @@ Paper V (`docs/research/intelligence_stats/soft_world_paper5.md`) describes a "s
 
 > "Paper V causal graph stub | `causal_graph.hpp/cpp` | papers + `/intelligence/report`" — `docs/reports/INTELLIGENCE_STATS_IMPLEMENTATION.md:37`
 
-> "Paper V causal graph beyond stub (`native/include/cypha/intelligence/causal_graph.hpp:13`)" — `docs/reports/DEV_PLAN_2026-07-11.md:138`
+> "Paper V causal graph beyond stub (`native/include/cypha/knowledge/causal_graph.hpp:13`)" — `docs/reports/DEV_PLAN_2026-07-11.md:138`
 
 The header comment itself (before this pass) read: `/// Paper V causal graph stub: tracks P-space edges and soft-world maturation signals.` (`causal_graph.hpp:13`, original).
 
@@ -22,7 +22,7 @@ The header comment itself (before this pass) read: `/// Paper V causal graph stu
 
 ## 2. What "stub" concretely means (read of the actual code, before this pass)
 
-`native/include/cypha/intelligence/causal_graph.hpp` + `native/src/intelligence/causal_graph.cpp` (both read in full) turned out to **not** be a no-op and **not** returning fake/fixed data. `CausalGraphMonitor` is a real, working class:
+`native/include/cypha/knowledge/causal_graph.hpp` + `native/src/knowledge/causal_graph.cpp` (both read in full) turned out to **not** be a no-op and **not** returning fake/fixed data. `CausalGraphMonitor` is a real, working class:
 
 - `edges()` returns a real, growing vector of `{from, to, weight}` triples.
 - `to_json()` / `trajectory_json()` produce real structured JSON, wired into `/intelligence/simulation` (`intelligence_rest_routes.cpp:88-98`) and into every bench domain that calls `intelligence_profile_report_json` (`profile_from_model.cpp:222-224`, feeding `d18_intelligence_profile` and the `intelligence_profile.causal_graph` block visible in every `cyphalm_bench_native --intelligence-profile` run and every D17 overnight log).
@@ -46,7 +46,7 @@ So the framing "stub == does nothing / returns fake data" is **wrong**. The corr
 
 ### 2.1 The two weight formulas, verbatim (before this pass)
 
-```20:33:native/src/intelligence/causal_graph.cpp (original)
+```20:33:native/src/knowledge/causal_graph.cpp (original)
 void CausalGraphMonitor::observe_profile(const ProfileObservation& obs) {
   ...
   record_edge("alpha", "calibration", clamp01(1.0 - std::abs(obs.alpha - 0.5)));
@@ -67,14 +67,14 @@ Reading every call site (`Grep` across the repo) found **two materially differen
 
 | Call site | Pattern | Effect on the weight-computation gap |
 |---|---|---|
-| `native/apps/cypha_rest.cpp:73,879,975` | `g_causal_graph_monitor` is a **persistent, process-lifetime singleton**. `observe_profile()` is called on every `/update`/infer request; `simulation_step()` on every self-correction event. | Given enough real traffic, this instance genuinely accumulates a long history of `(alpha, calibration)` and `(tau, r_eu)` pairs — a real correlation *could* be estimated from it. The old fixed-formula code never did this; it recomputed a fresh number from the current sample on every call and threw the history away. |
-| `native/src/intelligence/profile_from_model.cpp:222-224` (feeds `d18_intelligence_profile`, `cypha_intelligence_bench`, every bench-domain / overnight-log `intelligence_profile.causal_graph` block) | A **fresh `CausalGraphMonitor` is constructed inside `intelligence_profile_report_json()` on every call** and immediately fed a single `ProfileObservation` (the profiler's *mean* over the eval batch) via `run_simulation_trajectory(4, obs)`. | There is, by construction, only ever **one** real observation available to this instance — the "4 steps" are a synthetic decay loop over that one observation (see §2.3), not four independent samples. Any formula that claims to estimate a two-variable relationship from a single data point is statistically unfounded here, no matter how the formula is written. |
+| `native/tools/serve/cypha_rest.cpp:73,879,975` | `g_causal_graph_monitor` is a **persistent, process-lifetime singleton**. `observe_profile()` is called on every `/update`/infer request; `simulation_step()` on every self-correction event. | Given enough real traffic, this instance genuinely accumulates a long history of `(alpha, calibration)` and `(tau, r_eu)` pairs — a real correlation *could* be estimated from it. The old fixed-formula code never did this; it recomputed a fresh number from the current sample on every call and threw the history away. |
+| `native/src/knowledge/profile_from_model.cpp:222-224` (feeds `d18_intelligence_profile`, `cypha_intelligence_bench`, every bench-domain / overnight-log `intelligence_profile.causal_graph` block) | A **fresh `CausalGraphMonitor` is constructed inside `intelligence_profile_report_json()` on every call** and immediately fed a single `ProfileObservation` (the profiler's *mean* over the eval batch) via `run_simulation_trajectory(4, obs)`. | There is, by construction, only ever **one** real observation available to this instance — the "4 steps" are a synthetic decay loop over that one observation (see §2.3), not four independent samples. Any formula that claims to estimate a two-variable relationship from a single data point is statistically unfounded here, no matter how the formula is written. |
 
 This distinction matters directly for §4 below (what the fix can and can't do in each path) and is why the production-log numbers looked "real" — they *are* real observed `alpha`/`tau`/`r_eu` values, run through a formula, not literal fabrication — while still not being an estimated relationship.
 
 ### 2.3 The four/`n_steps` "trajectory" is synthetic, not re-observed data
 
-```54:70:native/src/intelligence/causal_graph.cpp (original)
+```54:70:native/src/knowledge/causal_graph.cpp (original)
 void CausalGraphMonitor::run_simulation_trajectory(int n_steps, const ProfileObservation& obs, double resolution_scale) {
   ...
   observe_profile(obs);
@@ -127,18 +127,18 @@ This is not a full causal-discovery gap (that would require implementing conditi
 
 ### 5.1 What changed
 
-`native/include/cypha/intelligence/causal_graph.hpp`:
+`native/include/cypha/knowledge/causal_graph.hpp`:
 - New `class OnlineCorrelation`: `update(x, y)` (Welford-style running mean/covariance/variance), `correlation()` (Pearson coefficient in `[-1, 1]`, exactly `0.0` when `n < 2` or either variable's variance is ~0 — i.e. explicitly reports "not enough data to estimate a relationship" rather than guessing).
 - `CausalGraphMonitor` gained two private `OnlineCorrelation` members (`alpha_calibration_corr_`, `tau_r_eu_corr_`) plus read-only accessors for testing/diagnostics (`alpha_calibration_correlation()`, `alpha_calibration_n()`, `tau_r_eu_correlation()`, `tau_r_eu_n()`).
 
-`native/src/intelligence/causal_graph.cpp`:
+`native/src/knowledge/causal_graph.cpp`:
 - `observe_profile()`: `record_edge("alpha", "calibration", clamp01(1.0 - std::abs(obs.alpha - 0.5)))` → `alpha_calibration_corr_.update(obs.alpha, obs.calibration); record_edge("alpha", "calibration", clamp01(std::abs(alpha_calibration_corr_.correlation())))`. Same pattern for `tau->r_eu` against `tau_r_eu_corr_`.
 - `to_json()`: added an `edge_estimation` object (`alpha_calibration_correlation`, `alpha_calibration_n`, `tau_r_eu_correlation`, `tau_r_eu_n`) so any consumer of `/intelligence/simulation` or a bench-domain JSON can see directly how many real observations back each estimated edge, rather than having to infer it.
 - Doc comment on `CausalEdge` (the flagged `causal_graph.hpp:13`) rewritten to state precisely what is and isn't real: fixed topology (not discovered), two weights now correlation-estimated from history, remaining weights are direct measured deltas/NIG means (already real), no causal-discovery structure learning (linked to this document).
 
 ### 5.2 CTest added
 
-`native/tools/intelligence_profiler_papers.cpp`: `test_paper_v_causal_graph_correlation_edges()` (registered in `main()`, runs under the existing `native_intelligence_profiler_papers` CTest), three cases:
+`native/tools/knowledge/intelligence_profiler_papers.cpp`: `test_paper_v_causal_graph_correlation_edges()` (registered in `main()`, runs under the existing `native_intelligence_profiler_papers` CTest), three cases:
 1. **Single observation** → both edges must report weight `0.0` and `n == 1` (cannot estimate a correlation from one point; this is the direct behavioural contrast with the old formula, which always produced a nonzero number from one sample).
 2. **12 synthetic observations**, `alpha`/`calibration` rising together and `tau`/`r_eu` moving in strict opposition → `alpha_calibration_correlation() > 0.95`, `tau_r_eu_correlation() < -0.95`, and both edge weights (which take `abs(correlation)`) `> 0.95` in the exported JSON.
 3. **8 constant observations** (zero variance) → both correlations fall back to the documented `0.0`, not a divide-by-zero artefact.
@@ -183,11 +183,11 @@ The bench-domain path (§5.4) can only ever see `n=1` by construction (§2.2), s
 
 | File | Change |
 |---|---|
-| `native/include/cypha/intelligence/causal_graph.hpp` | Added `OnlineCorrelation` class; added two private correlation-tracker members + 4 read-only accessors to `CausalGraphMonitor`; rewrote the `CausalEdge` doc comment to state precisely what's real vs. not |
-| `native/src/intelligence/causal_graph.cpp` | Implemented `OnlineCorrelation::update`/`correlation`; replaced the two formula-based `record_edge` calls in `observe_profile` with correlation-estimated ones; added `edge_estimation` block to `to_json()` |
-| `native/tools/intelligence_profiler_papers.cpp` | Added `test_paper_v_causal_graph_correlation_edges()` (3 cases), registered in `main()` |
+| `native/include/cypha/knowledge/causal_graph.hpp` | Added `OnlineCorrelation` class; added two private correlation-tracker members + 4 read-only accessors to `CausalGraphMonitor`; rewrote the `CausalEdge` doc comment to state precisely what's real vs. not |
+| `native/src/knowledge/causal_graph.cpp` | Implemented `OnlineCorrelation::update`/`correlation`; replaced the two formula-based `record_edge` calls in `observe_profile` with correlation-estimated ones; added `edge_estimation` block to `to_json()` |
+| `native/tools/knowledge/intelligence_profiler_papers.cpp` | Added `test_paper_v_causal_graph_correlation_edges()` (3 cases), registered in `main()` |
 
-No changes to `SoftWorldMonitor`, `soft_world_monitor.hpp/cpp`, `intelligence_rest_routes.cpp`, `profile_from_model.cpp`, `bench_domains.cpp`, or any file under `native/build_math`, `native/src/rpsm/`, `native/src/intelligence/measurers.cpp`, or the kernel-LLR/`--lstm-hidden` paths, per this task's constraints.
+No changes to `SoftWorldMonitor`, `soft_world_monitor.hpp/cpp`, `intelligence_rest_routes.cpp`, `profile_from_model.cpp`, `bench_domains.cpp`, or any file under `native/build_math`, `native/src/rpsm/`, `native/src/knowledge/measurers.cpp`, or the kernel-LLR/`--lstm-hidden` paths, per this task's constraints.
 
 ---
 
@@ -272,7 +272,7 @@ The wiring genuinely moves κ in any context where a `CausalGraphMonitor` accumu
 
 ### 9.4 CTest coverage
 
-Added to `native/tools/intelligence_profiler_papers.cpp`, `test_paper_v_causal_fidelity_kappa()` (registered in `main()`, runs under the existing `native_intelligence_profiler_papers` CTest):
+Added to `native/tools/knowledge/intelligence_profiler_papers.cpp`, `test_paper_v_causal_fidelity_kappa()` (registered in `main()`, runs under the existing `native_intelligence_profiler_papers` CTest):
 
 1. **Degenerate (single observation, and empty/zero-observation monitor):** `causal_fidelity() == 0.0` exactly, `apply_causal_fidelity(kappa, 0.0) == kappa` exactly (bit-identical) — the "matches the old bit-identical baseline" case the task required.
 2. **20 synthetic observations**, `alpha`/`calibration` rising together and `tau`/`r_eu` moving in strict opposition (same synthetic-history pattern as the sibling's own §5.2 case 2, extended from 12 to 20 points): `causal_fidelity()` lands in `(0.8, 1.0)`, and folding it into a baseline κ measurably raises κ (`adjusted > baseline`) while staying within the documented `<=5%` multiplicative ceiling and within `[0,1]`.
@@ -326,8 +326,8 @@ Not run in this pass (a full production overnight is already in flight elsewhere
 
 Grepping for `g_causal_graph_monitor` and tracing every `CausalGraphMonitor` construction site confirmed §9.7's own hypothesis exactly:
 
-- `native/apps/cypha_rest.cpp:73` constructs one process-global `g_causal_graph_monitor`, fed real per-request observations via `observe_profile` (`:975`, from `/intelligence/update`-style routes) and `simulation_step` (`:879`), and exposed to the REST profile-report path via `intelligence_rest_configure` (`:2114`) and `intelligence_rest_routes.cpp`'s own `g_causal_graph` pointer (`:21,26,29,95`). This monitor's lifetime is the server process's lifetime — genuinely persistent, and already fed live observations. **This part of §9.7's question is answered: yes, `g_causal_graph_monitor` is already fed real, relevant observations, but only on the REST server path, never during a `cyphalm_bench_native` CLI run** — nothing in `cyphalm_model.cpp`/`cyphalm_bench_native.cpp` touches it or any equivalent.
-- `native/src/intelligence/profile_from_model.cpp`'s `intelligence_profile_report_json` (the function every bench-domain/CLI/report caller actually goes through) constructed a **fresh, stack-local `CausalGraphMonitor causal;`** on every call (old `:204-206`), fed exactly one `observe_profile` via `run_simulation_trajectory(4, obs)`. This is the sole `CausalGraphMonitor` construction site reachable from `cyphalm_bench_native --intelligence-profile`, confirming §9.3's finding held for every CLI bench invocation, not just the ones measured there.
+- `native/tools/serve/cypha_rest.cpp:73` constructs one process-global `g_causal_graph_monitor`, fed real per-request observations via `observe_profile` (`:975`, from `/intelligence/update`-style routes) and `simulation_step` (`:879`), and exposed to the REST profile-report path via `intelligence_rest_configure` (`:2114`) and `intelligence_rest_routes.cpp`'s own `g_causal_graph` pointer (`:21,26,29,95`). This monitor's lifetime is the server process's lifetime — genuinely persistent, and already fed live observations. **This part of §9.7's question is answered: yes, `g_causal_graph_monitor` is already fed real, relevant observations, but only on the REST server path, never during a `cyphalm_bench_native` CLI run** — nothing in `cyphalm_model.cpp`/`cyphalm_bench_native.cpp` touches it or any equivalent.
+- `native/src/knowledge/profile_from_model.cpp`'s `intelligence_profile_report_json` (the function every bench-domain/CLI/report caller actually goes through) constructed a **fresh, stack-local `CausalGraphMonitor causal;`** on every call (old `:204-206`), fed exactly one `observe_profile` via `run_simulation_trajectory(4, obs)`. This is the sole `CausalGraphMonitor` construction site reachable from `cyphalm_bench_native --intelligence-profile`, confirming §9.3's finding held for every CLI bench invocation, not just the ones measured there.
 - No other `CausalGraphMonitor` construction sites exist in `native/src/**`/`native/tools/**` outside the two above and the CTest-local ones in `intelligence_profiler_papers.cpp` (which construct their own monitors deliberately, to test `CausalGraphMonitor` in isolation).
 
 ### 10.2 Fix implemented
@@ -337,13 +337,13 @@ Grepping for `g_causal_graph_monitor` and tracing every `CausalGraphMonitor` con
 1. **`IntelligenceProfiler::causal_graph()`** (`intelligence_profiler.hpp/.cpp`) — new `mutable CausalGraphMonitor causal_graph_` member with a `const`-callable accessor (mutable-backed, matching this class's existing "diagnostics can be read through a const ref, but still evolve" pattern used elsewhere in the profiler stack). Lives exactly as long as the `IntelligenceProfiler` it belongs to — one per bench run in `cyphalm_bench_native.cpp`, one per REST-server profiler instance, etc. — never process-global.
 2. **`profile_from_model.cpp`**: `intelligence_profile_report_json` now reads `profiler.causal_graph()` instead of constructing a fresh monitor, so any observations fed into it before the report call are visible to `causal_fidelity()`. Backward compatibility is structural, not a special case: callers that never feed the profiler incrementally (`profile_from_reference_fixture`'s single `update_from_batch` call — the `d18_intelligence_profile` bench domain, `cypha_intelligence_bench`, and the CTest fixtures) still only ever add the one `run_simulation_trajectory` observation, so `causal_fidelity()` stays exactly `0.0` and `criticality_score`/`criticality_score_obs` are bit-identical to pre-§9.7 behaviour — verified in §10.4.
 3. **`LmIntelligenceMonitor::feed_causal_checkpoints`** (new, `lm_intelligence_monitor.hpp/.cpp`) — the piece that actually makes the CLI bench path non-degenerate. Investigation found that merely threading the persistent monitor through (step 1–2 alone) was **not sufficient**: `flush_to_profiler` already made two calls into the profiler's NIG state per flush (`update_from_batch` then `update(hook_obs)`), which nominally would give the causal graph `n=2` per flush — except calibration and r_eu are recomputed identically both times from the same summed statistics (`compute_calibration`/`compute_epistemic_ratio` over the same accumulated data), so one axis of *each* estimated edge has exactly zero variance across those two "observations" and `causal_fidelity()` would still measure `0.0` even with `n=2`. `feed_causal_checkpoints` instead reconstructs 4 genuinely distinct growing-prefix snapshots from this monitor's own per-token history (`step_alphas_`, `confidences_`/`correct_`, `sequence_trace_`, and two new tracked vectors `epistemic_history_`/`aleatoric_history_`) and feeds each as its own `observe_profile` call into `profiler.causal_graph()`. Each checkpoint is a real, different point (more tokens included -> different mean alpha, different calibration bin composition, different memory-depth window, different epistemic/aleatoric average), so the two estimated edges see genuine variation. No-ops gracefully (feeds nothing) below a 4-sample-per-checkpoint floor, so tiny/synthetic histories (e.g. existing CTest fixtures with a handful of tokens) are unaffected.
-4. Files touched, all outside `native/build_math`, `bench/BASELINE_LOCK.json`, overnight scripts, `native/src/rpsm/*`, `cyphalm_model.cpp`, `char_lstm.cpp`, `native/src/intelligence/measurers.*`, `cyphalm_bench_native.cpp`'s `--lstm-hidden` parsing, kernel-LLR files, and `cypha_rest.cpp`/`intelligence_rest_routes.cpp` (REST path deliberately left untouched — see §10.5):
-   - `native/include/cypha/intelligence/profile_observation.hpp` (new) — `ProfileObservation` factored out of `intelligence_profiler.hpp` so `causal_graph.hpp` no longer needs to include the full `intelligence_profiler.hpp`, breaking what would otherwise be a header cycle (`intelligence_profiler.hpp` now embeds a `CausalGraphMonitor` member, so it must include `causal_graph.hpp`; `causal_graph.hpp` only ever needed `ProfileObservation`, not the rest of `IntelligenceProfiler`).
-   - `native/include/cypha/intelligence/causal_graph.hpp` — one-line include swap (`intelligence_profiler.hpp` -> `profile_observation.hpp`).
-   - `native/include/cypha/intelligence/intelligence_profiler.hpp` / `native/src/intelligence/profile_from_model.cpp` — persistent monitor member + accessor; report path reads it instead of constructing fresh.
-   - `native/include/cypha/cyphalm/lm_intelligence_monitor.hpp` / `native/src/cyphalm/lm_intelligence_monitor.cpp` — `feed_causal_checkpoints`, `epistemic_history_`/`aleatoric_history_` tracking, call site in `flush_to_profiler`.
-   - `native/tools/intelligence_profiler_papers.cpp` — new `test_paper_v_causal_fidelity_report_path_persistence` (report-path integration coverage, complementing §9.4's direct-`CausalGraphMonitor` coverage).
-   - `native/tools/intelligence_lm_monitor_smoke.cpp` — extended to assert the causal graph actually accumulates (`alpha_calibration_n`/`tau_r_eu_n` >= 4) after a 32-step flush.
+4. Files touched, all outside `native/build_math`, `bench/BASELINE_LOCK.json`, overnight scripts, `native/src/rpsm/*`, `cyphalm_model.cpp`, `char_lstm.cpp`, `native/src/knowledge/measurers.*`, `cyphalm_bench_native.cpp`'s `--lstm-hidden` parsing, kernel-LLR files, and `cypha_rest.cpp`/`intelligence_rest_routes.cpp` (REST path deliberately left untouched — see §10.5):
+   - `native/include/cypha/knowledge/profile_observation.hpp` (new) — `ProfileObservation` factored out of `intelligence_profiler.hpp` so `causal_graph.hpp` no longer needs to include the full `intelligence_profiler.hpp`, breaking what would otherwise be a header cycle (`intelligence_profiler.hpp` now embeds a `CausalGraphMonitor` member, so it must include `causal_graph.hpp`; `causal_graph.hpp` only ever needed `ProfileObservation`, not the rest of `IntelligenceProfiler`).
+   - `native/include/cypha/knowledge/causal_graph.hpp` — one-line include swap (`intelligence_profiler.hpp` -> `profile_observation.hpp`).
+   - `native/include/cypha/knowledge/intelligence_profiler.hpp` / `native/src/knowledge/profile_from_model.cpp` — persistent monitor member + accessor; report path reads it instead of constructing fresh.
+   - `native/include/cypha/knowledge/lm_intelligence_monitor.hpp` / `native/src/knowledge/lm_intelligence_monitor.cpp` — `feed_causal_checkpoints`, `epistemic_history_`/`aleatoric_history_` tracking, call site in `flush_to_profiler`.
+   - `native/tools/knowledge/intelligence_profiler_papers.cpp` — new `test_paper_v_causal_fidelity_report_path_persistence` (report-path integration coverage, complementing §9.4's direct-`CausalGraphMonitor` coverage).
+   - `native/tools/knowledge/intelligence_lm_monitor_smoke.cpp` — extended to assert the causal graph actually accumulates (`alpha_calibration_n`/`tau_r_eu_n` >= 4) after a 32-step flush.
 
 ### 10.3 Why not just auto-feed on every `IntelligenceProfiler::update()` call
 
@@ -412,13 +412,13 @@ native/build_softworld/cypha_intelligence_bench.exe --out <scratch path>.json
 
 ### Files read/cited in this scoping pass
 
-- `native/include/cypha/intelligence/causal_graph.hpp`, `native/src/intelligence/causal_graph.cpp` (full read, before and after this pass's edits)
-- `native/include/cypha/intelligence/soft_world_monitor.hpp`, `native/src/intelligence/soft_world_monitor.cpp` (full read)
-- `native/include/cypha/intelligence/nig_statistic_state.hpp`, `native/src/intelligence/nig_statistic_state.cpp` (full read)
-- `native/include/cypha/intelligence/intelligence_profiler.hpp` (`ProfileObservation` fields)
-- `native/src/intelligence/profile_from_model.cpp` (full read — `intelligence_profile_report_json`, `mean_observation`, causal-graph call site)
-- `native/apps/intelligence_rest_routes.cpp`, `native/apps/cypha_rest.cpp` (persistent `g_causal_graph_monitor` wiring)
-- `native/tools/intelligence_profiler_papers.cpp` (existing `test_paper_v_causal_graph`/`test_paper_v_soft_world*`, full read; new test added here)
+- `native/include/cypha/knowledge/causal_graph.hpp`, `native/src/knowledge/causal_graph.cpp` (full read, before and after this pass's edits)
+- `native/include/cypha/knowledge/soft_world_monitor.hpp`, `native/src/knowledge/soft_world_monitor.cpp` (full read)
+- `native/include/cypha/knowledge/nig_statistic_state.hpp`, `native/src/knowledge/nig_statistic_state.cpp` (full read)
+- `native/include/cypha/knowledge/intelligence_profiler.hpp` (`ProfileObservation` fields)
+- `native/src/knowledge/profile_from_model.cpp` (full read — `intelligence_profile_report_json`, `mean_observation`, causal-graph call site)
+- `native/src/serve/intelligence_rest_routes.cpp`, `native/tools/serve/cypha_rest.cpp` (persistent `g_causal_graph_monitor` wiring)
+- `native/tools/knowledge/intelligence_profiler_papers.cpp` (existing `test_paper_v_causal_graph`/`test_paper_v_soft_world*`, full read; new test added here)
 - `docs/research/intelligence_stats/soft_world_paper5.md` (full read, esp. §3, §6, §8 Phase 1–5 roadmap)
 - `docs/research/intelligence_stats/cypha_self_correcting_paper4.md` (causal-reasoning-gap sections, `:705-730,779-781`)
 - `docs/reports/INTELLIGENCE_STATS_IMPLEMENTATION.md` (Phase 1–5 shipped-component tables)
@@ -440,4 +440,4 @@ native/build_causal_kappa/cyphalm_bench_native.exe --profile d17 --n-train 2000 
 # then inspect intelligence_profile.causal_fidelity / .criticality_score / .criticality_score_obs
 ```
 
-Additional files read/cited for §9: `native/include/cypha/intelligence/intelligence_profiler.hpp` + `native/src/intelligence/intelligence_profiler.cpp` (full read — `criticality_score`/`criticality_score_for`/`critical_targets`, where `apply_causal_fidelity` was added), `native/src/intelligence/intelligence_profile_json.cpp` (`criticality_score` JSON key source), `native/src/bench/bench_domains.cpp:2885-2893,4916-4926` (`d18_intelligence_profile`'s `criticality_score` consumption, confirmed as a generic-numeric-value check, not a pinned literal, so unaffected by the value changing when fidelity is non-zero), `native/src/intelligence/profile_guided_loss.cpp` and `native/src/cyphalm/cyphalm_math_integration.cpp` (other `criticality_score_for` call sites, confirmed unaffected since they call the static per-observation function directly, not through `intelligence_profile_report_json`).
+Additional files read/cited for §9: `native/include/cypha/knowledge/intelligence_profiler.hpp` + `native/src/knowledge/intelligence_profiler.cpp` (full read — `criticality_score`/`criticality_score_for`/`critical_targets`, where `apply_causal_fidelity` was added), `native/src/knowledge/intelligence_profile_json.cpp` (`criticality_score` JSON key source), `native/src/eval/bench_domains.cpp:2885-2893,4916-4926` (`d18_intelligence_profile`'s `criticality_score` consumption, confirmed as a generic-numeric-value check, not a pinned literal, so unaffected by the value changing when fidelity is non-zero), `native/src/knowledge/profile_guided_loss.cpp` and `native/src/lm/cyphalm_math_integration.cpp` (other `criticality_score_for` call sites, confirmed unaffected since they call the static per-observation function directly, not through `intelligence_profile_report_json`).

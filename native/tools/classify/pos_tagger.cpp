@@ -39,7 +39,7 @@
 //     UPOS on EWT in the literature (stated, not verified here).
 //   Report: docs/reports/E1_POS_TAGGER.md
 //
-// Build: g++ -O2 -std=c++20 native/tools/pos_tagger.cpp -o pos_tagger
+// Build: g++ -O2 -std=c++20 native/tools/classify/pos_tagger.cpp -o pos_tagger
 // Usage: pos_tagger train <train.conllu> <dev.conllu> <model_out> [--epochs N] [--patience N] [--prune X]
 //                          [--dict-min N] [--dict-ratio R] [--no-dict] [--no-xpos]
 //        pos_tagger eval <model> <file.conllu>   (accuracy, known / unknown / questions, speed, NP F1)

@@ -1,8 +1,8 @@
-#include "cypha/infer_cpu.hpp"
+#include "cypha/classify/infer_cpu.hpp"
 
-#include "cypha/class_gmm.hpp"
-#include "cypha/kernel_memory.hpp"
-#include "cypha/preprocessor.hpp"
+#include "cypha/classify/class_gmm.hpp"
+#include "cypha/classify/kernel_memory.hpp"
+#include "cypha/classify/preprocessor.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -16,12 +16,12 @@
 #include <utility>
 #include <vector>
 
-#include "cypha/accel_backend.hpp"
-#include "cypha/env.hpp"
-#include "cypha/nig_field.hpp"
-#include "cypha/nig_gig_math.hpp"
-#include "cypha/parallel_rows.hpp"
-#include "cypha/retrieval.hpp"
+#include "cypha/core/accel_backend.hpp"
+#include "cypha/core/env.hpp"
+#include "cypha/classify/nig_field.hpp"
+#include "cypha/classify/nig_gig_math.hpp"
+#include "cypha/core/parallel_rows.hpp"
+#include "cypha/classify/retrieval.hpp"
 
 namespace cypha {
 

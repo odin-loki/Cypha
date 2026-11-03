@@ -8,8 +8,8 @@
 #include <string>
 #include <vector>
 
-#include "cypha/load_cypha.hpp"
-#include "cypha/rff_features.hpp"
+#include "cypha/classify/load_cypha.hpp"
+#include "cypha/classify/rff_features.hpp"
 
 namespace cypha {
 /// Nyström RBF kernel memory (reference parity fixture).

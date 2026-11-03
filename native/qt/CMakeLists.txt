@@ -31,8 +31,8 @@ target_link_libraries(cypha_qt_shell PRIVATE Qt6::Widgets Qt6::Network cypha_cor
 # _cypha_exp_sqlite_link is set by the parent before add_subdirectory(qt).
 if(_cypha_exp_sqlite_link)
   target_sources(cypha_qt_shell PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}/../src/experiment_db.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/../src/experiment_db_crud.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/core/experiment_db.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/core/experiment_db_crud.cpp"
   )
   target_link_libraries(cypha_qt_shell PRIVATE ${_cypha_exp_sqlite_link})
   target_compile_definitions(cypha_qt_shell PRIVATE CYPHA_SHELL_EXPERIMENT_DB=1)

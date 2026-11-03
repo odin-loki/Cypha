@@ -1,4 +1,4 @@
-#include "cypha/cyphalm/cyphalm_parallel.hpp"
+#include "cypha/lm/cyphalm_parallel.hpp"
 
 #if defined(_OPENMP)
 #include <omp.h>

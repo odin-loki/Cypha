@@ -18,8 +18,8 @@
 #include <string>
 #include <vector>
 
-#include "cypha/accel_backend.hpp"
-#include "cypha/nig_gig_math.hpp"
+#include "cypha/core/accel_backend.hpp"
+#include "cypha/classify/nig_gig_math.hpp"
 
 namespace {
 

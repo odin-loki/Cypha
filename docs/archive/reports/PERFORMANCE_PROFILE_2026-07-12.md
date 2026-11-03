@@ -75,7 +75,7 @@ this environment. Not pursued further; moved to the fallback.
 ### 1.3 Manual `chrono` phase instrumentation (Phase 1 step 2, fallback — what actually produced results)
 
 Added an env-gated (`CYPHA_PERF_TRACE=1`), zero-overhead-when-unset instrumentation block to
-`native/src/cyphalm/cyphalm_model.cpp`: a `PerfTracePhases` struct accumulates
+`native/src/lm/cyphalm_model.cpp`: a `PerfTracePhases` struct accumulates
 `std::chrono::steady_clock` durations into 8 named buckets across every `train_step` call, and
 prints a percentage breakdown to `stderr` at process exit. `perf_trace_scope(idx, fn)` /
 `perf_trace_begin()`/`perf_trace_end()` wrap each subsystem call inside `train_step`; when the env
@@ -143,7 +143,7 @@ pure memory-reuse change with **zero arithmetic change**:
    `CharLSTMGrad` by value every call. The original by-value overload now delegates to this one
    (so anyone still calling the old signature gets identical behavior/output, just via one extra
    copy — no existing caller's numerics change).
-3. **`native/include/cypha/cyphalm/cyphalm_model.hpp` / `cyphalm_model.cpp` — `CyphaLMModel`:**
+3. **`native/include/cypha/lm/cyphalm_model.hpp` / `cyphalm_model.cpp` — `CyphaLMModel`:**
    added a `CharLSTMGrad hybrid_lstm_grad_scratch_` member, reused across every `train_step` call
    in the hybrid-mode LSTM backward path via the new out-param overload — eliminates the ~1.5MB
    `CharLSTMGrad` allocation that previously happened every single character step in D17's default
@@ -632,7 +632,7 @@ contended machine.
 ### `predict_next` sub-phase breakdown
 
 Added a `PredictNextSubPhaseTrace`/`PredictScopeTimer` pair inside `CyphaLMModel::predict_next`
-(`native/src/cyphalm/cyphalm_model.cpp`), gated by the same `CYPHA_PERF_TRACE` env var, mirroring
+(`native/src/lm/cyphalm_model.cpp`), gated by the same `CYPHA_PERF_TRACE` env var, mirroring
 the `BackwardSubPhaseTrace`/`BwdScopeTimer` pattern Part 2 used for `lstm_backward`. Eight buckets,
 consistent across every run of this pass (four independent measurements, two different corpora,
 percentages stable to within ~1.5pp of each other even though absolute instrumented seconds varied

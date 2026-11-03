@@ -7,7 +7,7 @@
 | ID | Deliverable | Path |
 |----|-------------|------|
 | MC3 | FGSM-proxy ε-sweep helper | `run_d15_fgsm_robustness_curve` in `bench_domains.hpp` |
-| MC3 | Curve runner | `native/tools/cyphalm_robustness_curve.cpp` |
+| MC3 | Curve runner | `native/tools/eval/cyphalm_robustness_curve.cpp` |
 | — | Profile config | `bench/config/robustness_curve_profile.json` |
 | — | CTest smoke (≥3 ε) | `native_robustness_curve_smoke` |
 | — | D15C extension | `15C_adversarial_fgsm_proxy` emits full curve + legacy `accuracy_*` fields |

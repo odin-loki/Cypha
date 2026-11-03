@@ -28,7 +28,7 @@ The forward plan built on these results is [`../PLAN.md`](../PLAN.md).
 | Model | The packed trie and six-expert mixture exactly as `cyphalm_trie chat` (then `trie_chat.cpp`): wiki pass, `<\|doc\|>` break, two Dolly passes, Synth mode. Reproduced weights: 0.961 on order 4, 0.039 on the match |
 | Machine | 2 cores, 7 GB RAM, g++ 13.3, `-O2` |
 
-**Tools.** The test was run with `trie_qa_probe.cpp` and `trie_context_8k.cpp`, which reused `trie_chat.cpp`'s model through `#include`. On 2026-10-27 (PLAN B1) all three became subcommands of `native/tools/cyphalm_trie.cpp` over `native/include/cypha/cyphalm/packed_trie.hpp`, with byte-identical output ([B1 report](B1_TRIE_CONSOLIDATION.md); the old files are in git `9f35798` and `ab4f9f6`).
+**Tools.** The test was run with `trie_qa_probe.cpp` and `trie_context_8k.cpp`, which reused `trie_chat.cpp`'s model through `#include`. On 2026-10-27 (PLAN B1) all three became subcommands of `native/tools/lm/cyphalm_trie.cpp` over `native/include/cypha/lm/packed_trie.hpp`, with byte-identical output ([B1 report](B1_TRIE_CONSOLIDATION.md); the old files are in git `9f35798` and `ab4f9f6`).
 
 | Subcommand | What it does |
 |---|---|
@@ -39,7 +39,7 @@ The forward plan built on these results is [`../PLAN.md`](../PLAN.md).
 ```bash
 gcc -O2 -c native/third_party/libsais/libsais.c -o libsais.o
 g++ -O2 -std=c++20 -I native/include -I native/third_party -I native/third_party/libsais \
-    native/tools/cyphalm_trie.cpp native/src/cyphalm/infinigram.cpp libsais.o -o cyphalm_trie
+    native/tools/lm/cyphalm_trie.cpp native/src/lm/infinigram.cpp libsais.o -o cyphalm_trie
 
 ./cyphalm_trie probe     enwik8 dolly.jsonl > qa.txt
 ./cyphalm_trie context8k enwik8 dolly.jsonl > ctx.txt

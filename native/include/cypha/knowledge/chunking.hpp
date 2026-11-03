@@ -26,8 +26,8 @@
 #include <string>
 #include <utility>
 
-#include "cypha/thought/interpreter.hpp"
-#include "cypha/thought/learners.hpp"
+#include "cypha/knowledge/interpreter.hpp"
+#include "cypha/knowledge/learners.hpp"
 
 namespace cypha::thought {
 

@@ -5,9 +5,9 @@
 #include <cstdio>
 #include <filesystem>
 
-#include "cypha/create_model.hpp"
-#include "cypha/infer_cpu.hpp"
-#include "cypha/memory_train.hpp"
+#include "cypha/classify/create_model.hpp"
+#include "cypha/classify/infer_cpu.hpp"
+#include "cypha/classify/memory_train.hpp"
 
 int main() {
     cypha::FreshModelParams p;

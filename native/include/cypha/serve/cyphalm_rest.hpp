@@ -7,7 +7,7 @@
 #include "httplib.h"
 #include <nlohmann/json.hpp>
 
-#include "cypha/cyphalm/cyphalm_generation.hpp"
+#include "cypha/lm/cyphalm_generation.hpp"
 
 namespace cypha {
 class Cypha;

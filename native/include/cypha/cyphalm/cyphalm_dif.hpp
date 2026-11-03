@@ -5,9 +5,9 @@
 
 #include <nlohmann/json.hpp>
 
-#include "cypha/cyphalm/cyphalm_config.hpp"
+#include "cypha/lm/cyphalm_config.hpp"
 #include "cypha/cyphalm/cyphalm_nig_expert.hpp"
-#include "cypha/kernel_memory.hpp"
+#include "cypha/classify/kernel_memory.hpp"
 
 namespace cypha::cyphalm {
 

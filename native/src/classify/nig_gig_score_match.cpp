@@ -1,11 +1,11 @@
-#include "cypha/nig_gig_score_match.hpp"
+#include "cypha/classify/nig_gig_score_match.hpp"
 
 #include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <optional>
 
-#include "cypha/env.hpp"
+#include "cypha/core/env.hpp"
 
 namespace cypha {
 

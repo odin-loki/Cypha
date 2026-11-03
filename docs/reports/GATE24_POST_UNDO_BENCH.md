@@ -1,7 +1,7 @@
 # gate24 post-undo serve benchmark
 
 **Date:** 2026-09-20  
-**Harness:** `native/tools/hp_inference_bench`  
+**Harness:** `native/tools/lm/hp_inference_bench`  
 **Profile:** gate24 (`v78_flags.ps1` + `HP_SLOT_MAX=24`, `table_bits=22`)
 
 ---

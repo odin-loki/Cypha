@@ -3,9 +3,9 @@
 #include <cstdio>
 #include <vector>
 
-#include "cypha/cyphalm/cyphalm_math_integration.hpp"
-#include "cypha/cyphalm/cyphalm_model.hpp"
-#include "cypha/intelligence/profile_completeness.hpp"
+#include "cypha/lm/cyphalm_math_integration.hpp"
+#include "cypha/lm/cyphalm_model.hpp"
+#include "cypha/knowledge/profile_completeness.hpp"
 
 int main() {
   cypha::cyphalm::CyphaLMConfig cfg;

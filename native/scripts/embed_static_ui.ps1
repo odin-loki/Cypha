@@ -1,4 +1,4 @@
-# Generate cypha_rest_static_embed.hpp from tools/static/* for CYPHA_EMBED_STATIC_UI.
+# Generate cypha_rest_static_embed.hpp from tools/serve/static/* for CYPHA_EMBED_STATIC_UI.
 param(
     [Parameter(Mandatory = $true)]
     [string]$StaticDir,

@@ -1,10 +1,10 @@
-#include "cypha/class_gmm.hpp"
+#include "cypha/classify/class_gmm.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
 
-#include "cypha/load_cypha.hpp"
+#include "cypha/classify/load_cypha.hpp"
 
 namespace cypha {
 

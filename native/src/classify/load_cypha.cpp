@@ -1,4 +1,4 @@
-#include "cypha/load_cypha.hpp"
+#include "cypha/classify/load_cypha.hpp"
 
 #include <cstring>
 #include <fstream>

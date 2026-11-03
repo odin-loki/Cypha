@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-#include "cypha/bench/bench_metrics.hpp"
+#include "cypha/eval/bench_metrics.hpp"
 
 namespace {
 

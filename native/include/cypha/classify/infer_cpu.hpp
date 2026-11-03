@@ -7,10 +7,10 @@
 #include <utility>
 #include <vector>
 
-#include "cypha/class_gmm.hpp"
-#include "cypha/kernel_memory.hpp"
-#include "cypha/load_cypha.hpp"
-#include "cypha/retrieval.hpp"
+#include "cypha/classify/class_gmm.hpp"
+#include "cypha/classify/kernel_memory.hpp"
+#include "cypha/classify/load_cypha.hpp"
+#include "cypha/classify/retrieval.hpp"
 
 namespace cypha {
 

@@ -16,7 +16,7 @@
 #include <utility>
 #include <vector>
 
-#include "cypha/infer_cpu.hpp"
+#include "cypha/classify/infer_cpu.hpp"
 
 namespace cypha {
 

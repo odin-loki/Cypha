@@ -65,37 +65,37 @@ if(CYPHA_ENABLE_CUDA)
 endif()
 
 add_library(cypha_core STATIC
-  src/env.cpp
-  src/load_cypha.cpp
-  src/save_cypha.cpp
-  src/infer_cpu.cpp
-  src/retrieval.cpp
-  src/nig_gig_math.cpp
-  src/nig_gig_score_match.cpp
-  src/bessel_table_data.cpp
-  src/preprocessor.cpp
-  src/preprocessor_fit.cpp
-  src/mt19937_rng.cpp
-  src/csv_ingest.cpp
-  src/memory_train.cpp
-  src/ewc_regularizer.cpp
-  src/curriculum.cpp
-  src/federated_aggregate.cpp
-  src/registry.cpp
-  src/sync_infer.cpp
-  src/encoder_contrastive.cpp
-  src/replay_buffer.cpp
-  src/train_step_vector.cpp
-  src/nig_field.cpp
-  src/regression.cpp
-  src/mke_scalar_train_step.cpp
-  src/em_step.cpp
-  src/class_gmm.cpp
-  src/generation.cpp
-  src/accel_backend.cpp
-  src/create_model.cpp
-  src/kernel_memory.cpp
-  src/rff_features.cpp
+  src/core/env.cpp
+  src/classify/load_cypha.cpp
+  src/classify/save_cypha.cpp
+  src/classify/infer_cpu.cpp
+  src/classify/retrieval.cpp
+  src/classify/nig_gig_math.cpp
+  src/classify/nig_gig_score_match.cpp
+  src/classify/bessel_table_data.cpp
+  src/classify/preprocessor.cpp
+  src/classify/preprocessor_fit.cpp
+  src/core/mt19937_rng.cpp
+  src/core/csv_ingest.cpp
+  src/classify/memory_train.cpp
+  src/online/ewc_regularizer.cpp
+  src/online/curriculum.cpp
+  src/classify/federated_aggregate.cpp
+  src/core/registry.cpp
+  src/classify/sync_infer.cpp
+  src/classify/encoder_contrastive.cpp
+  src/online/replay_buffer.cpp
+  src/classify/train_step_vector.cpp
+  src/classify/nig_field.cpp
+  src/classify/regression.cpp
+  src/classify/mke_scalar_train_step.cpp
+  src/classify/em_step.cpp
+  src/classify/class_gmm.cpp
+  src/classify/generation.cpp
+  src/core/accel_backend.cpp
+  src/classify/create_model.cpp
+  src/classify/kernel_memory.cpp
+  src/classify/rff_features.cpp
   src/forecast/event_vocabulary.cpp
   src/forecast/dispute_data.cpp
   src/forecast/node_estimator.cpp
@@ -108,32 +108,32 @@ add_library(cypha_core STATIC
   src/forecast/gdelt_monitor.cpp
   src/forecast/gdelt_stream.cpp
   src/forecast/forecast_pipeline.cpp
-  src/branch_a_router.cpp
+  src/classify/branch_a_router.cpp
   src/som/som_encoder.cpp
   src/som/temporal_som.cpp
   src/som/gng_expert.cpp
   src/som/gria_controller.cpp
   src/som/discriminative_feedback.cpp
-  src/multilabel_dif.cpp
-  src/similarity_index.cpp
-  src/intelligence/nig_statistic_state.cpp
-  src/intelligence/measurers.cpp
-  src/intelligence/intelligence_profiler.cpp
-  src/intelligence/criticality_vector.cpp
-  src/intelligence/intelligence_profile_json.cpp
-  src/intelligence/profile_completeness.cpp
-  src/intelligence/epistemic_threshold.cpp
-  src/intelligence/soft_world_monitor.cpp
-  src/intelligence/self_correcting_infer.cpp
-  src/intelligence/profile_from_model.cpp
-  src/intelligence/causal_graph.cpp
-  src/intelligence/profile_guided_loss.cpp
-  src/cyphalm/lm_intelligence_monitor.cpp
-  src/bench/bench_paths.cpp
+  src/classify/multilabel_dif.cpp
+  src/classify/similarity_index.cpp
+  src/knowledge/nig_statistic_state.cpp
+  src/knowledge/measurers.cpp
+  src/knowledge/intelligence_profiler.cpp
+  src/knowledge/criticality_vector.cpp
+  src/knowledge/intelligence_profile_json.cpp
+  src/knowledge/profile_completeness.cpp
+  src/knowledge/epistemic_threshold.cpp
+  src/knowledge/soft_world_monitor.cpp
+  src/knowledge/self_correcting_infer.cpp
+  src/knowledge/profile_from_model.cpp
+  src/knowledge/causal_graph.cpp
+  src/knowledge/profile_guided_loss.cpp
+  src/knowledge/lm_intelligence_monitor.cpp
+  src/eval/bench_paths.cpp
 )
 
 if(CYPHA_ENABLE_CUDA)
-  target_sources(cypha_core PRIVATE src/accel_cuda.cu)
+  target_sources(cypha_core PRIVATE src/core/accel_cuda.cu)
   target_compile_definitions(cypha_core PUBLIC CYPHA_ENABLE_CUDA)
   target_link_libraries(cypha_core PUBLIC CUDA::cudart)
   # accel_cuda.cu is the only .cu translation unit (no cross-TU device calls), so
@@ -167,23 +167,23 @@ add_library(cypha_lm_native INTERFACE)
 target_link_libraries(cypha_lm_native INTERFACE cypha_core)
 
 add_library(cypha_bench_native STATIC
-  src/bench/bench_profile.cpp
-  src/bench/bench_metrics.cpp
-  src/bench/bench_baselines.cpp
-  src/bench/bench_report_json.cpp
-  src/bench/bench_encoder_text.cpp
-  src/bench/bench_encoder_image.cpp
-  src/bench/bench_encoder_chess.cpp
-  src/bench/bench_encoder_go.cpp
-  src/bench/bench_encoder_poker.cpp
-  src/bench/bench_encoder_document.cpp
-  src/bench/bench_encoder_timeseries.cpp
-  src/bench/bench_cross_domain.cpp
-  src/bench/bench_report.cpp
-  src/bench/bench_figures.cpp
-  src/bench/bench_figure_render.cpp
-  src/bench/bench_tune.cpp
-  src/bench/bench_domains.cpp
+  src/eval/bench_profile.cpp
+  src/eval/bench_metrics.cpp
+  src/eval/bench_baselines.cpp
+  src/eval/bench_report_json.cpp
+  src/eval/bench_encoder_text.cpp
+  src/eval/bench_encoder_image.cpp
+  src/eval/bench_encoder_chess.cpp
+  src/eval/bench_encoder_go.cpp
+  src/eval/bench_encoder_poker.cpp
+  src/eval/bench_encoder_document.cpp
+  src/eval/bench_encoder_timeseries.cpp
+  src/eval/bench_cross_domain.cpp
+  src/eval/bench_report.cpp
+  src/eval/bench_figures.cpp
+  src/eval/bench_figure_render.cpp
+  src/eval/bench_tune.cpp
+  src/eval/bench_domains.cpp
 )
 
 target_include_directories(cypha_bench_native PUBLIC
@@ -207,7 +207,7 @@ endif()
 # Phase 0: golden regression under tests/regression/.
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/CyphaRegression.cmake")
 
-add_executable(cyphalm_bench_native tools/cyphalm_bench_native.cpp)
+add_executable(cyphalm_bench_native tools/lm/cyphalm_bench_native.cpp)
 target_link_libraries(cyphalm_bench_native PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cyphalm_bench_native)
 
@@ -217,7 +217,7 @@ if(CYPHA_BUILD_LEGACY_CYPHALM)
   cypha_mingw_apply_exe_link_options(cyphalm_ssm_diagnose)
 endif()
 
-# Phase B: production entrypoints under apps/ (see cmake/CyphaApps.cmake).
+# Phase B: production entrypoints: tools/serve, tools/eval, tools/lm (see cmake/CyphaApps.cmake, docs/MODULES.md).
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/CyphaApps.cmake")
 
 target_include_directories(cypha_core PUBLIC
@@ -234,73 +234,73 @@ if(CYPHA_BUILD_LEGACY_CYPHALM)
   target_link_libraries(cypha_fixture_gen PRIVATE cypha_core cypha_lm_native)
 endif()
 
-add_executable(xor_kernel_bench tools/xor_kernel_bench.cpp)
+add_executable(xor_kernel_bench tools/classify/xor_kernel_bench.cpp)
 target_link_libraries(xor_kernel_bench PRIVATE cypha_core)
 
-add_executable(cypha_kernel_tune tools/cypha_kernel_tune.cpp)
+add_executable(cypha_kernel_tune tools/classify/cypha_kernel_tune.cpp)
 target_link_libraries(cypha_kernel_tune PRIVATE cypha_core)
 
-add_executable(kernel_snapshot_roundtrip tools/kernel_snapshot_roundtrip.cpp)
+add_executable(kernel_snapshot_roundtrip tools/classify/kernel_snapshot_roundtrip.cpp)
 target_link_libraries(kernel_snapshot_roundtrip PRIVATE cypha_core)
 
-add_executable(kernel_approx_p5_smoke tools/kernel_approx_p5_smoke.cpp)
+add_executable(kernel_approx_p5_smoke tools/classify/kernel_approx_p5_smoke.cpp)
 target_link_libraries(kernel_approx_p5_smoke PRIVATE cypha_core)
 cypha_mingw_apply_exe_link_options(kernel_approx_p5_smoke)
 
-add_executable(class_gmm_p3_smoke tools/class_gmm_p3_smoke.cpp)
+add_executable(class_gmm_p3_smoke tools/classify/class_gmm_p3_smoke.cpp)
 target_link_libraries(class_gmm_p3_smoke PRIVATE cypha_core)
 cypha_mingw_apply_exe_link_options(class_gmm_p3_smoke)
 
-add_executable(encoder_ib_p6_smoke tools/encoder_ib_p6_smoke.cpp)
+add_executable(encoder_ib_p6_smoke tools/classify/encoder_ib_p6_smoke.cpp)
 target_link_libraries(encoder_ib_p6_smoke PRIVATE cypha_core)
 cypha_mingw_apply_exe_link_options(encoder_ib_p6_smoke)
 
-add_executable(gate_score_match_p7_smoke tools/gate_score_match_p7_smoke.cpp)
+add_executable(gate_score_match_p7_smoke tools/classify/gate_score_match_p7_smoke.cpp)
 target_link_libraries(gate_score_match_p7_smoke PRIVATE cypha_core)
 cypha_mingw_apply_exe_link_options(gate_score_match_p7_smoke)
 
-add_executable(ported_defects_pinned tools/ported_defects_pinned.cpp)
+add_executable(ported_defects_pinned tools/classify/ported_defects_pinned.cpp)
 target_link_libraries(ported_defects_pinned PRIVATE cypha_core)
 cypha_mingw_apply_exe_link_options(ported_defects_pinned)
 
-add_executable(kernel_gate_invariant tools/kernel_gate_invariant.cpp)
+add_executable(kernel_gate_invariant tools/classify/kernel_gate_invariant.cpp)
 target_link_libraries(kernel_gate_invariant PRIVATE cypha_core)
 cypha_mingw_apply_exe_link_options(kernel_gate_invariant)
 
-add_executable(bessel_gig_limits tools/bessel_gig_limits.cpp)
+add_executable(bessel_gig_limits tools/classify/bessel_gig_limits.cpp)
 target_link_libraries(bessel_gig_limits PRIVATE cypha_core)
 cypha_mingw_apply_exe_link_options(bessel_gig_limits)
 
-add_executable(nig_bma_p4_smoke tools/nig_bma_p4_smoke.cpp)
+add_executable(nig_bma_p4_smoke tools/classify/nig_bma_p4_smoke.cpp)
 target_link_libraries(nig_bma_p4_smoke PRIVATE cypha_bench_native)
 cypha_mingw_apply_exe_link_options(nig_bma_p4_smoke)
 
-add_executable(rao_blackwell_p8_smoke tools/rao_blackwell_p8_smoke.cpp)
+add_executable(rao_blackwell_p8_smoke tools/classify/rao_blackwell_p8_smoke.cpp)
 target_link_libraries(rao_blackwell_p8_smoke PRIVATE cypha_core)
 cypha_mingw_apply_exe_link_options(rao_blackwell_p8_smoke)
 
-add_executable(criticality_vector_p9_smoke tools/criticality_vector_p9_smoke.cpp)
+add_executable(criticality_vector_p9_smoke tools/knowledge/criticality_vector_p9_smoke.cpp)
 target_link_libraries(criticality_vector_p9_smoke PRIVATE cypha_core)
 cypha_mingw_apply_exe_link_options(criticality_vector_p9_smoke)
 
-add_executable(criticality_overhead_p9_bench tools/criticality_overhead_p9_bench.cpp)
+add_executable(criticality_overhead_p9_bench tools/knowledge/criticality_overhead_p9_bench.cpp)
 target_link_libraries(criticality_overhead_p9_bench PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(criticality_overhead_p9_bench)
 
-add_executable(infer_latency_bench tools/infer_latency_bench.cpp)
+add_executable(infer_latency_bench tools/eval/infer_latency_bench.cpp)
 target_link_libraries(infer_latency_bench PRIVATE cypha_core cypha_lm_native)
 cypha_mingw_apply_exe_link_options(infer_latency_bench)
 
-add_executable(kernel_cypha_roundtrip tools/kernel_cypha_roundtrip.cpp)
+add_executable(kernel_cypha_roundtrip tools/classify/kernel_cypha_roundtrip.cpp)
 target_link_libraries(kernel_cypha_roundtrip PRIVATE cypha_core)
 
-add_executable(memory_train_roundtrip tools/memory_train_roundtrip.cpp)
+add_executable(memory_train_roundtrip tools/classify/memory_train_roundtrip.cpp)
 target_link_libraries(memory_train_roundtrip PRIVATE cypha_core)
 
-add_executable(preprocessor_rff_gamma_cv_test tools/preprocessor_rff_gamma_cv_test.cpp)
+add_executable(preprocessor_rff_gamma_cv_test tools/classify/preprocessor_rff_gamma_cv_test.cpp)
 target_link_libraries(preprocessor_rff_gamma_cv_test PRIVATE cypha_core)
 
-add_executable(registry_register tools/registry_register.cpp)
+add_executable(registry_register tools/core/registry_register.cpp)
 target_link_libraries(registry_register PRIVATE cypha_core)
 
 add_executable(rest_schema_contract tests/rest_schema_contract.cpp)
@@ -309,13 +309,13 @@ if(WIN32)
   target_link_libraries(rest_schema_contract PRIVATE ws2_32)
 endif()
 
-add_executable(cuda_smoke tools/cuda_smoke.cpp)
+add_executable(cuda_smoke tools/core/cuda_smoke.cpp)
 target_link_libraries(cuda_smoke PRIVATE cypha_core)
 
-add_executable(create_model_smoke tools/create_model_smoke.cpp)
+add_executable(create_model_smoke tools/classify/create_model_smoke.cpp)
 target_link_libraries(create_model_smoke PRIVATE cypha_core)
 
-add_executable(cypha_save_load_test tools/cypha_save_load_test.cpp)
+add_executable(cypha_save_load_test tools/classify/cypha_save_load_test.cpp)
 target_link_libraries(cypha_save_load_test PRIVATE cypha_core)
 cypha_mingw_apply_exe_link_options(cypha_save_load_test)
 add_test(
@@ -325,7 +325,7 @@ add_test(
 set_tests_properties(native_cypha_save_load_test PROPERTIES TIMEOUT 300)
 
 # Branch A router save / load round trip (docs/reports/ROUTER_SAVE_LOAD_FIX.md).
-add_executable(branch_a_router_save_load_test tools/branch_a_router_save_load_test.cpp)
+add_executable(branch_a_router_save_load_test tools/classify/branch_a_router_save_load_test.cpp)
 target_link_libraries(branch_a_router_save_load_test PRIVATE cypha_core)
 cypha_mingw_apply_exe_link_options(branch_a_router_save_load_test)
 add_test(
@@ -336,7 +336,7 @@ set_tests_properties(native_branch_a_router_save_load_test PROPERTIES TIMEOUT 30
 
 # Cypha's OOD threshold learned from training rows (docs/reports/CYPHA_OOD_THRESHOLD.md): selftest for the CTest,
 # `measure` for the registered synthetic read.
-add_executable(cypha_ood_test tools/cypha_ood_test.cpp)
+add_executable(cypha_ood_test tools/classify/cypha_ood_test.cpp)
 target_link_libraries(cypha_ood_test PRIVATE cypha_core)
 cypha_mingw_apply_exe_link_options(cypha_ood_test)
 add_test(
@@ -345,7 +345,7 @@ add_test(
 )
 set_tests_properties(native_cypha_ood_test PROPERTIES TIMEOUT 300)
 
-add_executable(cypha_one_smoke tools/cypha_one_smoke.cpp)
+add_executable(cypha_one_smoke tools/classify/cypha_one_smoke.cpp)
 target_link_libraries(cypha_one_smoke PRIVATE cypha_core)
 cypha_mingw_apply_exe_link_options(cypha_one_smoke)
 add_test(
@@ -355,7 +355,7 @@ add_test(
 )
 set_tests_properties(native_one_cypha_smoke PROPERTIES TIMEOUT 600)
 
-add_executable(predictive_codec_smoke tools/predictive_codec_smoke.cpp)
+add_executable(predictive_codec_smoke tools/lm/predictive_codec_smoke.cpp)
 target_link_libraries(predictive_codec_smoke PRIVATE cypha_core)
 cypha_mingw_apply_exe_link_options(predictive_codec_smoke)
 add_test(NAME native_predictive_codec_smoke COMMAND "$<TARGET_FILE:predictive_codec_smoke>")
@@ -369,7 +369,7 @@ if(CYPHA_BUILD_LEGACY_CYPHALM)
   set_tests_properties(native_stacked_lstm_smoke PROPERTIES TIMEOUT 120)
 endif()
 
-add_executable(predictive_codec_bench tools/predictive_codec_bench.cpp)
+add_executable(predictive_codec_bench tools/lm/predictive_codec_bench.cpp)
 target_link_libraries(predictive_codec_bench PRIVATE cypha_core)
 cypha_mingw_apply_exe_link_options(predictive_codec_bench)
 # Short WikiText slice (or synthetic fallback): hybrid train + arithmetic coding parity.
@@ -379,7 +379,7 @@ add_test(
 )
 set_tests_properties(native_predictive_codec_bench_smoke PROPERTIES TIMEOUT 600)
 
-add_executable(forecast_smoke tools/forecast_smoke.cpp)
+add_executable(forecast_smoke tools/forecast/forecast_smoke.cpp)
 target_link_libraries(forecast_smoke PRIVATE cypha_core cypha_lm_native)
 cypha_mingw_apply_exe_link_options(forecast_smoke)
 add_test(NAME native_forecast_smoke COMMAND "$<TARGET_FILE:forecast_smoke>")
@@ -388,31 +388,31 @@ set_tests_properties(native_forecast_smoke PROPERTIES
   WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/.."
 )
 
-add_executable(cypha_forecast_run tools/cypha_forecast_run.cpp)
+add_executable(cypha_forecast_run tools/forecast/cypha_forecast_run.cpp)
 target_link_libraries(cypha_forecast_run PRIVATE cypha_core cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cypha_forecast_run)
 
 # C0/C7 (PLAN Track C; docs/reports/C0_C7_BASELINES_AND_ROUTING.md): topic classification baselines and
 # PPMI-SVD vectors for Branch A routing. The data runs need downloaded 20 Newsgroups / AG News files.
-add_executable(topic_bench tools/topic_bench.cpp)
+add_executable(topic_bench tools/classify/topic_bench.cpp)
 target_link_libraries(topic_bench PRIVATE cypha_core)
 cypha_mingw_apply_exe_link_options(topic_bench)
 add_test(NAME native_topic_bench_selftest COMMAND "$<TARGET_FILE:topic_bench>" selftest)
 set_tests_properties(native_topic_bench_selftest PROPERTIES TIMEOUT 60)
 
-add_executable(orf_encoder_bench tools/orf_encoder_bench.cpp)
+add_executable(orf_encoder_bench tools/classify/orf_encoder_bench.cpp)
 target_link_libraries(orf_encoder_bench PRIVATE cypha_core)
 cypha_mingw_apply_exe_link_options(orf_encoder_bench)
 add_test(NAME native_orf_encoder_bench_smoke COMMAND "$<TARGET_FILE:orf_encoder_bench>")
 set_tests_properties(native_orf_encoder_bench_smoke PROPERTIES TIMEOUT 180)
 
-add_executable(forecast_drift_backtest tools/forecast_drift_backtest.cpp)
+add_executable(forecast_drift_backtest tools/forecast/forecast_drift_backtest.cpp)
 target_link_libraries(forecast_drift_backtest PRIVATE cypha_core)
 cypha_mingw_apply_exe_link_options(forecast_drift_backtest)
 add_test(NAME native_forecast_drift_backtest COMMAND "$<TARGET_FILE:forecast_drift_backtest>")
 set_tests_properties(native_forecast_drift_backtest PROPERTIES TIMEOUT 60)
 
-add_executable(forecast_gdelt_poll tools/forecast_gdelt_poll.cpp)
+add_executable(forecast_gdelt_poll tools/forecast/forecast_gdelt_poll.cpp)
 target_link_libraries(forecast_gdelt_poll PRIVATE cypha_core)
 cypha_mingw_apply_exe_link_options(forecast_gdelt_poll)
 add_test(NAME native_forecast_gdelt_poll COMMAND "$<TARGET_FILE:forecast_gdelt_poll>" --once)
@@ -421,7 +421,7 @@ set_tests_properties(native_forecast_gdelt_poll PROPERTIES
   WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/.."
 )
 
-add_executable(views_leaderboard_bench tools/views_leaderboard_bench.cpp)
+add_executable(views_leaderboard_bench tools/forecast/views_leaderboard_bench.cpp)
 target_link_libraries(views_leaderboard_bench PRIVATE cypha_core)
 cypha_mingw_apply_exe_link_options(views_leaderboard_bench)
 add_test(NAME native_views_leaderboard_bench COMMAND "$<TARGET_FILE:views_leaderboard_bench>")
@@ -430,30 +430,30 @@ set_tests_properties(native_views_leaderboard_bench PROPERTIES
   WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/.."
 )
 
-add_executable(cypha_federated_merge tools/cypha_federated_merge.cpp)
+add_executable(cypha_federated_merge tools/classify/cypha_federated_merge.cpp)
 target_link_libraries(cypha_federated_merge PRIVATE cypha_core)
 
-add_executable(cypha_federated_coordinator tools/cypha_federated_coordinator.cpp)
+add_executable(cypha_federated_coordinator tools/classify/cypha_federated_coordinator.cpp)
 target_include_directories(cypha_federated_coordinator PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
 target_link_libraries(cypha_federated_coordinator PRIVATE cypha_core)
 if(WIN32)
   target_link_libraries(cypha_federated_coordinator PRIVATE ws2_32)
 endif()
 
-add_executable(cypha_federated_worker tools/cypha_federated_worker.cpp)
+add_executable(cypha_federated_worker tools/classify/cypha_federated_worker.cpp)
 target_include_directories(cypha_federated_worker PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
 target_link_libraries(cypha_federated_worker PRIVATE cypha_core)
 if(WIN32)
   target_link_libraries(cypha_federated_worker PRIVATE ws2_32)
 endif()
 
-add_executable(ewc_d16b_smoke tools/ewc_d16b_smoke.cpp)
+add_executable(ewc_d16b_smoke tools/online/ewc_d16b_smoke.cpp)
 target_link_libraries(ewc_d16b_smoke PRIVATE cypha_core)
 
-add_executable(ewc_d16b_sweep tools/ewc_d16b_sweep.cpp)
+add_executable(ewc_d16b_sweep tools/online/ewc_d16b_sweep.cpp)
 target_link_libraries(ewc_d16b_sweep PRIVATE cypha_bench_native)
 
-add_executable(ewc_growable_d_smoke tools/ewc_growable_d_smoke.cpp)
+add_executable(ewc_growable_d_smoke tools/online/ewc_growable_d_smoke.cpp)
 target_link_libraries(ewc_growable_d_smoke PRIVATE cypha_core)
 
 if(CYPHA_BUILD_LEGACY_CYPHALM)
@@ -467,7 +467,7 @@ if(CYPHA_BUILD_LEGACY_CYPHALM)
   target_link_libraries(native_sr_gate_laws_smoke PRIVATE cypha_lm_native)
 endif()
 
-add_executable(d17b_expert_diagnose tools/d17b_expert_diagnose.cpp)
+add_executable(d17b_expert_diagnose tools/lm/d17b_expert_diagnose.cpp)
 target_link_libraries(d17b_expert_diagnose PRIVATE cypha_lm_native)
 
 if(CYPHA_BUILD_LEGACY_CYPHALM)
@@ -475,14 +475,14 @@ if(CYPHA_BUILD_LEGACY_CYPHALM)
   target_link_libraries(ewc_weights_smoke PRIVATE cypha_lm_native)
 endif()
 
-add_executable(federated_worker_smoke tools/federated_worker_smoke.cpp)
+add_executable(federated_worker_smoke tools/classify/federated_worker_smoke.cpp)
 target_include_directories(federated_worker_smoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
 target_link_libraries(federated_worker_smoke PRIVATE cypha_core)
 if(WIN32)
   target_link_libraries(federated_worker_smoke PRIVATE ws2_32)
 endif()
 
-add_executable(federated_tls_smoke tools/federated_tls_smoke.cpp)
+add_executable(federated_tls_smoke tools/classify/federated_tls_smoke.cpp)
 target_include_directories(federated_tls_smoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
 target_link_libraries(federated_tls_smoke PRIVATE cypha_core)
 if(WIN32)
@@ -503,37 +503,37 @@ else()
   message(STATUS "Federated TLS: OpenSSL disabled (default); pass -DCYPHA_ENABLE_OPENSSL=ON to enable HTTPS")
 endif()
 
-add_executable(cypha_onnx_export tools/cypha_onnx_export.cpp)
+add_executable(cypha_onnx_export tools/classify/cypha_onnx_export.cpp)
 target_link_libraries(cypha_onnx_export PRIVATE cypha_core)
 
-add_executable(onnx_export_smoke tools/onnx_export_smoke.cpp)
+add_executable(onnx_export_smoke tools/classify/onnx_export_smoke.cpp)
 target_link_libraries(onnx_export_smoke PRIVATE cypha_core)
 
-add_executable(cypha_export_gguf tools/cypha_export_gguf.cpp)
+add_executable(cypha_export_gguf tools/classify/cypha_export_gguf.cpp)
 target_link_libraries(cypha_export_gguf PRIVATE cypha_core)
 
-add_executable(intelligence_profiler_smoke tools/intelligence_profiler_smoke.cpp)
+add_executable(intelligence_profiler_smoke tools/knowledge/intelligence_profiler_smoke.cpp)
 target_link_libraries(intelligence_profiler_smoke PRIVATE cypha_core)
 
-add_executable(intelligence_lm_monitor_smoke tools/intelligence_lm_monitor_smoke.cpp)
+add_executable(intelligence_lm_monitor_smoke tools/knowledge/intelligence_lm_monitor_smoke.cpp)
 target_link_libraries(intelligence_lm_monitor_smoke PRIVATE cypha_core)
 
-add_executable(lm_self_correct_smoke tools/lm_self_correct_smoke.cpp)
+add_executable(lm_self_correct_smoke tools/knowledge/lm_self_correct_smoke.cpp)
 target_link_libraries(lm_self_correct_smoke PRIVATE cypha_lm_native)
 
-add_executable(quality_recipe_wave1_smoke tools/quality_recipe_wave1_smoke.cpp)
+add_executable(quality_recipe_wave1_smoke tools/lm/quality_recipe_wave1_smoke.cpp)
 target_link_libraries(quality_recipe_wave1_smoke PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(quality_recipe_wave1_smoke)
 
-add_executable(quality_recipe_wave2_smoke tools/quality_recipe_wave2_smoke.cpp)
+add_executable(quality_recipe_wave2_smoke tools/lm/quality_recipe_wave2_smoke.cpp)
 target_link_libraries(quality_recipe_wave2_smoke PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(quality_recipe_wave2_smoke)
 
-add_executable(throughput_lock_smoke tools/throughput_lock_smoke.cpp)
+add_executable(throughput_lock_smoke tools/classify/throughput_lock_smoke.cpp)
 target_link_libraries(throughput_lock_smoke PRIVATE cypha_core)
 cypha_mingw_apply_exe_link_options(throughput_lock_smoke)
 
-add_executable(score_matrix_inv_v_fold_smoke tools/score_matrix_inv_v_fold_smoke.cpp)
+add_executable(score_matrix_inv_v_fold_smoke tools/classify/score_matrix_inv_v_fold_smoke.cpp)
 target_link_libraries(score_matrix_inv_v_fold_smoke PRIVATE cypha_core)
 cypha_mingw_apply_exe_link_options(score_matrix_inv_v_fold_smoke)
 
@@ -542,10 +542,10 @@ if(CYPHA_BUILD_LEGACY_CYPHALM)
   target_link_libraries(navigation_loss_hybrid_smoke PRIVATE cypha_lm_native)
 endif()
 
-add_executable(hp_llm_smoke tools/hp_llm_smoke.cpp)
+add_executable(hp_llm_smoke tools/lm/hp_llm_smoke.cpp)
 target_link_libraries(hp_llm_smoke PRIVATE cypha_lm_native)
 
-add_executable(cyphalm_generate tools/cyphalm_generate.cpp)
+add_executable(cyphalm_generate tools/lm/cyphalm_generate.cpp)
 target_link_libraries(cyphalm_generate PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cyphalm_generate)
 # A plain-text --infinigram corpus indexed whole is warned about (it may hold
@@ -561,71 +561,71 @@ add_test(NAME native_cyphalm_generate_infinigram_bytes
 set_tests_properties(native_cyphalm_generate_infinigram_bytes PROPERTIES
                      FAIL_REGULAR_EXPRESSION "indexed whole" TIMEOUT 60)
 
-add_executable(cyphalm_generation_harness tools/cyphalm_generation_harness.cpp)
+add_executable(cyphalm_generation_harness tools/lm/cyphalm_generation_harness.cpp)
 target_link_libraries(cyphalm_generation_harness PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cyphalm_generation_harness)
 
-add_executable(cyphalm_serve_smoke tools/cyphalm_serve_smoke.cpp)
+add_executable(cyphalm_serve_smoke tools/lm/cyphalm_serve_smoke.cpp)
 target_link_libraries(cyphalm_serve_smoke PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cyphalm_serve_smoke)
 add_test(NAME native_cyphalm_serve_smoke COMMAND "$<TARGET_FILE:cyphalm_serve_smoke>")
 set_tests_properties(native_cyphalm_serve_smoke PROPERTIES TIMEOUT 120)
 
-add_executable(cyphalm_generate_smoke tools/cyphalm_generate_smoke.cpp)
+add_executable(cyphalm_generate_smoke tools/lm/cyphalm_generate_smoke.cpp)
 target_link_libraries(cyphalm_generate_smoke PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cyphalm_generate_smoke)
 add_test(NAME native_cyphalm_generate_smoke COMMAND "$<TARGET_FILE:cyphalm_generate_smoke>")
 set_tests_properties(native_cyphalm_generate_smoke PROPERTIES TIMEOUT 180)
 
-add_executable(cyphalm_hp_hotpath_profile tools/cyphalm_hp_hotpath_profile.cpp)
+add_executable(cyphalm_hp_hotpath_profile tools/lm/cyphalm_hp_hotpath_profile.cpp)
 target_link_libraries(cyphalm_hp_hotpath_profile PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cyphalm_hp_hotpath_profile)
 
-add_executable(cyphalm_llm_profile tools/cyphalm_llm_profile.cpp)
+add_executable(cyphalm_llm_profile tools/lm/cyphalm_llm_profile.cpp)
 target_link_libraries(cyphalm_llm_profile PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cyphalm_llm_profile)
 
-add_executable(bpc_gap_verify tools/bpc_gap_verify.cpp)
+add_executable(bpc_gap_verify tools/lm/bpc_gap_verify.cpp)
 target_link_libraries(bpc_gap_verify PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(bpc_gap_verify)
 
-add_executable(bpc_gap_measure tools/bpc_gap_measure.cpp)
+add_executable(bpc_gap_measure tools/lm/bpc_gap_measure.cpp)
 target_link_libraries(bpc_gap_measure PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(bpc_gap_measure)
 
-add_executable(hp_bit_tree_smoke tools/hp_bit_tree_smoke.cpp)
+add_executable(hp_bit_tree_smoke tools/lm/hp_bit_tree_smoke.cpp)
 target_link_libraries(hp_bit_tree_smoke PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(hp_bit_tree_smoke)
 add_test(NAME native_hp_bit_tree_smoke COMMAND "$<TARGET_FILE:hp_bit_tree_smoke>")
 set_tests_properties(native_hp_bit_tree_smoke PROPERTIES TIMEOUT 120)
 
-add_executable(hp_frozen_smoke tools/hp_frozen_smoke.cpp)
+add_executable(hp_frozen_smoke tools/lm/hp_frozen_smoke.cpp)
 target_link_libraries(hp_frozen_smoke PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(hp_frozen_smoke)
 add_test(NAME native_hp_frozen_smoke COMMAND "$<TARGET_FILE:hp_frozen_smoke>")
 set_tests_properties(native_hp_frozen_smoke PROPERTIES TIMEOUT 120)
 
-add_executable(hp_speed_parity_smoke tools/hp_speed_parity_smoke.cpp)
+add_executable(hp_speed_parity_smoke tools/lm/hp_speed_parity_smoke.cpp)
 target_link_libraries(hp_speed_parity_smoke PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(hp_speed_parity_smoke)
 add_test(NAME native_hp_speed_parity_smoke COMMAND "$<TARGET_FILE:hp_speed_parity_smoke>")
 set_tests_properties(native_hp_speed_parity_smoke PROPERTIES TIMEOUT 300)
-add_executable(hp_stream_rewind_smoke tools/hp_stream_rewind_smoke.cpp)
+add_executable(hp_stream_rewind_smoke tools/lm/hp_stream_rewind_smoke.cpp)
 target_link_libraries(hp_stream_rewind_smoke PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(hp_stream_rewind_smoke)
 add_test(NAME native_hp_stream_rewind_smoke COMMAND "$<TARGET_FILE:hp_stream_rewind_smoke>")
 set_tests_properties(native_hp_stream_rewind_smoke PROPERTIES TIMEOUT 120)
-add_executable(hp_fold_smoke tools/hp_fold_smoke.cpp)
+add_executable(hp_fold_smoke tools/lm/hp_fold_smoke.cpp)
 target_link_libraries(hp_fold_smoke PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(hp_fold_smoke)
 add_test(NAME native_hp_fold_smoke COMMAND "$<TARGET_FILE:hp_fold_smoke>")
 set_tests_properties(native_hp_fold_smoke PROPERTIES TIMEOUT 120)
-add_executable(hp_checkpoint_robust_smoke tools/hp_checkpoint_robust_smoke.cpp)
+add_executable(hp_checkpoint_robust_smoke tools/lm/hp_checkpoint_robust_smoke.cpp)
 target_link_libraries(hp_checkpoint_robust_smoke PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(hp_checkpoint_robust_smoke)
 add_test(NAME native_hp_checkpoint_robust_smoke COMMAND "$<TARGET_FILE:hp_checkpoint_robust_smoke>")
 set_tests_properties(native_hp_checkpoint_robust_smoke PROPERTIES TIMEOUT 120)
-add_executable(cyphalm_shard_train tools/cyphalm_shard_train.cpp)
+add_executable(cyphalm_shard_train tools/lm/cyphalm_shard_train.cpp)
 target_link_libraries(cyphalm_shard_train PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cyphalm_shard_train)
 # --threads 0 is an error (it used to write an empty manifest); a failing
@@ -641,15 +641,15 @@ add_test(NAME native_cyphalm_shard_train_worker_error
                  --out "${CMAKE_CURRENT_BINARY_DIR}/shard_train_worker_error")
 set_tests_properties(native_cyphalm_shard_train_worker_error PROPERTIES
                      PASS_REGULAR_EXPRESSION "no manifest written" TIMEOUT 60)
-add_executable(cyphalm_infinigram_build tools/cyphalm_infinigram_build.cpp)
+add_executable(cyphalm_infinigram_build tools/lm/cyphalm_infinigram_build.cpp)
 target_link_libraries(cyphalm_infinigram_build PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cyphalm_infinigram_build)
-add_executable(cyphalm_infinigram_smoke tools/cyphalm_infinigram_smoke.cpp)
+add_executable(cyphalm_infinigram_smoke tools/lm/cyphalm_infinigram_smoke.cpp)
 target_link_libraries(cyphalm_infinigram_smoke PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cyphalm_infinigram_smoke)
 add_test(NAME native_cyphalm_infinigram_smoke COMMAND "$<TARGET_FILE:cyphalm_infinigram_smoke>")
 set_tests_properties(native_cyphalm_infinigram_smoke PROPERTIES TIMEOUT 120)
-add_executable(cyphalm_trace tools/cyphalm_trace.cpp)
+add_executable(cyphalm_trace tools/lm/cyphalm_trace.cpp)
 target_link_libraries(cyphalm_trace PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cyphalm_trace)
 # A missing --text is reported before the corpus is indexed.
@@ -658,30 +658,30 @@ add_test(NAME native_cyphalm_trace_missing_text
                  --text "${CMAKE_CURRENT_BINARY_DIR}/no_such_text")
 set_tests_properties(native_cyphalm_trace_missing_text PROPERTIES
                      PASS_REGULAR_EXPRESSION "cannot open --text" TIMEOUT 30)
-add_executable(cyphalm_neural_smoke tools/cyphalm_neural_smoke.cpp)
+add_executable(cyphalm_neural_smoke tools/lm/cyphalm_neural_smoke.cpp)
 target_link_libraries(cyphalm_neural_smoke PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cyphalm_neural_smoke)
 add_test(NAME native_cyphalm_neural_smoke COMMAND "$<TARGET_FILE:cyphalm_neural_smoke>")
 set_tests_properties(native_cyphalm_neural_smoke PROPERTIES TIMEOUT 120)
-add_executable(cyphalm_gen_bench tools/cyphalm_gen_bench.cpp)
+add_executable(cyphalm_gen_bench tools/lm/cyphalm_gen_bench.cpp)
 target_link_libraries(cyphalm_gen_bench PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cyphalm_gen_bench)
-add_executable(cyphalm_serve_state_smoke tools/cyphalm_serve_state_smoke.cpp)
+add_executable(cyphalm_serve_state_smoke tools/lm/cyphalm_serve_state_smoke.cpp)
 target_link_libraries(cyphalm_serve_state_smoke PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cyphalm_serve_state_smoke)
 add_test(NAME native_cyphalm_serve_state_smoke COMMAND "$<TARGET_FILE:cyphalm_serve_state_smoke>")
 set_tests_properties(native_cyphalm_serve_state_smoke PROPERTIES TIMEOUT 180)
-add_executable(cyphalm_serve_mixing_smoke tools/cyphalm_serve_mixing_smoke.cpp)
+add_executable(cyphalm_serve_mixing_smoke tools/lm/cyphalm_serve_mixing_smoke.cpp)
 target_link_libraries(cyphalm_serve_mixing_smoke PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cyphalm_serve_mixing_smoke)
 add_test(NAME native_cyphalm_serve_mixing_smoke COMMAND "$<TARGET_FILE:cyphalm_serve_mixing_smoke>")
 set_tests_properties(native_cyphalm_serve_mixing_smoke PROPERTIES TIMEOUT 300)
-add_executable(cyphalm_ensemble_smoke tools/cyphalm_ensemble_smoke.cpp)
+add_executable(cyphalm_ensemble_smoke tools/lm/cyphalm_ensemble_smoke.cpp)
 target_link_libraries(cyphalm_ensemble_smoke PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cyphalm_ensemble_smoke)
 add_test(NAME native_cyphalm_ensemble_smoke COMMAND "$<TARGET_FILE:cyphalm_ensemble_smoke>")
 set_tests_properties(native_cyphalm_ensemble_smoke PROPERTIES TIMEOUT 120)
-add_executable(cyphalm_mixing_variants_smoke tools/cyphalm_mixing_variants_smoke.cpp)
+add_executable(cyphalm_mixing_variants_smoke tools/lm/cyphalm_mixing_variants_smoke.cpp)
 target_link_libraries(cyphalm_mixing_variants_smoke PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cyphalm_mixing_variants_smoke)
 add_test(NAME native_cyphalm_mixing_variants_smoke COMMAND "$<TARGET_FILE:cyphalm_mixing_variants_smoke>")
@@ -691,7 +691,7 @@ set_tests_properties(native_cyphalm_mixing_variants_smoke PROPERTIES TIMEOUT 300
 # again (below, with cyphalm_lm_quality); mixsim replays every dump against
 # its NLL (when python3 with numpy is found).
 set(CYPHA_COMPONENT_DUMP_DIR "${CMAKE_CURRENT_BINARY_DIR}/component_dump_smoke")
-add_executable(cyphalm_component_dump_smoke tools/cyphalm_component_dump_smoke.cpp)
+add_executable(cyphalm_component_dump_smoke tools/lm/cyphalm_component_dump_smoke.cpp)
 target_link_libraries(cyphalm_component_dump_smoke PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cyphalm_component_dump_smoke)
 add_test(NAME native_cyphalm_component_dump_smoke
@@ -699,7 +699,7 @@ add_test(NAME native_cyphalm_component_dump_smoke
 set_tests_properties(native_cyphalm_component_dump_smoke PROPERTIES
                      TIMEOUT 300 FIXTURES_SETUP cyphalm_component_dumps)
 
-add_executable(hp_assign_reuse_bench tools/hp_assign_reuse_bench.cpp)
+add_executable(hp_assign_reuse_bench tools/lm/hp_assign_reuse_bench.cpp)
 target_link_libraries(hp_assign_reuse_bench PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(hp_assign_reuse_bench)
 
@@ -710,20 +710,20 @@ add_test(NAME native_hp_predictor_assign_parity_smoke
          COMMAND "$<TARGET_FILE:hp_predictor_assign_parity_smoke>")
 set_tests_properties(native_hp_predictor_assign_parity_smoke PROPERTIES TIMEOUT 180)
 
-add_executable(cyphalm_llm_eval tools/cyphalm_llm_eval.cpp)
+add_executable(cyphalm_llm_eval tools/lm/cyphalm_llm_eval.cpp)
 target_link_libraries(cyphalm_llm_eval PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cyphalm_llm_eval)
 
-add_executable(cyphalm_hp_sku_measure tools/cyphalm_hp_sku_measure.cpp)
+add_executable(cyphalm_hp_sku_measure tools/lm/cyphalm_hp_sku_measure.cpp)
 target_link_libraries(cyphalm_hp_sku_measure PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cyphalm_hp_sku_measure)
 
-add_executable(cyphalm_hp_shard_spike tools/cyphalm_hp_shard_spike.cpp)
+add_executable(cyphalm_hp_shard_spike tools/lm/cyphalm_hp_shard_spike.cpp)
 target_link_libraries(cyphalm_hp_shard_spike PRIVATE cypha_lm_native)
 cypha_apply_hp_compile_flags(cyphalm_hp_shard_spike)
 cypha_mingw_apply_exe_link_options(cyphalm_hp_shard_spike)
 
-add_executable(cyphalm_lm_quality tools/cyphalm_lm_quality.cpp)
+add_executable(cyphalm_lm_quality tools/lm/cyphalm_lm_quality.cpp)
 target_link_libraries(cyphalm_lm_quality PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cyphalm_lm_quality)
 # Load-only harness flags without --load are an error, not silently ignored.
@@ -800,33 +800,33 @@ else()
   message(STATUS "python3 with numpy not found: mixsim tests skipped")
 endif()
 
-add_executable(cyphalm_lossy_bench tools/cyphalm_lossy_bench.cpp)
+add_executable(cyphalm_lossy_bench tools/lm/cyphalm_lossy_bench.cpp)
 target_link_libraries(cyphalm_lossy_bench PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cyphalm_lossy_bench)
 
-add_executable(hp_undo_smoke tools/hp_undo_smoke.cpp)
+add_executable(hp_undo_smoke tools/lm/hp_undo_smoke.cpp)
 target_link_libraries(hp_undo_smoke PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(hp_undo_smoke)
 add_test(NAME native_hp_undo_smoke COMMAND "$<TARGET_FILE:hp_undo_smoke>")
 set_tests_properties(native_hp_undo_smoke PROPERTIES TIMEOUT 120)
 
-add_executable(hp_inference_bench tools/hp_inference_bench.cpp)
+add_executable(hp_inference_bench tools/lm/hp_inference_bench.cpp)
 target_link_libraries(hp_inference_bench PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(hp_inference_bench)
 
 
-add_executable(hp_shard_merge_spike tools/hp_shard_merge_spike.cpp)
+add_executable(hp_shard_merge_spike tools/lm/hp_shard_merge_spike.cpp)
 target_link_libraries(hp_shard_merge_spike PRIVATE cypha_lm_native)
 cypha_apply_hp_compile_flags(hp_shard_merge_spike)
 cypha_mingw_apply_exe_link_options(hp_shard_merge_spike)
 
-add_executable(tau_forget_gate_smoke tools/tau_forget_gate_smoke.cpp)
+add_executable(tau_forget_gate_smoke tools/knowledge/tau_forget_gate_smoke.cpp)
 target_link_libraries(tau_forget_gate_smoke PRIVATE cypha_lm_native)
 
-add_executable(ewc_smoke tools/ewc_smoke.cpp)
+add_executable(ewc_smoke tools/online/ewc_smoke.cpp)
 target_link_libraries(ewc_smoke PRIVATE cypha_core)
 
-add_executable(ewc_real_fisher_smoke tools/ewc_real_fisher_smoke.cpp)
+add_executable(ewc_real_fisher_smoke tools/online/ewc_real_fisher_smoke.cpp)
 target_link_libraries(ewc_real_fisher_smoke PRIVATE cypha_core)
 
 if(CYPHA_BUILD_LEGACY_CYPHALM)
@@ -844,82 +844,82 @@ if(CYPHA_BUILD_LEGACY_CYPHALM)
   target_link_libraries(pgm_cell_bench PRIVATE cypha_lm_native)
 endif()
 
-add_executable(curriculum_smoke tools/curriculum_smoke.cpp)
+add_executable(curriculum_smoke tools/online/curriculum_smoke.cpp)
 target_link_libraries(curriculum_smoke PRIVATE cypha_core)
 
-add_executable(bench_metrics_smoke tools/bench_metrics_smoke.cpp)
+add_executable(bench_metrics_smoke tools/eval/bench_metrics_smoke.cpp)
 target_link_libraries(bench_metrics_smoke PRIVATE cypha_bench_native)
 
-add_executable(cyphalm_sample_efficiency_curve tools/cyphalm_sample_efficiency_curve.cpp)
+add_executable(cyphalm_sample_efficiency_curve tools/eval/cyphalm_sample_efficiency_curve.cpp)
 target_link_libraries(cyphalm_sample_efficiency_curve PRIVATE cypha_bench_native)
 cypha_mingw_apply_exe_link_options(cyphalm_sample_efficiency_curve)
 
-add_executable(sample_efficiency_curve_smoke tools/sample_efficiency_curve_smoke.cpp)
+add_executable(sample_efficiency_curve_smoke tools/eval/sample_efficiency_curve_smoke.cpp)
 target_link_libraries(sample_efficiency_curve_smoke PRIVATE cypha_bench_native)
 cypha_mingw_apply_exe_link_options(sample_efficiency_curve_smoke)
 
-add_executable(cyphalm_robustness_curve tools/cyphalm_robustness_curve.cpp)
+add_executable(cyphalm_robustness_curve tools/eval/cyphalm_robustness_curve.cpp)
 target_link_libraries(cyphalm_robustness_curve PRIVATE cypha_bench_native)
 cypha_mingw_apply_exe_link_options(cyphalm_robustness_curve)
 
-add_executable(robustness_curve_smoke tools/robustness_curve_smoke.cpp)
+add_executable(robustness_curve_smoke tools/eval/robustness_curve_smoke.cpp)
 target_link_libraries(robustness_curve_smoke PRIVATE cypha_bench_native)
 cypha_mingw_apply_exe_link_options(robustness_curve_smoke)
 
-add_executable(cyphalm_needle_haystack tools/cyphalm_needle_haystack.cpp)
+add_executable(cyphalm_needle_haystack tools/eval/cyphalm_needle_haystack.cpp)
 target_link_libraries(cyphalm_needle_haystack PRIVATE cypha_lm_native cypha_bench_native)
 cypha_mingw_apply_exe_link_options(cyphalm_needle_haystack)
 
-add_executable(needle_haystack_smoke tools/needle_haystack_smoke.cpp)
+add_executable(needle_haystack_smoke tools/eval/needle_haystack_smoke.cpp)
 target_link_libraries(needle_haystack_smoke PRIVATE cypha_bench_native)
 cypha_mingw_apply_exe_link_options(needle_haystack_smoke)
 
-add_executable(cyphalm_memorization_canary tools/cyphalm_memorization_canary.cpp)
+add_executable(cyphalm_memorization_canary tools/eval/cyphalm_memorization_canary.cpp)
 target_link_libraries(cyphalm_memorization_canary PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cyphalm_memorization_canary)
 
-add_executable(memorization_canary_smoke tools/memorization_canary_smoke.cpp)
+add_executable(memorization_canary_smoke tools/eval/memorization_canary_smoke.cpp)
 target_link_libraries(memorization_canary_smoke PRIVATE cypha_bench_native)
 cypha_mingw_apply_exe_link_options(memorization_canary_smoke)
 
-add_executable(cyphalm_algebraic_fingerprint tools/cyphalm_algebraic_fingerprint.cpp)
+add_executable(cyphalm_algebraic_fingerprint tools/eval/cyphalm_algebraic_fingerprint.cpp)
 target_link_libraries(cyphalm_algebraic_fingerprint PRIVATE cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cyphalm_algebraic_fingerprint)
 
-add_executable(algebraic_fingerprint_smoke tools/algebraic_fingerprint_smoke.cpp)
+add_executable(algebraic_fingerprint_smoke tools/eval/algebraic_fingerprint_smoke.cpp)
 target_link_libraries(algebraic_fingerprint_smoke PRIVATE cypha_bench_native)
 cypha_mingw_apply_exe_link_options(algebraic_fingerprint_smoke)
 
-add_executable(curriculum_window_smoke tools/curriculum_window_smoke.cpp)
+add_executable(curriculum_window_smoke tools/online/curriculum_window_smoke.cpp)
 target_link_libraries(curriculum_window_smoke PRIVATE cypha_core)
 
-add_executable(corpus_smoke tools/corpus_smoke.cpp)
+add_executable(corpus_smoke tools/lm/corpus_smoke.cpp)
 target_link_libraries(corpus_smoke PRIVATE cypha_lm_native)
 
-add_executable(bpe_tokenizer_smoke tools/bpe_tokenizer_smoke.cpp)
+add_executable(bpe_tokenizer_smoke tools/lm/bpe_tokenizer_smoke.cpp)
 target_link_libraries(bpe_tokenizer_smoke PRIVATE cypha_lm_native)
 
-add_executable(npz_util_roundtrip_smoke tools/npz_util_roundtrip_smoke.cpp)
+add_executable(npz_util_roundtrip_smoke tools/core/npz_util_roundtrip_smoke.cpp)
 target_link_libraries(npz_util_roundtrip_smoke PRIVATE cypha_lm_native)
 
-add_executable(causal_graph_smoke tools/causal_graph_smoke.cpp)
+add_executable(causal_graph_smoke tools/knowledge/causal_graph_smoke.cpp)
 target_link_libraries(causal_graph_smoke PRIVATE cypha_core)
 
-add_executable(intelligence_profiler_papers tools/intelligence_profiler_papers.cpp)
+add_executable(intelligence_profiler_papers tools/knowledge/intelligence_profiler_papers.cpp)
 target_link_libraries(intelligence_profiler_papers PRIVATE cypha_core)
 
-add_executable(cypha_intelligence_bench tools/cypha_intelligence_bench.cpp)
+add_executable(cypha_intelligence_bench tools/knowledge/cypha_intelligence_bench.cpp)
 target_link_libraries(cypha_intelligence_bench PRIVATE cypha_core cypha_bench_native)
 
-add_executable(cypha_cell_hypothesis_sweep tools/cypha_cell_hypothesis_sweep.cpp)
+add_executable(cypha_cell_hypothesis_sweep tools/lm/cypha_cell_hypothesis_sweep.cpp)
 target_link_libraries(cypha_cell_hypothesis_sweep PRIVATE cypha_bench_native)
 cypha_mingw_apply_exe_link_options(cypha_cell_hypothesis_sweep)
 
-add_executable(cypha_baseline_lock tools/cypha_baseline_lock.cpp)
+add_executable(cypha_baseline_lock tools/eval/cypha_baseline_lock.cpp)
 target_link_libraries(cypha_baseline_lock PRIVATE cypha_bench_native)
 cypha_mingw_apply_exe_link_options(cypha_baseline_lock)
 
-add_executable(baseline_lock_validate tools/baseline_lock_smoke.cpp)
+add_executable(baseline_lock_validate tools/eval/baseline_lock_smoke.cpp)
 target_include_directories(baseline_lock_validate PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
 cypha_mingw_apply_exe_link_options(baseline_lock_validate)
 
@@ -1034,7 +1034,7 @@ if(NOT EXISTS "${_cypha_experiment_ddl_sql}")
 endif()
 
 if(CYPHA_BUILD_EXPERIMENT_DB AND _cypha_exp_sqlite_link)
-  add_executable(experiment_db_smoke tools/experiment_db_smoke.cpp src/experiment_db.cpp)
+  add_executable(experiment_db_smoke tools/core/experiment_db_smoke.cpp src/core/experiment_db.cpp)
   target_link_libraries(experiment_db_smoke PRIVATE ${_cypha_exp_sqlite_link})
   target_include_directories(experiment_db_smoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
   cypha_mingw_apply_exe_link_options(experiment_db_smoke)
@@ -1047,8 +1047,8 @@ if(CYPHA_BUILD_EXPERIMENT_DB AND _cypha_exp_sqlite_link)
   add_executable(
     experiment_db_crud_golden
     tests/regression/experiment_db_crud_golden.cpp
-    src/experiment_db.cpp
-    src/experiment_db_crud.cpp
+    src/core/experiment_db.cpp
+    src/core/experiment_db_crud.cpp
   )
   target_link_libraries(experiment_db_crud_golden PRIVATE ${_cypha_exp_sqlite_link})
   target_include_directories(experiment_db_crud_golden PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
@@ -2448,7 +2448,7 @@ cypha_apply_ctest_slow_labels()
 
 # --- M1: ECS (PLAN 7) and LCI (PLAN 8) header-only library tests --------------------------------
 # Header-only (include/cypha/eval/ecs.hpp, lci.hpp); the test needs no link against cypha_core.
-add_executable(ecs_lci_test tools/ecs_lci_test.cpp)
+add_executable(ecs_lci_test tools/eval/ecs_lci_test.cpp)
 target_include_directories(ecs_lci_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
 cypha_mingw_apply_exe_link_options(ecs_lci_test)
 add_test(NAME native_ecs_lci_test COMMAND "$<TARGET_FILE:ecs_lci_test>")
@@ -2456,10 +2456,10 @@ set_tests_properties(native_ecs_lci_test PROPERTIES TIMEOUT 120)
 # --- end M1 block -------------------------------------------------------------------------------
 
 # --- SCRIBE: the generated-text metric (PLAN 6), one tool: docs / prompts / samples / prepare / ladder / score ----
-# Header-only library include/cypha/eval/scribe.hpp. tools/scribe.cpp replaced tools/scribe_ladder.cpp on 2026-10-28
+# Header-only library include/cypha/eval/scribe.hpp. tools/eval/scribe.cpp replaced tools/scribe_ladder.cpp on 2026-10-28
 # (v1 ladder numbers reproduced to the printed digit with --profile v1). Ladders and scoring need corpora and are
 # run by hand (docs/reports/SCRIBE_V2.md); the self-test needs no corpus.
-add_executable(scribe tools/scribe.cpp)
+add_executable(scribe tools/eval/scribe.cpp)
 target_include_directories(scribe PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
 cypha_mingw_apply_exe_link_options(scribe)
 add_test(NAME native_scribe_selftest COMMAND "$<TARGET_FILE:scribe>" selftest)
@@ -2469,12 +2469,12 @@ set_tests_properties(native_scribe_selftest PROPERTIES TIMEOUT 120)
 # --- 1 TB runs (docs/TRAIN_1TB_RUNBOOK.md): a second streaming trainer and the checkpoint verifier --------------
 # trie_stream_train_v2 trains the live trainer's model with counts that halve instead of wrapping; the live trainer
 # (native/tools/trie_stream_train.cpp, built by scripts/build_1tb_tools.sh) writes TR64, 64-bit counts. trie_ckpt
-# verifies, scores, compares and packs TRI1 / TRI2 / TR64 checkpoints through include/cypha/cyphalm/stream_trie.hpp and
+# verifies, scores, compares and packs TRI1 / TRI2 / TR64 checkpoints through include/cypha/lm/stream_trie.hpp and
 # packed_trie.hpp.
-add_executable(trie_stream_train_v2 tools/trie_stream_train_v2.cpp)
+add_executable(trie_stream_train_v2 tools/lm/trie_stream_train_v2.cpp)
 target_include_directories(trie_stream_train_v2 PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include" "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
 cypha_mingw_apply_exe_link_options(trie_stream_train_v2)
-add_executable(trie_ckpt tools/trie_ckpt.cpp)
+add_executable(trie_ckpt tools/lm/trie_ckpt.cpp)
 target_include_directories(trie_ckpt PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include" "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
 cypha_mingw_apply_exe_link_options(trie_ckpt)
 add_test(NAME native_trie_ckpt_selftest COMMAND "$<TARGET_FILE:trie_ckpt>" selftest)
@@ -2485,7 +2485,7 @@ set_tests_properties(native_trie_ckpt_selftest PROPERTIES TIMEOUT 120)
 # scripts/cypha_report_card.sh runs cyphalm_trie qa / context8k / sample and scribe ladder; this tool reads their
 # outputs and writes the card (docs/reports/REPORT_CARD.md). Header-only use of ecs.hpp, lci.hpp and scribe.hpp.
 # The self-test reads a tiny fixture it writes itself; no corpus, no full run.
-add_executable(cypha_report_card tools/cypha_report_card.cpp)
+add_executable(cypha_report_card tools/eval/cypha_report_card.cpp)
 target_include_directories(cypha_report_card PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
 cypha_mingw_apply_exe_link_options(cypha_report_card)
 add_test(NAME native_cypha_report_card_selftest COMMAND "$<TARGET_FILE:cypha_report_card>" selftest)
@@ -2493,15 +2493,15 @@ set_tests_properties(native_cypha_report_card_selftest PROPERTIES TIMEOUT 60)
 # --- end report card block ------------------------------------------------------------------------------------
 
 # --- S2: epistemic layer (DISCOVERY 2.1-2.3, 3.1, 3.3, 10) header-only library test --------------
-# Header-only (include/cypha/eval/epistemic.hpp, which includes ecs.hpp); the test needs no link against cypha_core.
-add_executable(epistemic_test tools/epistemic_test.cpp)
+# Header-only (include/cypha/knowledge/epistemic.hpp, which includes ecs.hpp); the test needs no link against cypha_core.
+add_executable(epistemic_test tools/knowledge/epistemic_test.cpp)
 target_include_directories(epistemic_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
 cypha_mingw_apply_exe_link_options(epistemic_test)
 add_test(NAME native_epistemic_test COMMAND "$<TARGET_FILE:epistemic_test>")
 set_tests_properties(native_epistemic_test PROPERTIES TIMEOUT 120)
 
 # E1: a part-of-speech tagger whose decisions the Cypha classifier makes (docs/reports/E1_CYPHA_TAGGER.md).
-add_executable(cypha_tagger tools/cypha_tagger.cpp)
+add_executable(cypha_tagger tools/classify/cypha_tagger.cpp)
 target_link_libraries(cypha_tagger PRIVATE cypha_core cypha_lm_native)
 cypha_mingw_apply_exe_link_options(cypha_tagger)
 add_test(NAME native_cypha_tagger_selftest COMMAND "$<TARGET_FILE:cypha_tagger>" selftest)
@@ -2509,9 +2509,9 @@ set_tests_properties(native_cypha_tagger_selftest PROPERTIES TIMEOUT 60)
 # --- end S2 block -------------------------------------------------------------------------------
 
 # --- K2/K3: thought-process interpreter and standard learners (docs/THOUGHT.md sections 1.3, 3, 5, 12) ----
-# Header-only (include/cypha/thought/learners.hpp, interpreter.hpp; the latter uses third_party/nlohmann).
+# Header-only (include/cypha/knowledge/learners.hpp, interpreter.hpp; the latter uses third_party/nlohmann).
 # The test loads docs/thought/processes.json, written by: python3 scripts/thought_check.py --json docs/thought/processes.json
-add_executable(thought_test tools/thought_test.cpp)
+add_executable(thought_test tools/knowledge/thought_test.cpp)
 target_include_directories(thought_test PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}/include"
   "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
@@ -2522,10 +2522,10 @@ set_tests_properties(native_thought_test PROPERTIES TIMEOUT 300)
 # --- end K2/K3 block ----------------------------------------------------------------------------------
 
 # --- K4: thought primitives bound to Cypha's libraries (docs/reports/K4_K5_THOUGHT_BINDINGS.md) -------------
-# Header-only bindings (include/cypha/thought/bindings.hpp); the test also builds the FM-index for recall_case.
+# Header-only bindings (include/cypha/knowledge/bindings.hpp); the test also builds the FM-index for recall_case.
 add_executable(thought_bindings_test
-  tools/thought_bindings_test.cpp
-  src/cyphalm/fm_infinigram.cpp
+  tools/knowledge/thought_bindings_test.cpp
+  src/lm/fm_infinigram.cpp
   third_party/libsais/libsais.c)
 target_include_directories(thought_bindings_test PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}/include"
@@ -2537,22 +2537,22 @@ add_test(NAME native_thought_bindings_test
 set_tests_properties(native_thought_bindings_test PROPERTIES TIMEOUT 300)
 # K5: the first processes on their benchmarks and the DIF applicability comparison (links cypha_core for the
 # Cypha classifier). Run by hand; see the report for the commands.
-add_executable(thought_k5 tools/thought_k5.cpp)
+add_executable(thought_k5 tools/knowledge/thought_k5.cpp)
 target_include_directories(thought_k5 PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}/include"
   "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
 target_link_libraries(thought_k5 PRIVATE cypha_core)
 cypha_mingw_apply_exe_link_options(thought_k5)
 # K6/K7: chunking, process mining with MDL edits, and the DIF calibration map (docs/reports/K6_K7_CHUNKING_AND_MINING.md).
-# Header-only (include/cypha/thought/chunking.hpp, mining.hpp); the test also checks CalibratedApplicability
+# Header-only (include/cypha/knowledge/chunking.hpp, mining.hpp); the test also checks CalibratedApplicability
 # (bindings_cypha.hpp, links cypha_core). thought_k6 runs the benchmarks by hand; see the report for the commands.
-add_executable(thought_k6 tools/thought_k6.cpp)
+add_executable(thought_k6 tools/knowledge/thought_k6.cpp)
 target_include_directories(thought_k6 PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}/include"
   "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
 target_link_libraries(thought_k6 PRIVATE cypha_core)
 cypha_mingw_apply_exe_link_options(thought_k6)
-add_executable(thought_k6_test tools/thought_k6_test.cpp)
+add_executable(thought_k6_test tools/knowledge/thought_k6_test.cpp)
 target_include_directories(thought_k6_test PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}/include"
   "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
@@ -2566,7 +2566,7 @@ set_tests_properties(native_thought_k6_test PROPERTIES TIMEOUT 300)
 # --- QE geometry: Cypha-side embedding geometry library (docs/EMBEDDING_GEOMETRY.md sections 4.2, 4.5, 5.1, 7.1, 9.3) ----
 # Header-only (include/cypha/semantics/geometry.hpp, which includes eval/ecs.hpp); the test needs no link against
 # cypha_core. Synthetic data only: planted 400-item teacher, mask, confidence steps, CSLS, MRL, confidence check.
-add_executable(geometry_test tools/geometry_test.cpp)
+add_executable(geometry_test tools/semantics/geometry_test.cpp)
 target_include_directories(geometry_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
 cypha_mingw_apply_exe_link_options(geometry_test)
 add_test(NAME native_geometry_test COMMAND "$<TARGET_FILE:geometry_test>")
@@ -2574,12 +2574,12 @@ set_tests_properties(native_geometry_test PROPERTIES TIMEOUT 300)
 # --- end QE geometry block --------------------------------------------------------------------------------------------
 
 # --- B1: CyphaLM packed trie, one library and one tool (PLAN Track B1) ----------------------------
-# Header-only library include/cypha/cyphalm/packed_trie.hpp. cyphalm_trie replaces trie_fold_lm,
+# Header-only library include/cypha/lm/packed_trie.hpp. cyphalm_trie replaces trie_fold_lm,
 # trie_online_mix, trie_chat, trie_qa_probe, trie_context_8k and trie_sample. Only the selftest is a
 # CTest (no corpus); bpc/chat/probe/context8k/sample need enwik8 and Dolly and are run by hand.
 add_executable(cyphalm_trie
-  tools/cyphalm_trie.cpp
-  src/cyphalm/fm_infinigram.cpp
+  tools/lm/cyphalm_trie.cpp
+  src/lm/fm_infinigram.cpp
   third_party/libsais/libsais.c)
 target_include_directories(cyphalm_trie PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}/include"
@@ -2598,8 +2598,8 @@ set_tests_properties(native_cyphalm_trie_selftest PROPERTIES TIMEOUT 60)
 # Header-only tokenizer.hpp and token_model.hpp; cyphalm_tok trains tokenizers by counting and scores token count
 # models in bits per byte. Only the selftest is a CTest (no corpus).
 add_executable(cyphalm_tok
-  tools/cyphalm_tok.cpp
-  src/cyphalm/fm_infinigram.cpp
+  tools/lm/cyphalm_tok.cpp
+  src/lm/fm_infinigram.cpp
   third_party/libsais/libsais.c)
 target_include_directories(cyphalm_tok PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}/include"
@@ -2613,9 +2613,9 @@ set_tests_properties(native_cyphalm_tok_selftest PROPERTIES TIMEOUT 120)
 # --- RAM_PROFILE M5: InfiniGram over a compressed index (bidirectional FM-index) -------------------
 # The CTest checks it gives InfiniGram's answers on random texts; --bench FILE BYTES times both.
 add_executable(fm_infinigram_test
-  tools/fm_infinigram_test.cpp
-  src/cyphalm/fm_infinigram.cpp
-  src/cyphalm/infinigram.cpp
+  tools/lm/fm_infinigram_test.cpp
+  src/lm/fm_infinigram.cpp
+  src/lm/infinigram.cpp
   third_party/libsais/libsais.c)
 target_include_directories(fm_infinigram_test PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}/include"
@@ -2627,7 +2627,7 @@ set_tests_properties(native_fm_infinigram_test PROPERTIES TIMEOUT 120)
 
 # --- RAM_PROFILE M10: the stored class table ----------------------------------------------------------
 # The CTest round-trips class tables (16 settings) and checks that damaged files are refused.
-add_executable(class_context_test tools/class_context_test.cpp)
+add_executable(class_context_test tools/lm/class_context_test.cpp)
 target_include_directories(class_context_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
 cypha_mingw_apply_exe_link_options(class_context_test)
 add_test(NAME native_class_context_test COMMAND "$<TARGET_FILE:class_context_test>")
@@ -2635,19 +2635,41 @@ set_tests_properties(native_class_context_test PROPERTIES TIMEOUT 120)
 # --- end M10 block ---------------------------------------------------------------------------------
 
 # --- TOKENS T3: the exact byte-token bridge (docs/reports/TOKENS_T3_T4.md) ------------------------
-add_executable(token_bridge_test tools/token_bridge_test.cpp)
+add_executable(token_bridge_test tools/lm/token_bridge_test.cpp)
 target_include_directories(token_bridge_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
 cypha_mingw_apply_exe_link_options(token_bridge_test)
 add_test(NAME native_token_bridge_test COMMAND "$<TARGET_FILE:token_bridge_test>")
 set_tests_properties(native_token_bridge_test PROPERTIES TIMEOUT 300)
 # cyphalm_tok_gen reads TOK-A's token model through the bridge (bias, gen, words). It needs TOK-A's tokenizer.hpp and
 # token_model.hpp (docs/reports/TOKENS_T0_T2.md); built only when they are present.
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/include/cypha/cyphalm/tokenizer.hpp"
-   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/include/cypha/cyphalm/token_model.hpp")
-  add_executable(cyphalm_tok_gen tools/cyphalm_tok_gen.cpp third_party/libsais/libsais.c)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/include/cypha/lm/tokenizer.hpp"
+   AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/include/cypha/lm/token_model.hpp")
+  add_executable(cyphalm_tok_gen tools/lm/cyphalm_tok_gen.cpp third_party/libsais/libsais.c)
   target_include_directories(cyphalm_tok_gen PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/third_party/libsais")
   cypha_mingw_apply_exe_link_options(cyphalm_tok_gen)
 endif()
+
+# --- Modules (docs/MODULES.md): one target per module builds that module's tools -------------------------------
+# cmake --build <dir> --target cypha_lm_tools builds every executable whose main source is under tools/lm/ (likewise
+# core, classify, online, eval, knowledge, forecast, semantics, serve). Goldens under tests/ are in no module target.
+get_property(_cypha_all_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
+foreach(_cypha_module core lm online classify eval knowledge forecast semantics serve)
+  set(_cypha_module_exes "")
+  foreach(_cypha_t IN LISTS _cypha_all_targets)
+    get_target_property(_cypha_type ${_cypha_t} TYPE)
+    if(_cypha_type STREQUAL "EXECUTABLE")
+      get_target_property(_cypha_srcs ${_cypha_t} SOURCES)
+      list(GET _cypha_srcs 0 _cypha_main)
+      if(_cypha_main MATCHES "(^|/)tools/${_cypha_module}/")
+        list(APPEND _cypha_module_exes ${_cypha_t})
+      endif()
+    endif()
+  endforeach()
+  if(_cypha_module_exes)
+    add_custom_target(cypha_${_cypha_module}_tools)
+    add_dependencies(cypha_${_cypha_module}_tools ${_cypha_module_exes})
+  endif()
+endforeach()
 

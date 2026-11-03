@@ -9,8 +9,8 @@
 
 #include <nlohmann/json.hpp>
 
-#include "cypha/load_cypha.hpp"
-#include "cypha/memory_train.hpp"
+#include "cypha/classify/load_cypha.hpp"
+#include "cypha/classify/memory_train.hpp"
 
 namespace {
 

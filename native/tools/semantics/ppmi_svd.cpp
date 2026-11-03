@@ -40,7 +40,7 @@
 //   this corpus is about 90x smaller. Report: docs/reports/C1_PPMI_SVD_VECTORS.md
 //
 // Usage:
-//   g++ -O2 -std=c++20 native/tools/ppmi_svd.cpp -o ppmi_svd
+//   g++ -O2 -std=c++20 native/tools/semantics/ppmi_svd.cpp -o ppmi_svd
 //   ./ppmi_svd <enwik8> <EN-WS-353-ALL.txt> <EN-SIMLEX-999.txt> <EN-MEN-TR-3k.txt|-> <out_prefix>
 //              [--vocab 50000] [--dim 300] [--window 5] [--alpha 0.75] [--power 3] [--oversample 10]
 //              [--ri-dim 2000] [--ri-nnz 10] [--max-bytes N] [--min-count 1] [--no-ri] [--no-ablation]

@@ -12,7 +12,7 @@
 #include <string>
 #include <vector>
 
-#include "cypha/load_cypha.hpp"
+#include "cypha/classify/load_cypha.hpp"
 
 namespace cypha {
 

@@ -25,7 +25,7 @@ It was researched as a successor to Hybrid GRIA+LSTM for WikiText BPC (bench **d
 |------|-------|
 | Core sources | `native/src/rpsm/psi_matrices.cpp`, `rpsm_sequence_layer.cpp` |
 | Headers | `native/include/cypha/rpsm/psi_matrices.hpp`, `rpsm_sequence_layer.hpp` |
-| Inference hook | `use_rpsm_llr_from_env()`, `rpsm_score_matrix_batched` in `native/src/infer_cpu.cpp` |
+| Inference hook | `use_rpsm_llr_from_env()`, `rpsm_score_matrix_batched` in `native/src/classify/infer_cpu.cpp` |
 | Config | `ContextMode::Rpsm`, `BenchMode::Rpsm`, `rpsm_*` fields in `cyphalm_config.hpp` / `.cpp` |
 | Bench profiles | `bench/config/profiles/cyphalm_d21_rpsm.json`, `cyphalm_d21_rpsm_small.json`, `bench/config/d21_rpsm_profile.json` |
 | Overnight script | `scripts/run_rpsm_overnight.ps1` |

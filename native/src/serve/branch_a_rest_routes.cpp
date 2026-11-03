@@ -1,4 +1,4 @@
-#include "cypha/branch_a_rest.hpp"
+#include "cypha/serve/branch_a_rest.hpp"
 
 #include <chrono>
 #include <cstdlib>
@@ -9,9 +9,9 @@
 #include "httplib.h"
 #include <nlohmann/json.hpp>
 
-#include "cypha/branch_a_router.hpp"
-#include "cypha/cyphalm/cyphalm_generation.hpp"
-#include "cypha/cyphalm/cyphalm_rest.hpp"
+#include "cypha/classify/branch_a_router.hpp"
+#include "cypha/lm/cyphalm_generation.hpp"
+#include "cypha/serve/cyphalm_rest.hpp"
 
 namespace cypha {
 namespace {

@@ -2,14 +2,14 @@
 /// NIG world-field protection) so the before/after forgetting_score / task-B-accuracy trade-off
 /// can be inspected directly, without going through `cypha_bench_run` (which always finishes by
 /// calling `build_report()` / touching `bench/BASELINE_REPORT.md` -- explicitly off-limits for
-/// this investigation). See native/include/cypha/bench/bench_domains.hpp `run_d16_ewc_sweep` and
+/// this investigation). See native/include/cypha/eval/bench_domains.hpp `run_d16_ewc_sweep` and
 /// docs/reports/EWC_D16B_SCOPING_2026-07-12.md.
 #include <cstdio>
 #include <cstdlib>
 
 #include <nlohmann/json.hpp>
 
-#include "cypha/bench/bench_domains.hpp"
+#include "cypha/eval/bench_domains.hpp"
 
 int main() {
   const nlohmann::json result = cypha::bench::run_d16_ewc_sweep();
@@ -27,7 +27,7 @@ int main() {
   }
 
   // Every EWC-on row must carry a nonzero final penalty -- i.e. the growable-D prefix fix
-  // (native/src/ewc_regularizer.cpp `squared_penalty`/`pull_toward_anchor`) is actually engaging,
+  // (native/src/online/ewc_regularizer.cpp `squared_penalty`/`pull_toward_anchor`) is actually engaging,
   // not silently no-op'ing the moment task B introduces classes task A never saw (the pre-fix
   // bug this sweep exists to regression-test against).
   int checked = 0;

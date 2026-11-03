@@ -1,8 +1,8 @@
 /// Comprehensive smoke: arithmetic coder unit tests + hybrid default + predictive roundtrip.
 #include "cypha/cypha.hpp"
-#include "cypha/cyphalm/arithmetic_coder.hpp"
-#include "cypha/cyphalm/cyphalm_config.hpp"
-#include "cypha/cyphalm/predictive_codec.hpp"
+#include "cypha/lm/arithmetic_coder.hpp"
+#include "cypha/lm/cyphalm_config.hpp"
+#include "cypha/lm/predictive_codec.hpp"
 
 #include <cmath>
 #include <cstdint>

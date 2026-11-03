@@ -47,14 +47,14 @@
 #include <utility>
 #include <vector>
 
-#include "cypha/cyphalm/packed_trie.hpp"
+#include "cypha/lm/packed_trie.hpp"
 #include "cypha/eval/ecs.hpp"
-#include "cypha/eval/epistemic.hpp"
-#include "cypha/eval/gap_map.hpp"
-#include "cypha/eval/hypothesis.hpp"
+#include "cypha/knowledge/epistemic.hpp"
+#include "cypha/knowledge/gap_map.hpp"
+#include "cypha/knowledge/hypothesis.hpp"
 #include "cypha/eval/lci.hpp"
 #include "cypha/eval/scribe.hpp"
-#include "cypha/thought/interpreter.hpp"
+#include "cypha/knowledge/interpreter.hpp"
 
 namespace cypha::thought::bind {
 

@@ -12,11 +12,11 @@
 
 #include <nlohmann/json.hpp>
 
-#include "cypha/portable_popen.hpp"
-#include "cypha/cyphalm/cyphalm_config.hpp"
-#include "cypha/cyphalm/cyphalm_corpus.hpp"
-#include "cypha/cyphalm/cyphalm_model.hpp"
-#include "cypha/cyphalm/hp_backend.hpp"
+#include "cypha/core/portable_popen.hpp"
+#include "cypha/lm/cyphalm_config.hpp"
+#include "cypha/lm/cyphalm_corpus.hpp"
+#include "cypha/lm/cyphalm_model.hpp"
+#include "cypha/lm/hp_backend.hpp"
 
 namespace {
 
@@ -63,7 +63,7 @@ std::string resolve_corpus_path(const std::string& path) {
     if (path.empty()) return path;
     const fs::path p(path);
     if (fs::exists(p)) return fs::absolute(p).string();
-    const fs::path native = fs::path(__FILE__).parent_path().parent_path();
+    const fs::path native = fs::path(__FILE__).parent_path().parent_path().parent_path();
     const fs::path repo = native.parent_path();
     const std::vector<fs::path> candidates = {
         repo / path,

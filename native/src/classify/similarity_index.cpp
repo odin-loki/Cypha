@@ -1,4 +1,4 @@
-#include "cypha/similarity_index.hpp"
+#include "cypha/classify/similarity_index.hpp"
 
 #include <algorithm>
 #include <cmath>

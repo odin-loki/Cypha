@@ -1,4 +1,4 @@
-#include "cypha/intelligence/self_correcting_infer.hpp"
+#include "cypha/knowledge/self_correcting_infer.hpp"
 
 #include <algorithm>
 #include <cmath>

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "cypha/bench/bench_report_json.hpp"
+#include "cypha/eval/bench_report_json.hpp"
 
 #include <filesystem>
 #include <string>

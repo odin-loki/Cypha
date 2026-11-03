@@ -1,4 +1,4 @@
-#include "cypha/bench/bench_encoder_text.hpp"
+#include "cypha/eval/bench_encoder_text.hpp"
 
 #include <algorithm>
 #include <cctype>

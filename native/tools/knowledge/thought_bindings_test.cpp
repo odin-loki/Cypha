@@ -12,8 +12,8 @@
 #include <string>
 #include <vector>
 
-#include "cypha/cyphalm/fm_infinigram.hpp"
-#include "cypha/thought/bindings.hpp"
+#include "cypha/lm/fm_infinigram.hpp"
+#include "cypha/knowledge/bindings.hpp"
 
 using namespace cypha::thought;
 namespace bd = cypha::thought::bind;

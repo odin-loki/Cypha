@@ -77,6 +77,6 @@ xor_kernel_bench --kernel-feature-mode latent --kernel-m 64 --gamma-scale 1.0 --
 
 ## Files
 
-- `native/tools/xor_kernel_bench.cpp` — CLI flags + leverage init / SORF construction
-- `native/src/bench/bench_domains.cpp` — D03 env passthrough
+- `native/tools/classify/xor_kernel_bench.cpp` — CLI flags + leverage init / SORF construction
+- `native/src/eval/bench_domains.cpp` — D03 env passthrough
 - This report

@@ -1,4 +1,4 @@
-#include "cypha/cyphalm/cypha_cell_hypothesis.hpp"
+#include "cypha/lm/cypha_cell_hypothesis.hpp"
 
 #include <stdexcept>
 

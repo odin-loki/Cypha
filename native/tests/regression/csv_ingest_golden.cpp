@@ -9,7 +9,7 @@
 
 #include <nlohmann/json.hpp>
 
-#include "cypha/csv_ingest.hpp"
+#include "cypha/core/csv_ingest.hpp"
 
 namespace fs = std::filesystem;
 

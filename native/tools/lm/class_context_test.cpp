@@ -7,7 +7,7 @@
 // short, a byte appended, another file. An unbuilt table round-trips too. M15: built in chunks of 1, 7, 997 or 2^20
 // bytes, each table must equal the 4,096-byte one (the build merges its runs chunk by chunk in key buckets).
 
-#include "cypha/cyphalm/class_context.hpp"
+#include "cypha/lm/class_context.hpp"
 
 #include <cstdint>
 #include <cstdio>

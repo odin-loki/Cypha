@@ -1,4 +1,4 @@
-#include "cypha/intelligence/profile_completeness.hpp"
+#include "cypha/knowledge/profile_completeness.hpp"
 
 #include <cmath>
 

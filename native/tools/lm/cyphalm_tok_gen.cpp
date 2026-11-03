@@ -22,9 +22,9 @@
 // The token model is TOK-A's: interpolated modified Kneser-Ney (orders 1-5) mixed with the ∞-gram over
 // token IDs, λ per (match length x count) bucket fitted on the holdout's first half, as cyphalm_tok eval.
 // Nothing here answers a question (PLAN rule 10).
-#include "cypha/cyphalm/token_bridge.hpp"
-#include "cypha/cyphalm/token_model.hpp"
-#include "cypha/cyphalm/tokenizer.hpp"
+#include "cypha/lm/token_bridge.hpp"
+#include "cypha/lm/token_model.hpp"
+#include "cypha/lm/tokenizer.hpp"
 #include "cypha/eval/scribe.hpp"
 
 #include <algorithm>

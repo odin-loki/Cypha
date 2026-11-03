@@ -1,4 +1,4 @@
-#include "cypha/cyphalm/neural_expert.hpp"
+#include "cypha/lm/neural_expert.hpp"
 
 #include <algorithm>
 #include <atomic>

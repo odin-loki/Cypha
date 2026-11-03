@@ -1,4 +1,4 @@
-#include "cypha/cyphalm/arithmetic_coder.hpp"
+#include "cypha/lm/arithmetic_coder.hpp"
 
 #include <algorithm>
 #include <cmath>

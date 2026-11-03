@@ -5,7 +5,7 @@
 #include <iostream>
 #include <string>
 
-#include "cypha/registry.hpp"
+#include "cypha/core/registry.hpp"
 
 namespace {
 

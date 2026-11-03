@@ -271,4 +271,4 @@ pattern_learn $E OUT --cv --wikidata $W --dev bench/eval/t_qa_wiki_dev.tsv --gap
   --demand PAR2.rows.tsv,F.rows.tsv,P75.rows.tsv,G50.rows.tsv,G75.rows.tsv --parse $A/parse_dev.tsv
 ```
 
-Code: `native/tools/cyphalm_trie.cpp` 4,965 → 5,082 lines (`qa` flags, `copy_pred`'s source position, `open_token_at`, `copy_closes_unopened`, decode's no-repeat start inside a tag, selftest). New: `scripts/dk2_text.py`, `scripts/dk2_measures.py`.
+Code: `native/tools/lm/cyphalm_trie.cpp` 4,965 → 5,082 lines (`qa` flags, `copy_pred`'s source position, `open_token_at`, `copy_closes_unopened`, decode's no-repeat start inside a tag, selftest). New: `scripts/dk2_text.py`, `scripts/dk2_measures.py`.

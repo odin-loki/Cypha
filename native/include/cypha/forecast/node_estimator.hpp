@@ -2,7 +2,7 @@
 
 #include "cypha/cypha.hpp"
 #include "cypha/forecast/dispute_data.hpp"
-#include "cypha/preprocessor.hpp"
+#include "cypha/classify/preprocessor.hpp"
 
 #include <string>
 #include <vector>

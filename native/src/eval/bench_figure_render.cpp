@@ -1,4 +1,4 @@
-#include "cypha/bench/bench_figure_render.hpp"
+#include "cypha/eval/bench_figure_render.hpp"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"

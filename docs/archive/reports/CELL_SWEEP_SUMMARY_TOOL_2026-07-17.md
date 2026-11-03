@@ -76,7 +76,7 @@ During an active overnight run, variant JSON may lag progress lines in `overnigh
 
 ## Related
 
-- Native sweep writer: `native/tools/cypha_cell_hypothesis_sweep.cpp` (`write_overnight_artifacts`)
+- Native sweep writer: `native/tools/lm/cypha_cell_hypothesis_sweep.cpp` (`write_overnight_artifacts`)
 - Baseline reference: `docs/research/upgrades/CELL_HYPOTHESIS_TESTBENCH.md`
 - Overnight health: `docs/reports/OVERNIGHT_HEALTH_2026-07-17.md`
 - Spill merge: `scripts/migrate_inflight_overnight_artifacts.ps1`

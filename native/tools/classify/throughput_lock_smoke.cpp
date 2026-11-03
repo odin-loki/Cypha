@@ -4,7 +4,7 @@
 #include <cstdio>
 #include <vector>
 
-#include "cypha/accel_backend.hpp"
+#include "cypha/core/accel_backend.hpp"
 
 int main() {
   cypha::accel::init();

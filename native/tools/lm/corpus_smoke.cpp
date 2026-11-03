@@ -3,7 +3,7 @@
 #include <cstdlib>
 #include <string>
 
-#include "cypha/cyphalm/cyphalm_corpus.hpp"
+#include "cypha/lm/cyphalm_corpus.hpp"
 
 namespace {
 

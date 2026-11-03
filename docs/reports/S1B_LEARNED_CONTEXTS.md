@@ -2,7 +2,7 @@
 
 **Odin Loch** · 2026-10-28
 
-Tool: `native/tools/cypha_word_classes.cpp`, now with subcommands `s1`, `train`, `distill`, `eval` and `export`, linked against the core library.
+Tool: `native/tools/semantics/cypha_word_classes.cpp`, now with subcommands `s1`, `train`, `distill`, `eval` and `export`, linked against the core library.
 Design: [SEMANTICS.md](../SEMANTICS.md) §7 ("Why, in hindsight"), [EMBEDDING_GEOMETRY.md](../EMBEDDING_GEOMETRY.md) §4.2, §5.1, §9.3. Library: `native/include/cypha/semantics/geometry.hpp` ([QE_GEOMETRY_LIBRARY.md](QE_GEOMETRY_LIBRARY.md)).
 Baselines: [C1_PPMI_SVD_VECTORS.md](C1_PPMI_SVD_VECTORS.md), [C5_WORDS_AS_CLASSES.md](C5_WORDS_AS_CLASSES.md).
 
@@ -552,7 +552,7 @@ The dev choice was fixed before this read. Both words in the top 50,000; 2,000 p
 G="-O3 -DNDEBUG -std=c++20 -msse4.1 -fopenmp -DCYPHA_ACCEL_GPU_MIN_BATCH_ROWS=1 -DCYPHA_HP_GATE24=1 -DCYPHA_HP_SLOT_MAX=24 \
    -DCYPHA_LLM_ALGORITHM_HP=1 -DHP_SLOT_MAX=24 -DHP_XSIMD=1 -Inative/third_party/hp/include \
    -Inative/third_party/hp/third_party/xsimd/include -Inative/third_party -Inative/include"
-g++ $G native/tools/cypha_word_classes.cpp <build>/libcypha_core.a -lpthread -o cwc
+g++ $G native/tools/semantics/cypha_word_classes.cpp <build>/libcypha_core.a -lpthread -o cwc
 # item 1: the context prior once, then the lambda grid (each grid file is 51 MB; score, then delete)
 ./cwc prior $E --vectors out/sgns_v0p3_e5_wc.npy --prior context --theta-out prior/theta_ctx --out prior/ctx --lambdas 0,1,3,10
 ./cwc prior $E --vectors out/sgns_v0p3_e5_wc.npy --prior context --theta prior/theta_ctx.npy --out prior/ctx --lambdas 30,100,300,1000
@@ -581,8 +581,8 @@ cmake --build /root/work/sem/cb_core --target cypha_core -j1
 g++ -O3 -DNDEBUG -std=c++20 -msse4.1 -fopenmp -Wall -Wextra -DCYPHA_ACCEL_GPU_MIN_BATCH_ROWS=1 -DCYPHA_HP_GATE24=1 \
     -DCYPHA_HP_SLOT_MAX=24 -DCYPHA_LLM_ALGORITHM_HP=1 -DHP_SLOT_MAX=24 -DHP_XSIMD=1 \
     -Inative/third_party/hp/include -Inative/third_party/hp/third_party/xsimd/include -Inative/include -Inative/third_party \
-    native/tools/cypha_word_classes.cpp /root/work/sem/cb_core/libcypha_core.a -lpthread -o cwc
-g++ -O2 -std=c++20 native/tools/ppmi_svd.cpp -o ppmi_svd
+    native/tools/semantics/cypha_word_classes.cpp /root/work/sem/cb_core/libcypha_core.a -lpthread -o cwc
+g++ -O2 -std=c++20 native/tools/semantics/ppmi_svd.cpp -o ppmi_svd
 ```
 
 Inputs, from `raw.githubusercontent.com/mfaruqui/eval-word-vectors/master/data/word-sim/`, with sha256:

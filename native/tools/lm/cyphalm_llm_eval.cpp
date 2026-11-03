@@ -12,10 +12,10 @@
 
 #include <nlohmann/json.hpp>
 
-#include "cypha/cyphalm/cyphalm_config.hpp"
-#include "cypha/cyphalm/cyphalm_corpus.hpp"
-#include "cypha/cyphalm/cyphalm_model.hpp"
-#include "cypha/cyphalm/hp_backend.hpp"
+#include "cypha/lm/cyphalm_config.hpp"
+#include "cypha/lm/cyphalm_corpus.hpp"
+#include "cypha/lm/cyphalm_model.hpp"
+#include "cypha/lm/hp_backend.hpp"
 
 namespace {
 

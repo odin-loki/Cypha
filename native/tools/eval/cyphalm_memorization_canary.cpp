@@ -13,9 +13,9 @@
 
 #include <nlohmann/json.hpp>
 
-#include "cypha/bench/bench_paths.hpp"
-#include "cypha/cyphalm/cyphalm_config.hpp"
-#include "cypha/cyphalm/cyphalm_model.hpp"
+#include "cypha/eval/bench_paths.hpp"
+#include "cypha/lm/cyphalm_config.hpp"
+#include "cypha/lm/cyphalm_model.hpp"
 
 namespace fs = std::filesystem;
 using Json = nlohmann::json;
@@ -286,7 +286,7 @@ Json run_canary_experiment(const Args& args) {
 }
 
 fs::path default_results_path() {
-    const fs::path native = fs::path(__FILE__).parent_path().parent_path();
+    const fs::path native = fs::path(__FILE__).parent_path().parent_path().parent_path();
     return native.parent_path() / "bench" / "results" / "memorization_canary.json";
 }
 
@@ -310,7 +310,7 @@ int main(int argc, char** argv) {
         write_json_file(out, report);
 
         if (args.write_table) {
-            const fs::path table = fs::path(__FILE__).parent_path().parent_path().parent_path() /
+            const fs::path table = fs::path(__FILE__).parent_path().parent_path().parent_path().parent_path() /
                                    "bench" / "report" / "tables" / "memorization_canary.json";
             write_json_file(table, report);
         }

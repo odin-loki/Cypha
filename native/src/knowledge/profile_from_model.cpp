@@ -1,17 +1,17 @@
-#include "cypha/intelligence/profile_from_model.hpp"
+#include "cypha/knowledge/profile_from_model.hpp"
 
 #include <cmath>
 #include <cstring>
 #include <fstream>
 #include <vector>
 
-#include "cypha/bench/bench_paths.hpp"
-#include "cypha/intelligence/criticality_vector.hpp"
-#include "cypha/intelligence/intelligence_profile_json.hpp"
-#include "cypha/intelligence/causal_graph.hpp"
-#include "cypha/intelligence/measurers.hpp"
-#include "cypha/infer_cpu.hpp"
-#include "cypha/load_cypha.hpp"
+#include "cypha/eval/bench_paths.hpp"
+#include "cypha/knowledge/criticality_vector.hpp"
+#include "cypha/knowledge/intelligence_profile_json.hpp"
+#include "cypha/knowledge/causal_graph.hpp"
+#include "cypha/knowledge/measurers.hpp"
+#include "cypha/classify/infer_cpu.hpp"
+#include "cypha/classify/load_cypha.hpp"
 
 namespace cypha::intelligence {
 

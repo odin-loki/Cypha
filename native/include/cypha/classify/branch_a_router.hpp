@@ -9,8 +9,8 @@
 
 #include <nlohmann/json.hpp>
 
-#include "cypha/infer_cpu.hpp"
-#include "cypha/memory_train.hpp"
+#include "cypha/classify/infer_cpu.hpp"
+#include "cypha/classify/memory_train.hpp"
 
 namespace cypha {
 

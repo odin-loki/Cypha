@@ -1,6 +1,6 @@
 #include "cypha/forecast/theater_models.hpp"
 
-#include "cypha/create_model.hpp"
+#include "cypha/classify/create_model.hpp"
 
 #include <algorithm>
 #include <filesystem>

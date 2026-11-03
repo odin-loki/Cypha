@@ -5,11 +5,11 @@
 
 #include <nlohmann/json.hpp>
 
-#include "cypha/bench/bench_encoder_timeseries.hpp"
+#include "cypha/eval/bench_encoder_timeseries.hpp"
 #include "cypha/cyphalm/cellai_ssm.hpp"
-#include "cypha/cyphalm/cyphalm_config.hpp"
-#include "cypha/cyphalm/cyphalm_corpus.hpp"
-#include "cypha/cyphalm/cyphalm_model.hpp"
+#include "cypha/lm/cyphalm_config.hpp"
+#include "cypha/lm/cyphalm_corpus.hpp"
+#include "cypha/lm/cyphalm_model.hpp"
 #include "cypha/cyphalm/ssm_diagnose.hpp"
 
 namespace {

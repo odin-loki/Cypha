@@ -7,16 +7,16 @@
 
 #include <nlohmann/json.hpp>
 
-#include "cypha/cyphalm/cyphalm_checkpoint.hpp"
-#include "cypha/cyphalm/cyphalm_config.hpp"
-#include "cypha/cyphalm/cyphalm_corpus.hpp"
-#include "cypha/cyphalm/cyphalm_intelligence_hook.hpp"
-#include "cypha/cyphalm/cyphalm_math_integration.hpp"
-#include "cypha/cyphalm/cyphalm_model.hpp"
-#include "cypha/cyphalm/cyphalm_parallel.hpp"
-#include "cypha/intelligence/intelligence_profiler.hpp"
-#include "cypha/intelligence/profile_completeness.hpp"
-#include "cypha/intelligence/profile_guided_loss.hpp"
+#include "cypha/lm/cyphalm_checkpoint.hpp"
+#include "cypha/lm/cyphalm_config.hpp"
+#include "cypha/lm/cyphalm_corpus.hpp"
+#include "cypha/knowledge/cyphalm_intelligence_hook.hpp"
+#include "cypha/lm/cyphalm_math_integration.hpp"
+#include "cypha/lm/cyphalm_model.hpp"
+#include "cypha/lm/cyphalm_parallel.hpp"
+#include "cypha/knowledge/intelligence_profiler.hpp"
+#include "cypha/knowledge/profile_completeness.hpp"
+#include "cypha/knowledge/profile_guided_loss.hpp"
 
 namespace fs = std::filesystem;
 

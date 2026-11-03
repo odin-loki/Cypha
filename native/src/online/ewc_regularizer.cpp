@@ -1,4 +1,4 @@
-#include "cypha/ewc_regularizer.hpp"
+#include "cypha/online/ewc_regularizer.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -21,17 +21,17 @@ void build_diagonal_fisher(const std::vector<double>& anchor, std::vector<double
 // Real diagonal Fisher: F_i ~= E_x[(d loss / d theta_i)^2] over the calibration batch, using the
 // *actual* closed-form loss/update math this codebase already computes elsewhere:
 //
-// 1. D (class deltas): `CyphaDifMemoryState::memory_train` (native/src/memory_train.cpp) returns
+// 1. D (class deltas): `CyphaDifMemoryState::memory_train` (native/src/classify/memory_train.cpp) returns
 //    the scalar loss `-log_norm + 0.5*r.h_mu0 - cross_k + 0.5*d_sq_k`, where (for the true-label
 //    row k) `cross_k = sum_j D[k,j]*r[j]` and `d_sq_k = sum_j D[k,j]^2*world_inv_v[j]`, with
 //    `r[j] = (h[j]-mu0[j])*world_inv_v[j]`. Only the true-label row k appears in that formula, so
 //    `d(loss)/d(D[k,j]) = D[k,j]*world_inv_v[j] - r[j]`, and 0 for every other row (matches the
 //    codebase's own convention of only crediting the true label's row with this loss term).
 //    `mu0 = world_mu` exactly here because `f_field` is all-zero for every fresh model this class
-//    is used with (native/src/create_model.cpp) and is never mutated during training — the field
+//    is used with (native/src/classify/create_model.cpp) and is never mutated during training — the field
 //    correction term `memory_train` would otherwise add is provably zero, not merely ignored.
 //
-// 2. enc_w (encoder projection): `contrastive_update_encoder_w` (native/src/encoder_contrastive.cpp)
+// 2. enc_w (encoder projection): `contrastive_update_encoder_w` (native/src/classify/encoder_contrastive.cpp)
 //    documents itself as a "Fisher-Rao-style encoder update": `W[i,j] += lr*weight*diff[i]*f[j]`
 //    where `diff = rj - rk` are Fisher-Rao residuals `(h-mu)/max(v,eps)` for the predicted (`j`)
 //    and true (`k`) classes. The per-step contribution *before* scaling by `lr` — i.e.

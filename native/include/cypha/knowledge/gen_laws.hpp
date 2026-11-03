@@ -37,7 +37,7 @@
 #include <vector>
 
 #include "cypha/eval/ecs.hpp"
-#include "cypha/eval/gen_rules.hpp"
+#include "cypha/knowledge/gen_rules.hpp"
 #include "cypha/eval/lci.hpp"
 
 namespace cypha::eval::laws {

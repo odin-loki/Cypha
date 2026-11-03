@@ -1,5 +1,5 @@
-#include "cypha/infer_cpu.hpp"
-#include "cypha/retrieval.hpp"
+#include "cypha/classify/infer_cpu.hpp"
+#include "cypha/classify/retrieval.hpp"
 
 #include <algorithm>
 #include <cmath>

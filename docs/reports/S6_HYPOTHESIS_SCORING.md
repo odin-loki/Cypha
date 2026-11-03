@@ -203,7 +203,7 @@ These terms rank what is worth testing. The planted set cannot test that; S10's 
 ## How to reproduce
 
 ```bash
-g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp -o pattern_learn
+g++ -O2 -std=c++20 -I native/include native/tools/knowledge/pattern_learn.cpp -o pattern_learn
 # dev only (the test half is not printed)
 ./pattern_learn --score-planted /root/work/f2/v2/aug/seeds.tsv /root/work/f2/wikidata/wd_values.tsv out
 # the single test read
@@ -324,7 +324,7 @@ cmake -S native -B build && cmake --build build --target epistemic_test -j1 && b
 ### How to reproduce S6b
 
 ```bash
-g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp -o pattern_learn
+g++ -O2 -std=c++20 -I native/include native/tools/knowledge/pattern_learn.cpp -o pattern_learn
 ./pattern_learn --score-planted /root/work/f2/v2/aug/seeds.tsv /root/work/f2/wikidata/wd_values.tsv out                 # dev, the joint test
 ./pattern_learn --score-planted /root/work/f2/v2/aug/seeds.tsv /root/work/f2/wikidata/wd_values.tsv fresh --read-fresh  # the fresh set (read once)
 ```
@@ -347,7 +347,7 @@ g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp -o pattern_l
 - **Configuration:** S11b's dev choice, not tuned again: PPMI weights, hub cap H = 200, a link B needs at least 2 documents.
 - **One change from S11b, so it can score any pair.** S11b read the closed form only on pairs that never share a document. Here, the documents that hold both A and C are left out before counting: N, n_A, n_C, n_B, n_AB and n_BC are all counted on the other documents. score(A, C) = Σ_B ln(N′/n′_B) · PPMI′(A, B) · PPMI′(B, C), over B ∉ {A, C}. On a pair that never shares a document this is S11b's score exactly. So the score never reads a document where A and C appear together: it is indirect evidence only.
 - **Resolving a hypothesis (s, r, o):** s is the article with that title; o is the usable entity with the most documents among those whose surface forms (`norm_ent` of the title and of each redirect title) match `norm_ent(o)`, with at least 2 documents. If either does not resolve, or they resolve to the same entity, the closed form is **not applicable** to that hypothesis. Dates and most years never resolve.
-- **Code:** `native/include/cypha/eval/abc_closed.hpp` (the counts and the score, restored from S11b's `gen_abc.hpp` at `0230741`, the closed form only) and `pattern_learn`'s `namespace s6c` (building the text and resolving names).
+- **Code:** `native/include/cypha/knowledge/abc_closed.hpp` (the counts and the score, restored from S11b's `gen_abc.hpp` at `0230741`, the closed form only) and `pattern_learn`'s `namespace s6c` (building the text and resolving names).
 
 ### Part 1: a support term in S6's P0
 
@@ -505,7 +505,7 @@ Two hits, four misses, four not scored.
 #### How to reproduce S6c
 
 ```
-g++ -O2 -std=c++20 -I native/include -pthread native/tools/pattern_learn.cpp -o pl
+g++ -O2 -std=c++20 -I native/include -pthread native/tools/knowledge/pattern_learn.cpp -o pl
 F=f2; W=$F/wikidata/wd_values.tsv
 ./pl --score-planted $F/v2/aug/seeds.tsv $W OUT --abc enwik8              # Part 1, dev (w sweep)
 ./pl --test-kinds enwik8 $F/v2/aug/seeds.tsv $W $F/v2/aug/patterns.tsv OUT \

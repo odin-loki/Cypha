@@ -1,4 +1,4 @@
-#include "cypha/intelligence/epistemic_threshold.hpp"
+#include "cypha/knowledge/epistemic_threshold.hpp"
 
 namespace cypha::intelligence {
 
