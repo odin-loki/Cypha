@@ -262,6 +262,7 @@
 #include "cypha/lm/byte_kn.hpp"
 #include "cypha/lm/class_context.hpp"
 #include "cypha/lm/content_plan.hpp"
+#include "cypha/lm/copy_expert.hpp"
 #include "cypha/lm/doc_cache.hpp"
 #include "cypha/knowledge/evidence.hpp"
 #include "cypha/lm/fm_infinigram.hpp"
@@ -271,6 +272,7 @@
 #include "cypha/eval/lci.hpp"
 #include "cypha/eval/scribe.hpp"
 #include "cypha/knowledge/unknown_signals.hpp"
+#include "cypha/online/content_mixer.hpp"
 
 #include <cctype>
 #include <chrono>
@@ -296,6 +298,20 @@ using cypha::cyphalm::DocTopic;
 using cypha::cyphalm::FmInfiniGram;
 using cypha::cyphalm::SimilarContext;
 namespace evidence = cypha::cyphalm::evidence;
+using cypha::cyphalm::copy_bucket;
+using cypha::cyphalm::copy_clip;
+using cypha::cyphalm::copy_pred;
+using cypha::cyphalm::kCopyBuckets;
+using cypha::online::bkn_mix;
+using cypha::online::fit_doc;
+using cypha::online::fit_lambdas;
+using cypha::online::g_online_mix;
+using cypha::online::mix_bkn_into;
+using cypha::online::mix_cls_into;
+using cypha::online::mix_copy_into;
+using cypha::online::mix_doc_into;
+using cypha::online::mix_into;
+using cypha::online::online_mix;
 
 namespace {
 
@@ -754,15 +770,10 @@ int bucket(int n, std::uint64_t t) { return len_bucket(n) * 4 + count_bucket(t);
 constexpr int kBuckets = 28;
 
 // A4, defined below with the similar-context expert's spec: the expert where it is a default, and its use in sampling.
-void fit_lambdas(const std::vector<double>& pe, const std::vector<double>& pb, const std::vector<int>& bk,
-                 std::size_t upto, int nb, double* lam);
 std::unique_ptr<SimilarContext> default_sim(const Args& a, const std::uint8_t* text, std::size_t n, int& rc);
-// GEN-C (PLAN B5), defined below with the similar-context expert: the document experts of --doc SPEC, and their
-// lambdas fit on the first half of the holdout over cur (cur is then mixed with them; its second half is the read).
+// GEN-C (PLAN B5), defined below with the similar-context expert: the document experts of --doc SPEC (fit_doc and
+// mix_doc_into, in cypha/online/content_mixer.hpp, mix them into the chain).
 std::unique_ptr<DocTopic> make_doc(const std::string& doc, const std::uint8_t* text, std::size_t n, int& rc);
-std::vector<std::vector<double>> fit_doc(const DocTopic& dt, const std::uint8_t* data, std::size_t train, std::size_t half,
-                                         std::vector<double>& cur);
-void mix_doc_into(const DocTopic& dt, const std::uint8_t* data, std::size_t train, std::size_t half, std::vector<double>& cur);
 std::string sample_with_class(const PackedModel& model, const double w[6], std::size_t limit, const ClassContext* cc,
                               const double* lam, const std::string& prompt, int n, std::uint32_t seed,
                               const SimilarContext* sc, const double* lsm, double temperature, const double* lcp,
@@ -779,10 +790,6 @@ void sample_mix(const PackedModel& model, const double w[6], std::size_t limit, 
 std::vector<int> bkn_spec(const std::string& s);
 constexpr const char* kBknDefault = "6:4:2:1";  // BKN2: the default of qa, sample and context8k (way b)
 std::unique_ptr<cypha::cyphalm::bkn::ByteKN> make_bkn(const std::string& spec, const std::uint8_t* t, std::size_t n);
-std::vector<double> mix_bkn_into(const cypha::cyphalm::bkn::ByteKN& kn, const std::uint8_t* data, std::size_t train,
-                                 std::size_t half, bool replace, std::vector<double>& cur);
-void bkn_mix(const cypha::cyphalm::bkn::ByteKN& kn, const double* lkn, bool replace, const std::uint8_t* seq,
-             std::size_t len, double* P);
 // GEN-B, defined below with sample_with_class: the sentence gate.
 struct GateSpec {
     int k = 0;                       // candidates per sentence (0: no gate)
@@ -809,18 +816,10 @@ GateCand gate_candidate(const PackedModel& model, const double w[6], std::size_t
                         const std::vector<std::uint8_t>& seq, std::size_t p0, int budget, std::uint32_t rs,
                         double temperature, const GateSpec& g, const cypha::cyphalm::bkn::ByteKN* kn = nullptr,
                         const double* lkn = nullptr, bool kn_replace = false);
-// B4C, defined below with the copy and class experts: the class and copy experts where they are defaults.
+// B4C, defined below with the class expert: the class expert where it is a default (the copy expert is in
+// cypha/lm/copy_expert.hpp; the chain's stages in cypha/online/content_mixer.hpp).
 std::string default_cls_spec(const Args& a);
 std::unique_ptr<ClassContext> default_cls(const Args& a, const std::uint8_t* text, std::size_t n, int& rc);
-std::vector<double> mix_cls_into(const ClassContext& cc, const std::uint8_t* data, std::size_t train, std::size_t half,
-                                 std::vector<double>& cur);
-std::vector<double> mix_copy_into(const std::uint8_t* data, std::size_t train, std::size_t half, int m,
-                                  std::vector<double>& cur);
-int copy_pred(const std::uint8_t* s, std::size_t i, int& n, std::size_t* at = nullptr);  // the copy expert (below)
-int copy_bucket(int n);
-extern bool g_online_mix;  // GLNX §13.12 (below, with mix_into)
-std::vector<double> online_mix(const std::vector<double>& pe, const std::vector<int>& bk, int nb, std::vector<double>& cur,
-                               int copy_m = -1);
 // GEN-E, defined below with the copy expert: A3's frames, and the content-plan expert mixed into cur.
 std::map<std::string, std::vector<std::string>> load_frames(const std::string& path);
 bool good_start(const std::string& l);
@@ -1096,10 +1095,10 @@ int cmd_context8k(const Args& a) {
         if (dump) f.open(a.dump_experts, std::ios::binary);
         // --online-final (§13.12): one gated linear mixer over 24 of the row's values (every expert and every chain
         // stage), weights on the simplex chosen by InfiniGram's bucket x the previous byte's class (80 sets, as gate24
-        // gates by a small context), learned online by exponentiated gradient on log loss, every set starting at the chain.
+        // gates by a small context), learned online by exponentiated gradient on log loss, every set starting at the chain
+        // (cypha::online::OnlineFinal; kIn picks its inputs from the row, the chain last).
         static const int kIn[24] = {1, 2, 3, 4, 5, 6, 8, 9, 11, 12, 13, 14, 15, 18, 20, 22, 25, 27, 29, 31, 32, 33, 34, 35};
-        std::vector<double> W(80 * 24, 0.01 / (1.0 + 0.01 * 23));
-        for (int g = 0; g < 80; ++g) W[static_cast<std::size_t>(g) * 24 + 23] = 1.0 / (1.0 + 0.01 * 23);
+        cypha::online::OnlineFinal<24> fin(80);
         double fin_bits = 0, chain_bits = 0;
         for (std::size_t k = 0; k < H; ++k) {
             const std::size_t i = kTrain + k;
@@ -1144,21 +1143,15 @@ int cmd_context8k(const Args& a) {
             if (dump) f.write(reinterpret_cast<const char*>(row.data()), static_cast<std::streamsize>(C * sizeof(float)));
             if (a.online_final) {
                 const unsigned char pb = i ? data[i - 1] : ' ';
-                const int pc = std::isspace(pb) ? 0 : std::isalpha(pb) ? 1 : std::isdigit(pb) ? 2
-                               : std::strchr("[]{}<>|&=", pb) && pb ? 3 : 4;
-                const int g = std::min(static_cast<int>(bk8k[k]), 15) * 5 + pc;
-                double* w = &W[static_cast<std::size_t>(g) * 24];
-                double q[24], p = 0;
-                for (int j = 0; j < 24; ++j) p += w[j] * (q[j] = std::max(1e-9, static_cast<double>(row[kIn[j]])));
+                const int g = std::min(static_cast<int>(bk8k[k]), 15) * 5 + cypha::online::OnlineFinal<24>::byte_class(pb);
+                double q[24];
+                for (int j = 0; j < 24; ++j) q[j] = std::max(1e-9, static_cast<double>(row[kIn[j]]));
+                const double p = fin.predict(g, q);
                 if (k >= half) {
                     fin_bits += -std::log2(std::max(p, 1e-12));
                     chain_bits += -std::log2(std::max(base[k], 1e-12));
                 }
-                double z = 0;
-                for (int j = 0; j < 24; ++j) z += (w[j] *= std::exp(0.05 * std::min(q[j] / std::max(p, 1e-300), 30.0)));
-                double z2 = 0;
-                for (int j = 0; j < 24; ++j) z2 += (w[j] = std::max(w[j] / z, 1e-7));
-                for (int j = 0; j < 24; ++j) w[j] /= z2;
+                fin.update(g, q, p);
             }
         }
         if (dump) std::cerr << "dumped " << H << " rows of " << C << " columns to " << a.dump_experts << " (half " << half << ")\n";
@@ -1882,28 +1875,6 @@ std::string reference_code(int in_slice, int prose, int covered) {
     return !in_slice ? "UNKNOWN_ENTITY" : (prose == 1 || covered == 2) ? "LOW_CERTAINTY" : "NO_EVIDENCE";
 }
 
-// Copy expert (A1c, PLAN B9): the longest suffix of s[0..i), 3 to 64 bytes, that also ends at an earlier j inside the
-// last 16,384 bytes of the current context (the prompt and the answer so far, or the stream being scored). It predicts
-// s[j], from the most recent of the longest matches. Returns -1 (n = 0) when there is none. The window was 4,096 bytes
-// until B4C (B4B chose 16,384; a Q/A prompt and its answer fit inside either).
-constexpr std::size_t kCopyWin = 16384;
-constexpr int kCopyBuckets = 8;
-int copy_pred(const std::uint8_t* s, std::size_t i, int& n, std::size_t* at) {  // DK2: at = the source j
-    n = 0;
-    int pred = -1;
-    const std::size_t lo = i > kCopyWin ? i - kCopyWin : 0;
-    for (std::size_t j = i; j-- > lo + 1;) {
-        int L = 0;
-        while (L < 64 && j - lo > static_cast<std::size_t>(L) && s[j - 1 - L] == s[i - 1 - L]) ++L;
-        if (L > n) {
-            n = L;
-            pred = s[j];
-            if (at) *at = j;
-        }
-    }
-    if (n < 3) n = 0, pred = -1;
-    return pred;
-}
 // DK2 (--copy-frame): the copy source j is the '|' of a "|>" and the answer s[answer_at, i) has no open "<|" (none, or
 // the last one already closed). Copy then predicts nothing: a frame's entity is copied without the frame's end, which
 // ended A1d's E1c messages ("I have nothing about character Spider-Man|>").
@@ -1919,102 +1890,8 @@ std::size_t open_token_at(const std::uint8_t* s, std::size_t i, std::size_t answ
 bool copy_closes_unopened(const std::uint8_t* s, std::size_t i, std::size_t j, std::size_t answer_at) {
     return j + 1 < i && s[j] == '|' && s[j + 1] == '>' && open_token_at(s, i, answer_at) == std::string::npos;
 }
-int copy_bucket(int n) { return n == 0 ? 0 : n < 4 ? 1 : n < 6 ? 2 : n < 8 ? 3 : n < 12 ? 4 : n < 16 ? 5 : n < 32 ? 6 : 7; }
-// --copy-min m (B4B): copy only from matches of at least m bytes; the lambdas of buckets starting below m become 0.
-void copy_clip(double* lam, int m) {
-    static const int lo[kCopyBuckets] = {0, 3, 4, 6, 8, 12, 16, 32};
-    for (int b = 0; b < kCopyBuckets; ++b)
-        if (lo[b] < m) lam[b] = 0;
-}
 
-// lam[b] in {0, 0.005, ..., 0.995} maximising the log-likelihood of lam pe + (1 - lam) pb over the items k < upto in
-// bucket b (context8k's InfiniGram fit).
-void fit_lambdas(const std::vector<double>& pe, const std::vector<double>& pb, const std::vector<int>& bk,
-                 std::size_t upto, int nb, double* lam) {
-    for (int b = 0; b < nb; ++b) {
-        double best = -1e300;
-        lam[b] = 0;
-        for (int g = 0; g < 200; ++g) {
-            const double l = g * 0.005;
-            double ll = 0;
-            bool any = false;
-            for (std::size_t k = 0; k < upto; ++k)
-                if (bk[k] == b) {
-                    ll += std::log(l * pe[k] + (1 - l) * pb[k]);
-                    any = true;
-                }
-            if (!any) break;
-            if (ll > best) {
-                best = ll;
-                lam[b] = l;
-            }
-        }
-    }
-}
 
-// B4C: one default expert mixed into cur, where cur[k] is a distribution's probability of the true byte data[train + k]:
-// the expert's lambdas are fit on k < half over cur (the copy expert's then zeroed below a match of m bytes), and cur
-// becomes lam pe + (1 - lam) cur. Returns the lambdas, one a bucket.
-// GLNX (docs/GENERATION_PLAN.md §13.12; Odin: "don't freeze the mixer"): with g_online_mix the same chain stage learns
-// its lambda per bucket online instead of fitting it on the first half and freezing it. Each byte is predicted with the
-// current lambda, then the lambda follows the gradient of its stage's log loss (AdaGrad per bucket, start 0.05, step 0.05,
-// kept in [0, 0.995]); the copy stage's short-match buckets stay 0 as copy_clip sets them. cur becomes the online mix.
-bool g_online_mix = false;
-void copy_clip(double* lam, int m);
-std::vector<double> online_mix(const std::vector<double>& pe, const std::vector<int>& bk, int nb, std::vector<double>& cur,
-                               int copy_m) {
-    std::vector<double> lam(static_cast<std::size_t>(nb), 0.05), g2(static_cast<std::size_t>(nb), 1e-3);
-    if (copy_m >= 0) copy_clip(lam.data(), copy_m);
-    for (std::size_t k = 0; k < cur.size(); ++k) {
-        const std::size_t b = static_cast<std::size_t>(bk[k]);
-        const double prev = cur[k], p = lam[b] * pe[k] + (1 - lam[b]) * prev;
-        cur[k] = p;
-        const double g = (pe[k] - prev) / std::max(p, 1e-12);
-        g2[b] += g * g;
-        lam[b] = std::min(0.995, std::max(0.0, lam[b] + 0.05 * g / std::sqrt(g2[b])));
-        if (copy_m >= 0) copy_clip(lam.data(), copy_m);
-    }
-    return lam;
-}
-std::vector<double> mix_into(const std::vector<double>& pe, const std::vector<int>& bk, std::size_t half, int nb,
-                             std::vector<double>& cur, int copy_m = -1) {
-    std::vector<double> lam(static_cast<std::size_t>(nb), 0.0);
-    if (g_online_mix) {  // the frozen fit is still returned, so answers and samplers that read it are unchanged
-        fit_lambdas(pe, cur, bk, half, nb, lam.data());
-        if (copy_m >= 0) copy_clip(lam.data(), copy_m);
-        online_mix(pe, bk, nb, cur, copy_m);
-        return lam;
-    }
-    fit_lambdas(pe, cur, bk, half, nb, lam.data());
-    if (copy_m >= 0) copy_clip(lam.data(), copy_m);
-    for (std::size_t k = 0; k < cur.size(); ++k) {
-        const double l = lam[static_cast<std::size_t>(bk[k])];
-        cur[k] = l * pe[k] + (1 - l) * cur[k];
-    }
-    return lam;
-}
-std::vector<double> mix_cls_into(const ClassContext& cc, const std::uint8_t* data, std::size_t train, std::size_t half,
-                                 std::vector<double>& cur) {
-    std::vector<double> pe(cur.size());
-    std::vector<int> bk(cur.size());
-    for (std::size_t k = 0; k < cur.size(); ++k) {
-        double P[256];
-        bk[k] = ClassContext::bucket(cc.predict(data, train + k, P));
-        pe[k] = P[data[train + k]];
-    }
-    return mix_into(pe, bk, half, ClassContext::kBuckets, cur);
-}
-std::vector<double> mix_copy_into(const std::uint8_t* data, std::size_t train, std::size_t half, int m,
-                                  std::vector<double>& cur) {
-    std::vector<double> pe(cur.size());
-    std::vector<int> bk(cur.size());
-    for (std::size_t k = 0; k < cur.size(); ++k) {
-        int n = 0;
-        pe[k] = copy_pred(data, train + k, n) == data[train + k] ? 1.0 : 0.0;
-        bk[k] = copy_bucket(n);
-    }
-    return mix_into(pe, bk, half, kCopyBuckets, cur, m);
-}
 // GEN-E: the content-plan expert's predictions over the holdout text[train, train + cur.size()): every paragraph line
 // that could be a prompt (good_start) is planned from its first 64 bytes, as cmd_sample plans a prompt, and the expert
 // reads the rest of the line; elsewhere it predicts nothing (bucket 0). Lambdas fit on k < half; cur becomes the mix.
@@ -2079,32 +1956,6 @@ std::unique_ptr<cypha::cyphalm::bkn::ByteKN> make_bkn(const std::string& spec, c
     cypha::cyphalm::bkn::Prune pr;
     pr.from_order = v[1], pr.min_ctx = static_cast<std::uint32_t>(v[2]), pr.drop_singletons = v[3] != 0;
     return std::make_unique<cypha::cyphalm::bkn::ByteKN>(t, n, v[0], pr);
-}
-// BKN into cur (the trie mixture's probability of each holdout byte): (a) cur becomes Kneser-Ney's; (b) Kneser-Ney is
-// mixed in by lambda per (deepest order found x count band), fit on k < half. Returns (b)'s lambdas (empty for (a)).
-std::vector<double> mix_bkn_into(const cypha::cyphalm::bkn::ByteKN& kn, const std::uint8_t* data, std::size_t train,
-                                 std::size_t half, bool replace, std::vector<double>& cur) {
-    std::vector<double> pe(cur.size());
-    std::vector<int> bk(cur.size());
-    for (std::size_t k = 0; k < cur.size(); ++k) pe[k] = kn.prob_bucket(data, train + k, data[train + k], bk[k]);
-    if (replace) {
-        cur.swap(pe);
-        return {};
-    }
-    return mix_into(pe, bk, half, kn.buckets(), cur);
-}
-// BKN into a next-byte distribution P (the trie mixture's), as mix_bkn_into fit it.
-void bkn_mix(const cypha::cyphalm::bkn::ByteKN& kn, const double* lkn, bool replace, const std::uint8_t* seq,
-             std::size_t len, double* P) {
-    double Pk[256];
-    int band = 0;
-    const int d = kn.dist(seq, len, Pk, &band);
-    if (replace) {
-        std::memcpy(P, Pk, sizeof Pk);
-        return;
-    }
-    const double l = lkn[d == 0 ? 0 : (d - 1) * 3 + band];
-    for (int s = 0; s < 256; ++s) P[s] = l * Pk[s] + (1 - l) * P[s];
 }
 
 // B4: the class-context expert from "TABLE[:tail[:orders[:flags]]]": TABLE a word<TAB>class file, or "shape" (shape
@@ -2335,123 +2186,6 @@ std::unique_ptr<DocTopic> make_doc(const std::string& doc, const std::uint8_t* t
     return dt;
 }
 
-// GEN-C: each part's next-byte distribution over the holdout (one stream from the train end, reset at "<page>"),
-// its lambdas fit on k < half over cur, cur mixed with it, in DocTopic's part order. The read: bits a byte on
-// [half, cur.size()) before and after, with a bootstrap over 16 KiB blocks, and split by the byte's offset in its
-// document (under and over 4 KiB). Printed to stderr with a DOC prefix.
-std::vector<std::vector<double>> fit_doc(const DocTopic& dt, const std::uint8_t* data, std::size_t train, std::size_t half,
-                                         std::vector<double>& cur) {
-    const std::size_t span = cur.size();
-    const auto& p = dt.params();
-    const bool on[DocTopic::kParts] = {p.trig, p.cache, p.topic};
-    std::vector<double> pe[DocTopic::kParts];
-    std::vector<int> bk[DocTopic::kParts];
-    for (int q = 0; q < DocTopic::kParts; ++q)
-        if (on[q]) pe[q].resize(span), bk[q].resize(span);
-    std::vector<std::uint32_t> off(span);
-    DocTopic::Stream st(dt);
-    std::size_t page = 0;
-    const auto t0 = std::chrono::steady_clock::now();
-    for (std::size_t k = 0; k < span; ++k) {
-        const std::size_t i = train + k;
-        for (int q = 0; q < DocTopic::kParts; ++q)
-            if (on[q]) {
-                double P[256];
-                bk[q][k] = st.predict(q, P);
-                pe[q][k] = P[data[i]];
-            }
-        if (k >= 6 && std::memcmp(data + i - 6, "<page>", 6) == 0) page = k - 6;
-        off[k] = static_cast<std::uint32_t>(std::min<std::size_t>(k - page, 0xffffffffu));
-        st.feed(data[i]);
-    }
-    const std::vector<double> before = cur;
-    std::vector<std::vector<double>> lam(DocTopic::kParts);
-    for (int q = 0; q < DocTopic::kParts; ++q)
-        if (on[q]) lam[static_cast<std::size_t>(q)] = mix_into(pe[q], bk[q], half, DocTopic::kBuckets, cur);
-    static const char* const name[DocTopic::kParts] = {"trig", "cache", "topic"};
-    for (int q = 0; q < DocTopic::kParts; ++q) {
-        if (!on[q]) continue;
-        std::cerr << "DOC lambdas " << name[q];
-        for (double l : lam[static_cast<std::size_t>(q)]) std::cerr << " " << l;
-        std::cerr << "\n";
-    }
-    if (span > half) {
-        const std::size_t B = 16384;
-        std::vector<double> diff;  // mean bits a byte, after minus before, a block
-        double sb = 0, sa = 0, lb[2] = {0, 0}, la[2] = {0, 0}, ln[2] = {0, 0};
-        for (std::size_t s0 = half; s0 < span; s0 += B) {
-            const std::size_t s1 = std::min(span, s0 + B);
-            double d = 0;
-            for (std::size_t k = s0; k < s1; ++k) {
-                const double b0 = -std::log2(before[k]), b1 = -std::log2(cur[k]);
-                sb += b0, sa += b1, d += b1 - b0;
-                const int g = off[k] >= 4096;
-                lb[g] += b0, la[g] += b1, ln[g] += 1;
-            }
-            diff.push_back(d / static_cast<double>(s1 - s0));
-        }
-        const double n = static_cast<double>(span - half);
-        std::mt19937_64 rng(20261029);
-        std::vector<double> bs(2000);
-        for (double& x : bs) {
-            double m = 0;
-            for (std::size_t j = 0; j < diff.size(); ++j) m += diff[rng() % diff.size()];
-            x = m / static_cast<double>(diff.size());
-        }
-        std::sort(bs.begin(), bs.end());
-        double mean = 0;
-        for (double d : diff) mean += d;
-        mean /= static_cast<double>(diff.size());
-        std::fprintf(stderr, "DOC read [half, end) bytes %.0f bpc before %.6f after %.6f diff %.6f ci95 %.6f %.6f blocks %zu\n",
-                     n, sb / n, sa / n, mean, bs[50], bs[1949], diff.size());
-        for (int g = 0; g < 2; ++g)
-            if (ln[g] > 0)
-                std::fprintf(stderr, "DOC read offset %s 4KiB bytes %.0f bpc before %.6f after %.6f diff %.6f\n",
-                             g ? ">=" : "<", ln[g], lb[g] / ln[g], la[g] / ln[g], (la[g] - lb[g]) / ln[g]);
-    }
-    std::cerr << "DOC fit_s " << std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count() << "\n";
-    return lam;
-}
-
-// GEN-C2: fit_doc's mixture in less memory (context8k, qa's holdout). One stream from the train end; each part's
-// predictions are kept over the first half only, where its lambdas are fit (over cur, in DocTopic's part order) and it
-// is mixed; the second half is mixed as the stream reads it. The same numbers as fit_doc; no DOC lines.
-void mix_doc_into(const DocTopic& dt, const std::uint8_t* data, std::size_t train, std::size_t half, std::vector<double>& cur) {
-    const std::size_t span = cur.size(), h = std::min(half, span);
-    const auto& p = dt.params();
-    const bool on[DocTopic::kParts] = {p.trig, p.cache, p.topic};
-    std::vector<double> pe[DocTopic::kParts];
-    std::vector<int> bk[DocTopic::kParts];
-    for (int q = 0; q < DocTopic::kParts; ++q)
-        if (on[q]) pe[q].resize(h), bk[q].resize(h);
-    DocTopic::Stream st(dt);
-    for (std::size_t k = 0; k < h; ++k) {
-        for (int q = 0; q < DocTopic::kParts; ++q)
-            if (on[q]) {
-                double P[256];
-                bk[q][k] = st.predict(q, P);
-                pe[q][k] = P[data[train + k]];
-            }
-        st.feed(data[train + k]);
-    }
-    double lam[DocTopic::kParts][DocTopic::kBuckets] = {};
-    for (int q = 0; q < DocTopic::kParts; ++q) {
-        if (!on[q]) continue;
-        fit_lambdas(pe[q], cur, bk[q], h, DocTopic::kBuckets, lam[q]);
-        for (std::size_t k = 0; k < h; ++k) cur[k] = lam[q][bk[q][k]] * pe[q][k] + (1 - lam[q][bk[q][k]]) * cur[k];
-        std::vector<double>().swap(pe[q]);
-        std::vector<int>().swap(bk[q]);
-    }
-    for (std::size_t k = h; k < span; ++k) {
-        for (int q = 0; q < DocTopic::kParts; ++q)
-            if (on[q]) {
-                double P[256];
-                const int b = st.predict(q, P);
-                cur[k] = lam[q][b] * P[data[train + k]] + (1 - lam[q][b]) * cur[k];
-            }
-        st.feed(data[train + k]);
-    }
-}
 
 // simvec [wiki] --sim SPEC --out FILE (A4): the expert of SPEC built over the train bytes; its projected word rows
 // written as the file the default reads.
