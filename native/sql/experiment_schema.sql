@@ -36,7 +36,7 @@ CREATE INDEX IF NOT EXISTS idx_runs_experiment ON runs(experiment_id);
 CREATE INDEX IF NOT EXISTS idx_runs_status ON runs(status);
 
 -- S7 (DISCOVERY 7.2 step 1; invariants I5, I6): the pre-registration of hypothesis tests, mirrored in C++ by
--- PreregLog (native/include/cypha/eval/hypothesis.hpp). Rows are only ever inserted: a plan cannot be changed or
+-- PreregLog (native/include/cypha/knowledge/hypothesis.hpp). Rows are only ever inserted: a plan cannot be changed or
 -- removed, and a result cannot be changed or removed. A plan may be registered again for the same hypothesis only
 -- before any of its tests has a result; the newest registration is the plan.
 CREATE TABLE IF NOT EXISTS hypothesis_preregistrations (

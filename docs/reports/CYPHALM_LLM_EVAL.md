@@ -1,7 +1,7 @@
 # CyphaLM LLM Eval — enwik8.8mb gate24
 
 **Date:** 2026-09-19  
-**Harness:** `native/tools/cyphalm_hp_sku_measure.cpp`, `scripts/measure_enwik_gate24.sh`  
+**Harness:** `native/tools/lm/cyphalm_hp_sku_measure.cpp`, `scripts/measure_enwik_gate24.sh`  
 **Corpus:** `bench/data/enwik8/enwik8.8mb` (8,388,608 B, SHA256 `09f6dd72…`)
 
 CyphaLM builds **gate24 only** (v78_flags.ps1 + `HP_SLOT_MAX=24`). Removed SKUs: [`REMOVED_HP_SKUS.md`](../history/REMOVED_HP_SKUS.md).

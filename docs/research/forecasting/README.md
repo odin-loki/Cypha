@@ -20,7 +20,7 @@
 
 | Part | Path | State |
 |---|---|---|
-| ORF/SORF encoder | `native/include/cypha/orthogonal_rff_encoder.hpp` | Built; SORF on in `everyday_profile.json`; promotion rule to recheck (FC16) |
+| ORF/SORF encoder | `native/include/cypha/classify/orthogonal_rff_encoder.hpp` | Built; SORF on in `everyday_profile.json`; promotion rule to recheck (FC16) |
 | Event vocabulary | `native/include/cypha/forecast/event_vocabulary.hpp` | Built; 842 ids do not fit the 256-byte model (FC4); CAMEO level map wrong (FC0 F1) |
 | Data loaders | `native/include/cypha/forecast/dispute_data.hpp` | Read no rows of the committed files; UCDP and ICB never load (FC2) |
 | Escalation estimator | `native/include/cypha/forecast/node_estimator.hpp` | Same-year inputs, shuffled split (FC5) |
@@ -32,7 +32,7 @@
 | VIEWS baselines | `native/include/cypha/forecast/views_baselines.hpp` | Simplified stand-ins (FC7) |
 | Drift monitor | `native/include/cypha/forecast/gdelt_monitor.hpp` | EMA of a caller's number (FC9) |
 | Save and load | — | None (FC11) |
-| REST | `native/apps/cyphalm_rest_routes.cpp` | Retrains per call; no forecasts returned (FC12) |
+| REST | `native/src/serve/cyphalm_rest_routes.cpp` | Retrains per call; no forecasts returned (FC12) |
 
 ---
 

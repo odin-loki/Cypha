@@ -23,7 +23,7 @@ To scale **training** (table adaptation) without changing the ~1.61 enwik BPC ba
 
 **Recommended order:** undo inference → shard spike → OOO only if needed.
 
-**Spike harness:** `scripts/cyphalm_hp_shard_spike.sh` → `native/tools/cyphalm_hp_shard_spike.cpp`.
+**Spike harness:** `scripts/cyphalm_hp_shard_spike.sh` → `native/tools/lm/cyphalm_hp_shard_spike.cpp`.
 
 ---
 
@@ -118,8 +118,8 @@ Today: `hp::Predictor` exposes `clone_from` / `assign_from_` but **no** export, 
 
 | Mechanism | Location | Merges | hp tables? |
 |---------|----------|--------|------------|
-| `memory_merge_from` | `native/src/memory_train.cpp` | CyphaDIF class deltas + observation counts | No |
-| `federated_average_payloads` | `native/src/federated_aggregate.cpp` | JSON payloads → `memory_merge_from` chain | No |
+| `memory_merge_from` | `native/src/classify/memory_train.cpp` | CyphaDIF class deltas + observation counts | No |
+| `federated_average_payloads` | `native/src/classify/federated_aggregate.cpp` | JSON payloads → `memory_merge_from` chain | No |
 | `cypha_federated_coordinator` / `cypha_federated_worker` | `native/tools/` | HTTP/dir worker collection | No |
 | `merge_state_into_root_for_save` | `memory_train.cpp` | `.cypha` v3 sidecar for DIF memory | No |
 
@@ -242,7 +242,7 @@ Undo and train-scale are **orthogonal**: undo fixes **inference** fan-out; shard
 
 ### 6.1 What it does
 
-`native/tools/cyphalm_hp_shard_spike.cpp`:
+`native/tools/lm/cyphalm_hp_shard_spike.cpp`:
 
 1. Load byte corpus; split into **2** contiguous shards (optional `--write-shards`).
 2. **Single-stream baseline** — one gate24 `HpSequenceBackend`, `observe_stream_bits` over full corpus.

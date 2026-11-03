@@ -1,6 +1,6 @@
 #pragma once
 
-#include "cypha/cyphalm/cyphalm_model.hpp"
+#include "cypha/lm/cyphalm_model.hpp"
 #include "cypha/forecast/dispute_data.hpp"
 #include "cypha/forecast/event_vocabulary.hpp"
 #include "cypha/forecast/gdelt_monitor.hpp"

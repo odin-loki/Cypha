@@ -2,7 +2,7 @@
 
 Odin Loch, 2026-10-27
 
-Tool: `native/tools/ppmi_svd.cpp` (standalone C++20, no external library).
+Tool: `native/tools/semantics/ppmi_svd.cpp` (standalone C++20, no external library).
 Plan items: Track C row C1; suite T-words (section 9).
 
 ## Summary
@@ -269,7 +269,7 @@ tokenisation of multi-word items is as in those files.
 ## Reproduce
 
 ```
-g++ -O2 -std=c++20 native/tools/ppmi_svd.cpp -o ppmi_svd
+g++ -O2 -std=c++20 native/tools/semantics/ppmi_svd.cpp -o ppmi_svd
 ./ppmi_svd /root/cdata/enwik8 EN-WS-353-ALL.txt EN-SIMLEX-999.txt EN-MEN-TR-3k.txt /path/outside/repo/enwik8
 ```
 

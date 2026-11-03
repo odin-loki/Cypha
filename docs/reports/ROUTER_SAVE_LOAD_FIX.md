@@ -70,7 +70,7 @@ memory merge that `Cypha::save` uses.
 
 ## Test
 
-`native_branch_a_router_save_load_test` (`native/tools/branch_a_router_save_load_test.cpp`), five layouts. For each:
+`native_branch_a_router_save_load_test` (`native/tools/classify/branch_a_router_save_load_test.cpp`), five layouts. For each:
 
 1. Router A loads the source checkpoint. The probes (60 texts, including an empty one) must reach at least two
    labels, else a lost class would pass unseen. The test takes the first spread of `std`, from a fixed list, at which
@@ -112,10 +112,10 @@ back the same world and classes it read.
 
 ## Callers checked
 
-- `native/apps/branch_a_rest_routes.cpp`: `try_load_checkpoint` at start-up, `route` in `/route/text` and
+- `native/src/serve/branch_a_rest_routes.cpp`: `try_load_checkpoint` at start-up, `route` in `/route/text` and
   `/route/generate`, `save_checkpoint` in `/route/save`, `summary`.
-- `native/apps/cypha_rest.cpp`: passes `--branch-a-json` or `CYPHA_BRANCH_A_CHECKPOINT` to the routes above.
-- `native/tools/topic_bench.cpp`: copies the hashing featuriser only; it does not save or load a router.
+- `native/tools/serve/cypha_rest.cpp`: passes `--branch-a-json` or `CYPHA_BRANCH_A_CHECKPOINT` to the routes above.
+- `native/tools/classify/topic_bench.cpp`: copies the hashing featuriser only; it does not save or load a router.
 - No router checkpoint is committed in the repository (none under `fixtures/`, `bench/` or `data/`), so nothing needs
   regenerating.
 

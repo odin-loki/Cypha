@@ -39,7 +39,7 @@ The scheduler decides which hypothesis enters this pipeline next. A pipeline run
 
 **U, the uniform scheduler (the baseline).** Each pull picks an arm uniformly at random among the arms with hypotheses left. Within an arm, hypotheses come in a random order.
 
-**S10, the curiosity scheduler** (`native/include/cypha/eval/curiosity.hpp`):
+**S10, the curiosity scheduler** (`native/include/cypha/knowledge/curiosity.hpp`):
 - **Thompson sampling.** Each arm keeps a Beta(1 + s, 1 + f) posterior of its reward rate, with fractional counts: a pull adds r / R to s and 1 − r / R to f, where R is the largest possible reward. Its expected cost is (cost spent + c₀) / (pulls + 1), with c₀ the mean cost of all pulls so far (1 before the first). Each pull draws p from every arm's Beta. The arm with the largest p · R / expected cost × (1 + λ · LP) is pulled.
 - **Learning progress (LP).** Over an arm's last 10 pulls, the mean of max(0, H(P0) − H(posterior)) / cost: bits of uncertainty removed per unit cost. An arm whose tests decide its hypotheses gets the bonus; an arm whose hypotheses stay where they were loses it (the "noisy TV").
 - **Demand bonus.** Within an arm, hypotheses on slots with demand go first.
@@ -266,7 +266,7 @@ These were computed on the gate set after its read, to explain it. Nothing is ch
 ## How to reproduce
 
 ```bash
-g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp -o pattern_learn
+g++ -O2 -std=c++20 -I native/include native/tools/knowledge/pattern_learn.cpp -o pattern_learn
 F=/root/work/f2; E=/root/cdata/enwik8; S8D=/root/work/s8d/runs   # S8d's dev files (after2) and fresh set (fresh)
 S="--sources bench/eval/temporal_holdout_dev.tsv tables $F/wikidata/wd_values.tsv $F/v2/aug/seeds.tsv $F/v2/aug/facts_f2.tsv"
 DEVH="$S8D/after2/s8a.r1_dev.hyps.tsv $S8D/after2/s8a.r2_dev.hyps.tsv $S8D/after2/s8b.promo.tsv"

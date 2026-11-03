@@ -1,9 +1,9 @@
 #pragma once
 
 #include "cypha/cypha.hpp"
-#include "cypha/ewc_regularizer.hpp"
+#include "cypha/online/ewc_regularizer.hpp"
 #include "cypha/forecast/event_vocabulary.hpp"
-#include "cypha/replay_buffer.hpp"
+#include "cypha/online/replay_buffer.hpp"
 
 #include <memory>
 #include <string>

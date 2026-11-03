@@ -16,7 +16,7 @@ Canonical research journal. Historical subsystem names (CyphaDIF / CyphaLM) appe
 |--------|--------|---------|
 | **Cypha classifier** | Working, benchmarked | Strong on linear/tabular; nonlinear ceiling mitigated by kernel LLR |
 | **Cypha regressor** | Working | Near Ridge on smooth domains; weak on hard nonlinear equations |
-| **Native stack (M1-M6 + P7)** | Shipped | Sole runtime; Kernel LLR in `native/src/kernel_memory.cpp`; CTest-gated CI |
+| **Native stack (M1-M6 + P7)** | Shipped | Sole runtime; Kernel LLR in `native/src/classify/kernel_memory.cpp`; CTest-gated CI |
 | **cypha::accel** | Working | Optional CUDA infer (`-DCYPHA_ENABLE_CUDA=ON`); training stays CPU (GPU train is slower). Future: xsimd — [`FUTURE.md`](FUTURE.md) §1b |
 | **Cypha sequence** | D17 bench lock **2.664 BPC** (Hybrid, 300k). Not the language model. | Trie is the model to train. hp gate24 is the comparison. [`CURRENT.md`](CURRENT.md) |
 | **cypha_som** | Archived, default OFF | Failed experiment -- [`archive/failed_experiments/cypha_som/`](archive/failed_experiments/cypha_som/README.md) |

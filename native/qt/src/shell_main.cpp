@@ -100,30 +100,30 @@
 #include <unordered_map>
 #include <vector>
 
-#include "cypha/create_model.hpp"
-#include "cypha/csv_ingest.hpp"
-#include "cypha/infer_cpu.hpp"
-#include "cypha/generation.hpp"
-#include "cypha/kernel_memory.hpp"
-#include "cypha/load_cypha.hpp"
-#include "cypha/memory_train.hpp"
-#include "cypha/mke_scalar_train_step.hpp"
-#include "cypha/preprocessor.hpp"
-#include "cypha/registry.hpp"
-#include "cypha/regression.hpp"
-#include "cypha/replay_buffer.hpp"
-#include "cypha/train_step_vector.hpp"
+#include "cypha/classify/create_model.hpp"
+#include "cypha/core/csv_ingest.hpp"
+#include "cypha/classify/infer_cpu.hpp"
+#include "cypha/classify/generation.hpp"
+#include "cypha/classify/kernel_memory.hpp"
+#include "cypha/classify/load_cypha.hpp"
+#include "cypha/classify/memory_train.hpp"
+#include "cypha/classify/mke_scalar_train_step.hpp"
+#include "cypha/classify/preprocessor.hpp"
+#include "cypha/core/registry.hpp"
+#include "cypha/classify/regression.hpp"
+#include "cypha/online/replay_buffer.hpp"
+#include "cypha/classify/train_step_vector.hpp"
 #include "cypha/cypha.hpp"
-#include "cypha/cyphalm/cyphalm_generation.hpp"
-#include "cypha/intelligence/epistemic_threshold.hpp"
+#include "cypha/lm/cyphalm_generation.hpp"
+#include "cypha/knowledge/epistemic_threshold.hpp"
 
 #include "bulk_train_worker.h"
 #include "bulk_rest_update_worker.h"
 #include "bulk_mke_train_worker.h"
 
 #ifdef CYPHA_SHELL_EXPERIMENT_DB
-#include "cypha/experiment_db.hpp"
-#include "cypha/experiment_db_crud.hpp"
+#include "cypha/core/experiment_db.hpp"
+#include "cypha/core/experiment_db_crud.hpp"
 
 namespace {
 /// Canonical experiments DB schema (matches Python ExperimentDB._SCHEMA).

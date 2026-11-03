@@ -53,7 +53,7 @@ These seven statistics came from the hybrid model's training loop. Since `0653e2
 
 **Superseded by:** hp on 2026-09-18/20 (`0653e25`, release 2.5.0), and since 2026-10 the packed trie, which is the model taken forward (CURRENT.md). hp stays only as a comparison.
 
-**Size if cut:** about 4,100 of the 10,459 lines of `native/src/bench/bench_domains.cpp` (the d39–d76 domain functions), 38 profiles in `bench/config/` (`d39_*` to `d76_*`), and 35 CTest blocks. Four domain tests in the same range pass (d42, d43, d56, d57: "math integration" checks over `bench/BASELINE_LOCK.json` and cell-sweep files, 0.01–7 s). They belong to the same hybrid-era series and should be looked at in the same cut.
+**Size if cut:** about 4,100 of the 10,459 lines of `native/src/eval/bench_domains.cpp` (the d39–d76 domain functions), 38 profiles in `bench/config/` (`d39_*` to `d76_*`), and 35 CTest blocks. Four domain tests in the same range pass (d42, d43, d56, d57: "math integration" checks over `bench/BASELINE_LOCK.json` and cell-sweep files, 0.01–7 s). They belong to the same hybrid-era series and should be looked at in the same cut.
 
 ### Class a′: real defects in the hp wrapper (vocabulary under 256)
 
@@ -94,7 +94,7 @@ Odin ruled on question 1: "Delete them".
 | Part | Removed |
 |---|---|
 | CTests | The 35 class-d tests (`native_cyphalm_bench_intelligence_profile` and the d39–d76 domain smokes except d42, d43, d56 and d57): 316 lines of `native/CMakeLists.txt` |
-| `native/src/bench/bench_domains.cpp` | The 34 `run_dNN_*` domain functions, their 34 entries in the domain table, the 2 helpers and 8 constants only they used: 3,685 lines (10,458 → 6,773) |
+| `native/src/eval/bench_domains.cpp` | The 34 `run_dNN_*` domain functions, their 34 entries in the domain table, the 2 helpers and 8 constants only they used: 3,685 lines (10,458 → 6,773) |
 | `bench/config/` | The 34 `dNN_*_profile.json` files (1,015 lines) and their 34 entries in `profiles_index.json` (238 lines) |
 
 In all, 5,255 lines out and 3 in: a one-line comment in `native/cmake/CyphaCTest.cmake`, and a note at the top of `bench/MATH_INTEGRATION_REPORT.md`, which names the removed gates and is kept as written. Git history keeps everything.
@@ -193,7 +193,7 @@ ctest --test-dir build -L cypha_slow --output-on-failure -j1          # 91 tests
 CYPHA_BENCH_FAST=1 build/cyphalm_bench_native --profile d17 --mode hybrid \
   --n-train 100 --n-eval 40 --intelligence-profile                   # exit 1: the 7 missing statistics
 build/cyphalm_memorization_canary --out canary.json --seed 42        # recall 0/6
-git log -S'cypha::intelligence::IntelligenceProfiler&) {' -- native/src/cyphalm/cyphalm_model.cpp   # 0653e25, full clone
+git log -S'cypha::intelligence::IntelligenceProfiler&) {' -- native/src/lm/cyphalm_model.cpp   # 0653e25, full clone
 ```
 
 Running the slow tests rewrites `bench/BASELINE_REPORT.md`; restore it with `git checkout` afterwards.

@@ -25,8 +25,8 @@ The score is `r_eff / r_base − 1` (`gh_infer_anomaly_score`). Here `r_eff = ni
 | Caller | What it does with `is_ood` |
 |---|---|
 | `cypha_tagger` (E1) | Reports OOD flag rates and the flag's AUROC for wrong tags |
-| `thought/bindings_cypha.hpp` | `classify` primitive's `ood`; `DifApplicability`'s query `ood` (THOUGHT 3.1) |
-| `apps/cypha_rest.cpp` | `/predict` returns `is_ood` (via `Cypha::predict`); its view-based GH path computed its own with 3.0; session history and explanations carry it |
+| `knowledge/bindings_cypha.hpp` | `classify` primitive's `ood`; `DifApplicability`'s query `ood` (THOUGHT 3.1) |
+| `tools/serve/cypha_rest.cpp` | `/predict` returns `is_ood` (via `Cypha::predict`); its view-based GH path computed its own with 3.0; session history and explanations carry it |
 | `cypha_save_load_test` (CSAVE) | Requires `is_ood` identical after a reload |
 
 The forecasting node, Branch A router, benches, `topic_bench` and the Qt shell do not read `is_ood` (checked by search). `ood_sigma` (a training setting) is not changed.
@@ -184,6 +184,6 @@ E1's final configuration (`--alpha 0.5 --vec simvec --whiten 0.1 --delta-lr 0.03
 ### Callers affected
 
 - `cypha_tagger` (E1): flag rates as above.
-- `thought/bindings_cypha.hpp`: the `classify` primitive's `ood` and `DifApplicability`'s query `ood` now use the learned threshold once a process has 50 labels.
-- `apps/cypha_rest.cpp`: `/predict`'s `is_ood` (through `Cypha::predict`) and its view-based GH path (`Cypha::ood_threshold()` in place of its own 3.0).
+- `knowledge/bindings_cypha.hpp`: the `classify` primitive's `ood` and `DifApplicability`'s query `ood` now use the learned threshold once a process has 50 labels.
+- `tools/serve/cypha_rest.cpp`: `/predict`'s `is_ood` (through `Cypha::predict`) and its view-based GH path (`Cypha::ood_threshold()` in place of its own 3.0).
 - Models never trained through `update` (fixtures, files from other tools) and files saved before this change keep the fixed 3.0 until they learn 50 rows.

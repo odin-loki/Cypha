@@ -14,7 +14,7 @@
 // Author: Odin Loch
 #pragma once
 
-#include "cypha/eval/sources.hpp"
+#include "cypha/knowledge/sources.hpp"
 
 #include <fstream>
 #include <string>

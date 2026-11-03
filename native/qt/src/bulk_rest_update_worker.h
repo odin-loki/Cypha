@@ -7,7 +7,7 @@
 #include <atomic>
 #include <vector>
 
-#include "cypha/csv_ingest.hpp"
+#include "cypha/core/csv_ingest.hpp"
 
 /// Parameters for one bulk REST /update run (snapshotted on the main thread).
 struct BulkRestUpdateJob {

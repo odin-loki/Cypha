@@ -263,7 +263,7 @@ One run with `--read-test` at commit 913d2a7 (`/root/work/s11a/runs/test.out`). 
 ### How to rebuild
 
 ```
-g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp -o pattern_learn
+g++ -O2 -std=c++20 -I native/include native/tools/knowledge/pattern_learn.cpp -o pattern_learn
 pattern_learn --gen-concepts /root/cdata/enwik8 /root/work/f2/v2/aug/seeds.tsv /root/work/f2/wikidata/wd_values.tsv \
   /root/work/f2/v2/aug/patterns.tsv bench/eval OUT --attrs A1 [--read-test]
 ```
@@ -289,7 +289,7 @@ Each part runs alone with `--part rediscover|promote|open`. A full run takes abo
   - In "in [[1882]], he moved", "[[1882]]" is its own one-token date candidate, so it is inside.
   - "[[War of 1812]]" is not inside: its display has more than the year.
 - **The change for G11:** a (subject mention, link) pair whose link sits inside a date candidate is not a pair. It is not counted, not checked against the kept patterns, and not clustered. Nothing else in G11 changes: the keys, the clusters, the dev choice between C1 and C2, the grading.
-- The helper is `span_within` in `native/include/cypha/eval/unknown_signals.hpp`, shared with U.
+- The helper is `span_within` in `native/include/cypha/knowledge/unknown_signals.hpp`, shared with U.
 
 ### Reads (dev only)
 

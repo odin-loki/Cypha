@@ -1,7 +1,7 @@
 // CTest: native experiment_db_crud vs canonical DDL (Python ExperimentDB-compatible inserts + finish_run).
 // Usage: experiment_db_crud_golden <experiment_ddl.sql>
-#include "cypha/experiment_db.hpp"
-#include "cypha/experiment_db_crud.hpp"
+#include "cypha/core/experiment_db.hpp"
+#include "cypha/core/experiment_db_crud.hpp"
 
 #include <sqlite3.h>
 

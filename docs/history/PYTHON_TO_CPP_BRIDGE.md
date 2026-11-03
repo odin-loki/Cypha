@@ -69,22 +69,22 @@ identifiers** in doc comments — classes, methods and attributes described as t
 the C++ is matching. These are not vague nods; they are precise parity references:
 
 ```cpp
-// native/include/cypha/nig_field.hpp
+// native/include/cypha/classify/nig_field.hpp
 /// Diagonal timescales τ (same grouping as Python `NIGField`).
 /// `field_h += strength * (‖field_h‖/‖signal‖) * signal` with L2 cap (Python `NIGField.inject`).
 /// Causal `W_T` SGD step + spectral-radius trim + refresh `a_eff` (Python `update_causal`).
 
-// native/include/cypha/similarity_index.hpp
+// native/include/cypha/classify/similarity_index.hpp
 /// Mahalanobis similarity index over encoded latents (Python ``SimilarityIndex``).
 
-// native/include/cypha/multilabel_dif.hpp
+// native/include/cypha/classify/multilabel_dif.hpp
 /// Parameters for ``MultiLabelDIF`` (Python ``MultiLabelDIF`` defaults).
 /// One binary ``CyphaDIF`` (pos/neg) per semantic label, sharing ``VectorEncoder`` input dim.
 
-// native/include/cypha/mke_scalar_train_step.hpp
+// native/include/cypha/classify/mke_scalar_train_step.hpp
 /// One scalar ``MKERegressor.train_step`` composition in native ...
 
-// native/include/cypha/replay_buffer.hpp
+// native/include/cypha/online/replay_buffer.hpp
 /// Priority replay matching `PriorityReplayBuffer` decay + weighted sampling (subset).
 ```
 
@@ -154,16 +154,16 @@ native translation units that carry their behaviour:
 
 | Python class (line) | Native header | Evidence |
 |---|---|---|
-| `NIGField` (873) | [`nig_field.hpp`](../../native/include/cypha/nig_field.hpp) | named 3× in header comments |
-| `PriorityReplayBuffer` (992) | [`replay_buffer.hpp`](../../native/include/cypha/replay_buffer.hpp) | "matching `PriorityReplayBuffer` decay" |
-| `SimilarityIndex` (4246) | [`similarity_index.hpp`](../../native/include/cypha/similarity_index.hpp) | "(Python ``SimilarityIndex``)" |
-| `MultiLabelDIF` (4138) | [`multilabel_dif.hpp`](../../native/include/cypha/multilabel_dif.hpp) | "(Python ``MultiLabelDIF`` defaults)" |
-| `MKERegressor` (3674) | [`mke_scalar_train_step.hpp`](../../native/include/cypha/mke_scalar_train_step.hpp) | "``MKERegressor.train_step`` composition in native" |
-| `RFFEncoder` (3511) | [`rff_features.hpp`](../../native/include/cypha/rff_features.hpp), [`orthogonal_rff_encoder.hpp`](../../native/include/cypha/orthogonal_rff_encoder.hpp) | `RFFEncoder.W`, `auto_gamma`, `auto_gamma_cv` cited |
-| `EncoderProjection` (215) | [`encoder_contrastive.hpp`](../../native/include/cypha/encoder_contrastive.hpp) | `EncoderProjection.__init__`, `.align_to_offsets` cited |
-| `DIFRegressor` (3961) | [`regression.hpp`](../../native/include/cypha/regression.hpp) | shared regression path |
-| `CyphaDIF` (1085) | [`cypha.hpp`](../../native/include/cypha/cypha.hpp), [`infer_cpu.hpp`](../../native/include/cypha/infer_cpu.hpp), [`dif_rest.hpp`](../../native/include/cypha/dif_rest.hpp) | 12 distinct `CyphaDIF.*` members cited |
-| `DIFMemory` (438) | [`kernel_memory.hpp`](../../native/include/cypha/kernel_memory.hpp), [`memory_train.hpp`](../../native/include/cypha/memory_train.hpp) | `DIFMemory.classify`, `.get_class_params` |
+| `NIGField` (873) | [`nig_field.hpp`](../../native/include/cypha/classify/nig_field.hpp) | named 3× in header comments |
+| `PriorityReplayBuffer` (992) | [`replay_buffer.hpp`](../../native/include/cypha/online/replay_buffer.hpp) | "matching `PriorityReplayBuffer` decay" |
+| `SimilarityIndex` (4246) | [`similarity_index.hpp`](../../native/include/cypha/classify/similarity_index.hpp) | "(Python ``SimilarityIndex``)" |
+| `MultiLabelDIF` (4138) | [`multilabel_dif.hpp`](../../native/include/cypha/classify/multilabel_dif.hpp) | "(Python ``MultiLabelDIF`` defaults)" |
+| `MKERegressor` (3674) | [`mke_scalar_train_step.hpp`](../../native/include/cypha/classify/mke_scalar_train_step.hpp) | "``MKERegressor.train_step`` composition in native" |
+| `RFFEncoder` (3511) | [`rff_features.hpp`](../../native/include/cypha/classify/rff_features.hpp), [`orthogonal_rff_encoder.hpp`](../../native/include/cypha/classify/orthogonal_rff_encoder.hpp) | `RFFEncoder.W`, `auto_gamma`, `auto_gamma_cv` cited |
+| `EncoderProjection` (215) | [`encoder_contrastive.hpp`](../../native/include/cypha/classify/encoder_contrastive.hpp) | `EncoderProjection.__init__`, `.align_to_offsets` cited |
+| `DIFRegressor` (3961) | [`regression.hpp`](../../native/include/cypha/classify/regression.hpp) | shared regression path |
+| `CyphaDIF` (1085) | [`cypha.hpp`](../../native/include/cypha/cypha.hpp), [`infer_cpu.hpp`](../../native/include/cypha/classify/infer_cpu.hpp), [`dif_rest.hpp`](../../native/include/cypha/serve/dif_rest.hpp) | 12 distinct `CyphaDIF.*` members cited |
+| `DIFMemory` (438) | [`kernel_memory.hpp`](../../native/include/cypha/classify/kernel_memory.hpp), [`memory_train.hpp`](../../native/include/cypha/classify/memory_train.hpp) | `DIFMemory.classify`, `.get_class_params` |
 | `TieredContextBuffer` (707) | context path in [`cypha.hpp`](../../native/include/cypha/cypha.hpp) | `.record`, `.predict_next` cited |
 | `WorldPrior` (285) | world-prior state in [`cypha.hpp`](../../native/include/cypha/cypha.hpp) | `WorldPrior.F_field` cited |
 | `ClassDifferential` (378) | DIF core | `ClassDifferential.fisher_rao_norm` cited |
@@ -184,7 +184,7 @@ own comments and are worth knowing before treating it as a faithful copy.
 // Encoder: identity (VectorEncoder with no learning at start)
 root.map.push_back({"enc_W", identity_2d(d)});
 ```
-— `native/src/create_model.cpp:132-133`
+— `native/src/classify/create_model.cpp:132-133`
 
 `init_encoder_projection_w` — the orthogonalising initialiser that mirrors the Python — exists
 in `encoder_contrastive.cpp:254` but is called only from `native/tools/`
@@ -200,7 +200,7 @@ across and then switched off for cross-compiler floating-point reproducibility. 
 **Temperature recalibration is off.** `temp_recalib_every{0}`, documented as "default off",
 with the note that "Python has no per-step hook" — so this is a native addition that is
 disabled rather than a Python behaviour that was dropped
-(`native/include/cypha/train_step_vector.hpp:25-26`).
+(`native/include/cypha/classify/train_step_vector.hpp:25-26`).
 
 The pattern across all three: the port preserves the mechanism and the parameter names, and
 chooses different defaults. Anyone reading the archive to predict native behaviour should

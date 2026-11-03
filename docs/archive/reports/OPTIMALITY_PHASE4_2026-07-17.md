@@ -52,9 +52,9 @@ Full conjugacy integral of the class score over the NIG posterior in high-d is d
 
 ## Files touched
 
-- `native/include/cypha/nig_gig_math.hpp`, `native/src/nig_gig_math.cpp`
-- `native/include/cypha/infer_cpu.hpp`, `native/src/infer_cpu.cpp`
-- `native/tools/nig_bma_p4_smoke.cpp` (new)
+- `native/include/cypha/classify/nig_gig_math.hpp`, `native/src/classify/nig_gig_math.cpp`
+- `native/include/cypha/classify/infer_cpu.hpp`, `native/src/classify/infer_cpu.cpp`
+- `native/tools/classify/nig_bma_p4_smoke.cpp` (new)
 - `native/CMakeLists.txt`
 
 ## Build / test

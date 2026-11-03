@@ -46,7 +46,7 @@ Written into this file before `scripts/wikidata_seeds.py` was first run. Scored 
 
 ## Step 1: F2 reproduced, and one seed bug
 
-**Reproduction.** I built `native/tools/pattern_learn.cpp` as committed (commit `9f26206`) and ran `--cv` on all of enwik8.
+**Reproduction.** I built `native/tools/knowledge/pattern_learn.cpp` as committed (commit `9f26206`) and ran `--cv` on all of enwik8.
 - **Numbers.** Every number matches the F2 report: 8,148 seeds on 2,177 pages, 676 candidates, 44 kept, 942 raw extractions, 920 written (832 admitted, 88 candidates).
 - **Cost.** 20.6–25.3 s and 107–110 MB.
 
@@ -364,7 +364,7 @@ The flags as they were raised:
 
 | Item | Value |
 |---|---|
-| `native/tools/pattern_learn.cpp` | 1,937 → 2,303 lines (+366). The shard adapter (templates, writer, coverage) is 195 lines; the Wikidata loader and gold check 93; the seed fix 9; flags and header the rest |
+| `native/tools/knowledge/pattern_learn.cpp` | 1,937 → 2,303 lines (+366). The shard adapter (templates, writer, coverage) is 195 lines; the Wikidata loader and gold check 93; the seed fix 9; flags and header the rest |
 | `scripts/wikidata_seeds.py` | 180 lines, including an 18-line docstring; Python standard library only |
 | `pattern_learn --cv` | base 18.3 s / 109 MB; with Wikidata and the shard 29.9 s / 118 MB; one core |
 | Wikidata fetch | 262 requests in total (208 + 54 for the calendar fix); about 22 minutes wall time, of which 9.9 minutes waiting on the throttled Wikipedia API; the SPARQL endpoint was not throttled. Saved data 16 MB |
@@ -391,7 +391,7 @@ The flags as they were raised:
 ## Reproduce
 
 ```bash
-g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp -o pattern_learn
+g++ -O2 -std=c++20 -I native/include native/tools/knowledge/pattern_learn.cpp -o pattern_learn
 E=/root/cdata/enwik8; DEV=bench/eval/t_qa_wiki_dev.tsv; TEST=bench/eval/t_qa_wiki.tsv; O=/root/work/f2
 # F2 as published (8,148 seeds): build commit 9f26206's pattern_learn.cpp and run  ./pattern_learn $E $O/base --cv
 # base (fixed seeds) and its shard

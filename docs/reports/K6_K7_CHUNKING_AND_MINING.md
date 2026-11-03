@@ -15,7 +15,7 @@
 
 ## 1. K6: chunking (fixed before any code)
 
-**Mechanism** (new header `native/include/cypha/thought/chunking.hpp`, THOUGHT §4 as written):
+**Mechanism** (new header `native/include/cypha/knowledge/chunking.hpp`, THOUGHT §4 as written):
 1. **Compile.** When the last 5 System 2 results for a situation class are identical, a rule "class → that result" is compiled. It is tainted.
 2. **Trial.** A tainted rule's prediction is scored against System 2, which still runs and gives the answer.
 3. **Keep.** The rule joins System 1 (it answers) when the Wilson lower bound of its agreement with System 2 is ≥ 0.9 over at least 20 checked uses.
@@ -44,7 +44,7 @@
 
 ## 2. K7: process mining and MDL structural edits (fixed before any code)
 
-**Mechanism** (new header `native/include/cypha/thought/mining.hpp`).
+**Mechanism** (new header `native/include/cypha/knowledge/mining.hpp`).
 - **Mining (THOUGHT §6.1).** Directly-follows counts `|a > b|` over traces with a virtual start and end. Dependency `a ⇒ b = (|a > b| − |b > a|) / (|a > b| + |b > a| + 1)`. An edge is proposed when `a ⇒ b ≥ 0.9` and `|a > b| ≥ 10`. The heuristics miner's standard loop measures are part of the miner: a self-loop when `|a > a| / (|a > a| + 1) ≥ 0.9` with `|a > a| ≥ 10`; a length-2 loop when `(|aba| + |bab|) / (|aba| + |bab| + 1) ≥ 0.9` with `|aba| + |bab| ≥ 10`, which adds both edges.
 - **The model for edits.** A process as a probabilistic automaton over step labels: nodes carry a label (or a short sequence of labels for a merged step), and the successors of a node have distinct first labels, so a trace replays along one path. Transition probabilities are the counts plus 0.5 per allowed edge and per escape. A transition the model does not allow takes the escape: its probability at that node, plus log2(|labels| + 1) bits to name the label, and replay restarts at a node with that label (the first in node order).
 - **Description length (THOUGHT §6.4):** `L(model) + L(traces | model)`, in bits.
@@ -320,4 +320,4 @@ J=docs/thought/processes.json
 ctest --test-dir <build> -R "native_thought_(test|bindings_test|k6_test)"
 ```
 
-Code: `native/include/cypha/thought/chunking.hpp`, `native/include/cypha/thought/mining.hpp`, `CalibratedApplicability` in `native/include/cypha/thought/bindings_cypha.hpp`, `native/tools/thought_k6.cpp`, `native/tools/thought_k6_test.cpp` (CTest `native_thought_k6_test`), and `thought_k5 calibration` in `native/tools/thought_k5.cpp`.
+Code: `native/include/cypha/knowledge/chunking.hpp`, `native/include/cypha/knowledge/mining.hpp`, `CalibratedApplicability` in `native/include/cypha/knowledge/bindings_cypha.hpp`, `native/tools/knowledge/thought_k6.cpp`, `native/tools/knowledge/thought_k6_test.cpp` (CTest `native_thought_k6_test`), and `thought_k5 calibration` in `native/tools/knowledge/thought_k5.cpp`.

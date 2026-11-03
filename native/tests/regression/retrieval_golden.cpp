@@ -10,8 +10,8 @@
 
 #include <nlohmann/json.hpp>
 
-#include "cypha/infer_cpu.hpp"
-#include "cypha/load_cypha.hpp"
+#include "cypha/classify/infer_cpu.hpp"
+#include "cypha/classify/load_cypha.hpp"
 
 namespace {
 

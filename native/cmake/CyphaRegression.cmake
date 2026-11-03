@@ -59,7 +59,7 @@ cypha_add_golden_exe(som_golden LINK cypha_lm_native)
 cypha_add_golden_exe(cyphalm_checkpoint_golden LINK cypha_lm_native)
 cypha_add_golden_exe(cyphalm_golden LINK cypha_lm_native)
 
-add_executable(cypha_golden_run "${CMAKE_CURRENT_SOURCE_DIR}/apps/cypha_golden_run.cpp")
+add_executable(cypha_golden_run "${CMAKE_CURRENT_SOURCE_DIR}/tests/regression/cypha_golden_run.cpp")
 target_link_libraries(cypha_golden_run PRIVATE cypha_core)
 
 set(

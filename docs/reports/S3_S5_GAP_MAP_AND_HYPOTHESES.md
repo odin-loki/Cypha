@@ -21,10 +21,10 @@
 PLAN rule 10 holds. Neither store answers anything. Wikidata gives only a type-level rate, never a value. Strings are compared only for grading, on dev. The frozen test file was not opened.
 
 Files:
-- [`hypothesis.hpp`](../../native/include/cypha/eval/hypothesis.hpp) (S5);
-- [`gap_map.hpp`](../../native/include/cypha/eval/gap_map.hpp) (S3);
-- [`epistemic_test.cpp`](../../native/tools/epistemic_test.cpp): the new checks, in CTest `native_epistemic_test`;
-- [`pattern_learn.cpp`](../../native/tools/pattern_learn.cpp): `--gaps`.
+- [`hypothesis.hpp`](../../native/include/cypha/knowledge/hypothesis.hpp) (S5);
+- [`gap_map.hpp`](../../native/include/cypha/knowledge/gap_map.hpp) (S3);
+- [`epistemic_test.cpp`](../../native/tools/knowledge/epistemic_test.cpp): the new checks, in CTest `native_epistemic_test`;
+- [`pattern_learn.cpp`](../../native/tools/knowledge/pattern_learn.cpp): `--gaps`.
 
 Spec: [`DISCOVERY.md`](../DISCOVERY.md) sections 1, 2.3, 3.2, 3.5, 4, 6.1, 6.3, 7.2–7.5 and 11. Earlier work: [S1_S2_EPISTEMIC.md](S1_S2_EPISTEMIC.md), [D4](D4_WIKIDATA_SEEDS_AND_FACT_SHARD.md), [F2R](F2R_RAW_BYTE_PATTERNS.md), [A1c](A1C_ENTITY_FAMILIARITY_AND_COPY.md).
 
@@ -75,7 +75,7 @@ Written into this file before any gap-map run and before the new tests were firs
 
 ## S5. The hypothesis store
 
-`native/include/cypha/eval/hypothesis.hpp`, namespace `cypha::eval`, header-only, includes `epistemic.hpp`. Nothing in it reads or writes a file.
+`native/include/cypha/knowledge/hypothesis.hpp`, namespace `cypha::eval`, header-only, includes `epistemic.hpp`. Nothing in it reads or writes a file.
 
 | Part | Spec | What it provides |
 |---|---|---|
@@ -443,10 +443,10 @@ Odin: "try a lot of things, profile and record everything, then pick a fact-base
 
 | Item | Value |
 |---|---|
-| `native/include/cypha/eval/hypothesis.hpp` | 500 lines (new) |
-| `native/include/cypha/eval/gap_map.hpp` | 239 lines (new) |
-| `native/tools/epistemic_test.cpp` | 515 → 979 lines (+465, −1); checks 195 → 516; 0.00–0.01 s |
-| `native/tools/pattern_learn.cpp` | 2,709 → 3,026 lines (+319, −2): header comments and entity setup 50; f(T, R) and calibration 46; schema, contradiction and certainty gaps 54; demand and grading 70; outputs and summary 83; options and usage 16 |
+| `native/include/cypha/knowledge/hypothesis.hpp` | 500 lines (new) |
+| `native/include/cypha/knowledge/gap_map.hpp` | 239 lines (new) |
+| `native/tools/knowledge/epistemic_test.cpp` | 515 → 979 lines (+465, −1); checks 195 → 516; 0.00–0.01 s |
+| `native/tools/knowledge/pattern_learn.cpp` | 2,709 → 3,026 lines (+319, −2): header comments and entity setup 50; f(T, R) and calibration 46; schema, contradiction and certainty gaps 54; demand and grading 70; outputs and summary 83; options and usage 16 |
 | `native/CMakeLists.txt` | unchanged (the checks are in the existing CTest) |
 | `--gaps` run | 28.3–38.7 s, 132–153 MB peak (the tool's own measure), one core, shared machine. The v2 run without it took 28.9 s and 118 MB |
 | Outputs | `gap_map.tsv` 27,842 gaps (2.7 MB); `.cells.tsv` 132 cells; `.demand.tsv` 750 tags |
@@ -479,7 +479,7 @@ Odin: "try a lot of things, profile and record everything, then pick a fact-base
 ## Reproduce
 
 ```bash
-g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp -o pattern_learn
+g++ -O2 -std=c++20 -I native/include native/tools/knowledge/pattern_learn.cpp -o pattern_learn
 cmake -S native -B /root/cb_ecs && cmake --build /root/cb_ecs --target epistemic_test -j1
 ctest --test-dir /root/cb_ecs -R native_epistemic_test          # 516 checks
 E=/root/cdata/enwik8; W=/root/work/f2/wikidata/wd_values.tsv; DEV=bench/eval/t_qa_wiki_dev.tsv

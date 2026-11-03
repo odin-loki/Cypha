@@ -251,7 +251,7 @@ Given A and C, the B links separate a true value from its false partner on test 
 ## How to reproduce (at commit 0230741)
 
 ```bash
-g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp -o pattern_learn
+g++ -O2 -std=c++20 -I native/include native/tools/knowledge/pattern_learn.cpp -o pattern_learn
 E=/root/cdata/enwik8; F=/root/work/f2
 ./pattern_learn --gen-abc $E $F/v2/aug/seeds.tsv $F/v2/aug/facts_f2.tsv $F/wikidata/wd_values.tsv $F/v2/aug/patterns.tsv bench/eval dev/g12
 # S8d's source stage on each pool (S8d's calibration from its dev files; empty.tsv is a header-only G2 file)

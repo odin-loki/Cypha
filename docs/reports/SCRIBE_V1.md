@@ -14,7 +14,7 @@
 
 One of the three failed pairs is not the metric's fault: the order-4 trie writes word salad, which really is worse than shuffled human sentences, so "trie > sentences shuffled" cannot hold for a correct metric on this model (see "What still fails").
 
-Code: [`native/include/cypha/eval/scribe.hpp`](../../native/include/cypha/eval/scribe.hpp), [`native/tools/scribe_ladder.cpp`](../../native/tools/scribe_ladder.cpp), `native/tools/trie_sample.cpp` (since 2026-10-27 `cyphalm_trie sample` in [`native/tools/cyphalm_trie.cpp`](../../native/tools/cyphalm_trie.cpp), byte-identical output, [B1 report](B1_TRIE_CONSOLIDATION.md)). Spec: [`../PLAN.md`](../PLAN.md) section 6. Previous report: [`SCRIBE_V0.md`](SCRIBE_V0.md).
+Code: [`native/include/cypha/eval/scribe.hpp`](../../native/include/cypha/eval/scribe.hpp), [`native/tools/scribe_ladder.cpp`](../../native/tools/scribe_ladder.cpp), `native/tools/trie_sample.cpp` (since 2026-10-27 `cyphalm_trie sample` in [`native/tools/lm/cyphalm_trie.cpp`](../../native/tools/lm/cyphalm_trie.cpp), byte-identical output, [B1 report](B1_TRIE_CONSOLIDATION.md)). Spec: [`../PLAN.md`](../PLAN.md) section 6. Previous report: [`SCRIBE_V0.md`](SCRIBE_V0.md).
 
 ---
 
@@ -207,8 +207,8 @@ On the fresh region the held-out human set lands near the middle (E = 0.65). On 
 ```
 gcc -O2 -c native/third_party/libsais/libsais.c -o libsais.o
 g++ -O2 -std=c++20 -I native/include -I native/third_party -I native/third_party/libsais \
-    native/tools/cyphalm_trie.cpp native/src/cyphalm/infinigram.cpp libsais.o -o cyphalm_trie
-g++ -O2 -std=c++20 native/tools/ppmi_svd.cpp -o ppmi_svd
+    native/tools/lm/cyphalm_trie.cpp native/src/lm/infinigram.cpp libsais.o -o cyphalm_trie
+g++ -O2 -std=c++20 native/tools/semantics/ppmi_svd.cpp -o ppmi_svd
 g++ -O2 -std=c++20 -I native/include native/tools/scribe_ladder.cpp -o scribe_ladder
 dd if=enwik8 of=train32.xml bs=1048576 skip=16 count=32       # enwik8 [16, 48) MiB
 ./ppmi_svd train32.xml none none - v32 --no-ri --no-ablation  # 50 s; the similarity files may be absent

@@ -39,9 +39,9 @@ Score-match beats LUT on held-out log-likelihood with sub-0.2% gate deviation on
 
 ## Files touched
 
-- `native/include/cypha/nig_gig_score_match.hpp`, `native/src/nig_gig_score_match.cpp` (new)
-- `native/include/cypha/nig_gig_math.hpp`, `native/src/nig_gig_math.cpp` (dispatch + `gig_k2k1_lut`)
-- `native/tools/gate_score_match_p7_smoke.cpp` (new)
+- `native/include/cypha/classify/nig_gig_score_match.hpp`, `native/src/classify/nig_gig_score_match.cpp` (new)
+- `native/include/cypha/classify/nig_gig_math.hpp`, `native/src/classify/nig_gig_math.cpp` (dispatch + `gig_k2k1_lut`)
+- `native/tools/classify/gate_score_match_p7_smoke.cpp` (new)
 - `native/CMakeLists.txt`
 
 ## Promotion path

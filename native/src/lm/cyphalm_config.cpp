@@ -1,0 +1,694 @@
+#include "cypha/lm/cyphalm_config.hpp"
+
+#include <algorithm>
+#include <cctype>
+#include <cmath>
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <stdexcept>
+
+#include <nlohmann/json.hpp>
+
+#include "cypha/core/env.hpp"
+#include "hp/predictor.hpp"
+
+namespace cypha::cyphalm {
+
+namespace {
+
+std::string lower_copy(std::string s) {
+    for (char& c : s) {
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+    return s;
+}
+
+}  // namespace
+
+ContextMode parse_context_mode(const std::string& s) {
+    const std::string k = lower_copy(s);
+    if (k == "hp" || k == "hutter" || k == "context_mixer") return ContextMode::Hp;
+    if (k == "hp_gate24" || k == "gate24" || k == "hp_champ" || k == "champ") return ContextMode::Hp;
+    if (k == "full") return ContextMode::Full;
+    if (k == "gria_ngram") return ContextMode::GriaNgram;
+    if (k == "hybrid" || k == "hybrid_gria_lstm") return ContextMode::Hp;
+    if (k == "char_lstm") return ContextMode::CharLstm;
+    if (k == "ssm_gria" || k == "ssm_only" || k == "ssm-only") return ContextMode::SsmGria;
+    if (k == "ssm_gria_no_lstm") return ContextMode::SsmGriaNoLstm;
+    if (k == "ablation_no_dif") return ContextMode::AblationNoDif;
+    if (k == "ablation_no_ssm") return ContextMode::AblationNoSsm;
+    if (k == "rpsm") return ContextMode::Hp;  // retired alias → hp
+    if (k == "pgm_logits" || k == "pgm") return ContextMode::PgmLogits;
+    throw std::runtime_error("unknown context mode: " + s);
+}
+
+std::string context_mode_name(ContextMode mode) {
+    switch (mode) {
+        case ContextMode::Hp: return "hp";
+        case ContextMode::Full: return "full";
+        case ContextMode::GriaNgram: return "gria_ngram";
+        case ContextMode::Hybrid: return "hp";
+        case ContextMode::CharLstm: return "char_lstm";
+        case ContextMode::SsmGria: return "ssm_gria";
+        case ContextMode::SsmGriaNoLstm: return "ssm_gria_no_lstm";
+        case ContextMode::AblationNoDif: return "ablation_no_dif";
+        case ContextMode::AblationNoSsm: return "ablation_no_ssm";
+        case ContextMode::PgmLogits: return "pgm_logits";
+    }
+    return "unknown";
+}
+
+std::string context_mode_string(ContextMode mode) {
+    switch (mode) {
+        case ContextMode::Hp:
+        case ContextMode::Hybrid: return "hp";
+        case ContextMode::SsmGria: return "ssm_only";
+        case ContextMode::PgmLogits: return "pgm_logits";
+        default: return context_mode_name(mode);
+    }
+}
+
+BenchMode parse_bench_mode(const std::string& s) {
+    if (s == "char_lstm") return BenchMode::CharLstm;
+    if (s == "ssm") return BenchMode::Ssm;
+    if (s == "hybrid") return BenchMode::Hybrid;
+    if (s == "ssm_gria") return BenchMode::SsmGria;
+    if (s == "context_bank") return BenchMode::ContextBank;
+    if (s == "spectral") return BenchMode::Spectral;
+    if (s == "rpsm") return BenchMode::Hybrid;  // retired alias → hp
+    if (s == "pgm_logits" || s == "pgm") return BenchMode::PgmLogits;
+    throw std::runtime_error("unknown bench mode: " + s);
+}
+
+void apply_pgm_logits_recipe(CyphaLMConfig& cfg) {
+    cfg.context_mode = ContextMode::PgmLogits;
+    cfg.use_unified_context = true;
+    cfg.unified_context_source = UnifiedContextSource::Pgm;
+    cfg.unified_readout = UnifiedReadout::PgmWy;
+    cfg.use_pgm_cell = true;
+    cfg.pgm_n_sub = 8;
+    cfg.pgm_levels = 3;
+    cfg.pgm_chunk_len = 16;
+    cfg.pgm_topk = 4;
+    cfg.pgm_beam = 2;
+    cfg.pgm_rehash_t = 16;
+    cfg.pgm_hops = 2;
+    cfg.ngram_fuse_split = false;
+}
+
+int hp_compile_slot_max() {
+#if defined(CYPHA_HP_SLOT_MAX)
+    return CYPHA_HP_SLOT_MAX;
+#else
+    return 24;
+#endif
+}
+
+void normalize_hp_table_bits(CyphaLMConfig& cfg) {
+    const int cap = std::min(cfg.hp_slot_max, hp_compile_slot_max());
+    if (cfg.hp_table_bits > cap) {
+        cfg.hp_table_bits = cap;
+    }
+    if (cfg.hp_table_bits < 16) {
+        cfg.hp_table_bits = 16;
+    }
+}
+
+int hp_effective_table_bits(const CyphaLMConfig& cfg) {
+    if (cfg.hp_lossy_mem > 0) {
+        return std::max(16, std::min(cfg.hp_lossy_mem, 24));
+    }
+    return cfg.hp_table_bits;
+}
+
+void apply_hp_lossy_recipe(CyphaLMConfig& cfg, int mem_bits) {
+    apply_hp_production_recipe(cfg);
+    cfg.hp_lossy_mem = std::max(16, std::min(mem_bits, 24));
+    normalize_hp_table_bits(cfg);
+}
+
+void apply_hp_lossy_env(CyphaLMConfig& cfg) {
+    const char* mem = std::getenv("CYPHA_HP_LOSSY_MEM");
+    if (mem != nullptr && mem[0] != '\0') {
+        cfg.hp_lossy_mem = std::max(16, std::min(std::atoi(mem), 24));
+    }
+    const char* compact = std::getenv("CYPHA_HP_SERVE_COMPACT");
+    if (compact != nullptr && compact[0] == '1' && compact[1] == '\0') {
+        cfg.hp_serve_compact = true;
+    }
+    const char* tier = std::getenv("CYPHA_HP_LOSSY_TIER");
+    if (tier != nullptr && tier[0] != '\0') {
+        apply_hp_lossy_tier(cfg, tier);
+    }
+    const char* frozen = std::getenv("CYPHA_HP_FROZEN_SCORING");
+    if (frozen != nullptr && frozen[0] != '\0') {
+        cfg.hp_frozen_scoring = frozen[0] == '1';
+    }
+    auto env_int = [](const char* name, int& field) {
+        const char* v = std::getenv(name);
+        if (v != nullptr && v[0] != '\0') field = std::atoi(v);
+    };
+    env_int("CYPHA_HP_LR1_SCALE", cfg.hp_lr1_scale);
+    env_int("CYPHA_HP_MIXER_SCALE", cfg.hp_mixer_scale);
+    env_int("CYPHA_HP_MIXER_SKIP_L1", cfg.hp_mixer_skip_l1);
+    env_int("CYPHA_HP_MIXER_SKIP", cfg.hp_mixer_skip);  // tiers re-apply it after their own value
+    const char* extra_cms = std::getenv("CYPHA_HP_EXTRA_CMS");  // decimal or 0x hex bitmask
+    if (extra_cms != nullptr && extra_cms[0] != '\0') {
+        cfg.hp_extra_cms = static_cast<std::uint32_t>(std::strtoul(extra_cms, nullptr, 0));
+    }
+    const char* prune_env = std::getenv("CYPHA_HP_TREE_PRUNE");
+    if (prune_env != nullptr && prune_env[0] != '\0') cfg.hp_tree_prune = std::atof(prune_env);
+    const char* serve_lr = std::getenv("CYPHA_HP_SERVE_MIXER_LR_SCALE");
+    if (serve_lr != nullptr && serve_lr[0] != '\0') {
+        cfg.hp_serve_mixer_lr_scale = std::atof(serve_lr);
+    }
+    const char* prune = std::getenv("CYPHA_HP_PRUNE_COLD_MIN_N");
+    if (prune != nullptr && prune[0] != '\0') {
+        cfg.hp_prune_cold_min_n = std::max(0, std::atoi(prune));
+    }
+    if (cfg.hp_lossy_mem > 0) {
+        normalize_hp_table_bits(cfg);
+    }
+}
+
+std::vector<std::string> hp_lossy_tier_names() {
+    return {"gate24", "lean", "balanced", "compact", "small", "tiny", "slim"};
+}
+
+namespace {
+
+/// Eight wiki context models that cost more than they return on enwik8
+/// (drop-one and stacked screens, docs/reports/CYPHALM_LOSSY_MIXER_REPORT.md).
+std::uint64_t lean_cm_drop() {
+    using P = hp::Predictor;
+    const int ids[] = {P::kCmParaMod,     P::kCmNestMod,    P::kCmInfokeyMod, P::kCmLinkpipeMod,
+                       P::kCmTplMod,      P::kCmO6b,        P::kCmHeadingMod, P::kCmCapmaskMod};
+    std::uint64_t m = 0;
+    for (int id : ids) m |= std::uint64_t{1} << id;
+    return m;
+}
+
+/// slim: thirteen more context models whose held-out value is within noise
+/// when dropped one at a time from a lean 8 MiB model
+/// (CYPHALM_LM_QUALITY_REPORT.md, "RAM").
+std::uint64_t slim_cm_drop() {
+    using P = hp::Predictor;
+    const int ids[] = {P::kCmSp13, P::kCmSp24,     P::kCmCol,     P::kCmTag,      P::kCmWstrSp,
+                       P::kCmLink, P::kCmNum,      P::kCmSentmemCm, P::kCmStateMod, P::kCmCatMod,
+                       P::kCmTitleMod, P::kCmUppergapMod, P::kCmWordlenMod};
+    std::uint64_t m = lean_cm_drop();
+    for (int id : ids) m |= std::uint64_t{1} << id;
+    return m;
+}
+
+}  // namespace
+
+void apply_hp_lossy_tier(CyphaLMConfig& cfg, const std::string& tier) {
+    cfg.hp_cm_drop = 0;
+    cfg.hp_cm_bits_cap = 0;
+    cfg.hp_gate_drop = 0;
+    cfg.hp_mixer_skip = 0;
+    cfg.hp_match_bits_cap = 0;
+    cfg.hp_pool_slots = 0;
+    cfg.hp_pool_bits_cap = 0;
+    cfg.hp_hebb_bits_cap = 0;
+    cfg.hp_match_drop = 0;
+    if (tier.empty() || tier == "gate24") {
+        cfg.hp_lossy_tier.clear();
+        return;
+    }
+    // Measured on enwik8 8 MiB, mem 22 (gate24: 1.611729 bpc, 1,538 MB peak RSS).
+    // Every tier starts from lean; the others add table caps.
+    struct Tier {
+        const char* name;
+        int cm_cap, match_cap, pool_cap;
+    };
+    static const Tier kTiers[] = {
+        {"lean", 0, 22, 20},      // 1.609866 bpc, 1,078 MB
+        {"balanced", 23, 22, 20}, // 1.612457 bpc,   814 MB
+        {"compact", 22, 22, 20},  // 1.617400 bpc,   670 MB
+        {"small", 21, 21, 20},    // 1.629798 bpc,   404 MB
+        {"tiny", 20, 20, 18},     // 1.652317 bpc,   253 MB
+    };
+    for (const Tier& t : kTiers) {
+        if (tier != t.name) continue;
+        cfg.hp_cm_drop = lean_cm_drop();
+        cfg.hp_pool_slots = 8;
+        cfg.hp_cm_bits_cap = t.cm_cap;
+        cfg.hp_match_bits_cap = t.match_cap;
+        cfg.hp_pool_bits_cap = t.pool_cap;
+    }
+    if (tier == "slim") {
+        // LLM serving: lean minus 13 low-value context models, small pool
+        // and Hebbian tables. Match tables stay at lean's size: they hold
+        // the training text's positions, and shrinking them costs more the
+        // more text a model has seen (see report).
+        cfg.hp_cm_drop = slim_cm_drop();
+        cfg.hp_pool_slots = 8;
+        cfg.hp_match_bits_cap = 22;
+        cfg.hp_pool_bits_cap = 16;
+        cfg.hp_hebb_bits_cap = 16;
+        // Five byte-match models (orders 4, 5, 6; skip 2, 3) each within
+        // ±0.001 held-out when dropped from a 95 MB model: -84 MB there.
+        cfg.hp_match_drop = (1u << 1) | (1u << 2) | (1u << 8) | (1u << 10) | (1u << 11);
+    }
+    if (cfg.hp_cm_drop == 0) {
+        throw std::runtime_error("unknown CyphaLM lossy tier: " + tier);
+    }
+    cfg.hp_lossy_tier = tier;
+    const char* skip = std::getenv("CYPHA_HP_MIXER_SKIP");  // after the tier's own value
+    if (skip != nullptr && skip[0] != '\0') cfg.hp_mixer_skip = std::atoi(skip);
+}
+
+void apply_hp_production_recipe(CyphaLMConfig& cfg) {
+    cfg.context_mode = ContextMode::Hp;
+    cfg.use_pgm_cell = false;
+    cfg.use_unified_context = false;
+    cfg.unified_context_source = UnifiedContextSource::None;
+    cfg.unified_readout = UnifiedReadout::None;
+    cfg.use_kernel_llr = false;
+    // hp models bytes: a smaller vocabulary would only truncate its next-byte
+    // distribution (no UTF-8 in generation or scoring).
+    cfg.vocab_size = 256;
+    cfg.hp_slot_max = 24;
+    if (cfg.hp_table_bits < 16) {
+        cfg.hp_table_bits = 22;
+    }
+    if (cfg.hp_mixer_lr <= 0) {
+        cfg.hp_mixer_lr = 2;
+    }
+    cfg.hp_gria = true;
+    normalize_hp_table_bits(cfg);
+    if (cfg.view_schedule.empty() || cfg.view_schedule == "same_order") {
+        cfg.view_schedule = "schedule_b";
+    }
+}
+
+void apply_hybrid_production_recipe(CyphaLMConfig& cfg) {
+    apply_hp_production_recipe(cfg);
+    // Legacy field defaults preserved for profile JSON compatibility (ignored by hp path).
+    cfg.use_multiscale = true;
+    cfg.ngram_fuse_split = true;
+    cfg.use_ngram_count_prior = false;
+    if (cfg.ngram_context < 2) {
+        cfg.ngram_context = 3;
+    }
+    cfg.hybrid_blend_learnable = true;
+    if (cfg.lstm_hidden < 32) {
+        cfg.lstm_hidden = 128;
+    }
+    if (cfg.d_state < cfg.lstm_hidden) {
+        cfg.d_state = cfg.lstm_hidden;
+    }
+    if (cfg.lstm_layers < 2) {
+        cfg.lstm_layers = 2;
+    }
+    apply_wave2_bptt_recipe(cfg);
+}
+
+void apply_wave2_bptt_recipe(CyphaLMConfig& cfg, const Wave2BpttOptions& opt) {
+    cfg.lstm_bptt_steps = std::max(1, opt.bptt_steps);
+    cfg.lstm_optim = "adam";
+    cfg.lstm_grad_clip = opt.grad_clip;
+    cfg.lstm_init = "classic";
+    cfg.lstm_lr = opt.lstm_lr;
+    if (!opt.with_schedule || opt.train_steps <= 0) {
+        cfg.lstm_lr_warmup_steps = 0;
+        cfg.lstm_lr_cosine_steps = 0;
+        return;
+    }
+    // ~2.5% warmup (min 64, max 2000), cosine over the rest of the budget.
+    const int steps = std::max(1, opt.train_steps);
+    int warmup = std::max(64, steps / 40);
+    warmup = std::min(warmup, 2000);
+    warmup = std::min(warmup, std::max(1, steps / 4));
+    cfg.lstm_lr_warmup_steps = warmup;
+    cfg.lstm_lr_cosine_steps = std::max(1, steps - warmup);
+}
+
+void apply_bench_mode(BenchMode mode, CyphaLMConfig& cfg) {
+    cfg.use_context_bank = false;
+    cfg.use_spectral_pde = false;
+    switch (mode) {
+        case BenchMode::CharLstm:
+            cfg.context_mode = ContextMode::CharLstm;
+            break;
+        case BenchMode::Ssm:
+            cfg.context_mode = ContextMode::SsmGria;
+            break;
+        case BenchMode::Hybrid:
+            // Hermetic hybrid: clear PGM/unified leftovers without clobbering profile knobs
+            // (view_schedule, ngram_context, dims). Product default uses
+            // ``apply_hybrid_production_recipe`` instead.
+            cfg.context_mode = ContextMode::Hybrid;
+            cfg.use_pgm_cell = false;
+            cfg.use_unified_context = false;
+            cfg.unified_context_source = UnifiedContextSource::None;
+            cfg.unified_readout = UnifiedReadout::None;
+            cfg.ngram_fuse_split = true;
+            cfg.use_ngram_count_prior = false;
+            break;
+        case BenchMode::SsmGria:
+            cfg.context_mode = ContextMode::GriaNgram;
+            break;
+        case BenchMode::ContextBank:
+            cfg.context_mode = ContextMode::GriaNgram;
+            cfg.use_context_bank = true;
+            break;
+        case BenchMode::Spectral:
+            cfg.context_mode = ContextMode::SsmGria;
+            cfg.use_spectral_pde = true;
+            break;
+        case BenchMode::PgmLogits:
+            apply_pgm_logits_recipe(cfg);
+            break;
+    }
+}
+
+std::string bench_mode_name(BenchMode mode) {
+    switch (mode) {
+        case BenchMode::CharLstm: return "char_lstm";
+        case BenchMode::Ssm: return "ssm";
+        case BenchMode::Hybrid: return "hybrid";
+        case BenchMode::SsmGria: return "ssm_gria";
+        case BenchMode::ContextBank: return "context_bank";
+        case BenchMode::Spectral: return "spectral";
+        case BenchMode::PgmLogits: return "pgm_logits";
+    }
+    return "unknown";
+}
+
+std::string unified_context_source_name(UnifiedContextSource s) {
+    switch (s) {
+        case UnifiedContextSource::None: return "none";
+        case UnifiedContextSource::Field: return "field";
+        case UnifiedContextSource::Lstm: return "lstm";
+        case UnifiedContextSource::Pgm: return "pgm";
+        case UnifiedContextSource::ContextBank: return "context_bank";
+        case UnifiedContextSource::Memory: return "memory";
+        case UnifiedContextSource::UnifiedBuffer: return "unified_buffer";
+    }
+    return "none";
+}
+
+std::string unified_readout_name(UnifiedReadout r) {
+    switch (r) {
+        case UnifiedReadout::None: return "none";
+        case UnifiedReadout::Lstm: return "lstm";
+        case UnifiedReadout::Gria: return "gria";
+        case UnifiedReadout::PgmWy: return "pgm_wy";
+    }
+    return "none";
+}
+
+UnifiedContextSource parse_unified_context_source(const std::string& s) {
+    const std::string k = lower_copy(s);
+    if (k == "none" || k.empty()) return UnifiedContextSource::None;
+    if (k == "field") return UnifiedContextSource::Field;
+    if (k == "lstm") return UnifiedContextSource::Lstm;
+    if (k == "pgm") return UnifiedContextSource::Pgm;
+    if (k == "context_bank" || k == "bank") return UnifiedContextSource::ContextBank;
+    if (k == "memory") return UnifiedContextSource::Memory;
+    if (k == "unified_buffer" || k == "buffer") return UnifiedContextSource::UnifiedBuffer;
+    throw std::runtime_error("unknown unified_context_source: " + s);
+}
+
+UnifiedReadout parse_unified_readout(const std::string& s) {
+    const std::string k = lower_copy(s);
+    if (k == "none" || k.empty()) return UnifiedReadout::None;
+    if (k == "lstm") return UnifiedReadout::Lstm;
+    if (k == "gria") return UnifiedReadout::Gria;
+    if (k == "pgm_wy" || k == "pgm" || k == "wy") return UnifiedReadout::PgmWy;
+    throw std::runtime_error("unknown unified_readout: " + s);
+}
+
+namespace {
+
+std::string repo_root_from_config() {
+    namespace fs = std::filesystem;
+    const fs::path native = fs::path(__FILE__).parent_path().parent_path().parent_path();
+    return native.parent_path().string();
+}
+
+void merge_json_config(const nlohmann::json& j, CyphaLMConfig& cfg) {
+    auto set_i = [&](const char* k, int& v) {
+        if (j.contains(k)) v = j.at(k).get<int>();
+    };
+    auto set_u64 = [&](const char* k, std::uint64_t& v) {
+        if (j.contains(k)) v = j.at(k).get<std::uint64_t>();
+    };
+    auto set_d = [&](const char* k, double& v) {
+        if (j.contains(k)) v = j.at(k).get<double>();
+    };
+    auto set_b = [&](const char* k, bool& v) {
+        if (j.contains(k)) v = j.at(k).get<bool>();
+    };
+    auto set_s = [&](const char* k, std::string& v) {
+        if (j.contains(k)) v = j.at(k).get<std::string>();
+    };
+
+    set_i("vocab_size", cfg.vocab_size);
+    set_i("d_embed", cfg.d_embed);
+    set_i("d_state", cfg.d_state);
+    set_d("tau_fast", cfg.tau_fast);
+    set_d("tau_slow", cfg.tau_slow);
+    set_i("ssm_layers", cfg.ssm_layers);
+    set_i("field_dim", cfg.field_dim);
+    set_i("max_experts", cfg.max_experts);
+    set_i("n_experts", cfg.n_experts);
+    set_b("use_soft_expert_updates", cfg.use_soft_expert_updates);
+    set_b("use_routing_entropy_floor", cfg.use_routing_entropy_floor);
+    set_d("routing_entropy_lambda", cfg.routing_entropy_lambda);
+    set_d("routing_entropy_floor_frac", cfg.routing_entropy_floor_frac);
+    set_d("alpha_init", cfg.alpha_init);
+    set_b("alpha_learnable", cfg.alpha_learnable);
+    set_i("gria_rank", cfg.gria_rank);
+    set_i("context_length", cfg.context_length);
+    if (j.contains("context_mode")) {
+        cfg.context_mode = parse_context_mode(j.at("context_mode").get<std::string>());
+    }
+    set_i("ngram_context", cfg.ngram_context);
+    set_b("use_ngram_count_prior", cfg.use_ngram_count_prior);
+    set_i("train_epochs", cfg.train_epochs);
+    set_s("view_schedule", cfg.view_schedule);
+    set_i("view_block_size", cfg.view_block_size);
+    set_i("view_id_dim", cfg.view_id_dim);
+    set_b("view_learnable", cfg.view_learnable);
+    set_i("bptt_steps", cfg.bptt_steps);
+    set_d("laplace_smoothing", cfg.laplace_smoothing);
+    set_d("gria_lr_decay", cfg.gria_lr_decay);
+    set_i("lstm_hidden", cfg.lstm_hidden);
+    set_i("lstm_layers", cfg.lstm_layers);
+    if (cfg.lstm_layers < 1) cfg.lstm_layers = 1;
+    set_d("lstm_lr", cfg.lstm_lr);
+    set_i("lstm_bptt_steps", cfg.lstm_bptt_steps);
+    set_s("lstm_optim", cfg.lstm_optim);
+    set_d("lstm_grad_clip", cfg.lstm_grad_clip);
+    set_s("lstm_init", cfg.lstm_init);
+    set_d("lstm_weight_decay", cfg.lstm_weight_decay);
+    set_i("lstm_lr_warmup_steps", cfg.lstm_lr_warmup_steps);
+    set_i("lstm_lr_cosine_steps", cfg.lstm_lr_cosine_steps);
+    set_d("hybrid_blend_logit", cfg.hybrid_blend_logit);
+    set_b("hybrid_blend_learnable", cfg.hybrid_blend_learnable);
+    set_d("hybrid_blend_lr", cfg.hybrid_blend_lr);
+    set_u64("seed", cfg.seed);
+    set_d("gria_lr", cfg.gria_lr);
+    set_b("online", cfg.online);
+    set_b("use_spectral_pde", cfg.use_spectral_pde);
+    set_b("use_sparse_hebbian", cfg.use_sparse_hebbian);
+    set_b("use_multiscale", cfg.use_multiscale);
+    set_b("train_ssm", cfg.train_ssm);
+    set_d("ssm_lr", cfg.ssm_lr);
+    set_s("ngram_fusion", cfg.ngram_fusion);
+    set_b("ngram_position_weights", cfg.ngram_position_weights);
+    set_b("ngram_bilinear_fusion", cfg.ngram_bilinear_fusion);
+    set_b("ngram_fuse_split", cfg.ngram_fuse_split);
+    set_s("bpe_merges_path", cfg.bpe_merges_path);
+    set_s("bpe_vocab_path", cfg.bpe_vocab_path);
+    set_b("profile_guided_loss", cfg.profile_guided_loss);
+    set_b("use_full_navigation_loss", cfg.use_full_navigation_loss);
+    set_b("use_profile_curriculum", cfg.use_profile_curriculum);
+    set_i("navigation_loss_warmup_steps", cfg.navigation_loss_warmup_steps);
+    set_b("use_adaptive_navigation_lambdas", cfg.use_adaptive_navigation_lambdas);
+    set_d("kappa_lambda_target", cfg.kappa_lambda_target);
+    set_b("use_nig_state_cell", cfg.use_nig_state_cell);
+    set_b("use_pgm_cell", cfg.use_pgm_cell);
+    set_b("use_unified_context", cfg.use_unified_context);
+    if (j.contains("unified_context_source") && j["unified_context_source"].is_string()) {
+        cfg.unified_context_source =
+            parse_unified_context_source(j["unified_context_source"].get<std::string>());
+    }
+    if (j.contains("unified_readout") && j["unified_readout"].is_string()) {
+        cfg.unified_readout = parse_unified_readout(j["unified_readout"].get<std::string>());
+    }
+    if (j.contains("cell_variant") && j["cell_variant"].is_string()) {
+        cfg.cell_variant = j["cell_variant"].get<std::string>();
+    }
+    set_i("pgm_n_sub", cfg.pgm_n_sub);
+    set_i("pgm_levels", cfg.pgm_levels);
+    set_i("pgm_chunk_len", cfg.pgm_chunk_len);
+    set_i("pgm_topk", cfg.pgm_topk);
+    set_i("pgm_beam", cfg.pgm_beam);
+    set_i("pgm_rehash_t", cfg.pgm_rehash_t);
+    set_i("pgm_hops", cfg.pgm_hops);
+    if (j.contains("context_mode") && j["context_mode"].is_string()) {
+        const std::string cm = j["context_mode"].get<std::string>();
+        if (cm == "pgm_logits" || cm == "pgm") {
+            apply_pgm_logits_recipe(cfg);
+        }
+    }
+    if (cfg.cell_variant == "U06") {
+        apply_pgm_logits_recipe(cfg);
+        cfg.cell_variant = "U06";
+    }
+    set_b("use_alpha_forget_gate", cfg.use_alpha_forget_gate);
+    set_b("use_tau_forget_gate", cfg.use_tau_forget_gate);
+    set_b("use_kappa_trajectory_lambdas", cfg.use_kappa_trajectory_lambdas);
+    set_i("kappa_trajectory_window", cfg.kappa_trajectory_window);
+    set_b("use_per_stat_deviation_lambdas", cfg.use_per_stat_deviation_lambdas);
+    set_d("per_stat_deviation_span", cfg.per_stat_deviation_span);
+    set_b("use_kappa_ceiling_lambdas", cfg.use_kappa_ceiling_lambdas);
+    set_b("use_lstm_d_eff_hidden_nudge", cfg.use_lstm_d_eff_hidden_nudge);
+    set_b("use_eigenvalue_d_eff", cfg.use_eigenvalue_d_eff);
+    set_b("use_reu_forget_gate", cfg.use_reu_forget_gate);
+    set_d("kappa_ceiling_strength", cfg.kappa_ceiling_strength);
+    set_d("kappa_ceiling_min_scale", cfg.kappa_ceiling_min_scale);
+    set_b("use_kappa_trajectory_ceiling", cfg.use_kappa_trajectory_ceiling);
+    set_b("use_kappa_excess_grad_nudge", cfg.use_kappa_excess_grad_nudge);
+    set_d("kappa_excess_grad_scale", cfg.kappa_excess_grad_scale);
+    set_d("kappa_excess_grad_margin", cfg.kappa_excess_grad_margin);
+    set_b("use_kappa_kernel_blend_scale", cfg.use_kappa_kernel_blend_scale);
+    set_d("kappa_kernel_blend_floor", cfg.kappa_kernel_blend_floor);
+    set_b("use_kappa_navigation_warmup_scale", cfg.use_kappa_navigation_warmup_scale);
+    set_d("kappa_navigation_warmup_strength", cfg.kappa_navigation_warmup_strength);
+    set_d("kappa_navigation_warmup_floor", cfg.kappa_navigation_warmup_floor);
+    set_d("reu_forget_gate_blend", cfg.reu_forget_gate_blend);
+    set_b("use_kernel_llr", cfg.use_kernel_llr);
+    set_d("kernel_blend", cfg.kernel_blend);
+    set_i("kernel_m", cfg.kernel_m);
+    set_d("kernel_gamma_scale", cfg.kernel_gamma_scale);
+    set_d("kernel_lr_scale", cfg.kernel_lr_scale);
+    set_b("use_gria_gated_mixture", cfg.use_gria_gated_mixture);
+    set_b("use_ood_branching", cfg.use_ood_branching);
+    set_b("use_free_energy_loss", cfg.use_free_energy_loss);
+    set_d("free_energy_beta", cfg.free_energy_beta);
+    set_b("use_mdl_forget", cfg.use_mdl_forget);
+    set_d("mdl_forget_max_norm", cfg.mdl_forget_max_norm);
+    set_b("use_priority_replay", cfg.use_priority_replay);
+    set_b("use_hebbian_stack", cfg.use_hebbian_stack);
+    set_d("ewc_lambda", cfg.ewc_lambda);
+    set_i("hp_table_bits", cfg.hp_table_bits);
+    set_i("hp_slot_max", cfg.hp_slot_max);
+    set_i("hp_mixer_lr", cfg.hp_mixer_lr);
+    set_b("hp_gria", cfg.hp_gria);
+    if (j.contains("context_mode") && j["context_mode"].is_string()) {
+        const std::string cm = j["context_mode"].get<std::string>();
+        if (cm == "hp" || cm == "hp_gate24" || cm == "gate24" || cm == "hp_champ" || cm == "champ") {
+            apply_hp_production_recipe(cfg);
+        }
+    }
+}
+
+}  // namespace
+
+void apply_bench_profile(const std::string& profile, CyphaLMConfig& cfg) {
+    namespace fs = std::filesystem;
+    const fs::path root = fs::path(repo_root_from_config()) / "bench" / "config" / "profiles";
+    fs::path path;
+    if (profile == "d17") {
+        path = root / "cyphalm_d17_wikitext.json";
+    } else if (profile == "d17_bpe") {
+        path = root / "cyphalm_d17_wikitext_bpe.json";
+    } else if (profile == "hp" || profile == "hp_gate24" || profile == "gate24") {
+        path = root / "cyphalm_hp_gate24.json";
+    } else if (profile == "d21" || profile == "d21_small") {
+        path = root / "cyphalm_d21_hp.json";
+    } else if (profile == "d04") {
+        path = root / "cyphalm_d04_gutenberg.json";
+        if (!fs::is_regular_file(path)) {
+            path = root / "cyphalm_d04.json";
+        }
+    } else {
+        path = root / ("cyphalm_" + profile + ".json");
+    }
+    if (!fs::is_regular_file(path)) {
+        return;
+    }
+    std::ifstream in(path);
+    if (!in) return;
+    nlohmann::json j;
+    in >> j;
+    merge_json_config(j, cfg);
+    const fs::path repo = fs::path(repo_root_from_config());
+    auto resolve = [&](std::string& p) {
+        if (p.empty()) return;
+        const fs::path cand = fs::path(p);
+        if (cand.is_absolute() && fs::is_regular_file(cand)) return;
+        const fs::path under = repo / cand;
+        if (fs::is_regular_file(under)) p = under.string();
+    };
+    resolve(cfg.bpe_merges_path);
+    resolve(cfg.bpe_vocab_path);
+    apply_lstm_recipe_env(cfg);
+}
+
+void apply_lstm_recipe_env(CyphaLMConfig& cfg) {
+    if (const auto v = cypha::env_get("CYPHA_LSTM_LAYERS"); v.has_value() && !v->empty()) {
+        cfg.lstm_layers = std::max(1, std::stoi(*v));
+    }
+    if (const auto v = cypha::env_get("CYPHA_LSTM_BPTT"); v.has_value() && !v->empty()) {
+        cfg.lstm_bptt_steps = std::max(1, std::stoi(*v));
+    }
+    if (const auto v = cypha::env_get("CYPHA_LSTM_OPTIM"); v.has_value() && !v->empty()) {
+        cfg.lstm_optim = lower_copy(*v);
+    }
+    if (const auto v = cypha::env_get("CYPHA_LSTM_GRAD_CLIP"); v.has_value() && !v->empty()) {
+        cfg.lstm_grad_clip = std::stod(*v);
+    }
+    if (const auto v = cypha::env_get("CYPHA_LSTM_INIT"); v.has_value() && !v->empty()) {
+        cfg.lstm_init = lower_copy(*v);
+    }
+    if (const auto v = cypha::env_get("CYPHA_LSTM_WEIGHT_DECAY"); v.has_value() && !v->empty()) {
+        cfg.lstm_weight_decay = std::max(0.0, std::stod(*v));
+    }
+    if (const auto v = cypha::env_get("CYPHA_LSTM_LR_WARMUP"); v.has_value() && !v->empty()) {
+        cfg.lstm_lr_warmup_steps = std::max(0, std::stoi(*v));
+    }
+    if (const auto v = cypha::env_get("CYPHA_LSTM_LR_COSINE"); v.has_value() && !v->empty()) {
+        cfg.lstm_lr_cosine_steps = std::max(0, std::stoi(*v));
+    }
+    if (const auto v = cypha::env_get("CYPHA_LSTM_LR"); v.has_value() && !v->empty()) {
+        cfg.lstm_lr = std::stod(*v);
+    }
+}
+
+double lstm_lr_at_step(const CyphaLMConfig& cfg, int step) {
+    const int warmup = std::max(0, cfg.lstm_lr_warmup_steps);
+    const int cosine = std::max(0, cfg.lstm_lr_cosine_steps);
+    if (warmup == 0 && cosine == 0) {
+        return cfg.lstm_lr;
+    }
+    const double base = cfg.lstm_lr;
+    const double floor_lr = 0.1 * base;
+    if (step < 0) {
+        step = 0;
+    }
+    if (warmup > 0 && step < warmup) {
+        // Linear warmup 0 → base over ``warmup`` steps (step 0 near-zero, step warmup-1 at base).
+        return base * (static_cast<double>(step + 1) / static_cast<double>(warmup));
+    }
+    if (cosine <= 0) {
+        return base;
+    }
+    const int t = step - warmup;
+    if (t >= cosine) {
+        return floor_lr;
+    }
+    constexpr double kPi = 3.14159265358979323846;
+    const double progress = static_cast<double>(t) / static_cast<double>(cosine);
+    const double cos_factor = 0.5 * (1.0 + std::cos(kPi * progress));  // 1 → 0
+    return floor_lr + (base - floor_lr) * cos_factor;
+}
+
+}  // namespace cypha::cyphalm

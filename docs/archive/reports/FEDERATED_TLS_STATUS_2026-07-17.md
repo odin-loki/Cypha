@@ -42,7 +42,7 @@ Implementation lives in existing tree (pre-BoW):
 
 | Item | Purpose |
 |------|---------|
-| `native/tools/federated_tls_smoke.cpp` | HTTPS loopback: self-signed cert via `openssl req`, `httplib::SSLServer` + `SSLClient`, `/submit` merge |
+| `native/tools/classify/federated_tls_smoke.cpp` | HTTPS loopback: self-signed cert via `openssl req`, `httplib::SSLServer` + `SSLClient`, `/submit` merge |
 | `native/CMakeLists.txt` | `CYPHA_ENABLE_OPENSSL` option; links `OpenSSL::SSL` / `OpenSSL::Crypto` when ON |
 | `native_federated_tls_smoke` (CTest) | Optional; **exit 2 = skip** (`SKIP_RETURN_CODE 2`) without OpenSSL build or CLI |
 | `scripts/ci_federated_tls_linux.sh` | Optional CI job mirror (Linux) |

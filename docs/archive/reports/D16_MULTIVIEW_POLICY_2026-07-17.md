@@ -49,7 +49,7 @@ Profile `_meta.multiview_policy` in `bench/config/profiles/cyphalm_d17_wikitext.
 
 ### What 16G measures
 
-`run_d16()` experiment **16G** (`native/src/bench/bench_domains.cpp`) compares two multitask stream policies after a short iris warm-start:
+`run_d16()` experiment **16G** (`native/src/eval/bench_domains.cpp`) compares two multitask stream policies after a short iris warm-start:
 
 | Stream | Behavior |
 |--------|----------|
@@ -100,5 +100,5 @@ Corroborated independently by D03 view-schedule pilot (`docs/reports/MULTI_VIEW_
 - `docs/MULTI_VIEW_TRAINING_PLAN.md` — Phase 1 sweep recommendations (lines 325, 340)
 - `docs/FINDINGS_CYPHALM_TRAINING.md` — convergence limits, same-order @ 40k cap
 - `docs/reports/MULTI_VIEW_DIF_PHASE2_PLAN.md` — D03 pilot + 16G negative context
-- `native/src/bench/bench_domains.cpp` — `16G_view_streams` (~2388)
-- `native/tools/cyphalm_bench_native.cpp` — `--n-train` default 40k
+- `native/src/eval/bench_domains.cpp` — `16G_view_streams` (~2388)
+- `native/tools/lm/cyphalm_bench_native.cpp` — `--n-train` default 40k

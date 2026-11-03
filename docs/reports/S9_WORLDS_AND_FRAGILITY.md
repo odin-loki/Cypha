@@ -297,7 +297,7 @@ Every card starts with the HYPOTHETICAL label, ends with "Nothing here is stored
 ## Reproduce
 
 ```
-g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp -o pattern_learn
+g++ -O2 -std=c++20 -I native/include native/tools/knowledge/pattern_learn.cpp -o pattern_learn
 ./pattern_learn --worlds enwik8 /root/work/f2/v2/aug/seeds.tsv /root/work/f2/wikidata/wd_values.tsv \
   /root/work/f2/v2/aug/facts_f2.tsv bench/eval/temporal_holdout_dev.tsv OUT [--read-confirm]
 ```

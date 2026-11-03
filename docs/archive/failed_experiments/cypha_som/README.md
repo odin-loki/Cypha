@@ -25,7 +25,7 @@ Full evaluation: [`../../reports/SOM_UPGRADE_REPORT.md`](../../reports/SOM_UPGRA
 | Layer | Path |
 |-------|------|
 | Native parity smoke | `native/src/som/`, `native/tools/som_parity.cpp` |
-| Config flags | `native/include/cypha/cyphalm/cyphalm_config.hpp` |
+| Config flags | `native/include/cypha/lm/cyphalm_config.hpp` |
 | Historical Python package | removed with P7 (`cypha_som/`) |
 
 ## Lessons
@@ -37,4 +37,4 @@ Full evaluation: [`../../reports/SOM_UPGRADE_REPORT.md`](../../reports/SOM_UPGRA
 ## What to use instead
 
 - **Nonlinear boundaries (XOR):** kernel LLR + `KernelMemory` -- see `xor_kernel_bench` / [`../../../research/upgrades/NONLINEAR_BOUNDARY.md`](../../../research/upgrades/NONLINEAR_BOUNDARY.md).
-- **Structural intelligence stats:** `native/include/cypha/intelligence/` (P-space profiler).
+- **Structural intelligence stats:** `native/include/cypha/knowledge/` (P-space profiler).

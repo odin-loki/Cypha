@@ -300,7 +300,7 @@ The flags as raised:
 
 | Item | Value |
 |---|---|
-| `native/tools/pattern_learn.cpp` | 2,303 → 2,708 lines (+427, −22). In-place cleaning 83; token positions about 30; raw keys and mentions 68; raw frames, `--join` and the raw-form shard about 75; `--reach` 128; flags and header about 20 |
+| `native/tools/knowledge/pattern_learn.cpp` | 2,303 → 2,708 lines (+427, −22). In-place cleaning 83; token positions about 30; raw keys and mentions 68; raw frames, `--join` and the raw-form shard about 75; `--reach` 128; flags and header about 20 |
 | `pattern_learn --raw --cv` with Wikidata | 41.6–57.8 s, 117–119 MB, one core (the machine was shared) |
 | The same with `--join`, `--shard` and `--reach` | 41.6 s, 119 MB |
 | Cleaned run, for comparison | 26.6–27.4 s, 118–119 MB |
@@ -318,7 +318,7 @@ The flags as raised:
 ## Reproduce
 
 ```bash
-g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp -o pattern_learn
+g++ -O2 -std=c++20 -I native/include native/tools/knowledge/pattern_learn.cpp -o pattern_learn
 E=/root/cdata/enwik8; DEV=bench/eval/t_qa_wiki_dev.tsv; TEST=bench/eval/t_qa_wiki.tsv
 F=/root/work/f2; O=/root/work/f2raw; W=$F/wikidata/wd_values.tsv
 PAR=parse_dev.tsv   # E1's parse of the dev questions, A3's --parse file (/root/work/answer/parse_dev.tsv)

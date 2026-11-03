@@ -1,7 +1,7 @@
 # Numerical audit — inference gate, GIG/Bessel kernels, field, CUDA
 
 **Date:** 2026-09-17 · **Status:** **R1–R4 and N1–N4, L5–L9 all fixed and CTest-guarded**; L11–L13 recorded
-**Scope:** `native/src/infer_cpu.cpp`, `nig_gig_math.cpp`, `nig_gig_score_match.cpp`,
+**Scope:** `native/src/classify/infer_cpu.cpp`, `nig_gig_math.cpp`, `nig_gig_score_match.cpp`,
 `bessel_table*`, `nig_field.cpp`, `accel_cuda.cu`
 
 This began while tracing the GIG world gate back through the Python archive during the
@@ -65,7 +65,7 @@ changing it is deliberate rather than accidental.
 
 ## R3 and R4 — fixed
 
-Both are corrected in `native/src/infer_cpu.cpp` and guarded by CTest
+Both are corrected in `native/src/classify/infer_cpu.cpp` and guarded by CTest
 `native_ported_defects_pinned`, which asserts the **correct** behaviour. (That test previously
 asserted the defective behaviour, to stop an accidental change while the parity question was
 open; the question is settled, so it was rewritten rather than worked around.)
@@ -171,7 +171,7 @@ if (use_kernel_llr && kernel_mem != nullptr && kernel_mem->n_basis() >= 4 && K >
   out.disc = disc_new * (conf_lin / disc_lin);
 }
 ```
-— `native/src/infer_cpu.cpp:1165-1169`
+— `native/src/classify/infer_cpu.cpp:1165-1169`
 
 `conf_lin / disc_lin` is `(disc_lin · world_gate) / disc_lin`, so `disc_lin` cancels exactly and
 the block reduces to **`out.disc *= world_gate`**. Nineteen lines later:
@@ -210,7 +210,7 @@ tail of the function expects. The linear softmax above it (`linear_best`, `z_lin
 `disc_lin`) fed only this block and went with it, removing a redundant softmax per call on the
 kernel path. `linear_llrs` is kept — the blend still uses it.
 
-**Proven against the built binary, not on paper.** `native/tools/kernel_gate_invariant.cpp`
+**Proven against the built binary, not on paper.** `native/tools/classify/kernel_gate_invariant.cpp`
 exercises the `kernel_blend = 0.0` invariant, where the blended LLRs are bit-identical to the
 linear ones so every downstream quantity must match. Before the fix:
 
@@ -237,7 +237,7 @@ passing vacuously if a future change stops the input exercising the gated path.
 const double r_base = (mahal_ema_fallback > 0.0 && std::isfinite(mahal_ema_fallback)) ? mahal_ema_fallback : 1.0;
 return std::max(0.0, (r_eff - r_base) / r_base);
 ```
-— `native/src/infer_cpu.cpp:1275-1279`
+— `native/src/classify/infer_cpu.cpp:1275-1279`
 
 The `r_eff` it receives was formed by `gh_infer_at_h` against a *different* baseline:
 
@@ -282,7 +282,7 @@ if (sum_w > 0.0) {
   ece += sum_w * std::abs(sum_c / sum_w - sum_corr / sum_w) / static_cast<double>(n);
 }
 ```
-— `native/src/infer_cpu.cpp:874-883`
+— `native/src/classify/infer_cpu.cpp:874-883`
 
 The last bin is `[0.9, 1.0)`, strictly excluding 1.0. A sample at confidence exactly 1.0 falls
 into **no bin at all** — it is dropped from the numerator while `n` still counts it in the
@@ -327,7 +327,7 @@ fix. **Left as-is.**
 double best_ece = std::numeric_limits<double>::infinity();
 double best_T = infer.temperature;
 ```
-— `native/src/infer_cpu.cpp:905-906`, with `infer.temperature = best_T;` at `:950`
+— `native/src/classify/infer_cpu.cpp:905-906`, with `infer.temperature = best_T;` at `:950`
 
 `best_ece` starts at infinity, so the **incumbent temperature is never scored**. The first grid
 point beats infinity unconditionally, and the winner is stored whether or not it is an
@@ -371,7 +371,7 @@ if (x > 120.0) {
 const double ratio = active_k2k1(x);
 return std::sqrt(psi / chi_g) * ratio;
 ```
-— `native/src/nig_gig_math.cpp:105-110`
+— `native/src/classify/nig_gig_math.cpp:105-110`
 
 For `V ~ GIG(λ = −1, χ, ψ)` the first inverse moment is
 
@@ -389,7 +389,7 @@ if (x > 120.0) {
   return std::sqrt(chi_g / std::max(psi, kEps));
 }
 ```
-— `native/src/nig_gig_math.cpp:121-123` (`gig_e_v_lam_neg1`)
+— `native/src/classify/nig_gig_math.cpp:121-123` (`gig_e_v_lam_neg1`)
 
 so the two siblings disagree about how to take the same kind of limit.
 
@@ -427,8 +427,8 @@ is bit-for-bit unaffected. The paths that would see the full step are
 
 ### It is mirrored on the GPU, and parity cannot catch it
 
-`native/src/accel_cuda.cu:141-160` carries the same branches. And the parity harness
-`native/tools/cuda_smoke.cpp:78-93` compares against `cypha::nig_r_eff_scalar` — the CPU
+`native/src/core/accel_cuda.cu:141-160` carries the same branches. And the parity harness
+`native/tools/core/cuda_smoke.cpp:78-93` compares against `cypha::nig_r_eff_scalar` — the CPU
 production function itself — so it is a self-comparison, not an independent oracle. A CPU/GPU
 parity test cannot detect a defect both sides share. (CUDA is an opt-in build:
 `CMakeLists.txt:19` declares `CYPHA_ENABLE_CUDA ... OFF`.)
@@ -446,7 +446,7 @@ if (x < 1e-6) {
   return psi / chi_g;                     // N2
 }
 ```
-— `native/src/nig_gig_math.cpp:97-99, 102-104`
+— `native/src/classify/nig_gig_math.cpp:97-99, 102-104`
 
 As `x → 0`, `K₂/K₁ → 2/x`, so
 
@@ -480,7 +480,7 @@ if (x > 120.0) {
   return 1.0 + 1.5 / x + 6.75 / (x * x);
 }
 ```
-— `native/src/nig_gig_score_match.cpp:62`
+— `native/src/classify/nig_gig_score_match.cpp:62`
 
 Deriving the ratio from the standard asymptotic series
 `K_ν(x) ~ sqrt(π/2x)·e^{−x}·[1 + (4ν²−1)/(8x) + (4ν²−1)(4ν²−9)/(2!(8x)²) + …]`:
@@ -504,7 +504,7 @@ The linear term `1.5/x` is right, so this looks like a transcription slip in one
 **Unreachable through its caller.** `active_k2k1` is invoked only at `nig_gig_math.cpp:108`,
 *after* the `x > 120` early return of N1 — so this large-`x` branch cannot be reached through
 `gig_e_inv_v_lam_neg1` at all. It is reachable only via `nig_gate_predictive_loglik`, which is
-called only from `native/tools/gate_score_match_p7_smoke.cpp`. ScoreMatch mode is also off by
+called only from `native/tools/classify/gate_score_match_p7_smoke.cpp`. ScoreMatch mode is also off by
 default (`Lut` unless `CYPHA_GIG_SCORE_MATCH` is set, `nig_gig_score_match.cpp:38-51`).
 
 N1 and N4 therefore mask each other: the dead branch is dead *because* of the other defect.
@@ -676,7 +676,7 @@ Its remaining points were documentation and provenance debt, now closed by
 - `--validate` (default) checks the shipped constants and the shipped table, and asserts range,
   monotonicity, accuracy and cross-backend agreement. This is the same set of properties
   `native_bessel_gig_limits` enforces in CI.
-- `--table` regenerates `native/src/bessel_table_data.cpp`, which had been unreproducible: its
+- `--table` regenerates `native/src/classify/bessel_table_data.cpp`, which had been unreproducible: its
   header names `scripts/gen_native_bessel_table.py`, and **that script is not in the repository**.
   The regenerated columns agree with the shipped ones to `2.6e-15` relative, and the grid is exact,
   so the shipped file was left in place rather than churned for last-bit noise.
@@ -685,7 +685,7 @@ Its remaining points were documentation and provenance debt, now closed by
 
 ### Guarded by
 
-CTest **`native_bessel_gig_limits`** (`native/tools/bessel_gig_limits.cpp`) drives **both**
+CTest **`native_bessel_gig_limits`** (`native/tools/classify/bessel_gig_limits.cpp`) drives **both**
 backends and checks three things separately, because the defects fell into three groups:
 accuracy against pinned `scipy` values across every seam; range and shape (`K₀/K₁ ∈ [0,1)` and
 non-decreasing, `K₂/K₁ > 1` and non-increasing, over 4,000 log-spaced points); and each limit
@@ -731,7 +731,7 @@ of this — see [the fix](#n1n4-l5l9--fixed-together-because-they-were-one-defec
 No test or fixture exercised the affected range.
 
 - `native/tests/` contains no test for either function.
-- The only non-product caller, `native/tools/gate_score_match_p7_smoke.cpp`, draws
+- The only non-product caller, `native/tools/classify/gate_score_match_p7_smoke.cpp`, draws
   `chi, psi ∈ [0.1, 10]`, `mp ~ Gamma(2, 0.5)`, `r_base ∈ [0.05, 2]`. Simulating that design
   2,000 times, the largest `x` reached is **28.6**, against a cut at 120.
 - The `fixtures/gh_infer_deliberation` golden cases run at `x = 2.09, 2.24, 3.23` (back-solved
@@ -765,7 +765,7 @@ PY
 
 ## What was checked and found sound
 
-- The Bessel lookup table itself: `native/src/bessel_table_data.cpp` satisfies the exact
+- The Bessel lookup table itself: `native/src/classify/bessel_table_data.cpp` satisfies the exact
   recurrence `K₂/K₁ − K₀/K₁ = 2/x` at every grid point, with `K₂/K₁ → 2/x` as `x → 0` and both
   ratios → 1 as `x → ∞`. Its last tabulated entry, 1.01252582699306592, matches
   `scipy.special` `K₂(120)/K₁(120)` to all printed digits.

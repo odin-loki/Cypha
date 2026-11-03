@@ -6,11 +6,11 @@
 
 | Path | Role |
 |------|------|
-| `native/tools/static/index.html` | Cypha Studio shell (tabs, dark theme) |
-| `native/tools/static/app.js` | REST client + new chat logic |
-| `native/tools/cypha_rest_static_ui.cpp` | Mounts `/` and `/ui/*` from static dir (or embedded via `CYPHA_EMBED_STATIC_UI`) |
+| `native/tools/serve/static/index.html` | Cypha Studio shell (tabs, dark theme) |
+| `native/tools/serve/static/app.js` | REST client + new chat logic |
+| `native/tools/serve/cypha_rest_static_ui.cpp` | Mounts `/` and `/ui/*` from static dir (or embedded via `CYPHA_EMBED_STATIC_UI`) |
 
-No separate `web/` or `spa/` tree — the minimal SPA lives under `native/tools/static/`.
+No separate `web/` or `spa/` tree — the minimal SPA lives under `native/tools/serve/static/`.
 
 ## Shipped
 

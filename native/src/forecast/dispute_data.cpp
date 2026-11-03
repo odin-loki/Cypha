@@ -1,6 +1,6 @@
 #include "cypha/forecast/dispute_data.hpp"
 
-#include "cypha/csv_ingest.hpp"
+#include "cypha/core/csv_ingest.hpp"
 #include "cypha/forecast/event_vocabulary.hpp"
 #include "cypha/forecast/views_scoring.hpp"
 

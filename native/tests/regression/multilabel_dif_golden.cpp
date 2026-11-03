@@ -10,7 +10,7 @@
 
 #include <nlohmann/json.hpp>
 
-#include "cypha/multilabel_dif.hpp"
+#include "cypha/classify/multilabel_dif.hpp"
 
 namespace fs = std::filesystem;
 

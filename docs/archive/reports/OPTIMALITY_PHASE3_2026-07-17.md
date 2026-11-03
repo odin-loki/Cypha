@@ -19,7 +19,7 @@ Online EM responsibilities + log-sum-exp class scores are wired and exerciseable
 |-----------|-----|---------|-------|
 | Per-class GMM | `CyphaDifMemoryState::use_class_gmm`, `class_gmm_m` (2–4) | **Off** | `D` becomes `K×maxM×d` when ON |
 | Mixing | `class_pi`, `class_n_comp` | — | EMA π update from EM responsibilities |
-| Score | `class_llr_for_k` / log-sum-exp | — | Uses `cypha/em_step.hpp` |
+| Score | `class_llr_for_k` / log-sum-exp | — | Uses `cypha/classify/em_step.hpp` |
 | Train hook | `TrainStepExtras::use_class_gmm` | **Off** | Propagated in `dif_train_step_vector` |
 | Infer | `CyphaInferModel` GMM fields + `classify_at_h` / `score_matrix` | Off | Sync via `sync_infer_model_from_memory` |
 | Format | `cypha_format` / `use_class_gmm` / `class_gmm` map; `mixing` tensor | Legacy M=1 still loads | Full default-on bump **required before** enabling by default |
@@ -51,12 +51,12 @@ A 2-component class mixture in latent space *can* represent XOR lobes, but this 
 
 ## Files touched
 
-- `native/include/cypha/class_gmm.hpp`, `native/src/class_gmm.cpp` (new)
-- `native/include/cypha/memory_train.hpp`, `native/src/memory_train.cpp`
-- `native/include/cypha/infer_cpu.hpp`, `native/src/infer_cpu.cpp`
-- `native/include/cypha/train_step_vector.hpp`, `native/src/train_step_vector.cpp`
-- `native/src/sync_infer.cpp`
-- `native/tools/class_gmm_p3_smoke.cpp` (new)
+- `native/include/cypha/classify/class_gmm.hpp`, `native/src/classify/class_gmm.cpp` (new)
+- `native/include/cypha/classify/memory_train.hpp`, `native/src/classify/memory_train.cpp`
+- `native/include/cypha/classify/infer_cpu.hpp`, `native/src/classify/infer_cpu.cpp`
+- `native/include/cypha/classify/train_step_vector.hpp`, `native/src/classify/train_step_vector.cpp`
+- `native/src/classify/sync_infer.cpp`
+- `native/tools/classify/class_gmm_p3_smoke.cpp` (new)
 - `native/CMakeLists.txt`
 
 ## Build / test

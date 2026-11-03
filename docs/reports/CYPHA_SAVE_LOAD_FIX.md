@@ -77,7 +77,7 @@ The replay buffer is the only large addition: 8·d bytes a row (plus a label ind
 
 ## Tests
 
-**New CTest `native_cypha_save_load_test`** (`native/tools/cypha_save_load_test.cpp`). It trains model A (d = 10, 3 overlapping classes, sticky label order so the context prior matters), saves it, and loads the file into a fresh model B. Then it requires:
+**New CTest `native_cypha_save_load_test`** (`native/tools/classify/cypha_save_load_test.cpp`). It trains model A (d = 10, 3 overlapping classes, sticky label order so the context prior matters), saves it, and loads the file into a fresh model B. Then it requires:
 
 1. every piece of state equal to the bit (128 checks through the public accessors);
 2. byte-identical `predict` output on 40 fixed probes (6 of them far out) under four modes: GH gate, plain with field, plain without field, self-correcting. It compares label, confidence, scores, probabilities, y, uncertainty, anomaly, OOD flag, `r_eff`, the self-correction fields, the active-query score and the drift score;
@@ -138,7 +138,7 @@ Every caller still builds. Results:
 
 ## Not covered, and follow-ups
 
-- **Branch A router.** `BranchARouter::save_checkpoint` (`native/src/branch_a_router.cpp`) writes only the world and the classes through `merge_state_into_root_for_save`. Its encoder, temperature, `mahal_ema`, context and field keep the template's values. Same class of bug; not changed here.
+- **Branch A router.** `BranchARouter::save_checkpoint` (`native/src/classify/branch_a_router.cpp`) writes only the world and the classes through `merge_state_into_root_for_save`. Its encoder, temperature, `mahal_ema`, context and field keep the template's values. Same class of bug; not changed here.
 - **Qt shell.** `shell_main.cpp` has its own writer for the studio model (next to its call to `Cypha::save`). Not changed or tested here.
 - **Kernel in RFF mode.** `patch_kernel_into_root` does not write the RFF projection. `Cypha` never builds an RFF kernel itself; only callers that set `kernel_mem_owned()` can.
 - **Separate files.** The preprocessor and the sequence model have their own files and are unchanged.

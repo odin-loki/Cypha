@@ -46,7 +46,7 @@ Task is linearly separable after encoder co-training; both paths saturate. No re
 
 ## Files touched
 
-- `native/include/cypha/encoder_contrastive.hpp`, `native/src/encoder_contrastive.cpp`
-- `native/include/cypha/train_step_vector.hpp`, `native/src/train_step_vector.cpp`
-- `native/tools/encoder_ib_p6_smoke.cpp` (new)
+- `native/include/cypha/classify/encoder_contrastive.hpp`, `native/src/classify/encoder_contrastive.cpp`
+- `native/include/cypha/classify/train_step_vector.hpp`, `native/src/classify/train_step_vector.cpp`
+- `native/tools/classify/encoder_ib_p6_smoke.cpp` (new)
 - `native/CMakeLists.txt`

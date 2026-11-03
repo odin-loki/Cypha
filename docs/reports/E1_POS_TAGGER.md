@@ -2,7 +2,7 @@
 
 Odin Loch, 2026-10-27
 
-Tool: `native/tools/pos_tagger.cpp` (standalone C++20). Plan rows: Track E, E1 (and the rule part of E2); test T-syntax, POS accuracy (section 9).
+Tool: `native/tools/classify/pos_tagger.cpp` (standalone C++20). Plan rows: Track E, E1 (and the rule part of E2); test T-syntax, POS accuracy (section 9).
 
 ## Result
 
@@ -175,7 +175,7 @@ How the helper decides. The wh-word is the first of who, whom, whose, what, whic
 ## Reproduce
 
 ```
-g++ -O2 -std=c++20 native/tools/pos_tagger.cpp -o pos_tagger
+g++ -O2 -std=c++20 native/tools/classify/pos_tagger.cpp -o pos_tagger
 UD=https://raw.githubusercontent.com/UniversalDependencies/UD_English-EWT/master
 for s in train dev test; do curl -sSfO $UD/en_ewt-ud-$s.conllu; done
 ./pos_tagger train en_ewt-ud-train.conllu en_ewt-ud-dev.conllu pos_model.bin --epochs 40 --patience 6

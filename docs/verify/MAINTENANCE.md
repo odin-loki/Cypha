@@ -29,7 +29,7 @@ Use this when you change contracts or reference math. **Snapshot of automation:*
 | **RFF / ridge sidecar** | Update `rff_regression/` → **`ctest -R native_regression_rff`** |
 | **MoE `regression_head.json`** | Update root JSON → REST / **`--regression-json`** smoke |
 | **Embedded `F_field` JSON** | Update `f_field.json` when world field export changes |
-| **Native Bessel tables** | Regenerate `native/src/bessel_table_data.cpp` if GH grid changes |
+| **Native Bessel tables** | Regenerate `native/src/classify/bessel_table_data.cpp` if GH grid changes |
 | **`.cypha` v3 buffer I/O** | **`ctest -R native_memory_train_roundtrip`** + buffer load/save CTests |
 | **Qt** (`cypha_qt_stub`, **`cypha_qt_shell`**) | **`qt6-base-dev`**, **`cmake … -DCYPHA_BUILD_QT=ON`**, **`ctest -R native_qt`** (headless CI excludes GUI exec) |
 | **CyphaLM checkpoint sidecars** | Update `fixtures/cyphalm_checkpoint/` → **`ctest -R native_cyphalm_*`** |

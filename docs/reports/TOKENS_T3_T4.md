@@ -23,7 +23,7 @@ The bridge fixes both. It is exact, not an approximation.
 - A valid sequence that decodes exactly to a string s is unique: it is `encode(s)`. So the covers of x are `encode(x[0:i])` followed by one token v that starts with `x[i:n]`, for each split point i.
 - **Truncate-renormalisation** (Proposition 2): a real count model gives some probability to invalid tokens. Each next-token distribution is set to 0 on invalid tokens and renormalised. This does not increase the KL divergence to the true distribution.
 
-**What the header does** (`native/include/cypha/cyphalm/token_bridge.hpp`):
+**What the header does** (`native/include/cypha/lm/token_bridge.hpp`):
 - **Inputs:** a deterministic tokenizer (interface: vocabulary, `encode`, and a stable prefix) and a token model (interface: next-token distribution given a token history).
 - **Stable prefix:** the tokenizer names a position p in the bytes so far such that the encoding up to p can never change when bytes are appended. With word-boundary pre-tokenization, p is the start of the last pretoken. For longest match without pre-tokenization, it is the start of the first token whose longest-match test still needs unknown bytes. Only covers that start at or after p are searched, so each byte costs at most (longest token length) model calls.
 - **Outputs:** the exact next-byte distribution after any bytes, the exact log₂ prefix probability (the marginal over covers), and the canonical-segmentation log₂ probability for comparison.
@@ -133,7 +133,7 @@ $B words $E $O/dev/TU.gen.txt /root/work/gena/runs/dev/D0.gen.txt   # the invent
 
 ## T3 results (2026-10-29)
 
-Code: `native/include/cypha/cyphalm/token_bridge.hpp` and the CTest `native_token_bridge_test` (`native/tools/token_bridge_test.cpp`), commit 41bf8ee; stable hints added in b1fb8d3 (the numbers below are unchanged by it). The CTest runs in about 17 s on the loaded machine and makes 9,352 checks.
+Code: `native/include/cypha/lm/token_bridge.hpp` and the CTest `native_token_bridge_test` (`native/tools/lm/token_bridge_test.cpp`), commit 41bf8ee; stable hints added in b1fb8d3 (the numbers below are unchanged by it). The CTest runs in about 17 s on the loaded machine and makes 9,352 checks.
 
 ### The planted chain (rules 1–3)
 

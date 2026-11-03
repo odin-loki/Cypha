@@ -4,7 +4,7 @@
 
 **OFF-LIMITS:** `build_math`, `build_deff`, `BASELINE_*`, overnight.
 
-**Tool:** `cypha_export_gguf` (`native/tools/cypha_export_gguf.cpp`)  
+**Tool:** `cypha_export_gguf` (`native/tools/classify/cypha_export_gguf.cpp`)  
 **Build dir:** `native/build_gguf` (Ninja, Release, MinGW).
 
 ## Status

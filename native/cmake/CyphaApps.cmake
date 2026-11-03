@@ -1,28 +1,28 @@
-# CyphaApps.cmake — production / orchestration entrypoints (sources under apps/).
-# cypha_rest compiles route TU's from the same directory; binary name unchanged.
+# CyphaApps.cmake — production / orchestration entrypoints (docs/MODULES.md): the REST server (tools/serve, its
+# route TU's in src/serve), the bench / tune / diagnostics runners (tools/eval) and cyphalm_train (tools/lm).
+# Binary names unchanged.
 
-set(CYPHA_APPS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/apps")
-set(CYPHA_STATIC_UI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/tools/static")
+set(CYPHA_STATIC_UI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/tools/serve/static")
 
 option(CYPHA_EMBED_STATIC_UI "Embed Studio Web UI in cypha_rest (no static/ beside binary)" OFF)
 
 # --- cypha_rest: DIF + CyphaLM + Branch A route translation units ---
 add_executable(
   cypha_rest
-  "${CYPHA_APPS_DIR}/cypha_rest.cpp"
-  "${CYPHA_APPS_DIR}/cyphalm_rest_routes.cpp"
-  "${CYPHA_APPS_DIR}/branch_a_rest_routes.cpp"
-  "${CYPHA_APPS_DIR}/dif_rest_routes.cpp"
-  "${CYPHA_APPS_DIR}/intelligence_rest_routes.cpp"
-  "${CMAKE_CURRENT_SOURCE_DIR}/tools/cypha_rest_static_ui.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/tools/serve/cypha_rest.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/serve/cyphalm_rest_routes.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/serve/branch_a_rest_routes.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/serve/dif_rest_routes.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/serve/intelligence_rest_routes.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/tools/serve/cypha_rest_static_ui.cpp"
 )
-target_include_directories(cypha_rest PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tools")
+target_include_directories(cypha_rest PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tools/serve")
 target_link_libraries(cypha_rest PRIVATE cypha_core cypha_lm_native)
 if(WIN32)
   target_link_libraries(cypha_rest PRIVATE ws2_32)
 endif()
 
-add_executable(embed_static_ui "${CMAKE_CURRENT_SOURCE_DIR}/tools/embed_static_ui.cpp")
+add_executable(embed_static_ui "${CMAKE_CURRENT_SOURCE_DIR}/tools/serve/embed_static_ui.cpp")
 target_include_directories(embed_static_ui PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
 cypha_mingw_apply_exe_link_options(embed_static_ui)
 
@@ -57,7 +57,7 @@ else()
 endif()
 
 # --- bench / tune / diagnostics runners ---
-add_executable(cypha_bench_run "${CYPHA_APPS_DIR}/cypha_bench_run.cpp")
+add_executable(cypha_bench_run "${CMAKE_CURRENT_SOURCE_DIR}/tools/eval/cypha_bench_run.cpp")
 target_link_libraries(cypha_bench_run PRIVATE cypha_bench_native)
 find_package(ZLIB QUIET)
 if(NOT ZLIB_FOUND)
@@ -85,16 +85,16 @@ else()
   target_link_libraries(cypha_bench_run PRIVATE ZLIB::ZLIB)
 endif()
 
-add_executable(cypha_bench_report "${CYPHA_APPS_DIR}/cypha_bench_report.cpp")
+add_executable(cypha_bench_report "${CMAKE_CURRENT_SOURCE_DIR}/tools/eval/cypha_bench_report.cpp")
 target_link_libraries(cypha_bench_report PRIVATE cypha_bench_native)
 
-add_executable(cypha_tune_run "${CYPHA_APPS_DIR}/cypha_tune_run.cpp")
+add_executable(cypha_tune_run "${CMAKE_CURRENT_SOURCE_DIR}/tools/eval/cypha_tune_run.cpp")
 target_link_libraries(cypha_tune_run PRIVATE cypha_bench_native)
 
-add_executable(cypha_diagnostics_run "${CYPHA_APPS_DIR}/cypha_diagnostics_run.cpp")
+add_executable(cypha_diagnostics_run "${CMAKE_CURRENT_SOURCE_DIR}/tools/eval/cypha_diagnostics_run.cpp")
 target_link_libraries(cypha_diagnostics_run PRIVATE cypha_core)
 
-add_executable(cyphalm_train "${CYPHA_APPS_DIR}/cyphalm_train.cpp")
+add_executable(cyphalm_train "${CMAKE_CURRENT_SOURCE_DIR}/tools/lm/cyphalm_train.cpp")
 target_link_libraries(cyphalm_train PRIVATE cypha_lm_native)
 
 set(

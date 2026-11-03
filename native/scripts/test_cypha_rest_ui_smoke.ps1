@@ -12,7 +12,7 @@ if (-not (Test-Path $exe)) {
 }
 if (-not (Test-Path $exe)) { throw "Missing cypha_rest in $BuildDir" }
 
-$staticSrc = Join-Path $root "native\tools\static"
+$staticSrc = Join-Path $root "native\tools\serve\static"
 $staticDst = Join-Path $BuildDir "static"
 if (Test-Path $staticDst) { Remove-Item -Recurse -Force $staticDst }
 Copy-Item -Recurse -Force $staticSrc $staticDst

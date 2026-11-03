@@ -42,7 +42,7 @@ Per the task's explicit instruction — *"If it's no longer chance-level ... say
 
 This is the more important finding for correcting the doc, independent of the accuracy number:
 
-**D10's scored classification experiments (10A–10D) never construct or call the CellAI SSM.** Traced the full call chain in `native/src/bench/bench_domains.cpp`:
+**D10's scored classification experiments (10A–10D) never construct or call the CellAI SSM.** Traced the full call chain in `native/src/eval/bench_domains.cpp`:
 
 ```
 run_d10_experiment_a()                     bench_domains.cpp:2553
@@ -86,7 +86,7 @@ None of the three hypotheses explain D10's (now-resolved) low accuracy, because 
 
 ## 4. D10's actual config (checked per the task's step 3 — is this a data/training-scale issue?)
 
-From `native/src/bench/bench_encoder_timeseries.cpp` and `native/src/bench/bench_domains.cpp` (all hardcoded, no `bench/config/*.json` entry exists for `d10`):
+From `native/src/eval/bench_encoder_timeseries.cpp` and `native/src/eval/bench_domains.cpp` (all hardcoded, no `bench/config/*.json` entry exists for `d10`):
 
 | Parameter | Value |
 |---|---|

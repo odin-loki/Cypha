@@ -64,7 +64,7 @@ ctest --test-dir native/build_rest_multi -R "native_rest_multi_model|native_rest
 
 ## Files touched
 
-- `native/apps/cypha_rest.cpp` — `g_models`, `LoadedModelBundle`, `resolve_model_view`, route wiring
+- `native/tools/serve/cypha_rest.cpp` — `g_models`, `LoadedModelBundle`, `resolve_model_view`, route wiring
 - `native/scripts/test_cypha_rest_multi_model.ps1` — dual-model smoke
 - `native/tests/rest_schema_contract.cpp` — `/models` contract keys
 - `docs/port/PORT_CONTRACT.md` — multi-model table rows + note

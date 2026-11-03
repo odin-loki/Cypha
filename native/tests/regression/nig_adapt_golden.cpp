@@ -3,7 +3,7 @@
 #include <cstdlib>
 #include <iostream>
 
-#include "cypha/infer_cpu.hpp"
+#include "cypha/classify/infer_cpu.hpp"
 
 namespace {
 

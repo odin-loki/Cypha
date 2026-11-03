@@ -2,7 +2,7 @@
 
 #include <algorithm>
 
-#include "cypha/curriculum.hpp"
+#include "cypha/online/curriculum.hpp"
 
 namespace cypha::cyphalm {
 

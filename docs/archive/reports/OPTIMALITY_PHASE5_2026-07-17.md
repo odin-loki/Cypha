@@ -9,7 +9,7 @@
 |-----------|-----|---------|-------|
 | **SORF RFF** | `RffProjectionKind::Sorf`, `KernelMemory::make_orthogonal_rff`, `PreprocessorState::rff_sorf` | **Off** (iid Gaussian preserved) | QR-block orthogonal rows (Yu et al. style); opt-in only |
 | **Leverage Nyström** | `LandmarkSamplingKind::LeverageScore`, `KernelMemory::init_leverage_landmarks_from_samples`, `select_leverage_landmark_indices` | **Off** (uniform reservoir preserved) | Ridge-leverage batch + online replacement |
-| **Shared math** | `native/include/cypha/rff_features.hpp`, `native/src/rff_features.cpp` | — | `‖K−K̂‖_F` estimators, FWHT helpers (for future Fastfood blocks) |
+| **Shared math** | `native/include/cypha/classify/rff_features.hpp`, `native/src/classify/rff_features.cpp` | — | `‖K−K̂‖_F` estimators, FWHT helpers (for future Fastfood blocks) |
 | **CTest** | `native_kernel_approx_p5_smoke` | — | Tier-1 leverage bound asserted; SORF measured |
 
 ## Measurements (`kernel_approx_p5_smoke`, seed=42424242, n=48, d=8)
@@ -40,8 +40,8 @@
 
 ## Files touched
 
-- `native/include/cypha/rff_features.hpp`, `native/src/rff_features.cpp` (new)
-- `native/include/cypha/kernel_memory.hpp`, `native/src/kernel_memory.cpp`
-- `native/include/cypha/preprocessor.hpp`, `native/src/preprocessor_fit.cpp`
-- `native/tools/kernel_approx_p5_smoke.cpp` (new)
+- `native/include/cypha/classify/rff_features.hpp`, `native/src/classify/rff_features.cpp` (new)
+- `native/include/cypha/classify/kernel_memory.hpp`, `native/src/classify/kernel_memory.cpp`
+- `native/include/cypha/classify/preprocessor.hpp`, `native/src/classify/preprocessor_fit.cpp`
+- `native/tools/classify/kernel_approx_p5_smoke.cpp` (new)
 - `native/CMakeLists.txt`

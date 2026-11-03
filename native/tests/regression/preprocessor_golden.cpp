@@ -7,7 +7,7 @@
 
 #include <nlohmann/json.hpp>
 
-#include "cypha/preprocessor.hpp"
+#include "cypha/classify/preprocessor.hpp"
 
 namespace {
 bool near(double a, double b) { return std::abs(a - b) <= 1e-10; }

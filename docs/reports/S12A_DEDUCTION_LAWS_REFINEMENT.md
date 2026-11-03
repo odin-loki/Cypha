@@ -24,7 +24,7 @@
 - **The loop, the source stage, the pools and the grader** are S11c's: T1, T6 and T4 with S7's dev point estimates, `PreregLog`, `decide` with S8d's fix; then `--sources … --fresh` with S8d's calibration; promoted = supported by `decide` after the source stage; graded with S8c's grader on S15 (`--pool-grade`).
 - **Intervals:** Wilson 95% on proportions; 2,000 bootstrap resamples (seed 20261029) on differences.
 
-## G15: numeric laws (`native/include/cypha/eval/gen_laws.hpp`)
+## G15: numeric laws (`native/include/cypha/knowledge/gen_laws.hpp`)
 
 **Tables.** A table is one type: entities by numeric attributes. Each attribute has a scale:
 - **ratio** (positive quantities: areas, populations, money, densities): power products are allowed;
@@ -317,7 +317,7 @@ Precision at equal N (N = 580 graded G2 predictions): G2 0.405, G2 + G19 0.416; 
 ## How to reproduce
 
 ```
-g++ -O2 -std=c++20 -I native/include -pthread native/tools/pattern_learn.cpp -o pattern_learn
+g++ -O2 -std=c++20 -I native/include -pthread native/tools/knowledge/pattern_learn.cpp -o pattern_learn
 F=/root/work/f2
 ./pattern_learn --gen-laws enwik8 $F/v2/aug/seeds.tsv $F/v2/aug/facts_f2.tsv OUT/laws               # dev replicates and the real read
 ./pattern_learn --gen-laws enwik8 … OUT/laws --read-test                                            # the gate (once)

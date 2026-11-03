@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-19  
 **Branch:** `cursor/bpc-gap-report-94d7` (from `cursor/cyphalm-llm-profile-f9fe`)  
-**Harness:** `native/tools/bpc_gap_measure.cpp`, `scripts/cyphalm_bpc_gap.sh`, `native/tools/bpc_gap_verify.cpp`, `scripts/hp_v78_flag_diff.py`
+**Harness:** `native/tools/lm/bpc_gap_measure.cpp`, `scripts/cyphalm_bpc_gap.sh`, `native/tools/lm/bpc_gap_verify.cpp`, `scripts/hp_v78_flag_diff.py`
 
 ---
 

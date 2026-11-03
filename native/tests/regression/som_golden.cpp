@@ -4,7 +4,7 @@
 #include <iostream>
 #include <vector>
 
-#include "cypha/mt19937_rng.hpp"
+#include "cypha/core/mt19937_rng.hpp"
 #include "cypha/som/discriminative_feedback.hpp"
 #include "cypha/som/gng_expert.hpp"
 #include "cypha/som/gria_controller.hpp"

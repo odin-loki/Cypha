@@ -33,7 +33,7 @@ python3 bench/lm_compare/mixsim.py check /tmp/d/wiki --set neural_mix=log --agai
 python3 bench/lm_compare/mixsim.py compare-dumps /tmp/d/wiki /tmp/d/wiki_other   # two harness runs, same bytes
 ```
 
-**What a dump holds.** A dump directory has one row per scored byte. The layout is in `native/include/cypha/cyphalm/component_dump.hpp`:
+**What a dump holds.** A dump directory has one row per scored byte. The layout is in `native/include/cypha/lm/component_dump.hpp`:
 
 - `truth.bin`: the true byte.
 - `models.bin`: the log P of the primary, then each member, before the ensemble mix.

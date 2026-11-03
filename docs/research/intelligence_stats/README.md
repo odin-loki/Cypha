@@ -1,6 +1,6 @@
 # Intelligence Statistics — research papers
 
-Seven universal intelligence statistics and their applications (P-space profiling, self-correction, soft-world simulation). **C++ implementation:** `native/include/cypha/intelligence/`.
+Seven universal intelligence statistics and their applications (P-space profiling, self-correction, soft-world simulation). **C++ implementation:** `native/include/cypha/knowledge/`.
 
 | Paper | File | C++ status |
 |-------|------|------------|

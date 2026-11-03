@@ -17,7 +17,7 @@ Two parallel workstreams compose into one architecture:
 | **Option A** | Refactor CyphaDIF internals into matrix form (Ψ_mu, Ψ_var) | Same behaviour, batched LLR/GEMM, faster CUDA, parity-validated |
 | **Option B** | RPSM sequence layer in CyphaLM | CyphaDIF (post-A) at level 0; hierarchy handles long context |
 
-Neither replaces the other. Nyström kernel LLR (partially **shipped** in `native/src/kernel_memory.cpp`) slots into Option A and benefits Option B automatically.
+Neither replaces the other. Nyström kernel LLR (partially **shipped** in `native/src/classify/kernel_memory.cpp`) slots into Option A and benefits Option B automatically.
 
 ---
 

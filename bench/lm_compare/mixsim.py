@@ -4,10 +4,10 @@
 `cyphalm_lm_quality --dump-components DIR` writes, for every scored byte,
 what the served distribution was mixed from: each ensemble model's log P,
 the ∞-gram query (longest match and reliable part), each neural expert's
-log P and the served log P (layout: native/include/cypha/cyphalm/
+log P and the served log P (layout: native/include/cypha/lm/
 component_dump.hpp). This module re-implements the stages of
 HpSequenceBackend::next_byte_log_probs and their online weight updates
-(native/src/cyphalm/hp_backend.cpp) over those arrays:
+(native/src/lm/hp_backend.cpp) over those arrays:
 
   mix_with_members_          geometric ensemble mix (or the context gate)
   update_ensemble_weights_   exponentiated gradient (update_gate_: AdaGrad)

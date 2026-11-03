@@ -12,9 +12,9 @@ Header-only, namespace `cypha::thought`, standard library plus `third_party/nloh
 |---|---|
 | `scripts/thought_check.py` | New `--json OUT`: writes the validated library as JSON. Nothing else changed. |
 | `docs/thought/processes.json` | The library as JSON (151 KB; 142 processes, 840 steps, 43 calls). Regenerate with `python3 scripts/thought_check.py --json docs/thought/processes.json`. |
-| `native/include/cypha/thought/learners.hpp` | Portable random draws; Beta and Dirichlet posteriors; Welford and log-cost Welford; `U = p*G - C`; Thompson selection with the epsilon floor; ACT-R utility; TD(lambda) credits; VOC stop; per-process calibration log (Brier, ECE, isotonic correction); Wilson bounds (from `eval/ecs.hpp`) |
-| `native/include/cypha/thought/interpreter.hpp` | `Library` (load and check), `WorkingMemory`, primitive registry, `Interpreter::run` and `solve`, trace records, learning after each run |
-| `native/tools/thought_test.cpp` | 5,534 checks, nonzero exit on failure |
+| `native/include/cypha/knowledge/learners.hpp` | Portable random draws; Beta and Dirichlet posteriors; Welford and log-cost Welford; `U = p*G - C`; Thompson selection with the epsilon floor; ACT-R utility; TD(lambda) credits; VOC stop; per-process calibration log (Brier, ECE, isotonic correction); Wilson bounds (from `eval/ecs.hpp`) |
+| `native/include/cypha/knowledge/interpreter.hpp` | `Library` (load and check), `WorkingMemory`, primitive registry, `Interpreter::run` and `solve`, trace records, learning after each run |
+| `native/tools/knowledge/thought_test.cpp` | 5,534 checks, nonzero exit on failure |
 | `native/CMakeLists.txt` | One commented block at the end: target `thought_test`, CTest `native_thought_test` (TIMEOUT 300) with the JSON path as its argument |
 
 ## API in brief

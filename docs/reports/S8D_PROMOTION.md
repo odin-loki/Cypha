@@ -203,7 +203,7 @@ S8c met the same kind (Swinburne: London against Putney). S15's grader is closed
 ## How to reproduce
 
 ```bash
-g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp -o pattern_learn
+g++ -O2 -std=c++20 -I native/include native/tools/knowledge/pattern_learn.cpp -o pattern_learn
 F=/root/work/f2; E=/root/cdata/enwik8
 # the dev reads (before: the same at main aca60a5)
 ./pattern_learn --test-kinds $E $F/v2/aug/seeds.tsv $F/wikidata/wd_values.tsv $F/v2/aug/patterns.tsv out/s7 \

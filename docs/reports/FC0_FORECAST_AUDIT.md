@@ -196,7 +196,7 @@ The root names are from the [CAMEO codebook](https://parusanalytics.com/eventdat
    - It drops every row with zero fatalities (line 260). Most country-months are zero, and VIEWS scores them.
    - It keeps 2020 onward and holds out the last three months fetched.
 
-### H. Serving (`native/apps/cyphalm_rest_routes.cpp`)
+### H. Serving (`native/src/serve/cyphalm_rest_routes.cpp`)
 
 1. **`POST /forecast/run` (:393)**
    - It retrains the whole pipeline from CSV on every request, an hp model of about 845 MB (SLOW_TEST_TRIAGE), with no lock.

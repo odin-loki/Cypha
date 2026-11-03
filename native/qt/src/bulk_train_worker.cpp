@@ -4,11 +4,11 @@
 #include <QMetaType>
 #include <QVector>
 
-#include "cypha/curriculum.hpp"
-#include "cypha/infer_cpu.hpp"
-#include "cypha/kernel_memory.hpp"
-#include "cypha/memory_train.hpp"
-#include "cypha/train_step_vector.hpp"
+#include "cypha/online/curriculum.hpp"
+#include "cypha/classify/infer_cpu.hpp"
+#include "cypha/classify/kernel_memory.hpp"
+#include "cypha/classify/memory_train.hpp"
+#include "cypha/classify/train_step_vector.hpp"
 
 namespace {
 

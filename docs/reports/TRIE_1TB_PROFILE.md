@@ -4,8 +4,8 @@
 
 **Date:** 2026-10-28 to 2026-10-31
 **Trainer:** `native/tools/trie_stream_train.cpp` (8 cores, one pass, checkpoint `TR64`, 64-bit counts)
-**Profiler:** `native/tools/trie_stream_profile.cpp`
-**Checker and packer:** `native/tools/trie_ckpt.cpp` (`verify`, `bpc`, `pack`) over `cypha/cyphalm/stream_trie.hpp`
+**Profiler:** `native/tools/lm/trie_stream_profile.cpp`
+**Checker and packer:** `native/tools/lm/trie_ckpt.cpp` (`verify`, `bpc`, `pack`) over `cypha/lm/stream_trie.hpp`
 **Checksums:** `scripts/verify_corpus_sha.py`
 **Packed model in git:** [`models/cyphalm_1tb/`](../../models/cyphalm_1tb/README.md) (`trie_1tb.pk.zst`, Git LFS)
 **Raw output:** `D:\cypha_llm\profile\` (profile: `enwik9.txt`, `c4_heldout.out`, `lcet10.out`; packing: `pack.txt`, `verify_tr64.txt`, `bpc_pk.txt`, `bpc_ckpt.txt`; tests: `ctx8k_*.out`, `gen/*.summary.md`)

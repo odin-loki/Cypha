@@ -1,6 +1,6 @@
 #include "cypha/forecast/forecast_pipeline.hpp"
 
-#include "cypha/cyphalm/cyphalm_config.hpp"
+#include "cypha/lm/cyphalm_config.hpp"
 
 #include <algorithm>
 #include <fstream>

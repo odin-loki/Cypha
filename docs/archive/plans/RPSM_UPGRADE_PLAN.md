@@ -34,10 +34,10 @@ This is the largest raw BPC gap anywhere in the codebase (`docs/reports/DEV_PLAN
 | Component | Files | What it does |
 |---|---|---|
 | Option A — unified Ψ state + batched LLR GEMM | `native/include/cypha/rpsm/psi_matrices.hpp`, `native/src/rpsm/psi_matrices.cpp` | `PsiMatrices{mu, inv_var, counts}` (row 0 = world prior, rows 1..K = class deltas) and `batched_llr_gemm(...)`, replacing the per-class LLR loop with one batched multiply — this is **exactly** the "unified Ψ_mu/Ψ_var, batched LLR/GEMM" Option A asks for (`RPSM_COMBINED_SPEC.md:34-61`) |
-| Option A wired live (classification path) | `native/src/infer_cpu.cpp:33-36,620-621,632-635,692-703` | `score_matrix_use_field` dispatches to `rpsm_score_matrix_batched` (which calls `build_psi_from_model` + `batched_llr_gemm`) **by default** — gated by `CYPHA_USE_RPSM_LLR`, which defaults to `true` (`infer_cpu.cpp:33-36`). This is the general `CyphaInferModel` classification/DIF scoring path (D01–D16-style domains), not the CyphaLM RPSM mode — but it means **Option A's core GEMM kernel is already shipped and default-on** for that path, parity-tested against the old per-class loop |
+| Option A wired live (classification path) | `native/src/classify/infer_cpu.cpp:33-36,620-621,632-635,692-703` | `score_matrix_use_field` dispatches to `rpsm_score_matrix_batched` (which calls `build_psi_from_model` + `batched_llr_gemm`) **by default** — gated by `CYPHA_USE_RPSM_LLR`, which defaults to `true` (`infer_cpu.cpp:33-36`). This is the general `CyphaInferModel` classification/DIF scoring path (D01–D16-style domains), not the CyphaLM RPSM mode — but it means **Option A's core GEMM kernel is already shipped and default-on** for that path, parity-tested against the old per-class loop |
 | Option A parity test | `native/tests/parity/rpsm_batched_llr_smoke.cpp`, CTest `native_rpsm_batched_llr_smoke` (`native/CMakeLists.txt:570-574`) | Exactly the `native_batched_llr_parity` check the spec calls for (`RPSM_COMBINED_SPEC.md:67`), just named differently — compares `score_matrix_use_field` vs `rpsm_score_matrix_batched` to `1e-12` |
 | Option B — RPSM sequence layer scaffold | `native/include/cypha/rpsm/rpsm_sequence_layer.hpp`, `native/src/rpsm/rpsm_sequence_layer.cpp` | `RpsmSequenceLayer`: multi-level hierarchy (`h_levels_`), `W_up`/`W_down = W_up^T`, GRIA-style error gate, `RpsmGlobalMemory` (M_slots, soft-attention read + surprise-gated ring write), Izaac activation-mix selector (`IzaacActivationMix`, seed-selected) — a real, non-trivial implementation of most of `RPSM_IMPLEMENTATION.md`'s 11-step forward pass |
-| Option B wired live (CyphaLM) | `native/src/cyphalm/cyphalm_model.hpp:36,179,181`, `native/src/cyphalm/cyphalm_model.cpp:47-49,328-338,767-774,826-827,1151-1155,1379-1468` | `CyphaLMModel` owns an `RpsmSequenceLayer` whenever `uses_rpsm(cfg)` is true (`use_rpsm_layer` or `context_mode==Rpsm`); `--mode rpsm` (`BenchMode::Rpsm`, `cyphalm_config.cpp:95-101`) sets `context_mode=Rpsm` and is exactly the D21 production path that produced BPC 7.336 |
+| Option B wired live (CyphaLM) | `native/include/cypha/lm/cyphalm_model.hpp:36,179,181`, `native/src/lm/cyphalm_model.cpp:47-49,328-338,767-774,826-827,1151-1155,1379-1468` | `CyphaLMModel` owns an `RpsmSequenceLayer` whenever `uses_rpsm(cfg)` is true (`use_rpsm_layer` or `context_mode==Rpsm`); `--mode rpsm` (`BenchMode::Rpsm`, `cyphalm_config.cpp:95-101`) sets `context_mode=Rpsm` and is exactly the D21 production path that produced BPC 7.336 |
 | Option B parity/smoke tests | `native/tests/parity/rpsm_sequence_smoke.cpp`, `rpsm_hierarchy_smoke.cpp`, `rpsm_train_smoke.cpp`; CTests `native_rpsm_sequence_smoke`, `native_rpsm_hierarchy_smoke`, `native_rpsm_train_smoke` (`native/CMakeLists.txt:576-586`) | Forward-pass shape/NaN checks, W_up/M_slots write checks, and a 20-step SGD loss-decrease check — **all pass today** (implicit; these are part of the 115-CTest gate, `docs/native/CYPHA_FULL_CPP_FRAMEWORK_PLAN.md:14-17`). §4.4 explains why passing this suite is compatible with the bug found below |
 
 **So: Option A's GEMM kernel is shipped and default-on (for the general classification path); Option B's hierarchy/memory scaffold is shipped and is exactly what `--mode rpsm` runs.** What's missing is not "the architecture" — it's specific pieces of the *training* loop, found in §4.
@@ -137,7 +137,7 @@ which is exactly the same "prediction-error times precision" form already used f
 
 The task asked to check specifically whether `rpsm_embed_backprop_stub` is a no-op. It is not — it performs a real numeric update every step — but the update is dimensionally and mathematically unsound, which is arguably worse than a no-op because it perturbs the embedding table with a signal that is not derived from the loss via a correct chain rule:
 
-```1379-1395:native/src/cyphalm/cyphalm_model.cpp
+```1379-1395:native/src/lm/cyphalm_model.cpp
 void CyphaLMModel::rpsm_embed_backprop_stub(std::uint32_t token_id) {
     if (!embed_ || !rpsm_layer_) return;
     const auto& field_grad = rpsm_layer_->input_grad();
@@ -177,7 +177,7 @@ Separately, `n_memory_slots`, `alpha_carry`, `beta_memory`, `hierarchy_loss_weig
 
 ### 4.5 Finding #4 (minor, not blocking): the LM-side RPSM never uses a context prior or the general CyphaDIF online mu/inv_var update mechanism
 
-`batched_llr_gemm`'s `ctx` parameter (Tier-1 context prior, mapped from `TieredContextBuffer` in `RPSM_COMBINED_SPEC.md:46`) is passed as `nullptr` at both LM call sites (`rpsm_sequence_layer.cpp:389,413`) — the LM path never supplies a context prior, unlike the general classification path (`infer_cpu.cpp:701`, `context_prior_for_labels`). Separately, the general `CyphaInferModel`'s `mu_world`/`D`/`inv_v` **are** updated online during normal DIF/GNG training (`native/src/memory_train.cpp:709,717`, `native/src/infer_cpu.cpp:352`) — this is the "correct pattern" that Finding #1's fix should mirror, but `RpsmSequenceLayer` builds its own from-scratch `PsiMatrices` (`init_psi_matrices`, `rpsm_sequence_layer.cpp:81-100`) entirely independent of `CyphaInferModel`, so it never benefits from that existing, already-proven update mechanism. Low priority relative to Findings #1–#3, but worth noting for whoever implements the Phase 0 fix: the update rule to add is not a novel derivation, it's porting an existing, working pattern from a different file into this one.
+`batched_llr_gemm`'s `ctx` parameter (Tier-1 context prior, mapped from `TieredContextBuffer` in `RPSM_COMBINED_SPEC.md:46`) is passed as `nullptr` at both LM call sites (`rpsm_sequence_layer.cpp:389,413`) — the LM path never supplies a context prior, unlike the general classification path (`infer_cpu.cpp:701`, `context_prior_for_labels`). Separately, the general `CyphaInferModel`'s `mu_world`/`D`/`inv_v` **are** updated online during normal DIF/GNG training (`native/src/classify/memory_train.cpp:709,717`, `native/src/classify/infer_cpu.cpp:352`) — this is the "correct pattern" that Finding #1's fix should mirror, but `RpsmSequenceLayer` builds its own from-scratch `PsiMatrices` (`init_psi_matrices`, `rpsm_sequence_layer.cpp:81-100`) entirely independent of `CyphaInferModel`, so it never benefits from that existing, already-proven update mechanism. Low priority relative to Findings #1–#3, but worth noting for whoever implements the Phase 0 fix: the update rule to add is not a novel derivation, it's porting an existing, working pattern from a different file into this one.
 
 ---
 
@@ -295,7 +295,7 @@ For reference, the existing `bench/BASELINE_LOCK.json` 300k-scale pins (differen
 
 ### 9.5 Quick Small-tier check (not committed, config plumbing still needed for a real run)
 
-Per §4.3 (Finding #3), `apply_bench_mode`'s `BenchMode::Rpsm` case (`native/src/cyphalm/cyphalm_config.cpp:95-101`) hard-codes Tiny-tier dims (`L=4, D=128, feat=64`) after `apply_bench_profile` runs, so no JSON profile or existing CLI flag can reach Small tier (`L=8, D=256, feat=128`) today — confirmed firsthand, matching the doc's claim. As a quick, throwaway experiment (three constants edited locally, rebuilt, run once, then reverted — confirmed via `git status`/`git diff` to leave zero net diff on `cyphalm_config.cpp`), Small tier was tested at the same `n_train=5000`, with the Phase 0 fix applied:
+Per §4.3 (Finding #3), `apply_bench_mode`'s `BenchMode::Rpsm` case (`native/src/lm/cyphalm_config.cpp:95-101`) hard-codes Tiny-tier dims (`L=4, D=128, feat=64`) after `apply_bench_profile` runs, so no JSON profile or existing CLI flag can reach Small tier (`L=8, D=256, feat=128`) today — confirmed firsthand, matching the doc's claim. As a quick, throwaway experiment (three constants edited locally, rebuilt, run once, then reverted — confirmed via `git status`/`git diff` to leave zero net diff on `cyphalm_config.cpp`), Small tier was tested at the same `n_train=5000`, with the Phase 0 fix applied:
 
 | Tier | BPC (with Phase 0 fix, n_train=5000) |
 |---|---|
@@ -320,7 +320,7 @@ Small tier gives a further **−0.040 BPC (−0.8%)** — real, but an order of 
 - `native/src/rpsm/rpsm_sequence_layer.cpp` — the fix (`Ψ_mu` rows `1..K` gradient update in `train_step`)
 - `native/tests/parity/rpsm_train_multiclass_smoke.cpp` — new changing-target CTest closing the §4.4 blind spot
 - `native/cmake/CyphaParity.cmake`, `native/CMakeLists.txt` — register the new test target/CTest
-- `native/src/cyphalm/cyphalm_config.cpp` — **not** modified in the committed diff; the Small-tier check in §9.5 used a local, reverted edit only
+- `native/src/lm/cyphalm_config.cpp` — **not** modified in the committed diff; the Small-tier check in §9.5 used a local, reverted edit only
 
 ---
 
@@ -330,9 +330,9 @@ Small tier gives a further **−0.040 BPC (−0.8%)** — real, but an order of 
 
 ### 10.1 What was confirmed
 
-Re-read `CyphaLMModel::rpsm_embed_backprop_stub` (`native/src/cyphalm/cyphalm_model.cpp:1379-1395` pre-fix) and its call site (`train_step_rpsm`, immediately after `rpsm_layer_->train_step(...)`) firsthand, plus the full forward chain between the embedding table and the RPSM layer's input: `embed_->embed_vec(token_id)` → `ssm_step(e)` (dispatches to `CellAISSM::step`/`HierarchicalSSM::step`; for the D21 RPSM profile — `use_hierarchical_ssm=false`, `use_differential_gate=false`, `use_ca_state_cell=false`, `use_reversible_cell=false` — this reduces to a bare `ssm_->step(e)` call) → `project_field(ctx)` (`field_x_ = proj_ssm_ · ctx`, a plain matvec) → `rpsm_layer_->train_step(field_x_, ...)`. Confirmed §4.2's diagnosis exactly: the stub read `rpsm_layer_->input_grad()` (gradient of loss w.r.t. the RPSM layer's own input, i.e. w.r.t. `field_x_`, restricted to the leading `rpsm_state_dim` entries the layer's forward pass actually reads — see `encode_level0_features`/`inject_input_multilevel` in `rpsm_sequence_layer.cpp`, both loop-bounded by `state_dim`) and subtracted its leading `min(d_embed, field_grad.size())` entries directly from the embedding row, with no `proj_ssm_` or SSM involvement at all — a basis mismatch (field-space vs embed-space), not a valid chain-rule gradient, exactly as diagnosed.
+Re-read `CyphaLMModel::rpsm_embed_backprop_stub` (`native/src/lm/cyphalm_model.cpp:1379-1395` pre-fix) and its call site (`train_step_rpsm`, immediately after `rpsm_layer_->train_step(...)`) firsthand, plus the full forward chain between the embedding table and the RPSM layer's input: `embed_->embed_vec(token_id)` → `ssm_step(e)` (dispatches to `CellAISSM::step`/`HierarchicalSSM::step`; for the D21 RPSM profile — `use_hierarchical_ssm=false`, `use_differential_gate=false`, `use_ca_state_cell=false`, `use_reversible_cell=false` — this reduces to a bare `ssm_->step(e)` call) → `project_field(ctx)` (`field_x_ = proj_ssm_ · ctx`, a plain matvec) → `rpsm_layer_->train_step(field_x_, ...)`. Confirmed §4.2's diagnosis exactly: the stub read `rpsm_layer_->input_grad()` (gradient of loss w.r.t. the RPSM layer's own input, i.e. w.r.t. `field_x_`, restricted to the leading `rpsm_state_dim` entries the layer's forward pass actually reads — see `encode_level0_features`/`inject_input_multilevel` in `rpsm_sequence_layer.cpp`, both loop-bounded by `state_dim`) and subtracted its leading `min(d_embed, field_grad.size())` entries directly from the embedding row, with no `proj_ssm_` or SSM involvement at all — a basis mismatch (field-space vs embed-space), not a valid chain-rule gradient, exactly as diagnosed.
 
-Also read `CellAISSM::step`'s non-spectral leaky-integrator branch (`native/src/cyphalm/cellai_ssm.cpp:203-252`, the branch taken for the D21 RPSM profile since `use_spectral_pde=false`) and its public accessors (`w_fast_layer0()`, `w_slow_layer0()`, `lambda_fast()`, `lambda_slow()`, `multiscale_alpha()`) to determine the true differentiable path: `h[i] = lf·h_prev[i] + (1-lf)·(W_fast·e)[i]`, `s[i] = ls·s_prev[i] + (1-ls)·(W_slow·e)[i]`, and (with `use_multiscale=true`, also the D21 profile's setting) `ctx = [α·h+(1-α)·s ; s]` per layer. Cross-checked the general transpose-multiply convention against two existing precedents in this codebase: `char_lstm.cpp`'s `backward_step` (`dx = Wx^T · dgates`, then `dE[token] = dx` directly, confirming "transpose the forward linear map to backprop through it" is the established pattern) and this same file's `bptt_ssm_update` (`native/src/cyphalm/cyphalm_model.cpp:1185-1291`, the hybrid path's own SSM backprop), which already computes `grad_ctx = matvec_transpose(proj_ssm_, field_dim, ctx_dim, grad_field)` for a different purpose (updating `W_fast`, not embeddings) — reusing that exact transpose convention rather than inventing a new one.
+Also read `CellAISSM::step`'s non-spectral leaky-integrator branch (`native/src/cyphalm/cellai_ssm.cpp:203-252`, the branch taken for the D21 RPSM profile since `use_spectral_pde=false`) and its public accessors (`w_fast_layer0()`, `w_slow_layer0()`, `lambda_fast()`, `lambda_slow()`, `multiscale_alpha()`) to determine the true differentiable path: `h[i] = lf·h_prev[i] + (1-lf)·(W_fast·e)[i]`, `s[i] = ls·s_prev[i] + (1-ls)·(W_slow·e)[i]`, and (with `use_multiscale=true`, also the D21 profile's setting) `ctx = [α·h+(1-α)·s ; s]` per layer. Cross-checked the general transpose-multiply convention against two existing precedents in this codebase: `char_lstm.cpp`'s `backward_step` (`dx = Wx^T · dgates`, then `dE[token] = dx` directly, confirming "transpose the forward linear map to backprop through it" is the established pattern) and this same file's `bptt_ssm_update` (`native/src/lm/cyphalm_model.cpp:1185-1291`, the hybrid path's own SSM backprop), which already computes `grad_ctx = matvec_transpose(proj_ssm_, field_dim, ctx_dim, grad_field)` for a different purpose (updating `W_fast`, not embeddings) — reusing that exact transpose convention rather than inventing a new one.
 
 ### 10.2 The fix
 
@@ -395,8 +395,8 @@ None of this means the fix was unnecessary: an incorrect gradient is still incor
 
 ### Files touched by Phase 0b
 
-- `native/src/cyphalm/cyphalm_model.cpp` — the fix (`rpsm_embed_backprop_stub` → `rpsm_embed_backprop`, real chain-rule backward pass)
-- `native/include/cypha/cyphalm/cyphalm_model.hpp` — declaration rename to match
+- `native/src/lm/cyphalm_model.cpp` — the fix (`rpsm_embed_backprop_stub` → `rpsm_embed_backprop`, real chain-rule backward pass)
+- `native/include/cypha/lm/cyphalm_model.hpp` — declaration rename to match
 - `native/tests/parity/rpsm_embed_grad_finite_diff.cpp` — new finite-difference CTest closing the "gold-standard regression guard" request
 - `native/cmake/CyphaParity.cmake`, `native/CMakeLists.txt` — register the new test target/CTest
 - `docs/reports/RPSM_UPGRADE_PLAN.md` — this section
@@ -482,7 +482,7 @@ Reasoning, weighing everything found across all phases:
 
 - `native/include/cypha/rpsm/rpsm_sequence_layer.hpp` — new opt-in config fields (`use_spectral_alpha`, `use_normalized_eta`, `eta_norm_max_scale`) and `gria_alpha_spectral()` declaration
 - `native/src/rpsm/rpsm_sequence_layer.cpp` — `gria_alpha_spectral()` implementation; wired into `hierarchy_update()` (Fix 1) and `train_step()` (Fix 2, `effective_lr`)
-- `native/src/cyphalm/cyphalm_model.cpp` — enable both flags for `context_mode == ContextMode::Rpsm`, next to the existing `use_izaac_init` line
+- `native/src/lm/cyphalm_model.cpp` — enable both flags for `context_mode == ContextMode::Rpsm`, next to the existing `use_izaac_init` line
 - `native/tests/parity/rpsm_spectral_alpha_smoke.cpp`, `native/tests/parity/rpsm_normalized_eta_smoke.cpp` — new CTests (§11.4)
 - `native/cmake/CyphaParity.cmake`, `native/CMakeLists.txt` — register the two new test targets/CTests
 - `docs/reports/RPSM_UPGRADE_PLAN.md` — this section
@@ -500,23 +500,23 @@ Reasoning, weighing everything found across all phases:
 - `docs/research/upgrades/RPSM_IMPLEMENTATION.md` (full read)
 - `native/include/cypha/rpsm/psi_matrices.hpp`, `native/src/rpsm/psi_matrices.cpp` (full read)
 - `native/include/cypha/rpsm/rpsm_sequence_layer.hpp`, `native/src/rpsm/rpsm_sequence_layer.cpp` (full read)
-- `native/include/cypha/cyphalm/cyphalm_config.hpp` (full read)
-- `native/src/cyphalm/cyphalm_config.cpp` (`apply_bench_mode`, `apply_bench_profile`, RPSM sections)
-- `native/include/cypha/cyphalm/cyphalm_model.hpp` (RPSM member/method declarations)
-- `native/src/cyphalm/cyphalm_model.cpp` (`uses_rpsm`, `init_components`, `forward`, `train_step_rpsm`, `rpsm_embed_backprop_stub`, `train_sequence_rpsm`, `project_field`)
+- `native/include/cypha/lm/cyphalm_config.hpp` (full read)
+- `native/src/lm/cyphalm_config.cpp` (`apply_bench_mode`, `apply_bench_profile`, RPSM sections)
+- `native/include/cypha/lm/cyphalm_model.hpp` (RPSM member/method declarations)
+- `native/src/lm/cyphalm_model.cpp` (`uses_rpsm`, `init_components`, `forward`, `train_step_rpsm`, `rpsm_embed_backprop_stub`, `train_sequence_rpsm`, `project_field`)
 - `native/src/cyphalm/char_lstm.cpp` (`CharLSTMGrad`/`backward_step`/`apply_gradients` — `Wy`/`dWy` comparison)
-- `native/src/infer_cpu.cpp` (`CYPHA_USE_RPSM_LLR`, `score_matrix_use_field`, `rpsm_score_matrix_batched`)
-- `native/src/memory_train.cpp` (existing online `mu`/`D` update pattern, cited as the fix template)
+- `native/src/classify/infer_cpu.cpp` (`CYPHA_USE_RPSM_LLR`, `score_matrix_use_field`, `rpsm_score_matrix_batched`)
+- `native/src/classify/memory_train.cpp` (existing online `mu`/`D` update pattern, cited as the fix template)
 - `native/tests/parity/rpsm_batched_llr_smoke.cpp`, `rpsm_hierarchy_smoke.cpp`, `rpsm_train_smoke.cpp` (full read)
 - `native/CMakeLists.txt` (RPSM CTest registrations)
 - `bench/BASELINE_LOCK.json` (read-only; `rpsm_results`, `overnight_results` sections)
 - `bench/config/profiles/cyphalm_d21_rpsm.json`, `bench/config/d21_rpsm_profile.json`, `bench/config/profiles/cyphalm_d17_wikitext.json` (read-only, config comparison)
-- `native/src/bench/bench_domains.cpp` (domain registration table, `d41`/`d76` pattern for the new-domain proposal)
+- `native/src/eval/bench_domains.cpp` (domain registration table, `d41`/`d76` pattern for the new-domain proposal)
 
 ### Additional files read/cited for Phase -1 (§11)
 
 - `docs/RESEARCH_STATUS.md:393` and surrounding context (`:383-397`, re-read directly, not just via §3.2's summary)
-- `native/include/cypha/cyphalm/cyphalm_config.hpp:53-54` (`alpha_init`/`alpha_learnable`), `native/src/cyphalm/cypha_cell_hypothesis.cpp:84-156` (H01-H22 cell variants, `alpha_init=0.485` at H10) — cross-referenced per the task's suggestion; confirmed unrelated GRIA-gate construct, but corroborates `0.485` as an established "edge of chaos" convention in this codebase
+- `native/include/cypha/lm/cyphalm_config.hpp:53-54` (`alpha_init`/`alpha_learnable`), `native/src/lm/cypha_cell_hypothesis.cpp:84-156` (H01-H22 cell variants, `alpha_init=0.485` at H10) — cross-referenced per the task's suggestion; confirmed unrelated GRIA-gate construct, but corroborates `0.485` as an established "edge of chaos" convention in this codebase
 - `native/src/cyphalm/gria_lowrank.cpp`, `native/src/cyphalm/cyphalm_gria.cpp` (alpha-gate implementations, confirmed structurally unrelated to spectral radius)
 
 ---
@@ -628,7 +628,7 @@ Read `cypha_cell_hypothesis.cpp:9-37,108-131` (the full `H08`/`H12`/`H13` varian
 
 ### 13.3 Runtime instrumentation: `M_slots` writes self-extinguish after ~1,300 steps and never resume
 
-Per the task's request, added temporary instrumentation (env-gated on `CYPHA_RPSM_DEBUG_INSTRUMENT=1`, zero cost/behavior change otherwise) to `inject_input_multilevel`, `hierarchy_update`'s `soft_read`/`ring_write` call sites, counting calls and logging the step index of every `ring_write`. Built in `native/build_rpsm`, ran `--profile d21 --mode rpsm --n-train 10000 --n-eval 128 --threads 1` (Tiny tier, all Phase 0/0b/-1 fixes live, unmodified production config otherwise). **All instrumentation was reverted before finishing this task — confirmed via `git diff` showing zero net changes to `native/src/rpsm/rpsm_sequence_layer.cpp` and `native/src/cyphalm/cyphalm_model.cpp`, and re-confirmed the reverted binary reproduces the exact `4.794304980541004` BPC pin at `n_train=5000` bit-for-bit.**
+Per the task's request, added temporary instrumentation (env-gated on `CYPHA_RPSM_DEBUG_INSTRUMENT=1`, zero cost/behavior change otherwise) to `inject_input_multilevel`, `hierarchy_update`'s `soft_read`/`ring_write` call sites, counting calls and logging the step index of every `ring_write`. Built in `native/build_rpsm`, ran `--profile d21 --mode rpsm --n-train 10000 --n-eval 128 --threads 1` (Tiny tier, all Phase 0/0b/-1 fixes live, unmodified production config otherwise). **All instrumentation was reverted before finishing this task — confirmed via `git diff` showing zero net changes to `native/src/rpsm/rpsm_sequence_layer.cpp` and `native/src/lm/cyphalm_model.cpp`, and re-confirmed the reverted binary reproduces the exact `4.794304980541004` BPC pin at `n_train=5000` bit-for-bit.**
 
 Findings from the instrumented run:
 
@@ -707,7 +707,7 @@ Recommendation, in priority order, superseding §12.5's "proceed to Option A/B's
 ### Files touched by §13
 
 - `docs/reports/RPSM_UPGRADE_PLAN.md` — this section only.
-- No source or config changes were kept. Temporary instrumentation (`native/src/rpsm/rpsm_sequence_layer.cpp`) and three temporary experimental config overrides (`native/src/cyphalm/cyphalm_model.cpp`) were added, measured, and fully reverted — confirmed via `git diff` showing zero net changes to both files, and via a bit-identical BPC reproduction (`4.794304980541004` at `n_train=5000`) and a clean `ctest --test-dir native/build_rpsm -R rpsm` run (10/10 passed) on the reverted tree before finishing this task.
+- No source or config changes were kept. Temporary instrumentation (`native/src/rpsm/rpsm_sequence_layer.cpp`) and three temporary experimental config overrides (`native/src/lm/cyphalm_model.cpp`) were added, measured, and fully reverted — confirmed via `git diff` showing zero net changes to both files, and via a bit-identical BPC reproduction (`4.794304980541004` at `n_train=5000`) and a clean `ctest --test-dir native/build_rpsm -R rpsm` run (10/10 passed) on the reverted tree before finishing this task.
 
 ## 14. Real multi-step BPTT implementation, verification, and measured impact (2026-07-11)
 
@@ -922,9 +922,9 @@ the 50k stretch-goal confirmation was not run (also per instructions).**
 ### 15.1 Precise scoping: what "the online mu/inv_v update mechanism ported from memory_train.cpp"
 actually means in this codebase
 
-Re-read `native/src/memory_train.cpp` and `native/include/cypha/memory_train.hpp` in full (the
+Re-read `native/src/classify/memory_train.cpp` and `native/include/cypha/classify/memory_train.hpp` in full (the
 mechanism's actual home — there is no separate `memory_train.hpp`-adjacent "mu/inv_v" header;
-everything lives in `CyphaDifMemoryState`, `native/include/cypha/memory_train.hpp:26-71`) before
+everything lives in `CyphaDifMemoryState`, `native/include/cypha/classify/memory_train.hpp:26-71`) before
 touching any RPSM code, per the task's explicit instruction. `CyphaDifMemoryState::memory_train`
 (`memory_train.cpp:231-374`) does two structurally distinct online updates per training step, and
 it is essential to keep them separate because they are **not the same mechanism** and only one of
@@ -1218,7 +1218,7 @@ supporting it:**
   (`world_n_`, `world_m2_`, `world_v_`), `update_world_stats()` declaration, `feat()` test accessor
 - `native/src/rpsm/rpsm_sequence_layer.cpp` — `update_world_stats()` implementation (ported from
   `memory_train.cpp`'s `world_update()`), wired into `train_step()`
-- `native/src/cyphalm/cyphalm_model.cpp` — `CYPHALM_RPSM_WORLD_STATS` research-only env override
+- `native/src/lm/cyphalm_model.cpp` — `CYPHALM_RPSM_WORLD_STATS` research-only env override
   (mirrors the existing `CYPHALM_RPSM_BPTT_WINDOW` convention); **not** wired to default-on for
   `context_mode==Rpsm` (§15.7)
 - `native/tests/parity/rpsm_world_stats_smoke.cpp` — new CTest (parity + stability + Phase-0-
@@ -1228,13 +1228,13 @@ supporting it:**
 
 ### Files read/cited for §15
 
-- `native/src/memory_train.cpp` (full read, `world_update()` at `:41-121`, `memory_train()` at
-  `:231-374`), `native/include/cypha/memory_train.hpp` (full read, `CyphaDifMemoryState` at `:26-71`)
+- `native/src/classify/memory_train.cpp` (full read, `world_update()` at `:41-121`, `memory_train()` at
+  `:231-374`), `native/include/cypha/classify/memory_train.hpp` (full read, `CyphaDifMemoryState` at `:26-71`)
 - `native/include/cypha/rpsm/rpsm_sequence_layer.hpp`, `native/src/rpsm/rpsm_sequence_layer.cpp`
   (re-read in full against current `HEAD`, i.e. post Phase 0/0b/-1/§14)
 - `native/include/cypha/rpsm/psi_matrices.hpp`, `native/src/rpsm/psi_matrices.cpp` (re-read to
   confirm `PsiMatrices`'s `mu`/`inv_var`/`v_mean` layout and `batched_llr_gemm`'s use of them)
-- `native/src/cyphalm/cyphalm_model.cpp` (RPSM `RpsmSequenceConfig` construction site,
+- `native/src/lm/cyphalm_model.cpp` (RPSM `RpsmSequenceConfig` construction site,
   `:485-513` post this phase's edit)
 - `native/tests/parity/rpsm_normalized_eta_smoke.cpp` (style/structure template for the new test)
 - `bench/config/profiles/cyphalm_d21_rpsm.json` (re-confirmed Tiny-tier dims unchanged, read-only)

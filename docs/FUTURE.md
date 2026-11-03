@@ -21,7 +21,7 @@ item has a measured effect size; nothing is speculative.
 **Evidence:** FDR=0.001 on XOR; `linear(h)=0.512` (chance) vs `kernel(h)=0.835`.
 Nonlinearity gap = **32.3 pp** — unreachable with the current linear LLR discriminant.
 
-**Shipped (2026-05-31):** Whitened Nyström features in native C++ (`native/src/kernel_memory.cpp`):
+**Shipped (2026-05-31):** Whitened Nyström features in native C++ (`native/src/classify/kernel_memory.cpp`):
 1. Reservoir landmarks (**M=256** default) with median-γ RBF bandwidth.
 2. `φ(h) = K(h, landmarks) · K(landmarks, landmarks)^{-1/2}` via Cholesky whitening.
 3. Online softmax gradient on `φ(h)`; blended into `score_matrix` when kernel enabled.
@@ -63,7 +63,7 @@ the gamma bandwidth is not well-tuned for all datasets.
 
 ## 1 — CUDA GPU path (`cypha::accel`)
 
-**Status:** Native **CUDA** in `native/src/accel_cuda.cu` (pooled device memory + Bessel table for GH–NIG gate) plus `accel_backend.cpp`. Without `-DCYPHA_ENABLE_CUDA=ON`, the same APIs use **ISO C++** `std::thread`. **`infer_cpu`** routes **`batch_encode`**, **`score_matrix_use_field`**, and **`world_gate_vector_use_field`** through **`cypha::accel`** (CUDA when batch rows ≥ **`CYPHA_ACCEL_GPU_MIN_BATCH_ROWS`**, default **1** — GPU used for all n≥1 when available). **`cuda_smoke`** checks encode / score / softmax / tanh gate / NIG gate vs references; **`--bench`** compares CUDA vs CPU refs when a GPU is present.
+**Status:** Native **CUDA** in `native/src/core/accel_cuda.cu` (pooled device memory + Bessel table for GH–NIG gate) plus `accel_backend.cpp`. Without `-DCYPHA_ENABLE_CUDA=ON`, the same APIs use **ISO C++** `std::thread`. **`infer_cpu`** routes **`batch_encode`**, **`score_matrix_use_field`**, and **`world_gate_vector_use_field`** through **`cypha::accel`** (CUDA when batch rows ≥ **`CYPHA_ACCEL_GPU_MIN_BATCH_ROWS`**, default **1** — GPU used for all n≥1 when available). **`cuda_smoke`** checks encode / score / softmax / tanh gate / NIG gate vs references; **`--bench`** compares CUDA vs CPU refs when a GPU is present.
 
 **Windows (native MSVC):** install [CUDA Toolkit](https://developer.nvidia.com/cuda-downloads), then:
 ```powershell
@@ -146,7 +146,7 @@ Release bundles: [`packaging/`](../../packaging/) install scripts + `scripts/pac
 Native **`cypha_rest`** (cpp-httplib; see [`PORT_CONTRACT.md`](port/PORT_CONTRACT.md) §3) exposes the full REST API.
 
 ### Minimal SPA — SHIPPED (2026 Q2)
-Vanilla JS SPA at **`GET /`** — health, predict, update, models, session RNG. Static assets under `native/tools/static/`; optional embed via `-DCYPHA_EMBED_STATIC_UI=ON`. CTest **`native_rest_ui_smoke`**.
+Vanilla JS SPA at **`GET /`** — health, predict, update, models, session RNG. Static assets under `native/tools/serve/static/`; optional embed via `-DCYPHA_EMBED_STATIC_UI=ON`. CTest **`native_rest_ui_smoke`**.
 
 **Remaining (expansion):** live training charts, experiment browser, richer model registry UX.
 
@@ -200,9 +200,9 @@ env-gated branch in the bench training loop).
   softmax confidence) already existed (used by the CyphaLM token-curriculum pilot and by
   `/uncertainty-rank`'s `"curriculum"` mode); this pass added the missing "randomise within a
   window" half of the spec as `cypha::curriculum_order_windowed(confidences, n_rows, window, rng)`
-  in `native/include/cypha/curriculum.hpp` / `native/src/curriculum.cpp`. It is wired into the
+  in `native/include/cypha/online/curriculum.hpp` / `native/src/online/curriculum.cpp`. It is wired into the
   actual CSV-driven DIF training hot path — `train_eval_vectors` in
-  `native/src/bench/bench_domains.cpp`, which every tabular/vision bench domain (D03, D08, ...)
+  `native/src/eval/bench_domains.cpp`, which every tabular/vision bench domain (D03, D08, ...)
   funnels through as its `dif_train_step_vector`-per-row loop (the practical equivalent of
   `dif_train_classify_sequence` for CSV data; that function itself is currently only exercised by
   parity fixtures, not by any bench CLI) — via a new opt-in env gate, **`CYPHA_CURRICULUM_WINDOW`**
@@ -226,7 +226,7 @@ env-gated branch in the bench training loop).
   confidence (hardest-first) when `"curriculum": true`. Covered by CTest `native_rest_uncertainty_rank`
   (integration test that starts `cypha_rest.exe` and hits the live endpoint). One audit fix this
   pass: the endpoint's entropy computation was a hand-duplicated copy of
-  `cypha::row_entropy_from_probs` (`native/include/cypha/infer_cpu.hpp`, also used by the
+  `cypha::row_entropy_from_probs` (`native/include/cypha/classify/infer_cpu.hpp`, also used by the
   library's own `cypha::uncertainty_rank_indices` helper); `cypha_rest.cpp` now calls the shared
   function directly instead of reimplementing it, per this section's original design intent to
   reuse existing softmax/entropy math.

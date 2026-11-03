@@ -91,7 +91,7 @@ A packed byte trie plus a six-expert mixture, measured October 2026 on enwik9's 
 
 Hashes of whole contexts are uniform. The structure worth storing is the bytes, parent first. `r_eu` and `32/(32+n)` are not mix weights. Uncertainty for the match is `u = H(order-1) / ln(256)`.
 
-BPC is the held-out negative log probability. It is not a generation score. Surface score `S = H·D·L` is implemented in `native/tools/surface_score.cpp`.
+BPC is the held-out negative log probability. It is not a generation score. Surface score `S = H·D·L` is implemented in `native/tools/eval/surface_score.cpp`.
 
 Details and the corpus plan: [`docs/CURRENT.md`](docs/CURRENT.md). Question answering and count-context results (2026-10-26): [`docs/reports/CYPHALM_QA_AND_CONTEXT_TEST.md`](docs/reports/CYPHALM_QA_AND_CONTEXT_TEST.md). Default plan: [`docs/PLAN.md`](docs/PLAN.md).
 

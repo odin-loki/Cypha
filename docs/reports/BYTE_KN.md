@@ -12,7 +12,7 @@
 
 ## The model (fixed before any run)
 
-`native/include/cypha/cyphalm/byte_kn.hpp`, class `ByteKN`.
+`native/include/cypha/lm/byte_kn.hpp`, class `ByteKN`.
 
 - **Estimate:** the same as `token_model.hpp`'s `KneserNey` with V = 256 (Chen & Goodman 1998): orders 1..K; raw counts at order K, continuation counts (distinct left extensions) below it; three discounts per order from the count of counts, each clamped to [0, j]; a uniform base 1/256. P_k(w | c) = max(n(c w) − D, 0) / n(c) + γ(c) P_{k−1}(w | c′), with γ(c) = (D₁ n₁(c) + D₂ n₂(c) + D₃₊ n₃₊(c)) / n(c). A context not stored ends the recursion at the shorter one.
 - **Packed form:** per order, the contexts sorted by a 64-bit key (the key of `token_model.hpp`: a hash grown to the left, one step per byte), a 32-bit offset into the children and γ as a float (16 bytes a context); per child, its byte (1 byte) and its discounted value max(n − D, 0) / n(c) as a float (4 bytes). So the lookup is p ← value(c, w) + γ(c) p, order by order.

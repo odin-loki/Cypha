@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-20  
 **Branch:** `cursor/gate24-hotpath-checkpoint-ci-6c23`  
-**Harness:** `native/tools/cyphalm_hp_hotpath_profile.cpp`, `native/tests/regression/hp_gate24_ci_gate.cpp`
+**Harness:** `native/tools/lm/cyphalm_hp_hotpath_profile.cpp`, `native/tests/regression/hp_gate24_ci_gate.cpp`
 
 ---
 

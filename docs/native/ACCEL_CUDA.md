@@ -4,10 +4,10 @@
 
 GitHub Actions **does not** compile or test CUDA (former **`windows_cuda_msvc`** / **`linux_cuda`** jobs removed in v2.2.8). There is **no** planned return of hosted CI GPU runners — validate infer CUDA on your own machine with `-DCYPHA_ENABLE_CUDA=ON`, then run **`native_cuda_smoke`** / **`native_score_batch`**. CPU-only CI (**`build_and_test`**, **`windows_msvc`**) remains the release gate.
 
-Optional GPU path for **`cypha::accel`** (`native/src/accel_backend.cpp` + `accel_cuda.cu`).
+Optional GPU path for **`cypha::accel`** (`native/src/core/accel_backend.cpp` + `accel_cuda.cu`).
 Without **`-DCYPHA_ENABLE_CUDA=ON`**, the same APIs use **ISO C++** `std::thread` row parallelism.
 
-**Native reference (P7):** `cypha_accel/` removed — use **`native/src/accel_cuda.cu`** + **`score_batch_parity`**, CTest **`native_score_batch`** for fused LLR parity vs `fixtures/score_batch/sidecar.json`.
+**Native reference (P7):** `cypha_accel/` removed — use **`native/src/core/accel_cuda.cu`** + **`score_batch_parity`**, CTest **`native_score_batch`** for fused LLR parity vs `fixtures/score_batch/sidecar.json`.
 
 ## Requirements
 
@@ -123,17 +123,17 @@ ones `f566fee` already fixed).
 
 ### 1. Call-site trace — which of the three accel functions are reachable from real domains
 
-`cypha::accel` accelerates exactly three entry points (`native/src/accel_backend.cpp:191-265`):
+`cypha::accel` accelerates exactly three entry points (`native/src/core/accel_backend.cpp:191-265`):
 `batch_encode`, `score_matrix`, `world_gate_batch`/`world_gate_nig_field_batch`. Grepping every
 call site under `native/src/**` and `native/tools/**` and tracing upward:
 
 - **`cypha::accel::batch_encode`** is reached through exactly one wrapper,
   `cypha::batch_encode(CyphaInferModel, x, n, h_out)`
-  (`native/src/infer_cpu.cpp:604-612`), which unconditionally calls
+  (`native/src/classify/infer_cpu.cpp:604-612`), which unconditionally calls
   `cypha::accel::batch_encode(...)` — no env toggle bypasses it. This wrapper **is** called from
-  real bench domains: `dif_train_step_vector` (`native/src/train_step_vector.cpp:61,233`, the
+  real bench domains: `dif_train_step_vector` (`native/src/classify/train_step_vector.cpp:61,233`, the
   per-sample online-training hot path used by every DIF classification/regression domain) and the
-  shared `train_eval_vectors`/eval loop (`native/src/bench/bench_domains.cpp:432` train step,
+  shared `train_eval_vectors`/eval loop (`native/src/eval/bench_domains.cpp:432` train step,
   `:446` `batch_llr_from_x` eval step). `train_eval_vectors` (`bench_domains.cpp:385-470`) is the
   common helper behind **D03** (`run_tabular_dataset`, `bench_domains.cpp:1255-1261`, iris/wine) and
   **D08** (`run_d08` → `run_vision_encoding`, `bench_domains.cpp:1319-1338`, digits/vision). So:
@@ -141,11 +141,11 @@ call site under `native/src/**` and `native/tools/**` and tracing upward:
   expert-routing discriminant (`bench_domains.cpp:846-848` `kernel_blend_llr`) and D07/D09/D10/D12/
   D15/D16 which reuse the same `OnlineClassifier`/`dif_train_step_vector` machinery.**
 - **`cypha::accel::score_matrix`** is reached through `score_matrix_use_field`
-  (`native/src/infer_cpu.cpp`) for standard DIF models (non–class-GMM path). RPSM's
+  (`native/src/classify/infer_cpu.cpp`) for standard DIF models (non–class-GMM path). RPSM's
   `CYPHA_USE_RPSM_LLR` bypass was **removed** in 2026-09 ([`docs/history/REMOVED_RPSM.md`](../../history/REMOVED_RPSM.md));
   LLR scoring now dispatches to `cypha::accel::score_matrix` when CUDA is enabled.
 - **`cypha::accel::world_gate_batch`/`world_gate_nig_field_batch`** is reached only through
-  `world_gate_vector_use_field` (`native/src/infer_cpu.cpp:882-916`, unconditional call at
+  `world_gate_vector_use_field` (`native/src/classify/infer_cpu.cpp:882-916`, unconditional call at
   `:914`). The *only* call site for this function in the whole repo is
   `native/tests/parity/parity_main.cpp:148` — a correctness-parity fixture runner, not a bench
   domain. **`world_gate_vector_use_field` (and therefore the CUDA world-gate kernels) is 100%
@@ -237,7 +237,7 @@ size where it would pay off, and one of the three accelerated ops (`score_matrix
 unreachable from CyphaLM hp inference (hp uses its own predictor, not DIF `score_matrix`). The
 correctness plumbing (`score_batch_parity`, `cuda_smoke`) is valuable to keep as a regression guard
 for whenever a genuinely batched call site appears (e.g. a future vectorized eval pass that scores
-many rows in one call, or REST/Studio-GUI bulk endpoints — `native/apps/cypha_rest.cpp:1142` and
+many rows in one call, or REST/Studio-GUI bulk endpoints — `native/tools/serve/cypha_rest.cpp:1142` and
 `native/qt/src/bulk_train_worker.cpp:74` already call `batch_encode`/`score_matrix_use_field` with
 real `n>1` batches outside the bench suite, so the plumbing isn't hypothetical, just not on the
 bench-domain critical path). No integration attempted in this pass — wiring anything into D03/D08/
@@ -278,7 +278,7 @@ section).
 
 ### Smallest bounded change that *does* exercise batched CUDA
 
-`train_eval_vectors` in `native/src/bench/bench_domains.cpp` (shared by **D03** and **D08**) used
+`train_eval_vectors` in `native/src/eval/bench_domains.cpp` (shared by **D03** and **D08**) used
 to call `batch_llr_from_x(..., n=1)` once per test row. It now flattens the full test matrix and
 calls `batch_llr_from_x(infer, flat, test_n, llr)` once. That reaches
 `cypha::accel::batch_encode` with `n = n_test` (and `cypha::accel::score_matrix` for the score stage when CUDA is on). Training remains online `n=1` (unchanged; still not GPU-amortizable).
@@ -318,7 +318,7 @@ Follow-up to the same-day `train_eval_vectors` batching (commit `882079b`). Grep
 `native/src` for remaining `batch_llr_from_x` / `batch_encode` / `score_matrix` call sites
 that still used `n=1` inside a loop over a known full test/calib matrix.
 
-### Sites batched this pass (`native/src/bench/bench_domains.cpp`)
+### Sites batched this pass (`native/src/eval/bench_domains.cpp`)
 
 | Site | Before | After | Domains hit |
 |------|--------|-------|-------------|

@@ -10,7 +10,7 @@
 
 **Rule 10.** PLAN rule 10 lets a tool gate. Every candidate is a sample from CyphaLM's own mixture with `sample`'s own sampler. The gate's features come from CyphaLM too. No string search, retrieval or hand-written text is involved. The gate is in `sample` only, behind a flag; `qa` and chat answers do not use it.
 
-## The gate (`native/tools/cyphalm_trie.cpp`)
+## The gate (`native/tools/lm/cyphalm_trie.cpp`)
 
 - **Flag.** `cyphalm_trie sample … --gate K[,wf=..][,wp=..][,wm=..][,min=..][,max=..]`. Without `--gate`, `sample` is unchanged.
 - **Candidates.** For each sentence, K candidates. Each is drawn from today's mixture (trie, then similar-context, then copy) with `sample`'s sampler (11-byte no-repeat ban, temperature, nucleus 0.9). Candidate k of sentence j has its own random stream, so no candidate depends on another.

@@ -6,7 +6,7 @@
 
 | ID | Deliverable | Path |
 |----|-------------|------|
-| MC3 | Needle-haystack runner | `native/tools/cyphalm_needle_haystack.cpp` |
+| MC3 | Needle-haystack runner | `native/tools/eval/cyphalm_needle_haystack.cpp` |
 | MG3 | JSON result + table | `bench/results/needle_haystack.json` |
 | — | CTest smoke | `native_needle_haystack_smoke` (`CYPHA_BENCH_FAST=1`) |
 

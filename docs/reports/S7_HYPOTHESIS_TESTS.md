@@ -207,7 +207,7 @@ The registered version's 56 pass BH only through the clamped Wikidata factor. It
 ## How to reproduce
 
 ```bash
-g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp -o pattern_learn
+g++ -O2 -std=c++20 -I native/include native/tools/knowledge/pattern_learn.cpp -o pattern_learn
 # dev only (the test half is not printed)
 ./pattern_learn --test-kinds enwik8 /root/work/f2/v2/aug/seeds.tsv /root/work/f2/wikidata/wd_values.tsv /root/work/f2/v2/aug/patterns.tsv out
 # the single test read
@@ -387,7 +387,7 @@ Tool: `pattern_learn --test-kinds … --phi-wd phi.tsv --s15 temporal_holdout_de
 ### How to reproduce (S7b)
 
 ```bash
-g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp -o pattern_learn
+g++ -O2 -std=c++20 -I native/include native/tools/knowledge/pattern_learn.cpp -o pattern_learn
 # dev choices and S15's choose half
 ./pattern_learn --test-kinds enwik8 /root/work/f2/v2/aug/seeds.tsv /root/work/f2/wikidata/wd_values.tsv /root/work/f2/v2/aug/patterns.tsv out \
   --phi-wd /root/work/f2/wikidata/phi.tsv --s15 bench/eval/temporal_holdout_dev.tsv
@@ -568,7 +568,7 @@ The normal `--gaps` run is byte-identical to main's (all ten output files; stdou
 ### How to reproduce (S7c)
 
 ```bash
-g++ -O2 -std=c++20 -I native/include native/tools/pattern_learn.cpp -o pattern_learn
+g++ -O2 -std=c++20 -I native/include native/tools/knowledge/pattern_learn.cpp -o pattern_learn
 # dev, S15's choose half, the simulations, the resamplings and the choice
 ./pattern_learn --test-kinds enwik8 /root/work/f2/v2/aug/seeds.tsv /root/work/f2/wikidata/wd_values.tsv /root/work/f2/v2/aug/patterns.tsv out \
   --phi-wd /root/work/f2/wikidata/phi.tsv --s15 bench/eval/temporal_holdout_dev.tsv --s7c
@@ -720,7 +720,7 @@ The store's φ on the v2 seed store differs from `kRel`'s hand-set table in most
 ### How to reproduce (S7d)
 
 ```bash
-g++ -O2 -std=c++20 -pthread -I native/include native/tools/pattern_learn.cpp -o pattern_learn
+g++ -O2 -std=c++20 -pthread -I native/include native/tools/knowledge/pattern_learn.cpp -o pattern_learn
 ./pattern_learn --test-kinds enwik8 seeds.tsv wd_values.tsv patterns.tsv s7 --phi-wd phi.tsv --s15 bench/eval/temporal_holdout_dev.tsv --s7c
 ./pattern_learn --worlds enwik8 seeds.tsv wd_values.tsv facts_f2.tsv bench/eval/temporal_holdout_dev.tsv s9 --s9b
 ./pattern_learn --s7d s7.items.tsv s9.dev_items.tsv s9.s9b_dev_items.tsv s7.s15_items.tsv s7d

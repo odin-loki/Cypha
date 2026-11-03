@@ -105,7 +105,7 @@ cmake --build native/build --target cyphalm_generate -j$(nproc)
 
 | Path | Role |
 |------|------|
-| [`native/`](native/) | C++ runtime, CMake, CTests |
+| [`native/`](native/) | C++ runtime, CMake, CTests. Grouped in modules: `core`, `lm`, `online`, `classify`, `eval`, `knowledge`, `forecast`, `semantics`, `som`, `serve` (headers `include/cypha/<module>/`, sources `src/<module>/`, tools `tools/<module>/`). Map: [`docs/MODULES.md`](docs/MODULES.md) |
 | [`forge/`](forge/README.md) | FORGE, Odin's C++23 library for running AI models on CPUs and GPUs (git subtree, builds on its own; [`docs/FORGE.md`](docs/FORGE.md)) |
 | [`fixtures/`](fixtures/) | Parity goldens |
 | [`bench/`](bench/) | Living lock (`BASELINE_LOCK.json`), profiles, corpora |

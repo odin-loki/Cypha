@@ -168,7 +168,7 @@ W_new = self._W_T - lr * np.outer(err, h_t) / self.d
 — `archive/cypha-v8/Cypha.py:857-858`
 
 Today it is `nig_field_update_causal` in
-[`native/include/cypha/nig_field.hpp`](../../../native/include/cypha/nig_field.hpp), whose
+[`native/include/cypha/classify/nig_field.hpp`](../../../native/include/cypha/classify/nig_field.hpp), whose
 comment still reads *"Causal `W_T` SGD step + spectral-radius trim + refresh `a_eff` (Python
 `update_causal`)"*.
 

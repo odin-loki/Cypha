@@ -3,7 +3,7 @@
 Odin Loch, 2026-10-28
 
 Library: `native/include/cypha/semantics/geometry.hpp` (header-only, namespace `cypha::semantics`).
-Test: `native/tools/geometry_test.cpp`, CTest `native_geometry_test`. Synthetic data only; about 9 s on one core.
+Test: `native/tools/semantics/geometry_test.cpp`, CTest `native_geometry_test`. Synthetic data only; about 9 s on one core.
 Design: [EMBEDDING_GEOMETRY.md](../EMBEDDING_GEOMETRY.md) §4.2, §4.5, §5.1, §7.1, §9.3; [SEMANTICS.md](../SEMANTICS.md) §2–3.
 
 ## What was built
@@ -35,9 +35,9 @@ Design: [EMBEDDING_GEOMETRY.md](../EMBEDDING_GEOMETRY.md) §4.2, §4.5, §5.1, �
   - Force-match KL.
   - Per-item disagreement and the confidence check.
 
-**Reused rather than written again:** `eval/ecs.hpp` (`Grade`, `grade_at_least`), and the fp16 rounding routine of `src/cyphalm/component_dump.cpp`.
+**Reused rather than written again:** `eval/ecs.hpp` (`Grade`, `grade_at_least`), and the fp16 rounding routine of `src/lm/component_dump.cpp`.
 
-**Written here instead of reused:** a Jacobi solver, because the existing ones (`src/preprocessor_fit.cpp`, `src/intelligence/measurers.cpp`, `tools/ppmi_svd.cpp`) are internal to `.cpp` files. `thought::Welford` is a scalar in double precision, so the per-dimension variance is written here as the same recurrence in fp32. Nothing in `third_party` applied.
+**Written here instead of reused:** a Jacobi solver, because the existing ones (`src/classify/preprocessor_fit.cpp`, `src/knowledge/measurers.cpp`, `tools/semantics/ppmi_svd.cpp`) are internal to `.cpp` files. `thought::Welford` is a scalar in double precision, so the per-dimension variance is written here as the same recurrence in fp32. Nothing in `third_party` applied.
 
 ## Test numbers
 

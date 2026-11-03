@@ -2,7 +2,7 @@
 
 **Status:** Small opt-in pilot implemented and validated on **D03** (see §6). Full four-domain port (D16/D03/D08/D09) remains a plan, not implemented — see §7 for explicit scope boundary.
 **Priority:** P6 in `docs/reports/DEV_PLAN_2026-07-11.md:156` ("Multi-view training Phase 2 (CyphaDIF) | LM side done; DIF side not started | independent").
-**Relationship to the live overnight run:** independent and additive. This work does not touch `native/build_math` (the live production-overnight D17→D21→cell-sweep run), `bench/BASELINE_LOCK.json`, or any overnight orchestration script. It builds in a fresh `native/build_multiview` directory and only edits `native/src/bench/bench_domains.cpp` (D03's own helper functions) and `native/CMakeLists.txt` (two new CTest entries). It does not touch `native/src/rpsm/*`, `native/src/intelligence/measurers.cpp`, `cyphalm_bench_native.cpp`'s `--lstm-hidden` path, kernel-LLR files, or `native/include/cypha/intelligence/causal_graph.*` — all confirmed untouched by `git status --porcelain native/` after this session's edits.
+**Relationship to the live overnight run:** independent and additive. This work does not touch `native/build_math` (the live production-overnight D17→D21→cell-sweep run), `bench/BASELINE_LOCK.json`, or any overnight orchestration script. It builds in a fresh `native/build_multiview` directory and only edits `native/src/eval/bench_domains.cpp` (D03's own helper functions) and `native/CMakeLists.txt` (two new CTest entries). It does not touch `native/src/rpsm/*`, `native/src/knowledge/measurers.cpp`, `cyphalm_bench_native.cpp`'s `--lstm-hidden` path, kernel-LLR files, or `native/include/cypha/knowledge/causal_graph.*` — all confirmed untouched by `git status --porcelain native/` after this session's edits.
 
 ---
 
@@ -12,13 +12,13 @@
 
 > "Multi-view online training helps LM/DIF | Planned | Spec: [`MULTI_VIEW_TRAINING_PLAN.md`](MULTI_VIEW_TRAINING_PLAN.md) — not yet implemented"
 
-`docs/MULTI_VIEW_TRAINING_PLAN.md:5`'s own status line: "Owner track: CyphaLM (Phase 1) → CyphaDIF (Phase 2)". Phase 1 (CyphaLM) is real, shipped, native C++ (confirmed in §2 below — not the Python `cypha_lm`/`cypha_views` package the plan doc's prose describes, which does not exist in this repo; the actual implementation is `native/src/cyphalm/cyphalm_views.cpp` + `cyphalm_model.cpp`). Phase 2 (CyphaDIF) is confirmed **not implemented** as a generic mechanism — verified firsthand by reading the actual D03/D08/D09/D16 training loops (§3). This document scopes Phase 2, implements a small validated first increment on D03 (§6), and lays out the remaining phased work for D08/D09/D16 (§7–8).
+`docs/MULTI_VIEW_TRAINING_PLAN.md:5`'s own status line: "Owner track: CyphaLM (Phase 1) → CyphaDIF (Phase 2)". Phase 1 (CyphaLM) is real, shipped, native C++ (confirmed in §2 below — not the Python `cypha_lm`/`cypha_views` package the plan doc's prose describes, which does not exist in this repo; the actual implementation is `native/src/lm/cyphalm_views.cpp` + `cyphalm_model.cpp`). Phase 2 (CyphaDIF) is confirmed **not implemented** as a generic mechanism — verified firsthand by reading the actual D03/D08/D09/D16 training loops (§3). This document scopes Phase 2, implements a small validated first increment on D03 (§6), and lays out the remaining phased work for D08/D09/D16 (§7–8).
 
 ---
 
 ## 2. What Phase 1 (CyphaLM) actually shipped
 
-### 2.1 Core types (`native/include/cypha/cyphalm/cyphalm_views.hpp:11-46`)
+### 2.1 Core types (`native/include/cypha/lm/cyphalm_views.hpp:11-46`)
 
 | Type | Fields | Purpose |
 |---|---|---|
@@ -27,7 +27,7 @@
 | `ViewSchedule` | `views: vector<ViewSpec>`, `seed` | Ordered list of views across training epochs |
 | `ViewEpochItem` | `view_spec`, `epoch_idx`, `segment_ids`, `reset_before` | One yielded training segment (a block of token ids under a given view) |
 
-### 2.2 Pure transforms (`native/src/cyphalm/cyphalm_views.cpp:78-150`)
+### 2.2 Pure transforms (`native/src/lm/cyphalm_views.cpp:78-150`)
 
 Four functions, all pure `vector<int> -> vector<int>` (or `-> vector<vector<int>>` for the block variants), with **no dependency on what the ints mean**:
 
@@ -47,11 +47,11 @@ This is the single most important fact for Phase 2 reuse: **these four functions
 - `resolve_view_schedule_struct(name, seed, train_epochs)` — same resolution, but returns a full `ViewSchedule` with a `ViewMemoryPolicy` attached per view via `memory_policy_for_view` (`cyphalm_views.cpp:22-30`): `"forward"` gets `{reset_fast=false, carry_slow=true, carry_dif=true, carry_gria_bias=true}`; every other view (`block_shuffle`, `rotated`, `backward`) gets `{reset_fast=true, carry_slow=false, ...}`.
 - `iter_view_epochs(ids, schedule, char_newline_id, block_size)` — the real engine (`cyphalm_views.cpp:221-251`). For block-segmented views (`forward`, `block_shuffle`), it calls `block_segments_for_view` to chop the (possibly transformed) id sequence into blocks and yields one `ViewEpochItem` per block, each carrying `reset_before = view_spec.memory_policy.reset_fast`. For non-block views (`rotated`, `backward`), it transforms the whole sequence once and yields it as a single segment.
 
-### 2.4 How the model consumes it (`native/src/cyphalm/cyphalm_model.cpp:1301-1367`)
+### 2.4 How the model consumes it (`native/src/lm/cyphalm_model.cpp:1301-1367`)
 
 `CyphaLMModel::train_sequence_views` is the concrete integration:
 
-1. Resolves `cfg_.view_schedule` (config field, `native/include/cypha/cyphalm/cyphalm_config.hpp:61-66`, default `"same_order"`) to a `ViewSchedule` via `resolve_view_schedule_struct(cfg_.view_schedule, cfg_.seed, cfg_.train_epochs)` (`cyphalm_model.cpp:1323-1324`).
+1. Resolves `cfg_.view_schedule` (config field, `native/include/cypha/lm/cyphalm_config.hpp:61-66`, default `"same_order"`) to a `ViewSchedule` via `resolve_view_schedule_struct(cfg_.view_schedule, cfg_.seed, cfg_.train_epochs)` (`cyphalm_model.cpp:1323-1324`).
 2. Calls `iter_view_epochs` to get the segment list.
 3. For each yielded segment: sets a **view slot** on a per-view embedding table (`set_view_slot(...)`, fed into GRIA's context — either a learned `view_emb_` table or a fixed `view_slot_for_name` mapping, `cyphalm_model.cpp:1303-1336`); resets SSM context (`reset_context()`) on macro-epoch boundaries or when `item.reset_before` is set; decays `cfg_.gria_lr` by `gria_lr_decay^epoch_idx`; then runs the ordinary per-token `train_step` loop over the segment.
 4. Called from `train_sequence` only `if (cfg_.view_schedule != "same_order")` (`cyphalm_model.cpp:1544-1547`) — i.e. the multi-view path is itself already an opt-in branch, off by default, exactly the same pattern this document's D03 pilot follows for DIF.
@@ -62,7 +62,7 @@ This is the single most important fact for Phase 2 reuse: **these four functions
 
 ## 3. How D16/D03/D08/D09 currently train (confirmed firsthand)
 
-All four domains bottom out in the same primitive, `cypha::dif_train_step_vector` (declared in `native/include/cypha/cyphalm_dif... ` — actually the standalone classifier header; called from `native/src/bench/bench_domains.cpp`), driven by one of two thin wrappers:
+All four domains bottom out in the same primitive, `cypha::dif_train_step_vector` (declared in `native/include/cypha/cyphalm_dif... ` — actually the standalone classifier header; called from `native/src/eval/bench_domains.cpp`), driven by one of two thin wrappers:
 
 | Domain | Bench entry point | Wrapper used | File:line |
 |---|---|---|---|
@@ -129,7 +129,7 @@ Both are literal, bespoke re-implementations inline in `run_d16`/`run_d16_ewc_pr
 
 ### 6.1 Design
 
-Added a new file-local helper in `native/src/bench/bench_domains.cpp:304-336` (renumbered after edit):
+Added a new file-local helper in `native/src/eval/bench_domains.cpp:304-336` (renumbered after edit):
 
 ```cpp
 std::vector<int> dif_view_order(int n, const std::string& view_schedule, int pass_idx) {
@@ -205,11 +205,11 @@ Both pass (`ctest --test-dir native/build_multiview -R "native_d03_smoke|native_
 
 | File | Change |
 |---|---|
-| `native/src/bench/bench_domains.cpp` | +1 include (`cyphalm_views.hpp`); +`dif_view_order`, +`d03_view_schedule_from_env`; `train_eval_vectors` gained one defaulted trailing parameter and its pass-loop now calls the new helper; `run_tabular_dataset` reads the env var and threads it through, and stamps `view_schedule` into its own result JSON only when non-default |
+| `native/src/eval/bench_domains.cpp` | +1 include (`cyphalm_views.hpp`); +`dif_view_order`, +`d03_view_schedule_from_env`; `train_eval_vectors` gained one defaulted trailing parameter and its pass-loop now calls the new helper; `run_tabular_dataset` reads the env var and threads it through, and stamps `view_schedule` into its own result JSON only when non-default |
 | `native/CMakeLists.txt` | +2 `add_test`/`set_tests_properties` blocks |
 | `docs/reports/MULTI_VIEW_DIF_PHASE2_PLAN.md` | This document (new) |
 
-No changes to `native/src/rpsm/*`, `native/src/intelligence/measurers.cpp`, `cyphalm_bench_native.cpp`, kernel-LLR files, or `native/include/cypha/intelligence/causal_graph.*` — confirmed via `git status --porcelain` showing only the three files above plus unrelated concurrent sibling-agent edits to `causal_graph.*`/`kernel_memory.hpp`/`intelligence_profiler_papers.cpp` (not made by this work).
+No changes to `native/src/rpsm/*`, `native/src/knowledge/measurers.cpp`, `cyphalm_bench_native.cpp`, kernel-LLR files, or `native/include/cypha/knowledge/causal_graph.*` — confirmed via `git status --porcelain` showing only the three files above plus unrelated concurrent sibling-agent edits to `causal_graph.*`/`kernel_memory.hpp`/`intelligence_profiler_papers.cpp` (not made by this work).
 
 ---
 
@@ -261,9 +261,9 @@ ctest --test-dir native/build_multiview -R "native_d03_smoke|native_d03_view_sch
 
 ## References
 
-- Phase 1 shipped code: `native/include/cypha/cyphalm/cyphalm_views.hpp`, `native/src/cyphalm/cyphalm_views.cpp`, `native/src/cyphalm/cyphalm_model.cpp:1301-1367,1544-1547`, `native/include/cypha/cyphalm/cyphalm_config.hpp:61-66`
+- Phase 1 shipped code: `native/include/cypha/lm/cyphalm_views.hpp`, `native/src/lm/cyphalm_views.cpp`, `native/src/lm/cyphalm_model.cpp:1301-1367,1544-1547`, `native/include/cypha/lm/cyphalm_config.hpp:61-66`
 - Plan doc (full read, all phases): `docs/MULTI_VIEW_TRAINING_PLAN.md`
 - Hypothesis ledger entry: `docs/RESEARCH_STATUS.md:377`
 - Priority ranking: `docs/reports/DEV_PLAN_2026-07-11.md:156`
-- Pre-existing D16 negative result this pass's finding corroborates: `docs/MULTI_VIEW_TRAINING_PLAN.md:311`, `native/src/bench/bench_domains.cpp:1927-1991` (16G)
-- This pass's implementation: `native/src/bench/bench_domains.cpp` (D03 helpers), `native/CMakeLists.txt` (CTest entries)
+- Pre-existing D16 negative result this pass's finding corroborates: `docs/MULTI_VIEW_TRAINING_PLAN.md:311`, `native/src/eval/bench_domains.cpp:1927-1991` (16G)
+- This pass's implementation: `native/src/eval/bench_domains.cpp` (D03 helpers), `native/CMakeLists.txt` (CTest entries)

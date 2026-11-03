@@ -16,7 +16,7 @@
 
 Phase 8 targets Monte-Carlo **sample averages** (estimators of the form `(1/n) Σ f(X_i)`) that could be replaced by **conditional expectations given sufficient statistics** already stored in the model (`μ_k`, `v₀`, `inv_v`, `n_obs`, replay priority weights `w_cache_`, co-occurrence / transition counts).
 
-After a full read of `native/include/cypha/generation.hpp`, `native/src/generation.cpp`, `native/include/cypha/replay_buffer.hpp`, and `native/src/replay_buffer.cpp`, **no such MC averaging loops exist**. The paths below are **direct stochastic samplers** (draw `h ~ p(h|·)`), **exact deterministic reductions**, or **exact weighted-selection algorithms** — not MC estimates of expectations built from averaged samples.
+After a full read of `native/include/cypha/classify/generation.hpp`, `native/src/classify/generation.cpp`, `native/include/cypha/online/replay_buffer.hpp`, and `native/src/online/replay_buffer.cpp`, **no such MC averaging loops exist**. The paths below are **direct stochastic samplers** (draw `h ~ p(h|·)`), **exact deterministic reductions**, or **exact weighted-selection algorithms** — not MC estimates of expectations built from averaged samples.
 
 ## File:line evidence (generation)
 
@@ -50,7 +50,7 @@ There is no KDE path, no `(1/n)Σ` replay-loss estimate, and no priority-replay 
 
 ## Variance smoke (fixed seed)
 
-`native/tools/rao_blackwell_p8_smoke.cpp` demonstrates that **hypothetical** MC paths would have strictly higher variance than the RB reductions already used (or available analytically):
+`native/tools/classify/rao_blackwell_p8_smoke.cpp` demonstrates that **hypothetical** MC paths would have strictly higher variance than the RB reductions already used (or available analytically):
 
 | Estimator | Variance (smoke) | Notes |
 |-----------|------------------|-------|
@@ -66,7 +66,7 @@ There is no KDE path, no `(1/n)Σ` replay-loss estimate, and no priority-replay 
 
 ## Files touched
 
-- `native/tools/rao_blackwell_p8_smoke.cpp` (new)
+- `native/tools/classify/rao_blackwell_p8_smoke.cpp` (new)
 - `native/CMakeLists.txt`
 - `docs/reports/OPTIMALITY_PHASE8_2026-07-17.md` (this report)
 

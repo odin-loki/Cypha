@@ -6,7 +6,7 @@
 
 ## Summary
 
-`T_QA_WIKI_200` showed that the fact store answered 3 of 150 answerable held-out questions. F2 asks whether patterns learned from the text itself can add facts. The tool `native/tools/pattern_learn.cpp` takes seeds from infobox and template fields, finds the sentences that carry them, learns lexical patterns, measures each pattern on held-out subjects, and applies the reliable ones to every article.
+`T_QA_WIKI_200` showed that the fact store answered 3 of 150 answerable held-out questions. F2 asks whether patterns learned from the text itself can add facts. The tool `native/tools/knowledge/pattern_learn.cpp` takes seeds from infobox and template fields, finds the sentences that carry them, learns lexical patterns, measures each pattern on held-out subjects, and applies the reliable ones to every article.
 
 - **Seeds:** 8,148 facts on 2,177 pages, over 31 relations.
 - **Patterns:** 676 candidates. 44 pass the plan's gate (at least 20 checks, Wilson 95% lower bound of precision at least 0.7). They cover six relations: birth date, death date, birth year, death year, birth place, and language.
@@ -355,7 +355,7 @@ The text states these relations correctly but rarely. F2's 20-check gate is what
 #### Reproduce
 
 ```bash
-g++ -O2 -std=c++20 -I native/include -pthread native/tools/pattern_learn.cpp -o pattern_learn
+g++ -O2 -std=c++20 -I native/include -pthread native/tools/knowledge/pattern_learn.cpp -o pattern_learn
 E=/root/cdata/enwik8; W=/root/work/f2/wikidata/wd_values.tsv; C=/root/work/sem/classes_k256.tsv
 ./pattern_learn --f2b-selftest
 ./pattern_learn $E A0 --cv --wikidata $W --f2b-gold-split                      # dev half only
@@ -504,7 +504,7 @@ The store with PL is the same on both halves' runs (the split only changes which
 #### Reproduce
 
 ```bash
-g++ -O2 -std=c++20 -I native/include -pthread native/tools/pattern_learn.cpp -o pattern_learn
+g++ -O2 -std=c++20 -I native/include -pthread native/tools/knowledge/pattern_learn.cpp -o pattern_learn
 E=/root/cdata/enwik8; W=/root/work/f2/wikidata/wd_values.tsv; T=data/f2c/wd_seed_types.tsv
 ./pattern_learn --f2b-selftest                                                                   # 25 checks
 ./pattern_learn $E A0off --cv --wikidata $W --f2b-gold-split --no-lexicon-type-check              # dev, off

@@ -8,6 +8,8 @@ The language model being taken forward is the **packed byte trie** (~**2.30 BPC*
 
 The D17 bench lock in `bench/BASELINE_LOCK.json` (Hybrid GRIA+LSTM **2.664 BPC** at 300k) is a classifier/sequence pin. It is not the CyphaLM quality bar. History of the retired hybrid stack: [`history/LEGACY_LLM.md`](history/LEGACY_LLM.md).
 
+Where the native code lives, module by module (core, lm, online, classify, eval, knowledge, forecast, semantics, som, serve): [`MODULES.md`](MODULES.md).
+
 Start here, then open the section that matches what you need.
 
 ---
@@ -63,7 +65,7 @@ For platform-specific setup see [CONTRIBUTING.md](../CONTRIBUTING.md) and [`pack
 | [Roadmap](verify/ROADMAP.md) | Milestones M1-M6 complete; current engineering horizon |
 | [Maintenance](verify/MAINTENANCE.md) | When to regen fixtures / rebuild native / sync DDL |
 | [Verify plan](verify/VERIFY_PLAN.md) | Debug / profile / benchmark / MSVC-Linux workflow checklist |
-| [Intelligence statistics](research/intelligence_stats/README.md) | P-space profiler papers (I-V); C++ in `native/include/cypha/intelligence/` |
+| [Intelligence statistics](research/intelligence_stats/README.md) | P-space profiler papers (I-V); C++ in `native/include/cypha/knowledge/` |
 | [Possible upgrades](research/upgrades/README.md) | Closed / opt-in tracks (default OFF) |
 | [Archive](archive/README.md) | Historical reports, studies, plans (not product spine) |
 | [Project history](history/README.md) | Pre-repository Cypha (Feb 2025 - Mar 2026): archived sources, timeline, Python-to-C++ bridge |

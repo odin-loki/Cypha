@@ -4,9 +4,9 @@
 #include <iostream>
 #include <vector>
 
-#include "cypha/cyphalm/cyphalm_checkpoint.hpp"
-#include "cypha/cyphalm/cyphalm_config.hpp"
-#include "cypha/cyphalm/cyphalm_model.hpp"
+#include "cypha/lm/cyphalm_checkpoint.hpp"
+#include "cypha/lm/cyphalm_config.hpp"
+#include "cypha/lm/cyphalm_model.hpp"
 
 namespace {
 

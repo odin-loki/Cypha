@@ -5,7 +5,7 @@
 #include <limits>
 #include <numeric>
 
-#include "cypha/cyphalm/cyphalm_model.hpp"
+#include "cypha/lm/cyphalm_model.hpp"
 
 namespace cypha::cyphalm {
 

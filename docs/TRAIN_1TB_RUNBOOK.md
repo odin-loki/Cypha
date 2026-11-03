@@ -84,9 +84,9 @@ These give Track A's A1 points, bits per byte against bytes seen. Prediction P-A
 | File | What it does |
 |---|---|
 | `scripts/train_model.sh`, `verify_model.sh`, `compare_models.sh`, `model_common.sh` | The scripts above |
-| `native/include/cypha/cyphalm/stream_trie.hpp` | Model 1's model, with counts that halve instead of wrapping; reads both checkpoint formats ("TRI1" for model 1, "TRI2" for later models) |
-| `native/tools/trie_stream_train_v2.cpp` | The trainer for model 2 and later |
-| `native/tools/trie_ckpt.cpp` | `verify`, `bpc`, `compare`, `selftest` (CTest `native_trie_ckpt_selftest`) |
+| `native/include/cypha/lm/stream_trie.hpp` | Model 1's model, with counts that halve instead of wrapping; reads both checkpoint formats ("TRI1" for model 1, "TRI2" for later models) |
+| `native/tools/lm/trie_stream_train_v2.cpp` | The trainer for model 2 and later |
+| `native/tools/lm/trie_ckpt.cpp` | `verify`, `bpc`, `compare`, `selftest` (CTest `native_trie_ckpt_selftest`) |
 
 Memory: the checker loads one model at a time, about its file size in RAM. The trainer needs about the same RAM as model 1's run.
 

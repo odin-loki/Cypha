@@ -7,9 +7,9 @@
 
 | Component | Location | Notes |
 |-----------|----------|-------|
-| **`CriticalityField`** | `native/include/cypha/intelligence/criticality_vector.hpp` | Per-gauge: `value`, `tier` (T1/T2), `target_or_bound`, `cadence` (hot/mid/cold), `distance`, `available` |
+| **`CriticalityField`** | `native/include/cypha/knowledge/criticality_vector.hpp` | Per-gauge: `value`, `tier` (T1/T2), `target_or_bound`, `cadence` (hot/mid/cold), `distance`, `available` |
 | **`CriticalityVector`** | same | `fields[]` + `mid_enabled` gate |
-| **Builder** | `native/src/intelligence/criticality_vector.cpp` | Hot fields from profiler + optional session extras; mid estimators behind `CriticalityBuildOptions::enable_mid` |
+| **Builder** | `native/src/knowledge/criticality_vector.cpp` | Hot fields from profiler + optional session extras; mid estimators behind `CriticalityBuildOptions::enable_mid` |
 | **`IntelligenceProfiler::criticality_vector()`** | `intelligence_profiler.hpp/.cpp` | Read-only accessor |
 | **`LmIntelligenceMonitor::hot_criticality_input()`** | `lm_intelligence_monitor.hpp/.cpp` | Hot gauges from token history |
 | **`SoftWorldMonitor::criticality_hot_input()`** | `soft_world_monitor.hpp` | Paper V maturation → hot extras |
@@ -75,18 +75,18 @@ No goldens touched.
 
 ## Files touched (Phase 9)
 
-- `native/include/cypha/intelligence/criticality_vector.hpp` (new)
-- `native/src/intelligence/criticality_vector.cpp` (new)
-- `native/include/cypha/intelligence/intelligence_profiler.hpp`
-- `native/include/cypha/intelligence/soft_world_monitor.hpp`
-- `native/include/cypha/cyphalm/lm_intelligence_monitor.hpp`
-- `native/src/intelligence/intelligence_profiler.cpp`
-- `native/src/intelligence/intelligence_profile_json.cpp`
-- `native/src/intelligence/profile_from_model.cpp`
-- `native/src/cyphalm/lm_intelligence_monitor.cpp`
-- `native/apps/intelligence_rest_routes.cpp`
-- `native/include/cypha/intelligence_rest.hpp`
-- `native/tools/criticality_vector_p9_smoke.cpp` (new)
+- `native/include/cypha/knowledge/criticality_vector.hpp` (new)
+- `native/src/knowledge/criticality_vector.cpp` (new)
+- `native/include/cypha/knowledge/intelligence_profiler.hpp`
+- `native/include/cypha/knowledge/soft_world_monitor.hpp`
+- `native/include/cypha/knowledge/lm_intelligence_monitor.hpp`
+- `native/src/knowledge/intelligence_profiler.cpp`
+- `native/src/knowledge/intelligence_profile_json.cpp`
+- `native/src/knowledge/profile_from_model.cpp`
+- `native/src/knowledge/lm_intelligence_monitor.cpp`
+- `native/src/serve/intelligence_rest_routes.cpp`
+- `native/include/cypha/serve/intelligence_rest.hpp`
+- `native/tools/knowledge/criticality_vector_p9_smoke.cpp` (new)
 - `native/CMakeLists.txt`
 
 ## Hot-path overhead (2026-07-17, `build_perf_p9`)

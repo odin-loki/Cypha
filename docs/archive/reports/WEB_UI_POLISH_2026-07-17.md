@@ -6,9 +6,9 @@
 
 | Path | Role |
 |------|------|
-| `native/tools/static/index.html` | Cypha Studio SPA shell (CyphaLM tab) |
-| `native/tools/static/app.js` | Chat logic (SSE stream, char token bridge) |
-| `native/tools/cypha_rest_static_ui.cpp` | Serves `/` and `/ui/*` |
+| `native/tools/serve/static/index.html` | Cypha Studio SPA shell (CyphaLM tab) |
+| `native/tools/serve/static/app.js` | Chat logic (SSE stream, char token bridge) |
+| `native/tools/serve/cypha_rest_static_ui.cpp` | Serves `/` and `/ui/*` |
 
 Prior chat pane shipped in `b706647` — see [`WEB_UI_GENERATE_2026-07-17.md`](WEB_UI_GENERATE_2026-07-17.md). No separate `web/` or `studio/` tree.
 

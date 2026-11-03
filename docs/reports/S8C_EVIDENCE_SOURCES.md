@@ -228,7 +228,7 @@ gunzip -c repo/data/s8c/dbpedia_ib.tsv.gz > tables/dbpedia_ib.tsv; gunzip -c rep
 #   or: python3 -I repo/scripts/evidence_sources.py dbpedia runs/subjects.txt raw/dbpedia tables
 python3 -I repo/scripts/evidence_sources.py geonames raw/geonames tables                       # today's GeoNames dump
 python3 -I repo/scripts/evidence_sources.py wpdump runs/subjects.txt tables/dbpedia_subjects.tsv raw/wpdump tables   # needs pyarrow
-g++ -O2 -std=c++20 -I repo/native/include repo/native/tools/pattern_learn.cpp -o build/pattern_learn
+g++ -O2 -std=c++20 -I repo/native/include repo/native/tools/knowledge/pattern_learn.cpp -o build/pattern_learn
 build/pattern_learn --sources repo/bench/eval/temporal_holdout_dev.tsv tables /root/work/f2/wikidata/wd_values.tsv \
   /root/work/f2/v2/aug/seeds.tsv /root/work/f2/v2/aug/facts_f2.tsv runs/s8c \
   /root/work/s8a/runs/test.r1_dev.hyps.tsv /root/work/s8a/runs/test.r2_dev.hyps.tsv /root/work/s8b/runs/final.promo.tsv

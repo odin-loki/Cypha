@@ -5,9 +5,9 @@
 
 #include <nlohmann/json.hpp>
 
-#include "cypha/cyphalm/cypha_cell_hypothesis.hpp"
+#include "cypha/lm/cypha_cell_hypothesis.hpp"
 #include "cypha/cyphalm/cyphalm_dif.hpp"
-#include "cypha/cyphalm/cyphalm_model.hpp"
+#include "cypha/lm/cyphalm_model.hpp"
 
 namespace {
 

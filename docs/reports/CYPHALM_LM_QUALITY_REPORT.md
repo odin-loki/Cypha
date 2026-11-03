@@ -1,7 +1,7 @@
 # CyphaLM as a language model: next-byte distribution quality
 
 **Date:** 2026-09-23 to 2026-09-24 (last commit covered: `2a003bf`)
-**Harness:** `native/tools/cyphalm_lm_quality.cpp`
+**Harness:** `native/tools/lm/cyphalm_lm_quality.cpp`
 **Pretraining:** enwik8, first 8 MiB, mem 22, one online pass (`gate24` and `lean` tiers);
 later sections state their own (95 MB, shards, `slim`)
 **Held-out:** enwik8 from byte 96,000,000 (wiki, in-domain; never seen in pretraining)
@@ -1165,7 +1165,7 @@ top-byte agreement (`longest16`: × 4 fertility × 2 determinism = 2048).
 | serve-time StateMap limits, APM rates | ≤ 0.004, wiki and Alice move opposite (`lim_*`) | harness code never committed |
 | two training epochs | +0.029 wiki (`ep2_*`) | `--epochs` kept |
 | table bits 24 | 8 MiB: 1.7962 vs 1.7950 (`t24_*`); 95 MB: −0.008 wiki, none on Alice (`t24_95_*`) | config only |
-| linear, fixed-share and grid ensemble weights | linear 1.7352 vs geometric 1.7248; fixed-share worse (`ens_*`, `div_*`) | removed `0f290f4`; recover `git show 0f290f4^:native/tools/cyphalm_lm_quality.cpp` |
+| linear, fixed-share and grid ensemble weights | linear 1.7352 vs geometric 1.7248; fixed-share worse (`ens_*`, `div_*`) | removed `0f290f4`; recover `git show 0f290f4^:native/tools/lm/cyphalm_lm_quality.cpp` |
 | word best-of-K by sum / mean without ban / SIR / soft ban (model-copy prototype, ~400 ms/byte) | sum 0.52 / 0.229, mean 0.54 / 0.441, SIR 1.351 / 0.845 judge / d4 (`wk_*`, `wk2_*`) | replaced by the library decoder in `a8ce4e7`; recover from `73ef7e6` |
 | candidate words from the primary, chosen by the ensemble | 1.272 / 0.735 vs 1.158 / 0.789 | not committed; no raw JSON |
 | training `slim` from scratch vs converting | equal (1.8341 vs 1.8327) | both work |

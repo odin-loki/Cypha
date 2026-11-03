@@ -268,7 +268,7 @@ What this read does settle (report only):
 ### How to reproduce
 
 ```bash
-g++ -O2 -std=c++20 -I native/include -pthread native/tools/pattern_learn.cpp -o pattern_learn
+g++ -O2 -std=c++20 -I native/include -pthread native/tools/knowledge/pattern_learn.cpp -o pattern_learn
 F=/root/work/f2; E=/root/cdata/enwik8; V=/root/work/sem/out/enwik8; D4=/root/work/s15/d4
 # the set (fetches into $RUN/raw the first time; tar -xzf bench/eval/s8e_slots_wikidata_cache.tar.gz -C $RUN for 0 requests)
 python3 -I scripts/fresh_slots.py build $E /root/work/f2/basefix/pages.tsv $D4 $F/v2/aug/facts_f2.tsv $F/v2/aug/seeds.tsv $RUN bench/eval

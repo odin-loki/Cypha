@@ -12,11 +12,11 @@
 
 #include <nlohmann/json.hpp>
 
-#include "cypha/infer_cpu.hpp"
-#include "cypha/load_cypha.hpp"
-#include "cypha/regression.hpp"
-#include "cypha/replay_buffer.hpp"
-#include "cypha/train_step_vector.hpp"
+#include "cypha/classify/infer_cpu.hpp"
+#include "cypha/classify/load_cypha.hpp"
+#include "cypha/classify/regression.hpp"
+#include "cypha/online/replay_buffer.hpp"
+#include "cypha/classify/train_step_vector.hpp"
 
 namespace fs = std::filesystem;
 

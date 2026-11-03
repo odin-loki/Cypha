@@ -12,7 +12,7 @@ Two header-only files, standard library only, namespace `cypha::eval`:
 |---|---|
 | `native/include/cypha/eval/ecs.hpp` | Beta helpers and Wilson bounds; evidence items and the factor helpers (7.1); fusion into an opinion (7.2); grades (7.3); answer confidence, risk-coverage and abstain threshold (7.4); ECE, Brier, reliability bins, PAV and an isotonic calibrator (7.5); admission rules (7.6) |
 | `native/include/cypha/eval/lci.hpp` | Bayesian bootstrap with optional clusters; canary non-inferiority; gamma, c, sigma, kappa; `compute_lci`; alpha spending, e-process and Benjamini-Hochberg (8.4); Thresholdout (8.5); BWT and learning-curve fit (8.6) |
-| `native/tools/ecs_lci_test.cpp` | 242 known-answer checks, nonzero exit on failure |
+| `native/tools/eval/ecs_lci_test.cpp` | 242 known-answer checks, nonzero exit on failure |
 | `native/CMakeLists.txt` | One commented block appended at the end: target `ecs_lci_test`, CTest `native_ecs_lci_test` |
 
 ## API in brief
