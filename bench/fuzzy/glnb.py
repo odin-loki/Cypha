@@ -157,11 +157,12 @@ class LSTM:
 
 
 class Hybrid:
-    def __init__(self, tabs, neurons=32, lstm=True, seed=0, hs=4):
+    def __init__(self, tabs, neurons=32, lstm=True, seed=0, hs=4, extra=0):
         rng = np.random.default_rng(seed)
         self.tabs, self.N, self.use_lstm = tabs, neurons, lstm
         self.K = ORDERS + (1 if lstm else 0) + 1  # inputs: orders, LSTM, bias
-        self.D = (64 if lstm else 0) + self.K  # side vector: LSTM state + inputs
+        self.D = (64 if lstm else 0) + self.K + extra  # side vector: LSTM state + inputs + extra (the mixer's feedback)
+        self.extra = np.zeros(extra)
         self.H1 = rng.standard_normal((neurons, hs, self.D))  # hs half-spaces per neuron: 2**hs contexts
         self.W1 = np.full((neurons, 2 ** hs, 8, self.K), 0.3)
         self.W1[..., -1] = 0.0
@@ -201,7 +202,7 @@ class Hybrid:
             tot = cum[hi] - cum[lo]
             ps.append(min(max((cum[hi] - cum[mid]) / max(tot, 1e-12), 1e-4), 1 - 1e-4))
         x = np.array([stretch(min(max(p, 1e-4), 1 - 1e-4)) for p in ps] + [1.0])
-        z = np.concatenate([hstate, x]) if self.lstm is not None else x
+        z = np.concatenate([hstate, x, self.extra]) if self.lstm is not None else np.concatenate([x, self.extra])
         g1 = ((np.einsum("nmd,d->nm", self.H1, z) > 0) * (1 << np.arange(self.H1.shape[1]))).sum(1)
         w1 = self.W1[np.arange(self.N), g1, j]
         s1 = np.clip(w1 @ x, -12, 12)
@@ -341,6 +342,33 @@ def gen_main(base, hold, arm, temp, nprompts, out):
     print(json.dumps(dict(arm=arm, temp=temp, prompts=nprompts, out=out, sec=round(time.time() - t0))), flush=True)
 
 
+def stream_main(base, hold, out, fb_path):
+    """Learn and predict online over the whole 1 MiB holdout, in order, and write the model's probability of every byte
+    (float32), for the content mixer to read as one more expert (GENERATION_PLAN §13.15). With MIXER_P (the mixer's
+    probability of every holdout byte, float32), the mixer feeds back: two more side values gate every neuron, the
+    mixer's recent loss and the GLN's recent loss against it (moving averages over about 32 bytes, from bytes already
+    seen), so the GLN and the mixer form one recurrent loop."""
+    fb = np.fromfile(fb_path, np.float32).astype(np.float64) if fb_path else None
+    m = Hybrid(base, neurons=32, extra=2 if fb is not None else 0)
+    P = np.empty(len(hold), np.float32)
+    lm = lg = 8.0
+    t0 = time.time()
+    for k, y in enumerate(hold):
+        if fb is not None:
+            m.extra = np.array([(lm - 2.0) / 2.0, (lg - lm) / 2.0])
+        b = m.code_byte(int(y))
+        P[k] = 2.0 ** -b
+        if fb is not None:
+            lm += (-math.log2(max(fb[k], 1e-12)) - lm) / 32.0
+            lg += (b - lg) / 32.0
+        if k % 65536 == 65535:
+            print(json.dumps(dict(bytes=k + 1, sec=round(time.time() - t0))), flush=True)
+    P.tofile(out)
+    h = len(hold) // 2
+    print(json.dumps(dict(out=out, bpb_second_half=float(-np.log2(P[h:].astype(np.float64)).mean()),
+                          feedback=bool(fb_path), sec=round(time.time() - t0))), flush=True)
+
+
 def main():
     path = sys.argv[1] if len(sys.argv) > 1 else "/root/cdata/enwik8"
     raw = np.fromfile(path, np.uint8, count=TRAIN + HOLD)
@@ -349,6 +377,8 @@ def main():
     t0 = time.time()
     base = pretrain(train)
     print("pretrained", round(time.time() - t0), "s", flush=True)
+    if len(sys.argv) > 3 and sys.argv[2] == "stream":  # glnb.py ENWIK8 stream OUT.f32 [MIXER_P.f32]
+        return stream_main(base, hold, sys.argv[3], sys.argv[4] if len(sys.argv) > 4 else None)
     if len(sys.argv) > 6 and sys.argv[2] == "gen":  # writing: glnb.py ENWIK8 gen ARM TEMP NPROMPTS OUT.gen.txt
         return gen_main(base, hold, sys.argv[3], float(sys.argv[4]), int(sys.argv[5]), sys.argv[6])
     if len(sys.argv) > 4 and sys.argv[2] == "hs":  # context capacity: glnb.py ENWIK8 hs HALF_SPACES BYTES

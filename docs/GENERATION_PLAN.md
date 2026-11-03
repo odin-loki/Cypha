@@ -906,3 +906,42 @@ So prediction (bits per byte) is the wrong target for writing. We need to know w
 - **The sampler:** temperature per position, typical sampling, or geometric mixing (where the experts must agree), each tuned on dev for the objective.
 
 **Measures and rules:** as §1.2 and §5, with dev for choices and one test read per change.
+
+### 13.15 The spike in the content mixer's online learning, and the GLN in the mixers (2026-11-03)
+
+**Odin:** "Fix the spike in the learning on the content mixer. It's overfiltered and the signal isn't learning on text." And: "Have the GLN feed into the mixers as well, feed that into the online learning. So basically it's going to be recurrent and online on every part."
+
+**The spike (measured on the dump, before any fix).** `online_mix` learns each lambda by AdaGrad. AdaGrad divides each step by the square root of every squared gradient the bucket has seen. The gradient is (expert − mixture) ÷ mixture, so a byte the mixture gave almost nothing to makes a huge one.
+
+| Stage | Largest gradient | Median | Share of the squared-gradient sum from the top 0.1% of bytes |
+|---|---:|---:|---:|
+| Kneser–Ney | 160 | 0.18 | 60% |
+| InfiniGram 8192 | 200 | 0.52 | 14% |
+| Class | 2,238 | 0.29 | 97% |
+| Similar-context | 2,784 | 0.41 | 91% |
+| Copy | 12 | 0.21 | 3% |
+| Document cache | 29,088 | 1.00 | 99.9% |
+
+So in four of six stages a few bytes set the step size for the rest of the stream. After one spike, a bucket barely learns from the text that follows.
+
+**What was tried** (second half of the dump, bits per byte; the frozen chain is 1.6979):
+
+| Update | Copy's short matches off (as now) | Copy's short matches on |
+|---|---:|---:|
+| AdaGrad (as now) | 1.6994 | 1.6776 |
+| AdaGrad, gradients clipped to ±2 | 1.7383 | 1.7338 |
+| Decaying average of squared gradients (RMS) | 1.6991 | 1.6768 |
+
+- Clipping the gradients is much worse. The spikes carry real signal; they should move the lambda, not freeze it.
+- **The registered fix** (before its result): learn each lambda in log-odds, lambda = sigmoid(theta), as PAQ's mixers learn in the stretch domain. The log-loss gradient in theta is lambda (1 − lambda) (expert − mixture) ÷ mixture, which always lies in [−1, 1]. Arms: plain steps (0.02 and 0.005) and AdaGrad on theta (step 0.1). Exponentiated gradient (step 0.02, as the final layer) is a fourth arm.
+- **Rule:** the best arm replaces `online_mix`'s update in C++ if it beats AdaGrad by at least 0.003 bits per byte on the dump in both columns. Answers and samplers are unchanged by it (they read the frozen fit).
+- **Overfiltering.** Copy's short matches (below 8 bytes) are held at 0 (B4B, for writing quality). In the online chain that costs 0.022 bits per byte (1.6994 against 1.6776). The online path only scores, so it can take short copies. The sampler keeps B4B's rule until a writing test says otherwise: prediction is not generation.
+
+**The GLN in the mixers** (registered before the runs). `bench/fuzzy/gln_mix.py` on the dump, with `glnb.py … stream` giving GLNB's probability of every holdout byte. GLNB is the bitwise GLN with the fixed LSTM, 32 neurons; it learns online over the whole holdout.
+- M0: the online chain (the log-odds update, short copies on).
+- M1: M0 plus GLNB as one more chain stage (lambda per InfiniGram bucket, online).
+- M2: M0 plus the online final layer (`--online-final`).
+- M3: M1 plus the final layer, with GLNB as one more input.
+- M4: M3 with GLNB fed back from the mixer. Two more side values gate every GLNB neuron: the mixer's recent loss, and GLNB's recent loss against it. So the GLN reads the mixer and the mixer reads the GLN: one recurrent loop, online on every part.
+- **Predictions:** M1 − M0 is −0.005 to −0.015 (GLNB alone is far worse, but it is a different kind of model, and a mixture gains from that). M3 − M2 is about −0.005. M4 − M3 is at most −0.002.
+- **Rule:** GLNB is ported to C++ (the online module) as a chain stage if M1 − M0 ≤ −0.005 with its 95% interval below 0. Then a writing test (SCRIBE on GEN-A dev) decides whether the sampler reads it.
