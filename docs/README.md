@@ -8,6 +8,8 @@ The language model being taken forward is the **packed byte trie** (~**2.30 BPC*
 
 The D17 bench lock in `bench/BASELINE_LOCK.json` (Hybrid GRIA+LSTM **2.664 BPC** at 300k) is a classifier/sequence pin. It is not the CyphaLM quality bar. History of the retired hybrid stack: [`history/LEGACY_LLM.md`](history/LEGACY_LLM.md).
 
+Where the native code lives, module by module (core, lm, online, classify, eval, knowledge, forecast, semantics, som, serve): [`MODULES.md`](MODULES.md).
+
 Start here, then open the section that matches what you need.
 
 ---
