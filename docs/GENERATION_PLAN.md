@@ -1012,3 +1012,26 @@ None of this changes what the sampler writes. That needs the GLN and the online 
 - The GLN makes the writing much worse: the best arm falls from 0.256 to 0.065. By the rule it does not go to the 250 prompts, and `sample` stays without it. The prediction (no gain) was right in direction but too mild.
 - It pulls the text into markup. It learned on raw enwik8, XML and all, and one lambda gives it a quarter of the mass at every byte. Prompt 0 at T 0.6 with it: "The and [[Protestant and have been contributor>\n <comment>*</comment>\n <text xml:space="preserve">{{Otherusesabout|…".
 - So the GLN stays in prediction (`context8k --gln`) and out of writing. Two ways it could enter writing later, each to be registered: learn on clean prose (SCRIBE's cleaner) rather than raw enwik8; and a lambda per position class (word starts, inside words) learned for writing, as §13.14 asks.
+
+**C++ results** (2026-11-03, this container, one core per arm; C0 to C3 side by side, then C4 and C5). Bits per byte on the holdout's second half:
+
+| Arm | Last chain line | `online_final_bpc` | `gln_alone_bpc` | Wall | Peak RSS |
+|---|---:|---:|---:|---:|---:|
+| C0: as it was | 1.6979 | — | — | 1296 s | 214 MB |
+| C1: `--online-mix` | 1.6714 | — | — | 1278 s | 214 MB |
+| C2: C1 + `--online-final` | 1.6714 | 1.6543 | — | 1339 s | 251 MB |
+| C3: C2 + `--gln` | 1.6456 | **1.6214** | 1.9468 | 1569 s | 371 MB |
+| C4: C2 + `--gln-feedback` | 1.6455 | 1.6213 | 1.9446 | 1636 s | 371 MB |
+| C5: C1 + `--gln` | 1.6456 | — | 1.9468 | 1567 s | 287 MB |
+
+- Every arm's answer tallies match C0's, and selftest passes.
+- **Rule 1 holds:** C1 is 0.0265 below C0, and its wall time is 1% shorter. `--online-mix` is the default of `context8k`.
+- **Rule 2 holds:** C2's final layer is 0.0171 below C1's chain. `--online-final` is the default.
+- **Rule 3 holds:** C3 is 0.0329 below C2, with wall time +17% (limit +35%). The GLN is the default. It adds about 120 MB.
+- **Rule 4 fails:** C4 is 0.0001 below C3. The feedback loop stays a flag.
+- **Every prediction held:** C1 1.6714 (near 1.669), C2 1.6543 (near 1.654), C3 and C4 1.6214 and 1.6213 (near 1.62), C5 1.6456 (near 1.643).
+- The registered Python read agrees. GLNB as a chain stage gives M1 − M0 = −0.0261 [−0.0302, −0.0222]; the feedback loop gives M4 − M3 = 0.0000 [−0.0002, +0.0002].
+
+**The new default of `context8k`** reports 1.6214 bits per byte, against 1.6979 before: −0.0765. `--frozen-mix --no-online-final --no-gln` gives the old lines. `qa`, `sample` and every answer are unchanged. `glnx_prep.sh` passes those three flags, so the dump keeps the frozen chain's columns.
+
+**What did not change: writing.** The sampler still reads the frozen chain, without the GLN, because the GLN lowered SCRIBE (above). Odin asked for "online on every part". The online parts now cover prediction. For writing, online learning still has to be shown to help on GEN-A, as §13.14 asks.

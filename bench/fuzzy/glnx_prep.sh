@@ -9,7 +9,7 @@ OUT=${1:-/root/work/glnx}
 B=${CYPHALM_TRIE:-native/build/cyphalm_trie}
 E=${ENWIK8:-/root/cdata/enwik8}
 D=${DOLLY:-/root/cdata/dolly.jsonl}
-EXTRA=${EXTRA:-}
+EXTRA=${EXTRA:---frozen-mix --no-online-final --no-gln}  # the frozen chain's columns, as glnx.py reads them
 mkdir -p "$OUT"
 key="$(sha256sum "$B" | cut -c1-16) $(basename "$E") $(basename "$D") $EXTRA"
 if [ "${FORCE:-0}" != 1 ] && [ -f "$OUT/experts.f32" ] && [ -f "$OUT/manifest.txt" ] && grep -qxF "key $key" "$OUT/manifest.txt"; then
