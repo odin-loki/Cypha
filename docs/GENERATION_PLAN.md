@@ -1079,3 +1079,21 @@ None of this changes what the sampler writes. That needs the GLN and the online 
 **The 250-prompt read** (registered before it). W0, R2, R3 and R5 on all 250 GEN-A dev prompts, T 0.6, 0.8 and 1.0, side by side. R5 goes by the rule; R2 and R3 go as exploration, since the screen cannot separate them.
 - **Rule:** a GLN arm reconciles the two if its best temperature is at least W0's best minus 0.02 (non-inferior), with copy share within GEN_TRACK's limit. Among those, the one with the highest SCRIBE becomes `sample`'s way of mixing the GLN, while `--gln` stays off by default until the GLN is trained at scale (Odin: "it hasn't been trained at scale").
 - **Prediction:** R2 and R5 are non-inferior; R3 is not.
+
+**250-prompt result** (2026-11-03, all of GEN-A dev, SCRIBE v2 [95%] by temperature):
+
+| Arm | T 0.6 | T 0.8 | T 1.0 |
+|---|---:|---:|---:|
+| W0: no GLN | **0.174** [0.137, 0.209] | 0.155 | 0.073 [0.049, 0.098] |
+| R2: `geo` (0.245) | 0.090 [0.067, 0.116] | 0.075 | 0.062 |
+| R3: `gate` (0.245) | 0.096 | 0.102 | **0.117** [0.090, 0.147] |
+| R5: `geo` + clean (0.015) | 0.153 [0.121, 0.186] | 0.147 | 0.099 |
+
+- **No arm reconciles them by the rule.** R5 is the closest: 0.021 below W0, against the 0.02 allowed. Its interval overlaps W0's almost entirely, but its GLN carries 1.5% of the weight, so it shows only that a nearly absent GLN does no harm. R2 and R3 are clearly below W0. `sample` keeps writing without the GLN.
+- **Predictions:** R3 not non-inferior held. R2 non-inferior failed. R5 non-inferior failed by 0.001.
+- **The gate does what it should, at T 1.0.** There it beats W0 (0.117 against 0.073), and its scores change least with temperature: it cuts the implausible tail that T 1.0 lets in. But at T 0.6 the chain alone is sharper and better.
+- **What this says.** In prediction, a weaker model helps a mixture because its errors differ. In writing, every sampled byte the GLN pulls in carries its errors. Alone, the GLN scores 1.94 bits per byte against the chain's 1.67; it learned from 7 MB of text. At that size no way of mixing it lets it carry real weight without lowering SCRIBE.
+- **Next**, as Odin says, is the GLN trained at scale: on clean prose, far more of it, on Odin's PC.
+  - Read both its bits per byte alone and the 250-prompt SCRIBE with `geo` and `gate`.
+  - Fit its writing lambda on clean prose, not on the raw holdout.
+  - The registered rule above stays the test.
