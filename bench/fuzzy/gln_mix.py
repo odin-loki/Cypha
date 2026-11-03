@@ -6,8 +6,8 @@ recurrent and online on every part."
 
 Reads the preprocessing phase's dump (glnx_prep.sh: every expert's probability of each holdout byte, CyphaLM's whole
 model) and GLNB's probability of each holdout byte (glnb.py ENWIK8 stream OUT.f32 [MIXER_P.f32]). Then, byte by byte:
-  - the content mixer's chain, every lambda learning online (OPT: adagrad as cyphalm_trie --online-mix, or logit:
-    lambda = sigmoid(theta), whose log-loss gradient stays in [-1, 1], so no single byte can stall a bucket);
+  - the content mixer's chain, every lambda learning online (OPT: adagrad as cyphalm_trie --online-mix, logit
+    (lambda = sigmoid(theta)), or eg: exponentiated gradient, the §13.15 fix, which no single byte can stall);
   - optionally GLNB as one more chain stage (lambda per InfiniGram bucket);
   - optionally the online final layer (cyphalm_trie --online-final: exponentiated gradient over every expert and chain
     stage, 80 weight sets by InfiniGram bucket x previous byte class), with GLNB as one more input.
@@ -36,6 +36,7 @@ def stage(pe, bk, cur, opt, dead_below=0):
     lam = np.full(nb, 0.05)
     acc = np.full(nb, 1e-3)
     th = np.full(nb, math.log(0.05 / 0.95))
+    w = np.tile([0.05, 0.95], (nb, 1))
     dead = np.array([b < len(COPY_LO) and COPY_LO[b] < dead_below for b in range(nb)])
     lam[dead] = 0.0
     out = np.empty_like(cur)
@@ -45,6 +46,14 @@ def stage(pe, bk, cur, opt, dead_below=0):
         p = l * e + (1 - l) * prev
         out[k] = p
         if dead[b]:
+            continue
+        if opt == "eg":  # exponentiated gradient on (lam, 1 - lam), step 0.02: the §13.15 fix
+            pp = max(p, 1e-300)
+            w[b, 0] *= math.exp(0.02 * min(e / pp, 30.0))
+            w[b, 1] *= math.exp(0.02 * min(prev / pp, 30.0))
+            w[b] = np.maximum(w[b] / w[b].sum(), 1e-4)
+            w[b] /= w[b].sum()
+            lam[b] = w[b, 0]
             continue
         g = (e - prev) / max(p, 1e-12)
         if opt == "adagrad":
@@ -118,17 +127,15 @@ def main():
     half = len(D) // 2
     g0 = np.fromfile(sys.argv[2], np.float32).astype(np.float64)
     g1 = np.fromfile(sys.argv[3], np.float32).astype(np.float64) if len(sys.argv) > 3 else None
-    opt = "logit"
-    copy_min = 0
     res, B = {}, {}
     B["frozen"] = bits(c["chain"], half)
     B["gln_alone"] = bits(g0, half)
     for name, opt, copy_min, gln, fin in (("M0_chain_adagrad_clip", "adagrad", 8, None, False),
-                                         ("M0_chain", "logit", 0, None, False),
-                                         ("M1_chain_gln", "logit", 0, g0, False),
-                                         ("M2_chain_final", "logit", 0, None, True),
-                                         ("M3_chain_gln_final", "logit", 0, g0, True)) + (
-            (("M4_chain_glnfb_final", "logit", 0, g1, True),) if g1 is not None else ()):
+                                         ("M0_chain", "eg", 0, None, False),
+                                         ("M1_chain_gln", "eg", 0, g0, False),
+                                         ("M2_chain_final", "eg", 0, None, True),
+                                         ("M3_chain_gln_final", "eg", 0, g0, True)) + (
+            (("M4_chain_glnfb_final", "eg", 0, g1, True),) if g1 is not None else ()):
         cur, snaps = chain(c, opt, copy_min, gln)
         p = final_layer(D, c, snaps, cur, gln) if fin else cur
         B[name] = bits(p, half)

@@ -935,6 +935,19 @@ So in four of six stages a few bytes set the step size for the rest of the strea
 - Clipping the gradients is much worse. The spikes carry real signal; they should move the lambda, not freeze it.
 - **The registered fix** (before its result): learn each lambda in log-odds, lambda = sigmoid(theta), as PAQ's mixers learn in the stretch domain. The log-loss gradient in theta is lambda (1 − lambda) (expert − mixture) ÷ mixture, which always lies in [−1, 1]. Arms: plain steps (0.02 and 0.005) and AdaGrad on theta (step 0.1). Exponentiated gradient (step 0.02, as the final layer) is a fourth arm.
 - **Rule:** the best arm replaces `online_mix`'s update in C++ if it beats AdaGrad by at least 0.003 bits per byte on the dump in both columns. Answers and samplers are unchanged by it (they read the frozen fit).
+- **Result** (the registered arms, same bytes):
+
+  | Update | Short copies off | Short copies on |
+  |---|---:|---:|
+  | AdaGrad (as now) | 1.6994 | 1.6776 |
+  | Log-odds, step 0.02 | 1.6979 | 1.6758 |
+  | Log-odds, step 0.005 | 1.7101 | 1.6882 |
+  | Log-odds, AdaGrad | 1.6984 | 1.6765 |
+  | **Exponentiated gradient, step 0.02** | **1.6920** | **1.6692** |
+
+  - Exponentiated gradient beats AdaGrad by 0.0074 and 0.0084, so by the rule it replaces `online_mix`'s update. Each lambda is the first of two weights; each weight is multiplied by exp(0.02 × its expert's probability ÷ the mixture's), capped at 30 in the exponent, then the pair is renormalised with a floor of 1e-4. A spike can move the weights a lot at once, but it never shrinks later steps.
+  - Log-odds removes the spikes too, but learns too slowly; the gain is under 0.002.
+  - The step size hardly matters (chosen on the dump, after the rule): 0.01 gives 1.6935 and 1.6708; 0.05 gives 1.6913 and 1.6692. It stays 0.02.
 - **Overfiltering.** Copy's short matches (below 8 bytes) are held at 0 (B4B, for writing quality). In the online chain that costs 0.022 bits per byte (1.6994 against 1.6776). The online path only scores, so it can take short copies. The sampler keeps B4B's rule until a writing test says otherwise: prediction is not generation.
 
 **The GLN in the mixers** (registered before the runs). `bench/fuzzy/gln_mix.py` on the dump, with `glnb.py … stream` giving GLNB's probability of every holdout byte. GLNB is the bitwise GLN with the fixed LSTM, 32 neurons; it learns online over the whole holdout.
