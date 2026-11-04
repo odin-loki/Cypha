@@ -1680,3 +1680,33 @@ The headline arm ABs mixes the two per bit. Settings were tuned by replay on the
 - **But both K5s read as about 2 out of 10:** "mostly sentence-shaped, but they don't connect or make sense". No K5 text got 6 or more from any rater. The human text came top in 100 of 100 items. Raters agreed closely (r 0.986 per text).
 - **Predictions:** human about 8 hit (8.5); K5 2–4 hit at the bottom (1.8–2.1); +0.5 and the rule holding hit in direction, smaller than predicted; agreement hit.
 - **What it means:** SCRIBE v2's 0.50 for K5 (human 0.92) overstates how readable it is. To a reader, K5 is still far from prose. Small tuning will not close that gap. It needs a different kind of model (Odin, 2026-11-04: "more math like K5 … but completely different maths").
+
+### 13.32 Meta mixing, and four kinds of maths beside K5 (2026-11-04; work moved to Odin's PC)
+
+**Odin:** "We have a mixer and we could possibly do meta mixing. Do a google search and see what you come up with and do that too." And on the four writers: "Do these as well. I want to see that."
+
+**What the search found for meta mixing:**
+- PAQ stacks mixers. Several first-layer mixers each choose their weight set by a different small context, and one more mixer joins them before SSE ([PAQ](https://en.wikipedia.org/wiki/PAQ), [context mixing](https://en.wikipedia.org/wiki/Context_mixing)). PAQ8's mixer maps onto a mixture of experts with a fixed gate ([Knoll and de Freitas](https://arxiv.org/pdf/1108.3298)).
+- MetaGrad and Squint run the same learner at many learning rates, and a master weights them by their performance, so no step needs tuning ([MetaGrad, JMLR 2021](https://www.jmlr.org/beta/papers/v22/20-1444.html)).
+- Fixed share (switching) follows whichever expert is best right now, which suits text whose topic changes page by page.
+- For writing, LLM-Blender and InfoSel rank candidates from several generators and keep the best ([InfoSel](https://arxiv.org/html/2407.12841v1)).
+
+**Three sessions on Odin's PC, each registering rules before its runs:**
+1. **Meta mixing** in `context8k`, against today's default 1.5051:
+   - a PAQ-style second layer over several context-selected mixers;
+   - a mixture over learning rates (MetaGrad style);
+   - fixed-share switching over the full mix's arms.
+   Branch `wip/meta-mix`.
+2. **K5's helpers, by sentence choice:**
+   - minimum Bayes risk over many drafts (decision theory);
+   - an entity grid (a Markov chain over each sentence's subjects and objects);
+   - an LDA topic model (Bayesian), steering K5's words and scoring its sentences;
+   - minimum Bayes risk over the pooled drafts of all K5 variants, as meta mixing for writing.
+   Branch `wip/k5-discourse`.
+3. **Whole-paragraph MCMC:** Metropolis–Hastings over a paragraph by small word edits. Its energy is K5's log probability plus the topic and entity terms from session 2. Branch `wip/k5-mcmc`.
+
+**Judges for writing:**
+- SCRIBE v2 and v3.1 on GEN-A dev;
+- then four blind Claude raters, as in §13.31, on 50 dev prompts. They are the judge of another kind that §13.31 showed is needed.
+
+The test split is read once per adopted change.
