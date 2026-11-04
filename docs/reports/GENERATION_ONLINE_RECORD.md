@@ -8,7 +8,8 @@ Odin asked: "Make sure you document everything we have tried and the results." T
 
 | Task | What CyphaLM uses now | Score |
 |---|---|---|
-| Writing | **K5**: word-level Kneser–Ney of order 5 on 7 MB of clean prose (`sample --k5 CLEAN.txt`), 12-word copy cap | GEN-A test SCRIBE v2 **0.305** [0.276, 0.338]; dev 0.353 |
+| Writing | **K5, upgraded** (nucleus 0.8, 256 exchange classes, the prompt-association sentence gate), 12-word copy cap: `sample --k5 CLEAN.txt` | GEN-A test SCRIBE v2 **0.524** [0.493, 0.552] (gate provisional: needs a judge of another kind); plain K5 0.305 |
+| Writing, scale | Plain K5 on 330 MB of clean enwik9 Wikipedia | test **0.380** [0.353, 0.406] |
 | Writing, bytes | The byte sampler (`sample`), no LSTM, no GLN | dev 0.174 at T 0.6; test 0.147 |
 | Prediction | `context8k`: online chain (exponentiated gradient), byte LSTM stage, slow and fast chains, online final layer with the copy gate | **1.6238** bits per byte (holdout second half), 269 MB |
 | Prediction before 1 November | the frozen chain | 1.6979 |
@@ -25,7 +26,14 @@ They came from different changes. What predicts better did not write better, in 
 | Experiment | Section | Best result | Decision |
 |---|---|---|---|
 | Byte sampler (BKN2 default, T 0.6) | §13.16 | 0.174 [0.137, 0.209] | Kept as the byte writer |
-| **K5** (Python bake-off, then C++) | §13.7, §13.19 | **0.353** [0.318, 0.384]; **test 0.305** | **The recommended writer** |
+| **K5** (Python bake-off, then C++) | §13.7, §13.19 | **0.353** [0.318, 0.384]; **test 0.305** | The writer |
+| K5 tuning: nucleus 0.8 | [K5_UPGRADES](K5_UPGRADES.md) | 0.395 (4 seeds +0.057) | **Adopted** |
+| K5: word cache; dynamic counts | [K5_UPGRADES](K5_UPGRADES.md) | 0.114–0.394 (bits down to 1.488) | No: lower bits, lower SCRIBE |
+| K5: orders 6 and 7 | [K5_UPGRADES](K5_UPGRADES.md) | 0.349 / 0.409 (noise) | No |
+| K5: 256 exchange classes as backoff | [K5_UPGRADES](K5_UPGRADES.md) | 0.444 (4 seeds +0.029) | **Adopted** |
+| K5: sentence gate, 8 candidates, prompt association | [K5_UPGRADES](K5_UPGRADES.md) | 0.498; **test 0.524** | **Adopted** (provisional: judge caution) |
+| K5 on clean enwik9: 7 / 30 / 100 / 300 / 330 MB | [K5_SCALE](K5_SCALE.md) | 0.350 / 0.375 / 0.363 / 0.382 / 0.390 (4-seed mean); **test 0.380** | **Adopted** as the training text |
+| K5 with a 65,536-word vocabulary | [K5_SCALE](K5_SCALE.md) | −0.010 to −0.016 | No |
 | 10 fuzzy experts mixed into K5 | §13.7 | all lower (ALL: 0.218) | Stopped for writing |
 | Self-organising structure (exchange classes etc.) | §13.9 | exchange classes 0.327 | Not adopted for writing |
 | GLN mixed into the byte sampler | §13.15 | 0.065 (10 prompts; W0 0.256) | No: pulled the text into XML |
@@ -86,8 +94,10 @@ What the prediction results say:
 | Wider 3-level GLN on 1 GiB (§13.23) | Odin's PC | Training; its online bits on C4 are 1.93–1.98 against the narrow GLN's 2.004 |
 | The 1 TB trie with the online mixer (§13.20) | Odin's PC | Asked; not yet reported |
 | R3, the half-space test, GLNB's writing (1 Nov) | Odin's PC, `/mnt/d/cypha_llm/r3_glnb/` | Never collected; asked again with §13.23 |
-| K5 upgrades: tuning, online cache and counts, order 6, classes, sentence gate, content plan | Odin's PC | Running → [K5_UPGRADES.md](K5_UPGRADES.md) |
-| K5 on clean Wikipedia from enwik9 (7 MB → hundreds of MB) | Odin's PC | Running → [K5_SCALE.md](K5_SCALE.md) |
+| K5 upgrades | Odin's PC | **Done**: test 0.524 → [K5_UPGRADES.md](K5_UPGRADES.md) |
+| K5 on clean Wikipedia from enwik9 | Odin's PC | **Done**: test 0.380 → [K5_SCALE.md](K5_SCALE.md) |
+| Upgraded K5 on the 330 MB text (the two together) | Odin's PC | Next |
+| A judge of another kind for the sentence gate (Odin's blind ratings) | Odin | Next |
 | Online n-gram expert, document-aware learning, a bigger LSTM | Odin's PC | Running → [ONLINE_LEARNING_UPGRADES.md](ONLINE_LEARNING_UPGRADES.md) |
 | Whole-distribution mixing with APM/SSE (PAQ-style) | Odin's PC | Running → [FULL_DISTRIBUTION_MIXING.md](FULL_DISTRIBUTION_MIXING.md) |
 

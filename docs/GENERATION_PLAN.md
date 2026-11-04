@@ -1430,3 +1430,24 @@ The flags stay (`--k5-lstm`, `--k5-lstm-mix`, `--final-gate lstm`, `lstm-train`)
   3. Online learning in the mixer: an online n-gram expert, document-aware learning, a bigger LSTM. Branch `wip/online-upgrades`, report [reports/ONLINE_LEARNING_UPGRADES.md](reports/ONLINE_LEARNING_UPGRADES.md).
   4. Whole-distribution mixing with APM/SSE, PAQ-style. Branch `wip/full-mix`, report [reports/FULL_DISTRIBUTION_MIXING.md](reports/FULL_DISTRIBUTION_MIXING.md).
 - The cloud session merges each branch and adds its results here and to the record.
+
+**Results from Odin's PC** (2026-11-04; merged to main):
+
+| Session | What changed | GEN-A dev | GEN-A test (one read) | Report |
+|---|---|---|---|---|
+| K5 upgrades | Nucleus 0.8; 256 exchange classes as K5's backoff floor; an 8-candidate sentence gate that keeps the sentence whose words co-occur most with the prompt's in K5's own training text | 0.498 [0.469, 0.528]; 4 seeds 0.493–0.505 against K5's 0.312–0.362 | **0.524 [0.493, 0.552]** against 0.305 | [K5_UPGRADES.md](reports/K5_UPGRADES.md) |
+| K5 at scale | 330 MB of clean Wikipedia from enwik9 past enwik8, overlap with GEN-A and SCRIBE removed (0 on recheck) | 4-seed mean 0.390 against 0.344 | **0.380 [0.353, 0.406]** against 0.305 | [K5_SCALE.md](reports/K5_SCALE.md) |
+
+- **Both are adopted by their registered rules.**
+  - K5's default is now the upgraded sampler. `--k5-base k5` writes §13.19's text line for line, checked in the cloud.
+  - The recommended training text is `train_all.txt`, 330 MB. It needs about 7 GB of RAM and a 65 s build.
+  - The cloud check of the new default gives 0.498 [0.469, 0.528] on dev, the same as the PC, with copy32 0.038 and 0 samples over the 12-word cap.
+- **What failed (K5 upgrades):**
+  - The word cache and dynamic counts lower K5's bits the most (to 1.488), but they lower SCRIBE. Prediction is not generation, again.
+  - Orders 6 and 7 add nothing.
+  - A 65,536-word vocabulary lowers SCRIBE.
+  - The content plan was skipped: GEN-E's fact store is in the cloud, not on the PC.
+- **Copying at scale.** On 330 MB, copy32 rises to 0.17: 17% of written bytes match some 32-byte span of the training text. The 12-word cap still holds.
+- **A caution on the judge (raised by the PC session).** The sentence gate scores co-occurrence with the prompt. SCRIBE's coherence axis also rests on co-occurrence (word vectors), and most of the gate's gain is on that axis (D_C 4.15 → 3.41). Part of the gain may be two co-occurrence measures agreeing rather than better text. By §1.3 it needs a judge of another kind: Odin's own blind ratings, or the second benchmark. Until then the gate's gain is provisional.
+- **Not yet run:** the two together (the upgraded K5 on the 330 MB text).
+- **Seeds:** `--k5-seed S` is absolute; a value below 20261101 is an offset, so both reports' seeds reproduce.
