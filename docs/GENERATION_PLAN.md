@@ -1428,7 +1428,7 @@ The flags stay (`--k5-lstm`, `--k5-lstm-mix`, `--final-gate lstm`, `lstm-train`)
   1. K5 upgrades: tuning; online cache and counts; order 6 and word classes; a sentence gate; a content plan. Branch `wip/k5-upgrades`, report [reports/K5_UPGRADES.md](reports/K5_UPGRADES.md).
   2. K5 on clean Wikipedia from enwik9, past enwik8's bytes, checked for overlap with GEN-A and SCRIBE. Branch `wip/k5-scale`, report [reports/K5_SCALE.md](reports/K5_SCALE.md).
   3. Online learning in the mixer: an online n-gram expert, document-aware learning, a bigger LSTM. Branch `wip/online-upgrades`, report [reports/ONLINE_LEARNING_UPGRADES.md](reports/ONLINE_LEARNING_UPGRADES.md).
-  4. Whole-distribution mixing with APM/SSE, PAQ-style. Branch `wip/full-mix`, report [reports/FULL_DISTRIBUTION_MIXING.md](reports/FULL_DISTRIBUTION_MIXING.md).
+  4. Whole-distribution mixing with APM/SSE, PAQ-style. Branch `wip/full-mix`, report `docs/reports/FULL_DISTRIBUTION_MIXING.md` on that branch (not merged yet).
 - The cloud session merges each branch and adds its results here and to the record.
 
 **Results from Odin's PC** (2026-11-04; merged to main):
@@ -1451,3 +1451,36 @@ The flags stay (`--k5-lstm`, `--k5-lstm-mix`, `--final-gate lstm`, `lstm-train`)
 - **A caution on the judge (raised by the PC session).** The sentence gate scores co-occurrence with the prompt. SCRIBE's coherence axis also rests on co-occurrence (word vectors), and most of the gate's gain is on that axis (D_C 4.15 → 3.41). Part of the gain may be two co-occurrence measures agreeing rather than better text. By §1.3 it needs a judge of another kind: Odin's own blind ratings, or the second benchmark. Until then the gate's gain is provisional.
 - **Not yet run:** the two together (the upgraded K5 on the 330 MB text).
 - **Seeds:** `--k5-seed S` is absolute; a value below 20261101 is an offset, so both reports' seeds reproduce.
+
+### 13.26 Online learning upgrades and SCRIBE v3 (2026-11-04; results)
+
+**Online learning** (Odin's PC; [reports/ONLINE_LEARNING_UPGRADES.md](reports/ONLINE_LEARNING_UPGRADES.md)). Rules and predictions were registered in the report before each phase.
+
+| Arm | What | Bits per byte | Against the old default |
+|---|---|---:|---:|
+| B0 | the old default (D3) on the PC | 1.6232 | — |
+| N2 | an online n-gram expert, PAQ-style (orders 1–6, 8, 12; 24 table bits) | 1.5913 | −0.0319 |
+| L3 | the byte LSTM at hidden 256, window 20 | 1.6026 | −0.0206 |
+| D1, D2 | larger online steps after each page start | 1.6246, 1.6239 | +0.0014, +0.0007 |
+| **C (N2 + L3)** | **the new default** | **1.5793** | **−0.0439** |
+
+- **Adopted by rule 1.** `context8k` now runs the n-gram and the 256/20 LSTM. Answers are unchanged.
+- The old default is `--no-ngram --lstm-size 64`. It reproduces B0 byte for byte; the new default reproduces C byte for byte.
+- **The cost:** +61% wall time (45 against 28 minutes) and peak RSS 828 MB against 247 MB. The time is the bigger LSTM; the memory is the n-gram's tables. `--ngram-tb 22` saves 440 MB for 0.007 bits per byte.
+- **What failed:** document-aware steps, and long BPTT windows (50, 100).
+- **Untested:** whether the n-gram or the bigger LSTM help `sample` or K5. By every earlier result (§13.24), they will not.
+- The cloud build of the merge passes `cyphalm_trie selftest`.
+
+**SCRIBE v3** ([reports/SCRIBE_V3.md](reports/SCRIBE_V3.md)). Odin: "Make another two metrics with different maths that complement each other and take the average of all 3. Make it fool proof."
+
+- **SURPRISE**: the text's code length under a model of the pack (Kneser–Ney trigram, spelling models, a cache and a match model). Two-sided: too predictable loses as surely as salad.
+- **MATCH**: matching statistics against a suffix array of the pack, the text's own LZ76 complexity, and echo of the prompt.
+- **v3** is the mean of v2, SURPRISE and MATCH. It also reports the minimum of the three and a `disagree` flag.
+- **The ladder (fresh data, read once):** v3 passes all 5 pairs, SURPRISE all 5, MATCH 4 (human > sentences shuffled 0.940).
+- **Not fool-proof yet.** The attack rule passed 5 of 9:
+  - caught: copying, echo, loops, co-occurrence collages from the pack;
+  - missed: copied prompt sentences then a continuation (v3 0.948; MATCH alone catches it), keyword stuffing into human text (0.825) and into a generic paragraph (0.457), a generic paragraph (0.930; SURPRISE and MATCH catch it, the mean dilutes it);
+  - invisible to all three: sentences reordered within a text.
+- **K5 cross-check:** old K5 → upgraded K5 is v2 +0.145, SURPRISE −0.106, MATCH −0.009, v3 +0.011 (inside the intervals). **The new judges do not confirm the sentence gate's gain.** SURPRISE finds the gated text too predictable: 7.4 bits a word against human text's 9.5. The gate stays provisional (§13.25) until Odin's blind ratings.
+- v2 is unchanged and stays the score of record for comparisons with earlier results. v3, `min3` and `disagree` are reported next to it from now on.
+- No fresh enwik8 range is left for another frozen read of a SCRIBE change. A v3.1 can take its fresh read from enwik9 past enwik8. SCRIBE's design never read it. K5's 330 MB training text comes from there, which does not matter for the judge's own ladder and attacks.
