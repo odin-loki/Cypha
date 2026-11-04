@@ -9,6 +9,14 @@ SCRIBE v3.1 makes v3 ([SCRIBE_V3.md](SCRIBE_V3.md)) harder to fool. It keeps the
 
 Command: `scribe ladder|attacks|score --profile v31`. Profiles v1, v2 and v3 are unchanged, byte for byte.
 
+**Result** (fresh region, enwik9 [100, 124) MiB, read once):
+- The ladder passes 5 of 5.
+- The registered attacks pass 9 of 9 (v3: 5 of 9). Keyword stuffing passed only just (0.953).
+- The fresh human mean is 0.904.
+- The held-out attacks, never run before, pass **2 of 8**. Stuffing at a lower rate, one plain generic paragraph, a template with the prompt's names, and fluent sentences from elsewhere still get through.
+
+v3.1 is harder to fool than v3. It is not fool-proof.
+
 ## What v3 missed
 
 On its fresh read (enwik8 [72, 95.37) MiB), v3's attack rule passed 5 of 9:
@@ -222,7 +230,82 @@ Profiles v1, v2 and v3 reproduce the build of main (6aed3eb) byte for byte, chec
 
 ## Fresh verdict
 
-(To be filled after the single read of the fresh region.)
+Read once, 2026-11-04, with the registered commands, at the frozen commit 28ff62c (plus `--export` to keep the per-text scores). enwik9 [100, 124) MiB, seed 2718281828. The filter dropped 2 of 2,106 documents. 500 standard samples from 6,116 candidates. The ladder took 20 s and the battery 23 s. Nothing was changed after the read.
+
+**Ladder** (pair accuracy):
+
+| Pair | v2 | SURPRISE | MATCH | v3 | SURPRISE 3.1 | MATCH 3.1 | **v3.1** |
+|---|---|---|---|---|---|---|---|
+| human > sentences shuffled | 0.976 PASS | 0.935 FAIL | 0.940 FAIL | 0.979 PASS | 0.924 FAIL | 0.935 FAIL | **0.968 PASS** |
+| sentences shuffled > words shuffled | 0.998 PASS | 1.000 PASS | 0.978 PASS | 1.000 PASS | 1.000 PASS | 0.978 PASS | **1.000 PASS** |
+| words shuffled > random lexicon words | 0.996 PASS | 0.955 PASS | 0.951 PASS | 0.972 PASS | 0.956 PASS | 0.863 FAIL | **0.992 PASS** |
+| random lexicon words > random letters | 1.000 PASS | 1.000 PASS | 1.000 PASS | 1.000 PASS | 1.000 PASS | 1.000 PASS | **1.000 PASS** |
+| random letters > one phrase repeated | 1.000 PASS | 1.000 PASS | 1.000 PASS | 1.000 PASS | 1.000 PASS | 1.000 PASS | **1.000 PASS** |
+| **pairs passed** | 5 | 4 | 4 | 5 | 4 | 3 | **5** |
+
+Rung means of v3.1 (95% interval): human 0.904 [0.892, 0.916]; sentences shuffled 0.546; words shuffled 0.034; random lexicon words 0.018; random letters 0.002; one phrase repeated 0.000; human, short 0.941. On the same samples v3 has a human mean of 0.908.
+
+**Battery** (mean score, P(human > attack) in brackets):
+
+| Attack | v2 | SURPRISE | MATCH | v3 | SURPRISE 3.1 | MATCH 3.1 | **v3.1** | |
+|---|---|---|---|---|---|---|---|---|
+| human | 0.893 | 0.899 | 0.827 | 0.873 | 0.860 | 0.791 | 0.833 | |
+| copy_pack | 0.104 (0.982) | 0.042 (0.996) | 0.000 (1.000) | 0.049 (0.995) | 0.009 (0.996) | 0.000 (1.000) | **0.000 (0.995)** | PASS |
+| echo_repeat | 0.000 (1.000) | 0.005 (1.000) | 0.000 (1.000) | 0.002 (1.000) | 0.015 (0.995) | 0.000 (1.000) | **0.000 (1.000)** | PASS |
+| echo_copy | 0.887 (0.500) | 0.892 (0.507) | 0.000 (0.997) | 0.593 (0.954) | 0.846 (0.530) | 0.000 (0.997) | **0.000 (0.996)** | PASS |
+| stuff_human | 0.477 (0.791) | 0.676 (0.770) | 0.689 (0.637) | 0.614 (0.825) | 0.180 (0.967) | 0.547 (0.745) | **0.305 (0.953)** | PASS |
+| stuff_generic | 0.987 (0.299) | 0.853 (0.653) | 0.872 (0.408) | 0.904 (0.467) | 0.106 (0.995) | 0.725 (0.566) | **0.412 (0.967)** | PASS |
+| loop | 0.000 (1.000) | 0.019 (0.998) | 0.003 (0.983) | 0.007 (0.998) | 0.121 (0.989) | 0.004 (0.993) | **0.000 (0.995)** | PASS |
+| generic | 0.835 (0.770) | 0.653 (0.950) | 0.475 (0.944) | 0.654 (0.937) | 0.318 (0.978) | 0.374 (0.951) | **0.462 (0.964)** | PASS |
+| shuffle_docs | 0.336 (0.968) | 0.662 (0.936) | 0.519 (0.932) | 0.506 (0.975) | 0.573 (0.935) | 0.400 (0.947) | **0.417 (0.966)** | PASS |
+| cooc_pack | 0.127 (0.983) | 0.092 (0.995) | 0.000 (0.995) | 0.073 (0.995) | 0.046 (0.994) | 0.000 (0.995) | **0.000 (0.995)** | PASS |
+| reorder (extra) | 0.888 (0.506) | 0.900 (0.499) | 0.828 (0.499) | 0.872 (0.504) | 0.860 (0.501) | 0.792 (0.498) | 0.832 (0.503) | — |
+| cooc_out (extra) | 0.861 (0.491) | 0.796 (0.693) | 0.765 (0.563) | 0.807 (0.592) | 0.777 (0.649) | 0.724 (0.571) | 0.770 (0.573) | — |
+| offprompt (extra) | 0.893 (0.500) | 0.899 (0.500) | 0.705 (0.751) | 0.833 (0.651) | 0.718 (0.815) | 0.529 (0.866) | 0.687 (0.809) | — |
+| ho_stuff7_rare | 0.833 (0.515) | 0.900 (0.446) | 0.938 (0.230) | 0.890 (0.392) | 0.624 (0.679) | 0.898 (0.283) | **0.739 (0.585)** | FAIL |
+| ho_stuff3_freq | 0.107 (0.965) | 0.455 (0.932) | 0.587 (0.727) | 0.383 (0.960) | 0.066 (0.995) | 0.579 (0.711) | **0.140 (0.984)** | PASS |
+| ho_stuff_rand | 0.702 (0.603) | 0.815 (0.598) | 0.859 (0.370) | 0.792 (0.570) | 0.350 (0.886) | 0.762 (0.481) | **0.516 (0.831)** | FAIL |
+| ho_generic2 | 0.838 (0.670) | 0.492 (0.902) | 0.578 (0.864) | 0.636 (0.882) | 0.275 (0.981) | 0.453 (0.911) | **0.458 (0.943)** | FAIL |
+| ho_template | 0.999 (0.269) | 0.721 (0.822) | 0.988 (0.166) | 0.903 (0.507) | 0.592 (0.816) | 0.979 (0.168) | **0.817 (0.578)** | FAIL |
+| ho_echo_scatter | 0.467 (0.759) | 0.743 (0.677) | 0.000 (0.999) | 0.403 (0.973) | 0.743 (0.647) | 0.003 (0.998) | **0.006 (0.996)** | PASS |
+| ho_title_swap | 0.891 (0.500) | 0.907 (0.490) | 0.749 (0.682) | 0.849 (0.603) | 0.815 (0.628) | 0.627 (0.751) | **0.757 (0.680)** | FAIL |
+| ho_list_related | 0.562 (0.859) | 0.720 (0.888) | 0.659 (0.800) | 0.647 (0.898) | 0.735 (0.807) | 0.638 (0.746) | **0.618 (0.856)** | FAIL |
+
+**Verdicts.**
+
+| Rule | Result |
+|---|---|
+| 1. v3.1 passes all five ladder pairs on dev A, dev B and fresh | **holds**: 5 of 5 on each (fresh first pair 0.968) |
+| 2. v3.1 ≥ 0.95 on each of the 9 registered attacks (fresh) | **holds**: 9 of 9. `stuff_human` only just (0.953), then `generic` 0.964, `shuffle_docs` 0.966, `stuff_generic` 0.967 |
+| 3. held-out attacks (no rule) | **2 of 8 pass**: `ho_stuff3_freq` 0.984, `ho_echo_scatter` 0.996 |
+| 4. fresh human mean within 0.05 of 0.906 | **holds**: 0.904 |
+
+On the same fresh battery, v3's own rule passes 5 of 9, as it did on enwik8.
+
+**Predictions, scored.** Rules 1, 2 and 4 held, as predicted for 1 and 4; I had called rule 2 a coin flip. For the held-out attacks I predicted 3 to 5 of 8; the result is 2. The calls on `ho_echo_scatter` (pass), `ho_stuff7_rare`, `ho_title_swap` and `ho_list_related` (fail) were right. `ho_stuff3_freq` (called borderline) passed and `ho_stuff_rand` (borderline) failed. `ho_generic2` (called a pass) missed by 0.007, and `ho_template` (called a pass) failed clearly.
+
+**Why the held-out attacks got through** (looked at after the read; nothing was changed):
+
+- **Stuffing is caught by its rate, not its pattern.** One inserted word in 4 (frequent words) is caught at 0.984, one in 5 at 0.953, about one in 6 at random gaps at 0.831, and one in 8 at 0.585. No statistic looks at the spacing. The fit and bridge statistics are averages over the text. At one word in 8 they move by about 1.8 standard deviations, inside the human range.
+- **Generic paragraphs:** three of the four new paragraphs are caught (0.965–0.975). The first ("There are many things to say about this subject…") is not (0.862): v2 rates it 1.000, and SURPRISE 3.1 alone reaches only 0.942.
+- **The template** is bland (`w_mean` z −2.6), but it repeats the prompt's names and its own words. MATCH 3.1 sees an on-topic, cohesive text and rates it above human text (0.979). Its cohesion and prompt statistics charge every shortfall (graded, from zero). An excess is charged only beyond a dead zone of 2 standard deviations, or beyond the human 99th percentile. v2 rates it 0.999.
+- **Title swap and loosely related sentences** are fluent human sentences. They are the same blind spot as `offprompt` (0.809) and `cooc_out` (0.573).
+
+## What v3.1 is, and is not
+
+- **It does not dilute a confident catch.** Copied prompt sentences, copying from the pack, loops and echo all go to 0 under the geometric mean. That holds even when two judges rate the text as human (`echo_copy`: 0.948 under v3, 0.996 under v3.1; `ho_echo_scatter` 0.996).
+- **It catches keyword stuffing at one inserted word in five or more**, by a principled statistic: words that fit neither neighbour, as code length (`w_fit`) and as strings (`m_bridge`). It does not catch it at one word in six to eight (0.83, 0.59). So it is not fool-proof against a stuffer who inserts less.
+- **It catches v2's generic paragraph and most bland paragraphs** (0.964; three of four new ones at 0.965–0.975), through the bland group B. One plain paragraph of the same kind got through (0.862). B is the most tuned part of the design: at the 99th percentile instead of the 97.5th it would have missed `generic` on dev A.
+- **It does not see:**
+  - sentence order (`reorder` 0.50; `w_lead` 0.556 on dev A);
+  - fluent human sentences from elsewhere, whether gathered by co-occurrence, by shared words, or with the title swapped in (`cooc_out` 0.57, `ho_list_related` 0.86, `ho_title_swap` 0.68, `offprompt` 0.81);
+  - a template that repeats the prompt's names (0.58);
+  - truth (numbers, negations).
+- **Its margins are thin.** On dev A the first ladder pair is 0.959 and four attacks sit at 0.958–0.964. On fresh data `stuff_human` passed at 0.953. Each failure mode a judge learns adds false positives on odd human texts (lists, citations, glossaries, plain passages), and the geometric mean does not dilute those either. On dev A no setting of the new groups gave more than about 0.96 on both the first ladder pair and the worst attack.
+- **The new judges are weaker on their own than v3's.** SURPRISE 3.1 alone passes 4 of 5 ladder pairs on fresh data, MATCH 3.1 alone 3 of 5. Only the geometric mean passes 5 of 5. Read v3.1 as one score, with v2, `min3` and `disagree` next to it.
+- **With a prompt, scores are lower.** The prompt statistics' graded shortfalls charge human continuations too: the battery's human mean is 0.833 against the ladder's 0.904. Compare prompted texts with prompted texts.
+- **K5:** v3.1 sees a small gain from the sentence gate (+0.048), carried by v2. SURPRISE 3.1 rates the gated text lower.
+- **Freeze discipline.** The design was chosen on dev A and its battery. Dev B was read once after the freeze. The rules, predictions, fresh region and filter were committed in 28ff62c before the fresh read. The fresh region was read once, and nothing was changed after it. The held-out attacks were committed (5defdb5) before any design work and never run on development data.
 
 ## Reproduce
 
