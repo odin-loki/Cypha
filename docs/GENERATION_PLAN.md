@@ -1295,3 +1295,8 @@ Even so, each layer-1 weight set sees about half a million bits. The cost is abo
 - GW's online bits per byte on C4's last MiB are at least 0.03 below the narrow GLN's 2.004.
 - On the enwik8 holdout it is still worse than the 7 MiB GLN, because the domain is wrong.
 - G3 is within 0.02 of 0.143.
+
+**K5's one test read** (registered 2026-11-04, before it; §13.11's decision). `sample --k5 /root/work/fz/train.txt` on GEN-A's 250 test prompts, SCRIBE v2 (GEN_TRACK's ladder), read once.
+- **Against:** the byte default BK0 on test, 0.147 [0.115, 0.181] at T 0.6 (T4d's read).
+- **Rule:** K5 becomes CyphaLM's recommended writer (`scripts/gen_eval.sh` and the docs use `--k5`) if its test interval lies wholly above BK0's (lower bound above 0.181), with no sample holding a run of more than 12 copied words. The byte sampler stays for answers, `chat` and anything without the clean text.
+- **Prediction:** 0.30–0.37, as on dev.
