@@ -25,6 +25,15 @@
 
 **Generation source.** `--gen-source a4d` uses `sample`'s own 250 prompts and the A4d / B4c pipeline. `--gen-source gena` uses GEN-A's frozen generation benchmark through `scripts/gen_eval.sh` once `/root/work/gena/HARNESS_READY` exists and the script is in the tree; `auto` picks `gena` when both hold, else `a4d`. The card states which source it used.
 
+## The card shows the latest results (2026-11-04)
+
+**Odin:** "The report card should always use the latest results."
+
+- **BPC:** the context8k headline is the run's own best line, `context8k_bpc`: the full mix's ABs arm by default, else `online_final_bpc`, else the last chain line. When a later change makes a new line the best, `context8k` names it in `context8k_bpc`, and the card follows without a code change. Older cards read `trie_plus_context_8192_*`, so compare a new card with an old one by its line names.
+- **Writing:** the card writes with the recommended writer, K5 (`sample --k5 $K5_TEXT`, default `/root/work/fz/train.txt`). `--writer bytes` gives the byte sampler. The card's meta records the writer.
+- **SCRIBE:** v2 stays the score of record. SCRIBE v3.1 is shown beside it, on the same samples (`L.scribe31.md`; `gen_eval.sh` writes it too).
+- Checked: `cypha_report_card selftest` (29 checks; the newest line wins), and a summary of real files gave context8k headline `context8k_bpc`, with K5's dev samples at v2 0.498 and v3.1 0.483.
+
 ## Registered rules (2026-10-29, before the first card run)
 
 1. **Dev by default.** Every number is dev unless the card says otherwise. The T-QA frozen test is read only with `--read-test`, and each such run appends a line to the Reads table below (date, label, commit, flags). Fresh text is read only with `--fresh`.

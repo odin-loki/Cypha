@@ -15,6 +15,7 @@
 #   --baseline-flags "F"  also run a baseline with these flags (label L_base) and compare
 #   --baseline-label B    compare with an earlier run B in the same OUT
 #   --gen-source auto|a4d|gena   generation pipeline [auto: gena when GEN-A's harness is ready, else a4d]
+#   --writer k5|bytes     who writes the text [k5 when $K5_TEXT exists, else bytes]: the card shows the latest writer
 #   --reuse               skip a part whose output is already there and complete
 #   --budget-mb N         the RAM budget for LCI's kappa [200]
 #
@@ -24,7 +25,10 @@
 #   C1L inputs: QA_PARSE_DEV [/root/work/qa2/parse_dev_span.tsv]  QA_PARSE_ALL [/root/work/qa2/parse_all_span.tsv]
 #               QA_DK [/root/work/answer/dk_mention.tsv]  QA_SHARD [/root/work/f2/shard_facts.tsv]
 #               QA_BASE [/root/work/answer/a0_rows.tsv]
-#   GENA_READY [/root/work/gena/HARNESS_READY]
+#   GENA_READY [/root/work/gena/HARNESS_READY]   K5_TEXT, K5's clean training text [/root/work/fz/train.txt]
+#
+# The card always reports the latest results (Odin, 2026-11-04): context8k's own headline line (context8k_bpc), the
+# recommended writer (K5) and SCRIBE v3.1 beside v2.
 #
 # Every part runs under nice -n 5 in the foreground; peak RSS is VmHWM polled every second (the method of
 # /root/work/r2/peak.sh). The card answers nothing and changes nothing in the model (rule 10).
@@ -45,9 +49,10 @@ DK=${QA_DK:-/root/work/answer/dk_mention.tsv}
 SHARD=${QA_SHARD:-/root/work/f2/shard_facts.tsv}
 BASE=${QA_BASE:-/root/work/answer/a0_rows.tsv}
 GREADY=${GENA_READY:-/root/work/gena/HARNESS_READY}
+K5T=${K5_TEXT:-/root/work/fz/train.txt}
 
 LABEL=card_$(date -u +%Y%m%d); OUT=$ROOT/build/report_card; FLAGS=""; PARTS=qa,ctx,gen; PROTO=c1l
-FRESH=0; TEST=0; BFLAGS=""; BLABEL=""; GSRC=auto; REUSE=0; BUDGET=200; HAVE_BFLAGS=0
+FRESH=0; TEST=0; BFLAGS=""; BLABEL=""; GSRC=auto; REUSE=0; BUDGET=200; HAVE_BFLAGS=0; WRITER=auto
 while [ $# -gt 0 ]; do
     case "$1" in
         --label) LABEL=$2; shift 2;;
@@ -58,12 +63,13 @@ while [ $# -gt 0 ]; do
         --fresh) FRESH=1; shift;;
         --read-test) TEST=1; shift;;
         --baseline-flags) BFLAGS=$2; HAVE_BFLAGS=1; shift 2;;
+        --writer) WRITER=$2; shift 2;;
         --baseline-label) BLABEL=$2; shift 2;;
         --gen-source) GSRC=$2; shift 2;;
         --reuse) REUSE=1; shift;;
         --budget-mb) BUDGET=$2; shift 2;;
         --) shift; FLAGS="$FLAGS $*"; break;;
-        -h|--help) sed -n '2,32p' "$0"; exit 0;;
+        -h|--help) sed -n '2,/^# Author/p' "$0"; exit 0;;
         *) echo "cypha_report_card: unknown option $1 (see --help)" >&2; exit 2;;
     esac
 done
@@ -74,6 +80,10 @@ fi
 case "$GSRC" in a4d) ;; gena)
     [ -x "$ROOT/scripts/gen_eval.sh" ] || { echo "gen-source gena: scripts/gen_eval.sh is not in the tree" >&2; exit 2; };;
     *) echo "gen-source must be auto, a4d or gena" >&2; exit 2;; esac
+if [ "$WRITER" = auto ]; then
+    if [ -s "$K5T" ]; then WRITER=k5; else WRITER=bytes; echo "[card] no K5 text at $K5T: the byte sampler writes" >&2; fi
+fi
+case "$WRITER" in k5) GFLAGS="--k5 $K5T";; bytes) GFLAGS="";; *) echo "writer must be k5 or bytes" >&2; exit 2;; esac
 if [ $HAVE_BFLAGS = 1 ] && [ -n "$BLABEL" ]; then echo "give --baseline-flags or --baseline-label, not both" >&2; exit 2; fi
 for f in "$TRIE" "$RC"; do [ -x "$f" ] || { echo "missing binary $f" >&2; exit 2; }; done
 case ",$PARTS," in *,gen,*) [ -x "$SC" ] || { echo "missing binary $SC" >&2; exit 2; };; esac
@@ -110,6 +120,7 @@ run_one() {
         printf 'commit\t%s\n' "$commit"
         printf 'protocol\t%s\n' "$PROTO"
         printf 'gen_source\t%s\n' "$GSRC"
+        printf 'writer\t%s\n' "$WRITER"
         printf 'split\t%s\n' "$([ "$TST" = 1 ] && echo test || echo dev)"
         printf 'flags\t%s\n' "$(echo $F)"
         printf 'parts\t%s\n' "$PARTS"
@@ -136,13 +147,15 @@ run_one() {
         if [ "$GSRC" = a4d ]; then
             if ! done_ok "$P.gen.peak"; then
                 echo "[card] $L sample" >&2
-                peak "$P.gen.peak" nice -n 5 "$TRIE" sample "$E" "$P.gen_dev.txt" "$P.gen_fresh.txt" $F > "$P.gen.out" 2> "$P.gen.err" || true
+                peak "$P.gen.peak" nice -n 5 "$TRIE" sample "$E" "$P.gen_dev.txt" "$P.gen_fresh.txt" $F $GFLAGS > "$P.gen.out" 2> "$P.gen.err" || true
             fi
             if ! done_ok "$P.scribe.peak"; then
                 echo "[card] $L scribe (dev prompts)" >&2
                 rm -rf "$P.scribe_export"
                 peak "$P.scribe.peak" nice -n 5 "$SC" $LADDER --test "enwik:$E:56:64" --seed 20261027 --gen-trie "$P.gen_dev.txt" \
                     --label "$L" --export "$P.scribe_export" > "$P.scribe.md" 2> "$P.scribe.err" || true
+                nice -n 5 "$SC" ${LADDER/--profile v2/--profile v31} --test "enwik:$E:56:64" --seed 20261027 --gen-trie "$P.gen_dev.txt" \
+                    --label "$L" > "$P.scribe31.md" 2> "$P.scribe31.err" || true
             fi
             if [ $FRESH = 1 ] && ! done_ok "$P.fresh.peak"; then
                 echo "[card] $L scribe (fresh prompts)" >&2
@@ -153,8 +166,9 @@ run_one() {
             # GEN-A's harness: its frozen generation benchmark (dev split); the card reads its ladder table.
             if ! done_ok "$P.gen.peak"; then
                 echo "[card] $L gen_eval.sh dev" >&2
-                peak "$P.gen.peak" "$ROOT/scripts/gen_eval.sh" dev "$L" "$OUT/gena" $F > "$P.gena.log" 2>&1 || true
+                peak "$P.gen.peak" "$ROOT/scripts/gen_eval.sh" dev "$L" "$OUT/gena" $F $GFLAGS > "$P.gena.log" 2>&1 || true
                 cp -f "$OUT/gena/$L.scribe.md" "$P.scribe.md" 2>/dev/null || true
+                cp -f "$OUT/gena/$L.scribe31.md" "$P.scribe31.md" 2>/dev/null || true
                 cp -f "$OUT/gena/$L.gen.txt" "$P.gen_dev.txt" 2>/dev/null || true
             fi
             [ $FRESH = 1 ] && echo "[card] gena: fresh prompts are GEN-A's test split; read it through gen_eval.sh test, not the card" >&2

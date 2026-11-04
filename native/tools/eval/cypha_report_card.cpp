@@ -8,7 +8,7 @@
 //
 // Usage:
 //   cypha_report_card summarize --dir DIR --label L [--baseline B] [--budget-mb 200]
-//       reads DIR/L.meta.tsv, L.qa.out, L.qa.rows.tsv, L.ctx.out, L.scribe.md, L.scribe_export/scores.jsonl,
+//       reads DIR/L.meta.tsv, L.qa.out, L.qa.rows.tsv, L.ctx.out, L.scribe.md, L.scribe31.md, L.scribe_export/scores.jsonl,
 //       L.gen_dev.txt, L.fresh.scribe.md, L.*.peak (each optional), and the same for B; writes DIR/L.card.md and
 //       DIR/L.card.tsv.
 //   cypha_report_card selftest
@@ -203,7 +203,9 @@ const std::vector<std::string> kQaPref = {"holdout2_trie_ig_cls_sim_copy_bpc", "
                                           "holdout2_trie_ig_cls_copy_bpc", "holdout2_trie_ig_sim_copy_bpc",
                                           "holdout2_trie_ig_copy_bpc", "holdout2_trie_ig_cls_bpc",
                                           "holdout2_trie_ig_sim_bpc", "holdout2_trie_ig_bpc"};
-const std::vector<std::string> kCtxPref = {"trie_plus_context_8192_cls_sim_copy_bpc", "trie_plus_context_8192_cls_sim_bpc",
+// context8k_bpc is the run's own best line (the full mix, else online_final_bpc, else the last chain line), so the card
+// always shows the latest default (Odin, 2026-11-04: "The report card should always use the latest results").
+const std::vector<std::string> kCtxPref = {"context8k_bpc", "online_final_bpc", "trie_plus_context_8192_cls_sim_copy_bpc", "trie_plus_context_8192_cls_sim_bpc",
                                            "trie_plus_context_8192_cls_copy_bpc", "trie_plus_context_8192_sim_copy_bpc",
                                            "trie_plus_context_8192_copy_bpc", "trie_plus_context_8192_cls_bpc",
                                            "trie_plus_context_8192_sim_bpc", "trie_plus_context_8192_bpc"};
@@ -368,7 +370,7 @@ std::map<std::string, int> dev_grades(const std::string& rows_path) {
 struct Run {
     std::string dir, label;
     std::map<std::string, std::string> meta;
-    std::vector<std::string> qa, ctx, scribe, fresh_scribe;
+    std::vector<std::string> qa, ctx, scribe, fresh_scribe, scribe31;
     std::map<std::string, double> qa_bpc, ctx_bpc;
     std::vector<Gain> gains;
     Peak pk_qa, pk_ctx, pk_gen, pk_scribe, pk_fresh;
@@ -383,6 +385,7 @@ Run load_run(const std::string& dir, const std::string& label) {
     r.ctx = read_lines(b + ".ctx.out");
     r.scribe = read_lines(b + ".scribe.md");
     r.fresh_scribe = read_lines(b + ".fresh.scribe.md");
+    r.scribe31 = read_lines(b + ".scribe31.md");  // SCRIBE v3.1 on the same samples (SCRIBE_V31.md)
     r.qa_bpc = bpc_pairs(r.qa);
     r.ctx_bpc = bpc_pairs(r.ctx);
     r.gains = lci_gains(r.qa);
@@ -395,7 +398,7 @@ Run load_run(const std::string& dir, const std::string& label) {
     auto failed = [](const Peak& p) { return p.found && std::isfinite(p.rc) && p.rc != 0; };
     if (failed(r.pk_qa)) r.qa.clear(), r.qa_bpc.clear(), r.gains.clear();
     if (failed(r.pk_ctx)) r.ctx.clear(), r.ctx_bpc.clear();
-    if (failed(r.pk_gen) || failed(r.pk_scribe)) r.scribe.clear();
+    if (failed(r.pk_gen) || failed(r.pk_scribe)) r.scribe.clear(), r.scribe31.clear();
     if (failed(r.pk_gen) || failed(r.pk_fresh)) r.fresh_scribe.clear();
     // Rule 1: a test tally counts only when the run was made with --read-test (the meta says so).
     r.test_read = r.meta.count("split") && r.meta.at("split") == "test";
@@ -457,11 +460,12 @@ void bpc_rows(Card& c, const Run& r) {
         c.add("BPC", "gain " + g.name + " (paired, 90%)", g.gain, g.lo, g.hi, NAN, "dev", "cyphalm_trie's block bootstrap");
     const auto k = headline(r.ctx_bpc, kCtxPref);
     if (std::isfinite(k.second))
-        c.add("BPC", "context8k, the configuration's fullest stack", k.second, NAN, NAN, NAN, "dev", note_fixed + "; line " + k.first);
+        c.add("BPC", "context8k headline (the run's best line)", k.second, NAN, NAN, NAN, "dev", note_fixed + "; line " + k.first);
 }
 
-void scribe_rows(Card& c, const std::vector<std::string>& md, const std::string& split, const std::string& tag) {
-    const std::string sec = "Text (SCRIBE v2, surface S" + tag + ")";
+void scribe_rows(Card& c, const std::vector<std::string>& md, const std::string& split, const std::string& tag,
+                 const std::string& metric = "SCRIBE v2") {
+    const std::string sec = "Text (" + metric + ", surface S" + tag + ")";
     struct N {
         const char* name;
         const char* label;
@@ -475,7 +479,7 @@ void scribe_rows(Card& c, const std::vector<std::string>& md, const std::string&
     for (const N& nm : names) {
         const Rung r = find_rung(md, nm.name);
         if (!r.found) continue;
-        c.add(sec, std::string(nm.label) + ": SCRIBE v2", r.scribe, r.slo, r.shi, r.n, split, "scribe's 95% bootstrap", 3);
+        c.add(sec, std::string(nm.label) + ": " + metric, r.scribe, r.slo, r.shi, r.n, split, "scribe's 95% bootstrap", 3);
         c.add(sec, std::string(nm.label) + ": surface S", r.surf, r.flo, r.fhi, r.n, split, "scribe's 95% bootstrap", 3);
     }
 }
@@ -690,6 +694,7 @@ Card build_card(const Run& r, const Run* base, double budget_mb) {
     answers_rows(c, r, "CV", "ABSTAIN", "dev");
     if (r.test_read) answers_rows(c, r, "TEST_GATED", "TEST_ABSTAIN", "test");
     scribe_rows(c, r.scribe, "dev", "");
+    if (!r.scribe31.empty()) scribe_rows(c, r.scribe31, "dev", "", "SCRIBE v3.1");
     if (!r.fresh_scribe.empty()) scribe_rows(c, r.fresh_scribe, "fresh", ", fresh prompts");
     cost_rows(c, r);
     if (base) compare_rows(c, compare(r, *base, budget_mb), r, *base);
@@ -769,6 +774,14 @@ int selftest() {
     CHECK_NEAR(qh.second, 1.789464, 1e-9);
     CHECK(!a.qa_bpc.count("fake_bpc"));  // example lines are not read
     CHECK_NEAR(headline(a.ctx_bpc, kCtxPref).second, 1.7897, 1e-9);
+    {  // the run's own best line wins over every chain line
+        const auto m = bpc_pairs({"trie_plus_context_8192_cls_sim_copy_bpc 1.7897", "online_final_bpc 1.5793 (chain 1.6103)",
+                                  "context8k_bpc 1.5051 (full_mix ABs)"});
+        CHECK(headline(m, kCtxPref).first == "context8k_bpc");
+        CHECK_NEAR(headline(m, kCtxPref).second, 1.5051, 1e-9);
+        const auto m2 = bpc_pairs({"trie_plus_context_8192_cls_sim_copy_bpc 1.7897", "online_final_bpc 1.5793 (chain 1.6103)"});
+        CHECK(headline(m2, kCtxPref).first == "online_final_bpc");
+    }
     CHECK(a.gains.size() == 2 && std::fabs(a.gains[0].lo - 0.145523) < 1e-9);
     const Tally t = find_tally(a.qa, "CV", "chat/trie_ig", "all");
     CHECK(t.found && t.n == 130 && t.right == 2 && t.abst == 128 && t.wrong == 0);
