@@ -1416,3 +1416,5 @@ Even so, each layer-1 weight set sees about half a million bits. The cost is abo
 - Not in K5: every mix tried lowers SCRIBE. Not as the final layer's gate context either: +0.011 bits per byte.
 
 The flags stay (`--k5-lstm`, `--k5-lstm-mix`, `--final-gate lstm`, `lstm-train`) for a stronger LSTM, such as one trained at scale on Odin's PC.
+
+**The LSTM out of writing** (Odin, 2026-11-04: "Take the LSTM out, let's just go with K5"). `sample` writes without the LSTM again (W0's text); `--lstm` or `--lstm-mix MODE` puts it back. K5 is the writer. The LSTM stays in `context8k`'s prediction, where it gains 0.023 bits per byte.

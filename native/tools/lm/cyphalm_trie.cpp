@@ -377,8 +377,8 @@ struct Args {
     bool online_lambdas = false;                  // §13.22: sample writes with the online mixer's learned lambdas
     // context8k's defaults since 2026-11-04 (§13.18, §13.21, D1-D3): the byte LSTM, the slow and fast chains, and the final
     // layer's sets by copy x byte class x long match. --no-lstm, --one-rate and --final-gate ig restore D0's lines.
-    // The LSTM is on by default in context8k (§13.18, D1) and in sample (§13.18's LS2: mixed in through the plausibility
-    // gate); --no-lstm leaves it out of both. sample takes the GLN instead when --gln is given.
+    // The LSTM is on by default in context8k (§13.18, D1); --no-lstm leaves it out. In sample it is off again since
+    // 2026-11-04 (Odin: "take the LSTM out, let's just go with K5"); --lstm or --lstm-mix MODE puts it back in.
     bool lstm = false, no_lstm = false;
     bool mix_set = false;                         // --gln-mix or --lstm-mix given
     bool two_rates = true;                        // §13.21: slow and fast chains (context8k)
@@ -1731,7 +1731,7 @@ int cmd_sample(const Args& a) {
         std::cerr << "sample: --gln and --lstm: one mixed-in expert at a time\n";
         return 2;
     }
-    const bool use_lstm = !a.no_lstm && !a.gln;  // §13.18: the LSTM writes along by default, unless the GLN does
+    const bool use_lstm = a.lstm && !a.no_lstm;  // §13.18: sample --lstm (off by default since 2026-11-04)
     double lgln = 0;
     std::vector<double> lcl, lcp, lpl;
     std::vector<std::vector<double>> ldoc;
