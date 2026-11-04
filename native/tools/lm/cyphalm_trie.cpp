@@ -84,6 +84,10 @@
 //        has K5 (word_kn.hpp: word-level Kneser-Ney of order 5, whole words, nucleus 0.9, the repeat ban) write every
 //        GEN line, at T 1.0 unless --temps; the trie and the experts are not built. --k5-cap N (default 12) bans a word
 //        that would make N + 1 consecutive tokens of TEXT (0: off). GEN_EVAL then gives K5's copy32 and verbatim13.
+//        docs/reports/K5_UPGRADES.md: by default K5 now writes with nucleus 0.8, 256 exchange classes as its backoff
+//        floor and an 8-candidate sentence gate by prompt association; --k5-base k5 (first) restores §13.19's K5. Other
+//        --k5-... flags (word_kn.hpp apply_flag): -seed, -nucleus, -cand-mass, -cand-max, -cache, -cache2, -cache-decay,
+//        -dyn, -order, -classes, -class-mode, -class-w, -gate.
 //        chat and sample: --save FILE stores the trained packed trie with its weights and split (RAM_PROFILE M7);
 //        --model FILE serves that file without training (chat then prints no mix_stored: it measures the training form).
 //   bkn <wiki> K[:m:c:d] [more specs] [--bkn-fresh] [--bkn-stack]
@@ -392,6 +396,7 @@ struct Args {
     int k5_cap = 12;                              // §13.19: --k5-cap N, at most N consecutive training tokens (0: off)
     std::string k5_lstm, k5_lstm_mix = "geo";     // §13.24: --k5-lstm FILE (lstm-train's), reranking K5's nucleus
     double k5_lstm_w = 0.25;                      // §13.24: --k5-lstm-w W, the byte LSTM's weight
+    std::vector<std::pair<std::string, std::string>> k5_opts;  // docs/reports/K5_UPGRADES.md: every other --k5-... flag
 };
 
 std::string env_or(const char* name, const char* fallback) {
@@ -493,6 +498,7 @@ Args parse(int argc, char** argv, int from) {
         else if (s == "--k5-lstm") a.k5_lstm = next();               // §13.24
         else if (s == "--k5-lstm-mix") a.k5_lstm_mix = next();       // §13.24: geo or lin
         else if (s == "--k5-lstm-w") a.k5_lstm_w = std::atof(next()); // §13.24
+        else if (s.rfind("--k5-", 0) == 0) a.k5_opts.emplace_back(s, next());  // K5_UPGRADES.md (word_kn.hpp apply_flag)
         else if (s.rfind("--", 0) == 0) {
             std::cerr << "unknown option " << s << "\n";
             a.ok = false;
@@ -1594,6 +1600,13 @@ int cmd_sample(const Args& a) {
     }
     if (!a.k5.empty()) {  // §13.19: K5 writes every GEN line (T 1.0 unless --temps); the trie and its experts are not built
         cypha::cyphalm::wkn::Options base;
+        for (const auto& [k, v] : a.k5_opts) {  // K5_UPGRADES.md
+            std::string err;
+            if (!cypha::cyphalm::wkn::apply_flag(k, v, base, err)) {
+                std::cerr << err << "\n";
+                return 2;
+            }
+        }
         std::unique_ptr<cypha::online::ByteLSTM> kl;
         if (!a.k5_lstm.empty()) {  // §13.24: the byte LSTM reranks the words inside K5's nucleus
             kl = cypha::online::ByteLSTM::load_file(a.k5_lstm);
