@@ -303,3 +303,31 @@ The memory is now the main cost: the n-gram's 589 MB cannot shrink without chang
 - **O1:** `--ngram-tb 23` (the new binary): about 294 MB less.
 - **Rule:** adopt only if `online_final_bpc` is at most 0.001 above the default's (1.5793) and the saving is at least 200 MB.
 - **Prediction:** +0.003 to +0.004 (24 bits against 22 gave −0.0073), so it fails. A float32 LSTM was not tried: the exact changes already cut the LSTM's time by 4×.
+
+## Full runs (`context8k`, the whole output compared with `cmp`)
+
+R are main's binary, run first as references. T (main) and N (new) were started together, so they ran at the same load. N's LSTM used 4 threads, so the four T and N runs held about 7 cores.
+
+| Run | Binary | Flags | `online_final_bpc` | Wall | Peak RSS | LSTM pass | n-gram (counts + online) | Output |
+|---|---|---|---:|---:|---:|---:|---:|---|
+| R_def | main | (default) | 1.5793 (chain 1.6103) | 32:41 | 853 MB | 942 s | 31.1 s | reference |
+| T_def | main | (default) | 1.5793 | 32:41 | 854 MB | 937 s | 30.1 s | = R_def |
+| **N_def** | new | (default) | **1.5793** | **20:07** | 853 MB | **218 s** | **7.1 s** | **= R_def, byte for byte** |
+| R_64 | main | `--no-ngram --lstm-size 64` | 1.6232 (chain 1.6570) | 18:15 | 261 MB | 98.6 s | — | reference |
+| T_64 | main | `--no-ngram --lstm-size 64` | 1.6232 | 18:10 | 262 MB | 98.8 s | — | = R_64 |
+| **N_64** | new | `--no-ngram --lstm-size 64` | **1.6232** | **16:52** | 261 MB | **50.8 s** | — | **= R_64, byte for byte** |
+| O1 | new | `--ngram-tb 23` | 1.5827 (chain 1.6154) | 20:52 | 573 MB | 213 s | 7.3 s | answers match |
+
+- **The rule holds.** The default output and `--no-ngram --lstm-size 64`'s are byte-identical to main's (every `GEN` and `TALLY` line included). `gln-train` and `lstm-train` write identical files. `selftest` passes.
+- **The default `context8k` takes 38% less time** at the same load (32:41 → 20:07). Its LSTM 256 pass is 4.3× faster (937 s → 218 s on 4 threads) and the n-gram 4.3× faster (30 s → 7 s). Peak RSS is unchanged (853 MB).
+- With the LSTM 64 (one thread), the LSTM pass is 1.9× faster (99 s → 51 s), and the run 7% faster.
+- **The LSTM 256 is no longer the cost.** The default now takes only 3 minutes more than `--no-ngram --lstm-size 64` (20:07 against 16:52), against 14½ minutes before. Most of `context8k`'s time is now the trie, InfiniGram and the other experts, which this work did not touch.
+- **O1 fails its rule.** It saves 294 MB (853 → 573 MB) but is 0.0034 worse (0.001 allowed). The prediction (+0.003 to +0.004) held. The n-gram stays at 24 table bits.
+
+## Risks before merging
+
+- **Threads.** `context8k`'s LSTM now runs 4 threads by default. On a busy PC, set `CYPHA_LSTM_THREADS=1` (and `CYPHA_NGRAM_THREADS=1`): the output is the same, only slower. Idle pool threads spin, then yield, then sleep.
+- **Exactness rests on two build facts:** no FMA contraction (the default build has no `-march`) and no `-ffast-math`. The SSE2 code uses separate multiply and add intrinsics, so it is exact even with `-march=native`. The scalar paths, as before, follow the compiler's flags.
+- **MSVC and ARM.** The SSE2 paths are guarded (`__SSE2__`, `_M_X64`); other targets use the scalar loops, which give the same numbers. `__builtin_prefetch` is used only on GCC and Clang. Only the Linux build was compiled and run here.
+- **The n-gram with `check` off** now takes 5 bytes a slot (it took 4). The default has the check on, and `bytes()` still reports the old formula.
+- **Merge.** The full-mix session edits `full_mixer.hpp` and `cyphalm_trie.cpp` at the same time. This branch changes `cyphalm_trie.cpp` only at the end of `cmd_selftest` (one block) and adds two lines to `CMakeLists.txt`. `OnlineNgram`'s and `ByteLSTMT`'s public interfaces are unchanged (`set_threads` and `threads` are new).
