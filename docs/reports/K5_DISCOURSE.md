@@ -142,6 +142,15 @@ score = wf·z(fluency) + wp·z(pmi) + mbr·z(chrF consensus) + eg·z(grid) + lda
   - Whole-draft MBR and meta cost N times the time of their drafts.
   - Peak RAM stays under 1 GB with the 7 MB helpers, and under 2 GB with the 330 MB ones.
 
+## Amendment 1 (2026-11-05, after T1 and T2 were read, before T2b and T2c ran)
+
+- T1 (B 0.5) and T2 (B 1) both raised v3.1, and T2 by far more. The best B may lie above 1, so two arms are added to the T family:
+  - T2b: rescaling B 1.5;
+  - T2c: rescaling B 2.
+- They follow the same choice and confirmation rules. T5 (200 topics), T6 (training size) and T7 then use the best B among T1, T2, T2b and T2c.
+- **Prediction:** v3.1 peaks at B 1–1.5. At B 2, copy32 passes the +0.02 bound or SURPRISE 3.1's foreign-word group pulls v3.1 down.
+- The PC's load average was about 90 on 64 threads during these reads, from other sessions. Wall times are measured under that load.
+
 ## Results
 
 (Added after the reads.)
