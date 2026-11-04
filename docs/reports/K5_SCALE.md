@@ -218,3 +218,103 @@ The test gain is +0.075, and the intervals do not overlap. No other test read wa
 - On Odin's PC: the texts in `/mnt/d/cypha_llm/k5scale/clean/` (`train_7M.txt` … `train_all.txt`, plus the cleaned dump `clean_e9.txt` and the kept documents `kept_e9.txt`); the reads in `/mnt/d/cypha_llm/k5scale/reads/`; the build in `~/cypha_build/k5scale/`; the worktree `/home/odin/k5scale_wt`.
 
 **To use it:** `cyphalm_trie sample ENWIK8 OUT.gen.txt --prompts-file … --prompts 250 --k5 /mnt/d/cypha_llm/k5scale/clean/train_all.txt`.
+
+## The upgraded K5 at scale (registered 2026-11-05, before the reads)
+
+**The question.** Does the upgraded K5 (the default since K5_UPGRADES.md: nucleus 0.8, 256 exchange classes as the backoff floor, the 8-candidate sentence gate by prompt association) gain from `train_all.txt` as the old K5 did?
+
+**Setup.** `origin/main` 6aed3eb, rebuilt (`cyphalm_trie selftest` ok; `scribe selftest` 90 checks, 0 failed). `K5_THREADS=4`. `scripts/k5_scale_read.sh` now also runs `scribe ladder --profile v3` and reports v2, SURPRISE, MATCH, v3, min3 and the disagree share for the K5 rung. The decision stays on v2.
+
+**Reproduction checks (made before registering, on 6aed3eb).**
+
+| check | expected | got |
+|---|---|---|
+| `--k5-base k5` on `train_all.txt`, seed 20261101 | NALL 0.412, the same samples | 0.412 [0.387, 0.439]; samples byte-identical to NALL's (MODEL lines aside) |
+| the new default on the 7 MB enwik8 `train.txt` (U8), seed 20261101 | 0.498 [0.469, 0.528] (the cloud) | 0.498 [0.469, 0.528] |
+
+`--k5-base k5` on `train_all.txt` now peaks at 8.45 GB (6.77 GB before; the context keys are 128 bits since K5_UPGRADES).
+
+**The arms.** Both on GEN-A dev, 250 prompts, seeds 20261101, 20262101, 20263101 and 20264101:
+- **U8**: the new default K5 on the 7 MB enwik8 `train.txt` (the baseline).
+- **C1**: the new default K5 on `train_all.txt` (329.6 MB).
+
+**The rule.**
+- C1 is adopted as the recommended writer if its 4-seed mean SCRIBE v2 is at least 0.02 above U8's 4-seed mean, with no sample over the 12-word cap.
+- copy32, build time and peak RAM are reported. If the class build or the gate's co-occurrence counts are too slow or too big at 330 MB, that is reported with what was measured.
+- If the rule holds, one GEN-A test read of C1 (seed 20261101), against U8's test 0.524 [0.493, 0.552]. The test split is not read otherwise.
+
+**The prediction.**
+- Q1. U8's 4 seeds: mean about 0.50 (K5_UPGRADES: 0.493–0.505).
+- Q2. C1's mean is about 0.03 above U8's (range 0.00 to +0.06). The old K5 gained +0.046; the gate and nucleus 0.8 already take part of what more text gives. The rule holds with probability about 55%.
+- Q3. C1's copy32 is 0.18–0.25 (higher than NALL's 0.17: nucleus 0.8 draws more from the top). 0 samples over the cap.
+- Q4. C1's build takes 3–10 minutes (the exchange classes over 12× the bigrams) and peaks at 10–14 GB.
+- Q5. SCRIBE v3 gains less than v2 between U8 and C1 (under +0.02), and the new judges disagree with v2 about the size of the gain.
+
+### Results (GEN-A dev, 250 prompts, `K5_THREADS=4`)
+
+SCRIBE v2 decides. v3 = mean(v2, SURPRISE, MATCH); min3 = the least of the three; disagree = the share of samples whose judges differ by more than 0.5 (docs/reports/SCRIBE_V3.md). v3's columns are the "SCRIBE v3" table of `scribe ladder --profile v3`, K5 rung.
+
+| arm | seed | v2 [95%] | SURPRISE | MATCH | v3 | min3 | disagree | copy32 | over the cap |
+|---|---|---|---|---|---|---|---|---|---|
+| U8 (7 MB) | 20261101 | 0.498 [0.469, 0.528] | 0.612 | 0.583 | 0.565 | 0.419 | 7% | 0.038 | 0 of 250 |
+| U8 | 20262101 | 0.496 [0.469, 0.524] | 0.590 | 0.575 | 0.554 | 0.407 | 9% | 0.041 | 0 of 250 |
+| U8 | 20263101 | 0.501 [0.472, 0.533] | 0.582 | 0.578 | 0.554 | 0.413 | 8% | 0.044 | 0 of 250 |
+| U8 | 20264101 | 0.505 [0.478, 0.533] | 0.595 | 0.575 | 0.559 | 0.414 | 9% | 0.050 | 0 of 250 |
+| **U8 mean** | | **0.500** | 0.595 | 0.578 | 0.558 | 0.413 | 8% | 0.043 | 0 of 1,000 |
+| C1 (330 MB) | 20261101 | 0.479 [0.450, 0.507] | 0.589 | 0.571 | 0.546 | 0.401 | 4% | 0.247 | 0 of 250 |
+| C1 | 20262101 | 0.462 [0.437, 0.487] | 0.587 | 0.558 | 0.536 | 0.398 | 2% | 0.228 | 0 of 250 |
+| C1 | 20263101 | 0.502 [0.476, 0.531] | 0.606 | 0.562 | 0.557 | 0.419 | 5% | 0.233 | 0 of 250 |
+| C1 | 20264101 | 0.473 [0.448, 0.497] | 0.602 | 0.569 | 0.548 | 0.407 | 6% | 0.236 | 0 of 250 |
+| **C1 mean** | | **0.479** | 0.596 | 0.565 | 0.547 | 0.406 | 4% | 0.236 | 0 of 1,000 |
+| **C1 − U8** | | **−0.021** | +0.001 | −0.013 | −0.011 | −0.007 | | | |
+
+**Cost.**
+
+| arm | K5 build | peak RAM | wall (build + 250 samples) | writing |
+|---|---|---|---|---|
+| U8 (7 MB) | 15–17 s | 0.30 GB | 2 min 5 s – 2 min 18 s | about 2 min |
+| C1 (330 MB) | 166–171 s | 8.67 GB | 5 min 37 s – 5 min 51 s | 104 s (seed 20261101) |
+| `--k5-base k5` on `train_all.txt` | 59–64 s | 8.45 GB | 2 min 19 s – 2 min 33 s | |
+
+- The exchange classes and the gate's co-occurrence counts add about 105 s to the build at 330 MB (166–171 s against 59–64 s for the old K5 on the same text) and 0.2 GB of peak RAM. Neither is too slow or too big. The log does not split the two.
+- Two C1 runs shared the PC at a time (8 cores in all), with the PC's other jobs running.
+
+**The rule fails.** C1's 4-seed mean (0.479) is 0.021 *below* U8's (0.500). The bar was U8 + 0.02 = 0.520. C1 is not adopted. **No test read was made.** The upgraded K5 stays on the 7 MB enwik8 `train.txt`.
+- C1's seeds span 0.462–0.502; U8's 0.496–0.505. Only one C1 seed reaches U8's lowest.
+- copy32 rises from 0.043 to 0.236. The cap held: 0 of 1,000 samples over 12 words (it removed candidates at 9 steps of seed 20261101).
+
+**The new judges.** For C1 against U8 they agree with v2 on the sign: v3 −0.011, MATCH −0.013, min3 −0.007; SURPRISE is level (+0.001). Their drop is about half of v2's.
+
+**The new judges on the first part of this report (the old K5).** The earlier reads' samples were scored again with `--profile v3` (no new sampling; the test samples were not scored again):
+
+| arm | v2 | SURPRISE | MATCH | v3 | min3 | disagree |
+|---|---|---|---|---|---|---|
+| E8, 4 seeds (mean) | 0.344 | 0.709 | 0.581 | 0.544 | 0.320 | 28% |
+| N7 | 0.350 | 0.698 | 0.577 | 0.542 | 0.321 | 28% |
+| N30 | 0.375 | 0.685 | 0.575 | 0.545 | 0.349 | 15% |
+| N100 | 0.363 | 0.673 | 0.563 | 0.533 | 0.343 | 13% |
+| N300 | 0.382 | 0.675 | 0.566 | 0.541 | 0.356 | 10% |
+| NALL, 4 seeds (mean) | 0.390 | 0.675 | 0.569 | 0.545 | 0.365 | 8% |
+| N300, 65,536 words | 0.366 | 0.687 | 0.563 | 0.539 | 0.343 | 10% |
+| NALL, 65,536 words | 0.402 | 0.696 | 0.563 | 0.554 | 0.373 | 12% |
+
+- **They disagree with v2.** v2 gives the old K5 +0.046 from E8 to NALL; v3 gives +0.001. SURPRISE falls (−0.034) and MATCH falls (−0.012) as the text grows. min3 rises (+0.045) because v2 is the lowest judge for these samples.
+- So the old K5's gain from 330 MB rests on v2 alone. The new judges do not confirm it, as they did not confirm the sentence gate's gain on 7 MB (v2 +0.145, v3 +0.011).
+- Per seed (E8 / NALL): v3 0.554, 0.547, 0.535, 0.541 / 0.558, 0.545, 0.537, 0.539. The files are `bench/k5_scale/results_pc_2026-11-04/reads/*.scribe3.md`.
+
+**The predictions, scored.**
+
+| | prediction | result | |
+|---|---|---|---|
+| Q1 | U8's mean about 0.50 | 0.500 (0.496–0.505) | hit |
+| Q2 | C1 about +0.03 (0.00 to +0.06); the rule holds (55%) | −0.021; fails | miss |
+| Q3 | C1's copy32 0.18–0.25; 0 over the cap | 0.228–0.247; 0 | hit |
+| Q4 | build 3–10 min, peak 10–14 GB | 2.8 min, 8.7 GB | miss (cheaper) |
+| Q5 | v3 gains less than v2; the judges disagree on the size | v3 −0.011 against v2 −0.021: same sign, half the size | partly |
+
+**What this means.**
+- More text helps the old K5 on v2 only. It does not help the upgraded K5 on any judge. The upgraded K5 on 7 MB (dev 0.500 over 4 seeds; test 0.524) stays the recommended writer, on the 7 MB text.
+- At 330 MB a quarter of the written bytes lie in 32-byte spans of the training text. The likely reason is that nucleus 0.8 and the gate pick the most-attested continuations, and a bigger text attests more long ones. That was not tested here.
+- Next, if wanted: a judge of another kind on E8 against NALL (the v2/v3 split above), and the upgraded K5 at 30 MB, where the old K5 had most of its v2 gain.
+
+**Files.** `bench/k5_scale/results_pc_2026-11-05/` (`READS2.txt`; every read's samples, log, v2 and v3 reports). On Odin's PC: `/mnt/d/cypha_llm/k5scale/reads2/` (`old/` holds the same two checks made on e8eb8e3 before the update to 6aed3eb, with the same numbers).
