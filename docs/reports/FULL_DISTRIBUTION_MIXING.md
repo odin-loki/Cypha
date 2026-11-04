@@ -279,3 +279,84 @@ First half only:
   4. the wall time and peak memory are stated.
 - **Prediction P7.** X2's `full_mix_bpc` is 1.502–1.512 (−0.067 to −0.077 against 1.5793). On the first half the gain is −0.071, as X1's was (−0.071 first half, −0.073 second). The n-gram adds an order-mixing model that the bitwise mixer partly duplicated before, so the gain should not grow.
 - **P8.** As − F and Bs − F are each within 0.01 of X1's (−0.061 and −0.058).
+
+## What it would take for `sample` to write from the same mixture
+
+Not built: `sample` is unchanged, and K5 is the writer. This is what it would need.
+
+1. **A non-learning query.** Today `FullMixer::step` predicts, scores and learns in one call, along the true byte's path. A writer needs `dist(ByteIn, P[256])` that learns nothing. For the bitwise arms that means the 255 bit probabilities of the partial-byte tree, each from the mixers and APMs without updating them. Or it samples bit by bit, so only the 8 nodes on the sampled path are needed (about 8/255 of the cost). Both are exact: a bitwise arm is a proper distribution by construction (the selftest checks it). Geometric mixing (B) already gives P[256].
+2. **The experts' whole distributions at every written byte.** `sample` already builds most of them (the trie, KN, InfiniGram 8192, class, similar-context, copy, doc). It would also need:
+   - InfiniGram at caps 4–512;
+   - the online n-gram's and the LSTM's distributions over the prompt and the text written so far, as `WriterExpert` does for the GLN and LSTM (save and restore their state around each continuation);
+   - the chain replica with online λs, and the final layer's weights.
+3. **Its learned state, carried over from the holdout and frozen.** After `context8k` (or `sample`'s own pass over the holdout), the mixers' weights, the APM tables, copy's confidences, the chain's λs and the final layer's weights would be kept and read without learning while writing (178 MB, mostly APM tables).
+4. **The writing problems seen before still apply.**
+   - The mixture is fitted for log loss on raw enwik8, markup and all. §13.15–13.18 found that experts which help prediction (the GLN, the LSTM, the online λs) lowered SCRIBE when sampled from.
+   - SSE sharpens confident predictions. That may suit temperature 0.6, or may sharpen markup.
+   - The test would be §13.16's: all 250 GEN-A dev prompts, SCRIBE v2, non-inferior to W0 (byte sampler), and compared with K5.
+5. **Cost.** The pass costs about 0.8–1.7 ms per byte here (most of it the experts, which `sample` builds anyway). The mixers themselves cost about 0.2 ms per byte (the replay runs 1 MiB in about 200 s). Writing 600 bytes × 250 prompts would take a few minutes.
+
+## X2: the result
+
+`context8k --full-mix` on the merged code. The PC was nearly idle (load about 1–2). Bits per byte:
+
+| Arm | First half | **Second half** | Against F (second half) |
+|---|---:|---:|---:|
+| F: the final layer's replica | 1.5978 | 1.5793 | — |
+| Fn: F normalised | 1.5975 | 1.5793 | 0.0000 |
+| Fs: Fn + SSE | 1.5747 | 1.5545 | −0.0248 |
+| A: bitwise logistic mixer | 1.5449 | 1.5247 | −0.0546 |
+| As: A + SSE | 1.5396 | 1.5189 | −0.0604 |
+| Rs: raw experts only, bitwise + SSE | 1.5970 | 1.5484 | −0.0309 |
+| B: geometric mixing | 1.5557 | 1.5312 | −0.0481 |
+| Bs: B + SSE | 1.5408 | 1.5169 | −0.0624 |
+| **ABs (headline)** | 1.5272 | **1.5051** | **−0.0742** |
+
+- `full_mix_bpc 1.5051 (arm ABs)`, against M0's `online_final_bpc` 1.5793.
+- F equals `online_final_bpc`. The replica chain and the n-gram's `dist()` match exactly.
+- 0 lines differ from M0 outside the `full_mix` lines (TALLY and GEN included). Selftest passes.
+- X2's arm lines equal X1m's, as registered.
+- **Wall:** 3434 s, against M0's 1726 s (+99%). The full-mix pass took 1699 s, most of it the experts computed again (the n-gram's whole distribution and the 256-wide LSTM are the new costs).
+- **Memory:** peak RSS 1098 MB, against M0's 874 MB (+224 MB).
+
+**The rule holds.** All four conditions are met:
+1. 1.5051 is 0.0742 below 1.5793 (at least 0.005 needed).
+2. The answers are unchanged.
+3. Selftest passes.
+4. The wall time and memory are stated above.
+
+**Predictions:**
+- P7 (1.502–1.512): **held** (1.5051).
+- P8 (As − F and Bs − F within 0.01 of X1's): **held** (−0.0604 against −0.0614; −0.0624 against −0.0577).
+
+**Reading.**
+- The gain does not shrink on the stronger default: −0.073 on the old default, −0.074 on the new.
+- The raw-input bitwise mixer (Rs) now beats the linear final layer by 0.031 (0.013 before). With the n-gram's orders as inputs, it has more to mix.
+
+## Summary
+
+| Default | `online_final_bpc` | `full_mix_bpc` (ABs) | Gain | Extra wall | Extra memory |
+|---|---:|---:|---:|---:|---:|
+| Old (B0; X1) | 1.6232 | 1.5499 | −0.0733 | +796 s pass (+77%) | +222 MB |
+| Main's, with the n-gram and LSTM 256 (M0; X2) | 1.5793 | **1.5051** | **−0.0742** | +1699 s pass (+99%) | +224 MB |
+
+**What became of each idea:**
+- Normalising the linear mixture: no gain (its mass is already 0.9998).
+- SSE after the linear final layer: −0.025 to −0.031.
+- Bitwise logistic mixing with SSE: −0.060.
+- Geometric mixing with SSE: −0.058 to −0.062. It needs a small step (lrb 0.0002); at 0.002 it was worse than the linear mixture.
+- Both, mixed per bit: −0.073 to −0.074.
+- A bigger order-2 APM and decaying steps: no gain.
+
+**What should become default.** By the rule, ABs's line becomes `context8k`'s headline bits per byte. The flag is off in this branch. Turning it on doubles `context8k`'s wall time, so that is the cloud session's choice at merge.
+- One way to keep the cost down: fold the full-mix pass into the final layer's loop. That loop already calls `fill_experts`, class and copy for every byte; the extra InfiniGram, similar-context, LSTM and n-gram passes could keep their whole distributions instead of only the true byte's.
+
+## Risks before merging
+
+- **One holdout.** Every number is the same 1 MiB of enwik8. The settings were tuned on its first half, and the scored second half follows it. The first and second halves agree (−0.071 and −0.073), but no other text has been read.
+- **No interval.** The per-byte bits are not kept, so there is no bootstrap. The gain is far larger than earlier intervals on this holdout (about ±0.004), but it is not measured here.
+- **Cost.** `context8k --full-mix` doubles the wall time and adds about 220 MB. Anything that runs `context8k` often (`scripts/cypha_report_card.sh`, the GLNX dump) would pay it if it became the default.
+- **The replica must follow the chain.** F checks this on every run: any change to the chain or the final layer (a new stage, a new input, a new step rule) must be mirrored in `full_mixer.hpp`, or arm F stops equalling `online_final_bpc`. `--doc-boost` and `--gln` are refused for this reason. `--final-gate lstm` is refused too.
+- **`OnlineNgram::dist`** is new, in another session's file. It matched `code()` exactly on all 1 MiB, but two nodes of one byte sharing a hashed slot could make them differ in rare cases.
+- **Prediction, not writing.** Nothing here changes `sample`. Earlier experts that helped prediction lowered SCRIBE when sampled from (§13.15–13.18). See the section above.
+- **Files.** The dumps are on this PC, `~/fullmix_data/x0.fmx` (18 GB) and `x1m.fmx` (28 GB), for more replay tuning. Run outputs: `/mnt/d/cypha_llm/full_mix/`.
