@@ -151,6 +151,18 @@ score = wf·z(fluency) + wp·z(pmi) + mbr·z(chrF consensus) + eg·z(grid) + lda
 - **Prediction:** v3.1 peaks at B 1–1.5. At B 2, copy32 passes the +0.02 bound or SURPRISE 3.1's foreign-word group pulls v3.1 down.
 - The PC's load average was about 90 on 64 threads during these reads, from other sessions. Wall times are measured under that load.
 
+## Amendment 2 (2026-11-05, after T2b and T2c were read, before any further run)
+
+- **What was seen.** v3.1 rose with B: 0.483 (B0), 0.503 (B 0.5), 0.567 (B 1), 0.670 (B 1.5), 0.712 (B 2), and v2 rose to 0.758. Reading T2c's samples shows topic words strung together with broken grammar ("Agassi played baseball team posted the Braves won their team won seven cardinals …"). K5's bits on the human continuations rise at B 2 (1.586 against 1.532), and SCRIBE's sentence-form distance rises too (D_S 0.66 → 1.11).
+- **Reading.** SCRIBE v2 and v3.1 reward topical stuffing at this rate. SCRIBE_V31.md already lists "stuffing at a lower rate" among the held-out attacks v3.1 misses. The rule's last condition, the blind raters, is the guard. It now carries the decision for this family.
+- **Added, before their runs:**
+  - The T family's pick by the registered rule is T2c (B 2). It is confirmed at 4 seeds as registered. **T2 (B 1) and T2b (B 1.5) are also run at the 4 seeds**, so the raters get a graded set. All of their GEN files are saved.
+  - T5 (200 topics) and T6a/b/c (LDA from 30, 100 and 330 MB) run at B 2, as registered, **and also at B 1** (T5_1, T6a_1, T6b_1, T6c_1).
+  - **A stuffing check that does not decide**, reported for every arm and for the human continuations:
+    - the share of content-word tokens (lda.hpp's content words);
+    - K5's own mean log2 probability per word of the written text, without the rescaling (`--k5-gate 1`, the same model): how grammatical K5 finds it.
+- **Prediction:** the raters rate T2c no higher than B0 (both about 2 of 10), and T2 at most +0.5 over B0.
+
 ## Results
 
 (Added after the reads.)
