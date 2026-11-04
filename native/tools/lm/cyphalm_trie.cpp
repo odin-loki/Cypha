@@ -360,11 +360,12 @@ struct Args {
     std::string doc;                              // GEN-C: document experts in sample (--doc SPEC; off by default)
     bool no_doc = false;                          // GEN-C2: the document experts' cache off in context8k and qa's holdout
     std::string dump_experts;                     // GLNX: context8k writes every expert's per-byte probability here
-    // context8k's defaults since §13.15 (C1-C3): the chain learns online, the final layer and the GLN are on.
-    // --frozen-mix, --no-online-final and --no-gln restore the old lines; answers never read any of them.
+    // context8k's defaults since §13.15 (C1, C2): the chain learns online and the final layer is on. The GLN (C3) was
+    // on from 2026-11-03 to 11-04 and is off again (Odin: "turn GLN off by default"); --gln turns it on.
+    // --frozen-mix and --no-online-final restore the old lines; answers never read any of them.
     bool online_mix = true;                       // GLNX: the content mixer's lambdas learn online (context8k)
     bool online_final = true;                     // GLNX: one online gated mixer over every stage, after the chain
-    bool no_gln = false;                          // context8k: --no-gln leaves the GLN out
+    bool no_gln = false;                          // context8k: --no-gln (the default now; kept for old scripts)
     bool gln = false, gln_feedback = false;       // §13.15: sample --gln (off: it lowers SCRIBE); --gln-feedback
     std::string gln_mix = "lin", gln_clean;       // §13.16: sample's GLN mixing (lin, after, geo) and clean-prose text
     std::string gln_load;                         // §13.17: a GLN trained at scale (gln-train), for context8k and sample
@@ -456,7 +457,7 @@ Args parse(int argc, char** argv, int from) {
         else if (s == "--no-gln") a.no_gln = true;                // §13.15
         else if (s == "--gln-mix") a.gln_mix = next(), a.gln = true;     // §13.16
         else if (s == "--gln-clean") a.gln_clean = next(), a.gln = true; // §13.16
-        else if (s == "--gln-load") a.gln_load = next();                // §13.17
+        else if (s == "--gln-load") a.gln_load = next(), a.gln = true;  // §13.17
         else if (s == "--gln") a.gln = true;                      // §13.15
         else if (s == "--gln-feedback") a.gln = a.gln_feedback = true;  // §13.15
         else if (s == "--dk-plain") a.dk_plain = std::atof(next());  // DK2
@@ -1105,7 +1106,7 @@ int cmd_context8k(const Args& a) {
     // bucket, and as one more input of --online-final. --gln-feedback closes the loop: two more side values gate every GLN
     // neuron, the chain's recent loss and the GLN's loss against it (moving averages over about 32 bytes already seen).
     std::vector<double> pgln;
-    if (!a.no_gln) {  // the default in context8k (§13.15, C3)
+    if (a.gln && !a.no_gln) {  // context8k --gln (§13.15, C3); off by default since 2026-11-04
         cypha::online::BitwiseGLN::Params gp;
         gp.extra = a.gln_feedback ? 2 : 0;
         std::unique_ptr<cypha::online::BitwiseGLN> glp;

@@ -1137,3 +1137,17 @@ None of this changes what the sampler writes. That needs the GLN and the online 
   - `geo` scores 0.111 (0.090 with the 7 MiB GLN): it fails the rule (≥ 0.154). The prediction that `geo` holds up missed.
   - `gate` scores 0.143 (0.117 with the 7 MiB GLN): it fails, as predicted. At T 1.0 it still beats W0, 0.122 against 0.073.
 - **Reading.** Scale on the wrong kind of text does not help. The GLN gained on writing (both mixes rose by 0.02–0.03) but lost on prediction, because the test is Wikipedia and the training was the web. The next step is the same test at scale on in-domain text: clean Wikipedia prose that does not overlap enwik8 (for example enwik9 beyond its first 100 MB, cleaned by SCRIBE's cleaner), with the online pass on that text too.
+
+### 13.18 The GLN off by default; a plain byte LSTM instead (2026-11-04)
+
+**Odin:** "Whoa. I was wrong about the GLN." Then: "I want you to turn GLN off by default. I'm thinking maybe just a simple LSTM. Give that a whiz instead of the GLN. It helped the original CyphaLM and that's what PAQ8 uses."
+
+**The GLN is off by default** in `context8k`. The default is now the online chain plus the online final layer (C2): 1.6543 bits per byte, 251 MB. `--gln` turns the GLN back on. Answers are unchanged, as before.
+
+**The LSTM** (`native/include/cypha/online/byte_lstm.hpp`) is the byte LSTM that was inside the GLN, now on its own: embedding 16, hidden 64, a softmax over 256 bytes, truncated BPTT over 20 bytes, Adam. It gives a whole next-byte distribution in one step, so it costs little in scoring and in writing.
+
+**Fast check** (registered before it): the LSTM streams over the 1 MiB holdout, learning online, then `gln_mix.py` scores it in place of the GLN.
+- L0: no warm-up. L2: first learning online over wiki train's last 2 MiB.
+- Read: the LSTM alone; M1 (the online chain with the LSTM as its last stage) against M0; M3 (plus the final layer, the LSTM an input) against M2.
+- **Rule:** the LSTM goes into `cyphalm_trie` (`context8k --lstm`, `sample --lstm`) if M1 − M0 ≤ −0.005 with its 95% interval below 0. Then a C++ run decides the default (registered then), and the 250-prompt writing test decides `sample`.
+- **Predictions:** the LSTM alone scores 2.2–2.5 bits per byte. M1 − M0 is −0.005 to −0.015, less than the GLN's −0.027, since the GLN held hashed counts as well. The 2 MiB warm-up helps by at least 0.02 alone.
