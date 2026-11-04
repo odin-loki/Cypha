@@ -370,6 +370,8 @@ struct Args {
     std::string gln_mix = "lin", gln_clean;       // §13.16: sample's GLN mixing (lin, after, geo) and clean-prose text
     std::string gln_load;                         // §13.17: a GLN trained at scale (gln-train), for context8k and sample
     bool online_lambdas = false;                  // §13.22: sample writes with the online mixer's learned lambdas
+    bool lstm = false, two_rates = false;         // §13.18: the byte LSTM expert; §13.21: slow and fast chains
+    std::string final_gate = "ig";                // §13.21: the final layer's weight sets: ig (bucket x byte class) or copy
     double dk_plain = 0;                          // DK2: share of don't-know training turns with no token
     std::string fam_ent_at = "all";               // DK2: where --fam-ent's frames go (all | answer | start)
     bool copy_frame = false;                      // DK2: copy a frame's entity, not its end; the tag may repeat the message
@@ -460,6 +462,9 @@ Args parse(int argc, char** argv, int from) {
         else if (s == "--gln-clean") a.gln_clean = next(), a.gln = true; // §13.16
         else if (s == "--gln-load") a.gln_load = next(), a.gln = true;  // §13.17
         else if (s == "--online-lambdas") a.online_lambdas = true;      // §13.22
+        else if (s == "--lstm") a.lstm = true;                          // §13.18
+        else if (s == "--two-rates") a.two_rates = true;                // §13.21
+        else if (s == "--final-gate") a.final_gate = next();            // §13.21
         else if (s == "--gln") a.gln = true;                      // §13.15
         else if (s == "--gln-feedback") a.gln = a.gln_feedback = true;  // §13.15
         else if (s == "--dk-plain") a.dk_plain = std::atof(next());  // DK2
@@ -942,6 +947,13 @@ int cmd_context8k(const Args& a) {
     if (keep) pt_trie.assign(pt.begin(), pt.end());
     std::vector<std::vector<float>> pinf_caps;
     std::vector<double> lkn;
+    // §13.21 --two-rates: the chain also runs at a slow and a fast step from here on (online only); the final layer
+    // reads both. The main chain's lines are unchanged.
+    std::vector<std::vector<double>> rate_chains;
+    if (a.two_rates && a.online_mix) {
+        rate_chains.assign(2, pt);
+        cypha::online::g_rate_chains = &rate_chains;
+    }
     if (kn) {
         lkn = mix_bkn_into(*kn, data.data(), kTrain, half, kn_rep, pt);
         double b = 0;
@@ -1143,6 +1155,25 @@ int cmd_context8k(const Args& a) {
         mix_into(pgln, bk8k, half, kBuckets, base);
         chain_line("_gln");
     }
+    // §13.18 --lstm (Odin: "maybe just a simple LSTM ... that's what PAQ8 uses"): the byte LSTM (cypha::online::ByteLSTM,
+    // learning online from scratch over the holdout, each byte predicted before it is learned) as the chain's last stage,
+    // a lambda per InfiniGram bucket, and one more input of --online-final.
+    std::vector<double> plstm;
+    if (a.lstm) {
+        cypha::online::ByteLSTM L;
+        plstm.resize(H);
+        double P[256], lb = 0;
+        for (std::size_t k = 0; k < H; ++k) {
+            L.dist(P);
+            plstm[k] = std::max(P[data[kTrain + k]], 1e-12);
+            if (k >= half) lb += -std::log2(plstm[k]);
+            L.step(data[kTrain + k], true);
+        }
+        std::cout << "lstm_alone_bpc " << lb / static_cast<double>(H - half) << "\n";
+        mix_into(plstm, bk8k, half, kBuckets, base);
+        chain_line("_lstm");
+    }
+    cypha::online::g_rate_chains = nullptr;  // §13.21: the slow and fast chains are complete
     if (dump || a.online_final) {
         // GLNX (docs/GENERATION_PLAN.md §13.10): one row of float32 per holdout byte. Columns, in order: the byte; the trie's
         // 5 experts' probability of it and the match (hit, present); the trie mixture; Kneser-Ney (prob, bucket);
@@ -1158,8 +1189,10 @@ int cmd_context8k(const Args& a) {
         // gates by a small context), learned online by exponentiated gradient on log loss, every set starting at the chain
         // (cypha::online::OnlineFinal; kIn picks its inputs from the row, the chain last).
         static const int kIn[24] = {1, 2, 3, 4, 5, 6, 8, 9, 11, 12, 13, 14, 15, 18, 20, 22, 25, 27, 29, 31, 32, 33, 34, 35};
-        cypha::online::OnlineFinal<24> fin(80);
-        cypha::online::OnlineFinal<25> fin25(80);  // §13.15: with the GLN before the chain
+        // The inputs: 23 of the row's values, then the GLN, the LSTM, the slow and fast chains when present, then the chain.
+        const int nin = 24 + !pgln.empty() + !plstm.empty() + 2 * !rate_chains.empty();
+        cypha::online::OnlineFinal fin(80, nin);
+        const bool copy_gate = a.final_gate == "copy";
         double fin_bits = 0, chain_bits = 0;
         for (std::size_t k = 0; k < H; ++k) {
             const std::size_t i = kTrain + k;
@@ -1204,21 +1237,23 @@ int cmd_context8k(const Args& a) {
             if (dump) f.write(reinterpret_cast<const char*>(row.data()), static_cast<std::streamsize>(C * sizeof(float)));
             if (a.online_final) {
                 const unsigned char pb = i ? data[i - 1] : ' ';
-                const int g = std::min(static_cast<int>(bk8k[k]), 15) * 5 + cypha::online::OnlineFinal<24>::byte_class(pb);
-                double q[25];
+                // §13.21 --final-gate copy: copy's bucket (8) x the previous byte's class (5) x InfiniGram matched >= 16 (2).
+                const int bc = cypha::online::OnlineFinal::byte_class(pb);
+                const int g = copy_gate ? copy_bucket(cn) * 10 + bc * 2 + (n8k[k] >= 16 ? 1 : 0)
+                                        : std::min(static_cast<int>(bk8k[k]), 15) * 5 + bc;
+                double q[28];
                 int nq = 0;
                 for (int j = 0; j < 23; ++j) q[nq++] = std::max(1e-9, static_cast<double>(row[kIn[j]]));
                 if (!pgln.empty()) q[nq++] = std::max(1e-9, pgln[k]);
+                if (!plstm.empty()) q[nq++] = std::max(1e-9, plstm[k]);
+                for (const auto& rc : rate_chains) q[nq++] = std::max(1e-9, rc[k]);
                 q[nq++] = std::max(1e-9, static_cast<double>(row[kIn[23]]));
-                const double p = pgln.empty() ? fin.predict(g, q) : fin25.predict(g, q);
+                const double p = fin.predict(g, q);
                 if (k >= half) {
                     fin_bits += -std::log2(std::max(p, 1e-12));
                     chain_bits += -std::log2(std::max(base[k], 1e-12));
                 }
-                if (pgln.empty())
-                    fin.update(g, q, p);
-                else
-                    fin25.update(g, q, p);
+                fin.update(g, q, p);
             }
         }
         if (dump) std::cerr << "dumped " << H << " rows of " << C << " columns to " << a.dump_experts << " (half " << half << ")\n";

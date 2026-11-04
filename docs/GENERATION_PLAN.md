@@ -1194,3 +1194,34 @@ None of this changes what the sampler writes. That needs the GLN and the online 
 **Rule:** `--online-lambdas` becomes `sample`'s default if SO's best temperature is at least W0's best minus 0.02 (no worse, within noise), with copy share within GEN_TRACK's limit.
 
 **Prediction:** SO is within ±0.02 of W0. The lambdas move little once learned, and writing is set more by the sampler than by small changes in the weights.
+
+**§13.18 and §13.21 fast-check results** (the dump; bits per byte on the second half):
+
+| Arm | Bits per byte | Against [95%] |
+|---|---:|---|
+| LSTM alone (no warm-up; 2 MiB warm-up) | 2.6447; 2.5326 | — |
+| The online chain + the LSTM stage | 1.6547 | the chain 1.6692: **−0.0145 [−0.0182, −0.0111]** |
+| + the final layer, the LSTM an input | **1.6298** | the final layer 1.6538: −0.0240 [−0.0296, −0.0191] |
+| U1: two learning rates | 1.6512 | U0 1.6538: −0.0026 [−0.0030, −0.0022] |
+| U2: final-layer sets by copy × byte class × long match | 1.6493 | U0: **−0.0046 [−0.0052, −0.0038]** |
+| U3: U1 + U2 | **1.6470** | U0: **−0.0068 [−0.0077, −0.0058]** |
+
+- **The LSTM passes its rule** (M1 − M0 ≤ −0.005, interval below 0). It goes to C++ as `--lstm`. It gives about 70% of the GLN's gain (−0.024 against −0.034 with the final layer), holds about 1 MB against the GLN's 101 MB, and runs faster.
+- The 2 MiB warm-up helps the LSTM alone (−0.11) but not the mixture (−0.0002). It is left out.
+- **Predictions:**
+  - The LSTM alone at 2.2–2.5 missed; it scored 2.53–2.64.
+  - M1 − M0 between −0.005 and −0.015 held (−0.0145).
+  - The warm-up gaining at least 0.02 held alone, but not in the mixture.
+- **U2 and U3 pass, U1 alone does not.** Predictions: U1 −0.003 to −0.010 missed (−0.0026); U2 within ±0.003 missed (−0.0046); U3 near U1 missed (−0.0068). U3 goes to C++ as `--final-gate copy --two-rates`.
+
+**C++ runs** (registered before them; this container, one core each, side by side):
+- D0: `context8k` (the default: online chain and final layer, no GLN).
+- D1: `--lstm`.
+- D2: `--final-gate copy --two-rates`.
+- D3: `--lstm --final-gate copy --two-rates`.
+
+**Rules** (each also needs answer tallies identical to D0's and selftest passing):
+- `--lstm` becomes the default if D1's `online_final_bpc` is at least 0.01 below D0's, with wall time within +35%.
+- `--final-gate copy --two-rates` becomes the default if D2 is at least 0.003 below D0, with wall time within +10%.
+
+**Predictions:** D1 near 1.630; D2 near 1.647; D3 near 1.623.

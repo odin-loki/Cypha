@@ -78,23 +78,23 @@ inline bool g_online_mix = false;
 // §13.22 (sample --online-lambdas): mix_into returns the online lambdas' state after the whole holdout, not the frozen
 // fit, so the sampler writes with what the online mixer has learned (copy's short matches still held at 0, B4B).
 inline bool g_online_lambdas_out = false;
-inline std::vector<double> online_mix(const std::vector<double>& pe, const std::vector<int>& bk, int nb,
-                                      std::vector<double>& cur, int copy_m = -1) {
+// §13.21 (two learning rates, as PAQ runs mixers at several rates): with g_rate_chains set, every online stage also
+// runs a slow (0.005) and a fast (0.08) copy of the chain, each over its own running mixture, so the final layer can
+// read all three and pick. The main chain (0.02) is unchanged by them.
+inline std::vector<std::vector<double>>* g_rate_chains = nullptr;
+inline constexpr double kRateSteps[2] = {0.005, 0.08};
+
+// One stage by exponentiated gradient at step eta over cur (see online_mix); lam gets the last weights when given.
+inline void eg_stage(const std::vector<double>& pe, const std::vector<int>& bk, int nb, std::vector<double>& cur,
+                     double eta, const std::vector<char>& dead, std::vector<double>* lam) {
     std::vector<double> we(static_cast<std::size_t>(nb), 0.05), wc(static_cast<std::size_t>(nb), 0.95);
-    std::vector<char> dead(static_cast<std::size_t>(nb), 0);
-    if (copy_m >= 0) {
-        std::vector<double> one(static_cast<std::size_t>(nb), 1.0);
-        cyphalm::copy_clip(one.data(), copy_m);
-        for (std::size_t b = 0; b < one.size(); ++b) dead[b] = one[b] == 0.0;
-    }
-    std::vector<double> lam(static_cast<std::size_t>(nb));
     for (std::size_t k = 0; k < cur.size(); ++k) {
         const std::size_t b = static_cast<std::size_t>(bk[k]);
         if (dead[b]) continue;  // lambda 0: cur stays
         const double prev = cur[k], l = we[b], p = l * pe[k] + (1 - l) * prev;
         cur[k] = p;
         const double pp = std::max(p, 1e-300);
-        double e = we[b] * std::exp(0.02 * std::min(pe[k] / pp, 30.0)), c = wc[b] * std::exp(0.02 * std::min(prev / pp, 30.0));
+        double e = we[b] * std::exp(eta * std::min(pe[k] / pp, 30.0)), c = wc[b] * std::exp(eta * std::min(prev / pp, 30.0));
         double z = e + c;
         e = std::max(e / z, 1e-4);
         c = std::max(c / z, 1e-4);
@@ -102,7 +102,22 @@ inline std::vector<double> online_mix(const std::vector<double>& pe, const std::
         we[b] = e / z;
         wc[b] = c / z;
     }
-    for (std::size_t b = 0; b < lam.size(); ++b) lam[b] = dead[b] ? 0.0 : we[b];
+    if (lam)
+        for (std::size_t b = 0; b < lam->size(); ++b) (*lam)[b] = dead[b] ? 0.0 : we[b];
+}
+
+inline std::vector<double> online_mix(const std::vector<double>& pe, const std::vector<int>& bk, int nb,
+                                      std::vector<double>& cur, int copy_m = -1) {
+    std::vector<char> dead(static_cast<std::size_t>(nb), 0);
+    if (copy_m >= 0) {
+        std::vector<double> one(static_cast<std::size_t>(nb), 1.0);
+        cyphalm::copy_clip(one.data(), copy_m);
+        for (std::size_t b = 0; b < one.size(); ++b) dead[b] = one[b] == 0.0;
+    }
+    std::vector<double> lam(static_cast<std::size_t>(nb));
+    eg_stage(pe, bk, nb, cur, 0.02, dead, &lam);
+    if (g_rate_chains)
+        for (std::size_t r = 0; r < g_rate_chains->size() && r < 2; ++r) eg_stage(pe, bk, nb, (*g_rate_chains)[r], kRateSteps[r], dead, nullptr);
     return lam;
 }
 inline std::vector<double> mix_into(const std::vector<double>& pe, const std::vector<int>& bk, std::size_t half, int nb,
@@ -156,6 +171,8 @@ inline std::vector<double> mix_bkn_into(const cyphalm::bkn::ByteKN& kn, const st
     std::vector<int> bk(cur.size());
     for (std::size_t k = 0; k < cur.size(); ++k) pe[k] = kn.prob_bucket(data, train + k, data[train + k], bk[k]);
     if (replace) {
+        if (g_rate_chains)
+            for (auto& c : *g_rate_chains) c = pe;  // §13.21: the slow and fast chains start where the main one does
         cur.swap(pe);
         return {};
     }
@@ -298,14 +315,11 @@ inline void mix_doc_into(const cyphalm::DocTopic& dt, const std::uint8_t* data, 
 /// class, 80 sets, as gate24 gates by a small context), learned online by exponentiated gradient on log loss, every set
 /// starting at the chain. predict gives the mixture's probability of the true byte from the inputs' probabilities q
 /// (each at least 1e-9); update takes one step on -log p. Another expert joins as one more input (Inputs + 1).
-template <int Inputs>
 class OnlineFinal {
  public:
-    static constexpr double kStart = 0.01 / (1.0 + 0.01 * (Inputs - 1));       ///< each input but the chain
-    static constexpr double kStartChain = 1.0 / (1.0 + 0.01 * (Inputs - 1));   ///< the chain (the last input)
-
-    explicit OnlineFinal(int sets) : w_(static_cast<std::size_t>(sets) * Inputs, kStart) {
-        for (int g = 0; g < sets; ++g) w_[static_cast<std::size_t>(g) * Inputs + (Inputs - 1)] = kStartChain;
+    /// sets weight sets of `inputs` weights each; every set starts at the chain (the last input), the others at 0.01.
+    OnlineFinal(int sets, int inputs) : n_(inputs), w_(static_cast<std::size_t>(sets) * inputs, 0.01 / (1.0 + 0.01 * (inputs - 1))) {
+        for (int g = 0; g < sets; ++g) w_[static_cast<std::size_t>(g) * inputs + (inputs - 1)] = 1.0 / (1.0 + 0.01 * (inputs - 1));
     }
 
     /// The previous byte's class for a gate: 0 space, 1 letter, 2 digit, 3 markup ([]{}<>|&=), 4 other.
@@ -315,22 +329,23 @@ class OnlineFinal {
     }
 
     double predict(int set, const double* q) const {
-        const double* w = &w_[static_cast<std::size_t>(set) * Inputs];
+        const double* w = &w_[static_cast<std::size_t>(set) * n_];
         double p = 0;
-        for (int j = 0; j < Inputs; ++j) p += w[j] * q[j];
+        for (int j = 0; j < n_; ++j) p += w[j] * q[j];
         return p;
     }
 
     void update(int set, const double* q, double p) {
-        double* w = &w_[static_cast<std::size_t>(set) * Inputs];
+        double* w = &w_[static_cast<std::size_t>(set) * n_];
         double z = 0;
-        for (int j = 0; j < Inputs; ++j) z += (w[j] *= std::exp(0.05 * std::min(q[j] / std::max(p, 1e-300), 30.0)));
+        for (int j = 0; j < n_; ++j) z += (w[j] *= std::exp(0.05 * std::min(q[j] / std::max(p, 1e-300), 30.0)));
         double z2 = 0;
-        for (int j = 0; j < Inputs; ++j) z2 += (w[j] = std::max(w[j] / z, 1e-7));
-        for (int j = 0; j < Inputs; ++j) w[j] /= z2;
+        for (int j = 0; j < n_; ++j) z2 += (w[j] = std::max(w[j] / z, 1e-7));
+        for (int j = 0; j < n_; ++j) w[j] /= z2;
     }
 
  private:
+    int n_;
     std::vector<double> w_;
 };
 
