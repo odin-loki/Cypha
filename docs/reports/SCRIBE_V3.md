@@ -175,11 +175,93 @@ scribe ladder  --pack enwik:$E:16:48 --ref enwik:$E:48:56 --test enwik:$E:72:95.
 scribe attacks --pack enwik:$E:16:48 --ref enwik:$E:48:56 --test enwik:$E:72:95.37 --vectors vec32 --seed 1123581321 --outside enwik:$E:0:16 --n 200 --label att_fresh
 ```
 
-(Filled in after the single read.)
+Read once, 2026-11-04, at the frozen commit. 500 standard samples from 5,839 candidates. The ladder took 14 s with a 509 MB peak; the battery 16 s.
+
+| Pair | v2 | SURPRISE | MATCH | v3 |
+|---|---|---|---|---|
+| human > sentences shuffled | 0.975 PASS | 0.950 PASS | **0.940 FAIL** | 0.981 PASS |
+| sentences shuffled > words shuffled | 0.999 PASS | 1.000 PASS | 0.979 PASS | 1.000 PASS |
+| words shuffled > random lexicon words | 0.998 PASS | 0.961 PASS | 0.950 PASS | 0.975 PASS |
+| random lexicon words > random letters | 0.998 PASS | 1.000 PASS | 1.000 PASS | 1.000 PASS |
+| random letters > one phrase repeated | 1.000 PASS | 1.000 PASS | 1.000 PASS | 1.000 PASS |
+| **pairs passed** | 5 of 5 | **5 of 5** | **4 of 5** | **5 of 5** |
+
+Rung means (95% interval):
+
+| Rung | v2 | SURPRISE | MATCH | v3 |
+|---|---|---|---|---|
+| human | 0.916 [0.901, 0.931] | 0.903 [0.891, 0.914] | 0.900 [0.887, 0.913] | 0.906 [0.896, 0.916] |
+| sentences shuffled | 0.354 | 0.667 | 0.659 | 0.560 |
+| words shuffled | 0.003 | 0.225 | 0.338 | 0.189 |
+| random lexicon words | 0.001 | 0.158 | 0.249 | 0.136 |
+| random letters | 0.000 | 0.066 | 0.058 | 0.041 |
+| one phrase repeated | 0.000 | 0.000 | 0.000 | 0.000 |
+| human, short | 0.954 | 0.942 | 0.951 | 0.949 |
+
+v2 reproduces its own frozen fresh verdict (0.975, 0.999, 0.998, 0.998, 1.000).
+
+**Rule 1 fails for MATCH**: 0.940 on human > sentences shuffled. Rule 1 holds for SURPRISE (just: 0.950) and for the v3 mean (0.975 or more on every pair). On this pair MATCH has only exact string repetition between sentences to go on, and on dev data it already had the thinnest margin (0.953, 0.955).
+
+Attack battery (fresh):
+
+| Attack | v2 | SURPRISE | MATCH | v3 | caught by | rule |
+|---|---|---|---|---|---|---|
+| human | 0.895 | 0.899 | 0.820 | 0.871 | | |
+| copy_pack | 0.107 (0.991) | 0.040 (0.997) | 0.000 (1.000) | 0.049 (0.996) | v2, S, M | PASS |
+| echo_repeat | 0.000 (1.000) | 0.005 (1.000) | 0.000 (1.000) | 0.002 (1.000) | v2, S, M | PASS |
+| echo_copy | 0.900 (0.523) | 0.900 (0.498) | 0.000 (1.000) | 0.600 (0.948) | M | FAIL |
+| stuff_human | 0.443 (0.807) | 0.658 (0.781) | 0.674 (0.624) | 0.592 (0.825) | none | FAIL |
+| stuff_generic | 0.977 (0.329) | 0.834 (0.679) | 0.893 (0.354) | 0.901 (0.457) | none | FAIL |
+| loop | 0.000 (1.000) | 0.018 (0.999) | 0.003 (0.985) | 0.007 (1.000) | v2, S, M | PASS |
+| generic | 0.835 (0.790) | 0.653 (0.970) | 0.461 (0.967) | 0.649 (0.930) | S, M | FAIL |
+| shuffle_docs | 0.336 (0.966) | 0.668 (0.939) | 0.511 (0.951) | 0.505 (0.981) | v2, M | PASS |
+| cooc_pack | 0.149 (0.977) | 0.096 (0.995) | 0.000 (1.000) | 0.082 (0.995) | v2, S, M | PASS |
+| reorder (extra) | 0.892 (0.511) | 0.897 (0.500) | 0.818 (0.504) | 0.869 (0.507) | none | — |
+| cooc_out (extra) | 0.839 (0.536) | 0.809 (0.684) | 0.768 (0.533) | 0.805 (0.608) | none | — |
+| offprompt (extra) | 0.895 (0.500) | 0.899 (0.500) | 0.701 (0.747) | 0.832 (0.634) | none | — |
+
+**Rule 2 fails: 5 of 9 attacks pass.**
+
+- Copying, echo, loops and the co-occurrence attack from the pack are caught by every judge.
+- The new judges add three things v2 does not have:
+  - MATCH alone catches copied prompt sentences (1.000, where v2 is at 0.523).
+  - Both new judges catch the generic paragraph (0.970, 0.967, where v2 is at 0.790).
+  - Both see the co-occurrence attack as copying (0.995, 1.000).
+- In two of those cases the mean of three stays below 0.95 (0.948 and 0.930): one judge's catch is diluted by two judges that rate the text as human. `min3` and the `disagree` flag are there for this case. 99% of `echo_copy` texts are flagged.
+- Keyword stuffing is caught by no judge, v2 included (0.807 and 0.329).
+
+The extras behave as registered blind spots:
+
+- Sentences reordered within the text are invisible to all three (0.50).
+- The co-occurrence attack drawn from outside the pack escapes copy detection. It is caught by nothing (v3 0.608), but SURPRISE (0.684) and MATCH see more of it than v2 (0.536).
+- Off-prompt human text is seen only through MATCH's echo (0.747).
 
 ## K5 cross-check (report only)
 
-(Filled in after the fresh verdict: `scribe ladder --profile v3` on the GEN-A dev ladder, `--test enwik:$E:56:64 --seed 20261027`, with /root/work/k5m/OLD.gen.txt and NEW.gen.txt.)
+The GEN-A dev ladder (enwik8 [56, 64) MiB, seed 20261027, no `--chain-rng`), with K5's 250 dev continuations: old K5 (nucleus 0.9, no classes, no gate: /root/work/k5m/OLD.gen.txt) and new K5 (nucleus 0.8, 256 classes, the 8-candidate co-occurrence gate: NEW.gen.txt). MATCH's echo uses each GEN line's PROMPT. v2's numbers equal K5's records byte for byte.
+
+| K5 dev samples | n | v2 | SURPRISE | MATCH | v3 | min of 3 | disagree |
+|---|---|---|---|---|---|---|---|
+| old K5 | 242 | 0.353 [0.323, 0.386] | 0.718 [0.699, 0.736] | 0.592 [0.579, 0.607] | 0.554 [0.537, 0.573] | 0.327 | 26% |
+| new K5 (gate) | 244 | 0.498 [0.471, 0.527] | 0.612 [0.591, 0.634] | 0.583 [0.566, 0.599] | 0.565 [0.549, 0.580] | 0.419 | 7% |
+| change | | **+0.145** | **−0.106** | −0.009 | +0.011 | +0.092 | |
+| human (same ladder) | 500 | 0.923 | 0.921 | 0.922 | 0.922 | 0.859 | 2% |
+| sentences shuffled | 500 | 0.344 | 0.665 | 0.661 | 0.557 | 0.339 | 3% |
+
+**The new judges do not confirm v2's gain.**
+
+- SURPRISE rates the new K5 lower: its deviance on the too-predictable side rises from 0.93 to 4.33. The new K5 text is more predictable than human text, and more pack-like:
+  - mean surprisal 7.4 bits against old K5's 8.4 and human text's 9.5 (median z −2.0);
+  - fewer rare words (w_hi z −1.8) and more very predictable ones (w_lo z +1.0);
+  - more 3-word pack matches than human text (m_tri z +1.8, MATCH).
+- MATCH does not move (−0.009, inside the intervals). The v3 mean moves by +0.011, also inside them.
+- Cohesion measured without co-occurrence is far below human text for both K5 versions:
+  - w_coh: −0.10 and −0.07 bits a word, against +1.09 for human text;
+  - m_coh: 0.008 and 0.012, against 0.115.
+- The gate's gain on v2's coherence axis (word vectors) does not show as content words recurring across sentences.
+- On these judges both K5 versions sit at or below sentences shuffled across documents on cohesion.
+
+The new K5 is more consistent across judges: 7% of its texts are flagged `disagree` against 26% for the old. The minimum of the three rises by 0.092, mostly because v2's low scores rose. A human read or a neural judge is still the right check.
 
 ## Cost
 
@@ -191,3 +273,28 @@ scribe attacks --pack enwik:$E:16:48 --ref enwik:$E:48:56 --test enwik:$E:72:95.
 | v3 (v2 + SURPRISE + MATCH) | 564 | 493 MB | + 0.4 s spelling models, + 0.9 s suffix array (4 threads, 84 MB) |
 
 v3's own features take 0.94 ms a text. The ladder computes them on 4 threads, 7,138 texts in about 1.7 s.
+
+## What v3 is, and is not
+
+- **Use the parts, not only the mean.** The mean of three is robust when the judges agree. When only one judge catches a failure (copied prompt sentences, a generic paragraph), the mean dilutes it. Read `min3` and `disagree` next to `scribe_v3`.
+- **SURPRISE** is the most independent judge. It is two-sided by construction, so text that is too predictable (copied, generic, formulaic) loses as surely as salad does. It passed all five ladder pairs on dev A, dev B and fresh data.
+- **MATCH** is a sharp copy and echo detector. As a coherence judge it is the weakest of the three: it failed one fresh ladder pair (human > sentences shuffled, 0.940).
+- **Blind spots that remain:**
+  - sentence order within a text;
+  - keyword stuffing at one inserted word in five;
+  - sentences gathered by co-occurrence from text outside the pack;
+  - truth (numbers, negations, as for v2).
+- **Freeze discipline.** The design was chosen on dev A and its battery and confirmed on dev B, with no change after B. It was frozen in commit a6fb4a9 before the fresh read. The fresh region was read once. No setting was changed after that read.
+
+## Reproduce
+
+```
+E=/root/cdata/enwik8; V=/root/work/scribe/vec32
+scribe ladder  --pack enwik:$E:16:48 --ref enwik:$E:48:56 --test enwik:$E:56:64 --vectors $V --profile v3 --seed 20261027 --chain-rng   # dev A
+scribe ladder  --pack enwik:$E:16:48 --ref enwik:$E:48:56 --test enwik:$E:64:72 --vectors $V --profile v3 --seed 31415926                # dev B
+scribe attacks --pack enwik:$E:16:48 --ref enwik:$E:48:56 --test enwik:$E:56:64 --vectors $V --seed 20261027 --outside enwik:$E:0:16       # dev A battery
+scribe ladder  --pack enwik:$E:16:48 --ref enwik:$E:48:56 --test enwik:$E:56:64 --vectors $V --profile v3 --seed 20261027 --gen-trie NEW.gen.txt   # K5
+scribe score   --pack enwik:$E:16:48 --ref enwik:$E:48:56 --vectors $V --profile v3 --in texts.jsonl --out scores.jsonl
+```
+
+`scribe selftest` (CTest `native_scribe_selftest`) checks the v3 parts: LZ76 on the Lempel–Ziv example, the spelling model's normalisation, the suffix array against a brute-force scan, the cache and match model, copy and echo detection, both sides of SURPRISE, and the mean, minimum and flag.
