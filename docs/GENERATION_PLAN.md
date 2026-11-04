@@ -1300,3 +1300,11 @@ Even so, each layer-1 weight set sees about half a million bits. The cost is abo
 - **Against:** the byte default BK0 on test, 0.147 [0.115, 0.181] at T 0.6 (T4d's read).
 - **Rule:** K5 becomes CyphaLM's recommended writer (`scripts/gen_eval.sh` and the docs use `--k5`) if its test interval lies wholly above BK0's (lower bound above 0.181), with no sample holding a run of more than 12 copied words. The byte sampler stays for answers, `chat` and anything without the clean text.
 - **Prediction:** 0.30–0.37, as on dev.
+
+**Result** (read once, 2026-11-04, this container): K5 on GEN-A test scores **SCRIBE v2 0.305 [0.276, 0.338]**, surface S 0.927 [0.923, 0.932], copy32 0.0335, and **0 of 250** samples hold a run of more than 12 copied words (the cap fired once in 31,773 words). It wrote the 250 continuations in 18 s.
+- Against BK0's 0.147 [0.115, 0.181] the intervals are disjoint: the lower bound 0.276 is above 0.181. **The rule holds. K5 is CyphaLM's recommended writer.**
+  - To write: `cyphalm_trie sample ENWIK8 OUT --prompts-file … --k5 CLEAN.txt`.
+  - The clean text comes from SCRIBE's cleaner: `scribe docs enwik:ENWIK8:0:16 --out DIR`, as `fuzzy_bake.py prep` makes it.
+  - The byte sampler stays for answers, `chat`, and anywhere without that text.
+- The prediction (0.30–0.37) held.
+- This is the shuffled-sentence rung on SCRIBE's ladder (G2's level, §5). The byte default sits below it. Human text scores 0.923.
