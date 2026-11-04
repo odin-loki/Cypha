@@ -175,3 +175,49 @@ Before X1 the code was read again for any use of the true byte before its predic
 - the chain's and the final layer's weights learn only after the whole distribution is formed;
 - each bit's inputs, copy's state and the APM contexts read only the partial byte and earlier bytes;
 - the selftest checks that a bitwise arm's 256 probabilities sum to 1.
+
+## X1: the registered read
+
+`context8k --full-mix` with the chosen defaults, one run. The first X1 was killed when WSL restarted, before it printed any `full_mix` line. It was rerun exactly as registered (same binary, same flags). The PC was less loaded this time (load about 15).
+
+Bits per byte:
+
+| Arm | First half | **Second half** | Against F (second half) |
+|---|---:|---:|---:|
+| F: the final layer's replica | 1.6333 | 1.6232 | — |
+| Fn: F normalised | 1.6329 | 1.6230 | −0.0002 |
+| Fs: Fn + SSE | 1.6050 | 1.5926 | −0.0306 |
+| A: bitwise logistic mixer | 1.5811 | 1.5715 | −0.0517 |
+| As: A + SSE | 1.5728 | 1.5618 | −0.0614 |
+| Rs: raw experts only, bitwise + SSE | 1.6507 | 1.6105 | −0.0127 |
+| B: geometric mixing | 1.6010 | 1.5870 | −0.0362 |
+| Bs: B + SSE | 1.5800 | 1.5655 | −0.0577 |
+| **ABs: As and Bs mixed per bit (headline)** | 1.5621 | **1.5499** | **−0.0733** |
+
+- `full_mix_bpc 1.5499 (arm ABs)`. B0's `online_final_bpc` is 1.6232.
+- The replica chain equals the chain on every byte (maximum difference 0), and F equals `online_final_bpc` (1.6232).
+- Every line outside the `full_mix` lines is identical to B0's, the TALLY and GEN lines included. Selftest passes.
+- **Wall:** 1834 s in all; the full-mix pass took 796 s of it. That is about +77% over the rest of the run, most of it the experts computed a second time. B0's 3403 s ran under far heavier load, so the two totals are not comparable.
+- **Memory:** peak RSS 472 MB, against B0's 250 MB (+222 MB). The mixers hold 178 MB, mostly the four SSE stages' APM tables.
+- There is no bootstrap interval: the per-byte bits are not kept. The gain is about 18 times the widths of earlier intervals on this holdout (about ±0.004).
+
+**The rule holds.** All four conditions are met:
+1. 1.5499 is 0.0733 below 1.6232 (at least 0.005 needed).
+2. The answers are unchanged.
+3. Selftest passes.
+4. The wall time and memory are stated above.
+
+So `--full-mix`'s ABs line becomes `context8k`'s headline bits per byte. The flag stays off by default here: it costs the extra pass and 222 MB, and the cloud session decides the default at merge.
+
+**Predictions:**
+- P1 (F and the chain replica exact): **held**.
+- P2 (Fn − F between −0.005 and 0): **held** (−0.0002).
+- P3 (Fs − F between −0.005 and −0.015): **missed**. SSE alone gains −0.031, twice the top of the range.
+- P4 (As − F between −0.015 and −0.035): **missed**. The gain is −0.061, nearly twice the top.
+- P5 (Bs within 0.01 of As): **held** (0.0037).
+- P6 (Rs within ±0.03 of F): **held** (−0.013).
+
+**Reading.**
+- Normalising the linear mixture gains almost nothing: its mass is already 0.9998.
+- The gain is nonlinear. SSE alone, after the linear final layer, takes 0.031 bits per byte. Logistic mixing with SSE takes 0.061. Mixing that with the geometric mixer takes 0.073.
+- The bitwise mixer over the raw experts alone (Rs) beats the whole linear chain and final layer by 0.013. The chain and final layer are still worth having as inputs: As beats Rs by 0.049.
