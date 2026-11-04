@@ -2872,6 +2872,83 @@ class SurpriseModel {
     }
   }
 
+  // SCRIBE v3.1 (docs/reports/SCRIBE_V31.md). Per word, how badly it fits BOTH its neighbours under the pack's
+  // static trigram (no history):
+  //   fit(w_i) = [s0(w_i | w_{i-2} w_{i-1}) - su(w_i)] + [s0(R | w_{i-1} w_i) - s0(R | w_{i-2} w_{i-1})]
+  // where R is the right context (the next two words, or </s>) and the second bracket codes R once with w_i and once
+  // with w_i deleted. So fit = the sentence's code length with w_i, minus its code length without w_i, minus w_i's
+  // own unigram code length: minus the pointwise mutual information of w_i with its two-sided context, in bits.
+  // Negative: the word belongs; positive: the sentence reads better without it (an inserted word). Spelling bits cancel.
+  // With a prompt, also the bits a unigram cache of the prompt's words saves on the text's content words (unigram
+  // surprisal >= coh_min_bits), p = (1 - lambda) p_static + lambda c_prompt(w) / |prompt|, per word of the text; and
+  // per sentence (lead: the first sentence's gain per word minus the mean of the other sentences').
+  struct Extra31 {
+    std::vector<float> fit;  // per word, sentence order
+    bool has_pgain = false, has_lead = false;
+    double pgain = 0, lead = 0;
+  };
+  void extra31(const std::string& text, const std::string& prompt, Extra31& x) const {
+    x = Extra31();
+    if (!trained()) return;
+    const double ln2 = std::log(2.0);
+    const std::vector<std::vector<std::string>> st = sentence_tokens(text);
+    std::unordered_map<std::string, int> pc;
+    size_t P = 0;
+    if (!prompt.empty())
+      for (const auto& t : sentence_tokens(prompt))
+        for (const std::string& w : t) {
+          ++pc[w];
+          ++P;
+        }
+    std::vector<std::uint32_t> ids;
+    std::vector<double> sg;  // prompt gain per word, per sentence
+    double gain = 0;
+    size_t nw = 0;
+    for (const auto& t : st) {
+      ids.clear();
+      for (const std::string& w : t) ids.push_back(m_->word_id(w));
+      const long n = static_cast<long>(ids.size());
+      auto at = [&](long j) { return j < 0 ? ScribeModel::kBos : (j >= n ? ScribeModel::kEos : ids[static_cast<size_t>(j)]); };
+      double g = 0;
+      for (long i = 0; i < n; ++i) {
+        const std::uint32_t u = at(i - 2), v = at(i - 1), w = at(i), r1 = at(i + 1);
+        const double lw = m_->logp(u, v, w);
+        double with = m_->logp(v, w, r1), without = m_->logp(u, v, r1);
+        if (i + 1 < n) {
+          const std::uint32_t r2 = at(i + 2);
+          with += m_->logp(w, r1, r2);
+          without += m_->logp(v, r1, r2);
+        }
+        x.fit.push_back(static_cast<float>(-lw / ln2 - uni_[w] - (with - without) / ln2));
+        if (P > 0) {
+          const std::string& tok = t[static_cast<size_t>(i)];
+          const double spell = w == ScribeModel::kUnk ? unk_.bits(tok) : (w == ScribeModel::kNum ? num_.bits(tok) : 0.0);
+          if (uni_[w] + spell >= params.coh_min_bits) {
+            const double b0 = -lw / ln2 + spell;
+            const auto it = pc.find(tok);
+            const double c = it == pc.end() ? 0.0 : static_cast<double>(it->second);
+            g += b0 + std::log2(std::max((1.0 - params.lambda) * std::exp2(-b0) + params.lambda * c / static_cast<double>(P), 1e-300));
+          }
+        }
+      }
+      if (n > 0) {
+        gain += g;
+        nw += static_cast<size_t>(n);
+        sg.push_back(g / static_cast<double>(n));
+      }
+    }
+    if (P > 0 && nw > 0) {
+      x.has_pgain = true;
+      x.pgain = gain / static_cast<double>(nw);
+      if (sg.size() >= 2) {
+        double o = 0;
+        for (size_t i = 1; i < sg.size(); ++i) o += sg[i];
+        x.lead = sg[0] - o / static_cast<double>(sg.size() - 1);
+        x.has_lead = true;
+      }
+    }
+  }
+
  private:
   const ScribeModel* m_ = nullptr;
   SpellModel unk_, num_;
@@ -3102,8 +3179,11 @@ enum V3Stat {
   W_MEAN, W_SD, W_AC1, W_LO, W_HI, W_CTX, W_ANTI, W_SPELL, W_COH,
   // MATCH
   M_MED, M_P90, M_LONG, M_SHORT, M_LZ, M_TRI, M_COH, M_ECHO, M_ECHO32,
+  // v3.1 only (computed and scored in profile v31; docs/reports/SCRIBE_V31.md)
+  W_FIT, W_FITHI, W_PGAIN, W_LEAD, M_BRIDGE, M_PCOH,
   W3_N
 };
+constexpr int W3_N_V3 = W_FIT;  // the statistics of profile v3
 
 // Each statistic is two-sided: its z-score is compared with the human reference on both sides, and each side's
 // evidence goes to one group of its metric's deviance (0: that side is not counted, because another statistic of the
@@ -3139,9 +3219,17 @@ inline const V3StatSpec& v3_spec(int k) {
       {"m_tri", 'M', 0.01, 'P', 'S', '-'},    // share of word starts whose pack match covers >= 3 whole words
       {"m_coh", 'M', 0.005, 'P', 'C', '-'},   // bytes shared with the other sentences, weighted by their pack information
       {"m_echo", 'M', 0.005, 'P', 'C', 0},    // share of bytes inside >= 8-byte matches with the prompt (prompted only)
-      {"m_echo32", 'M', 0.005, 'P', 0, 0}};  // share inside >= 32-byte matches with the prompt (copied prompt sentences)
+      {"m_echo32", 'M', 0.005, 'P', 0, 0},   // share inside >= 32-byte matches with the prompt (copied prompt sentences)
+      // v3.1 (their groups here are the defaults of profile v31; profile v3 never computes them)
+      {"w_fit", 'W', 0.05, 'S', 'P', '+'},    // mean fit: minus the PMI of each word with its two-sided context (bits)
+      {"w_fithi", 'W', 0.01, 'S', 'P', '+'},  // share of words whose fit is above the reference words' fit_q quantile
+      {"w_pgain", 'W', 0.01, 'P', 'C', 0},    // bits per word a unigram cache of the prompt saves (prompted only)
+      {"w_lead", 'W', 0.01, 0, 0, 0},         // first sentence's prompt gain minus the others' (reported only)
+      {"m_bridge", 'M', 0.005, 'S', 0, '+'},  // share of words whose two pack bigrams are absent while the neighbours' is present
+      {"m_pcoh", 'M', 0.005, 'P', 'C', 0}};   // bytes shared with the prompt from word starts, weighted by pack information
   return specs[k];
 }
+inline bool v3_prompted(int k) { return k == M_ECHO || k == M_ECHO32 || k == W_PGAIN || k == W_LEAD || k == M_PCOH; }
 
 // Raw per-text material of v3. w_lo and w_hi need the reference's thresholds and are finished by V3Scorer::values.
 struct V3Features {
@@ -3154,10 +3242,14 @@ struct V3Features {
   double m_med = 0, m_p90 = 0, m_long = 0, m_short = 0, m_lz = 0, m_tri = 0, m_coh = 0, m_echo = 0, m_echo32 = 0;
   double m_words = 0;  // reported only: mean number of whole words a pack match covers from a word start
   SurpriseModel::Seq seq;  // kept only on request (exploration dumps)
+  // v3.1 (only with v31 = true)
+  bool has_31 = false, has_pgain = false, has_lead = false, has_bridge = false, has_pcoh = false;
+  std::vector<float> fit;  // per word: minus the PMI with the two-sided context (bits)
+  double w_fit = 0, w_pgain = 0, w_lead = 0, m_bridge = 0, m_pcoh = 0;
 };
 
 inline V3Features extract_v3(const SurpriseModel& sm, const PackIndex& px, const std::string& text, const std::string& prompt = "",
-                             bool keep_seq = false) {
+                             bool keep_seq = false, bool v31 = false) {
   using namespace scribe_detail;
   V3Features f;
   f.bytes = text.size();
@@ -3191,8 +3283,52 @@ inline V3Features extract_v3(const SurpriseModel& sm, const PackIndex& px, const
     f.has_w_coh = std::isfinite(q.coh);
   }
   if (keep_seq) f.seq = std::move(q);
+  if (v31 && f.n_words > 0) {
+    SurpriseModel::Extra31 x;
+    sm.extra31(text, prompt, x);
+    if (!x.fit.empty()) {
+      f.has_31 = true;
+      f.fit = std::move(x.fit);
+      double s = 0;
+      for (float v : f.fit) s += v;
+      f.w_fit = s / static_cast<double>(f.fit.size());
+    }
+    f.has_pgain = x.has_pgain;
+    f.w_pgain = x.pgain;
+    f.has_lead = x.has_lead;
+    f.w_lead = x.lead;
+  }
   const size_t n = text.size();
   if (!px.built() || n < 8) return f;
+  // v3.1, MATCH: a word that fits neither neighbour as strings. The bigrams it forms with its left and with its right
+  // neighbour both are absent from the pack, while the bigram its two neighbours form without it is present.
+  if (v31) {
+    std::vector<std::pair<size_t, size_t>> tk;
+    for (size_t p = 0; p < n;) {
+      while (p < n && text[p] == ' ') ++p;
+      size_t e = p;
+      while (e < n && text[e] != ' ') ++e;
+      if (e > p) tk.emplace_back(p, e);
+      p = e;
+    }
+    auto occurs = [&](const std::string& s) {
+      const size_t L = std::min(s.size(), PackIndex::kCap);
+      return px.match(reinterpret_cast<const unsigned char*>(s.data()), s.size()) >= L;
+    };
+    if (tk.size() >= 3) {
+      size_t nb = 0;
+      for (size_t k = 1; k + 1 < tk.size(); ++k) {
+        const std::string left = text.substr(tk[k - 1].first, tk[k].second - tk[k - 1].first);
+        const std::string right = text.substr(tk[k].first, tk[k + 1].second - tk[k].first);
+        if (occurs(left) || occurs(right)) continue;
+        const std::string bridge = text.substr(tk[k - 1].first, tk[k - 1].second - tk[k - 1].first) + " " +
+                                   text.substr(tk[k + 1].first, tk[k + 1].second - tk[k + 1].first);
+        nb += occurs(bridge);
+      }
+      f.m_bridge = static_cast<double>(nb) / static_cast<double>(tk.size() - 2);
+      f.has_bridge = true;
+    }
+  }
   f.has_m = true;
   const unsigned char* t = reinterpret_cast<const unsigned char*>(text.data());
   // Matching statistics: from each byte, the longest prefix of the rest of the text that occurs in the pack.
@@ -3297,17 +3433,37 @@ inline V3Features extract_v3(const SurpriseModel& sm, const PackIndex& px, const
     f.m_echo = static_cast<double>(ae) / static_cast<double>(n);
     f.m_echo32 = static_cast<double>(ae32) / static_cast<double>(n);
     f.has_echo = true;
+    // v3.1: cohesion with the prompt, m_coh's weighting. From each word start, the longest match (>= 4 bytes) with
+    // the prompt; each byte it covers counts the matched string's information in the pack above the 0.45 floor.
+    if (v31) {
+      const double logN = std::log2(static_cast<double>(px.size()) + 1.0);
+      std::vector<float> cw(n, 0.0f);
+      for (size_t p = 0; p < n; ++p) {
+        if ((p > 0 && text[p - 1] != ' ') || text[p] == ' ' || me[p] < 4) continue;
+        const size_t L = me[p];
+        const size_t c = px.count(t + p, L);
+        const double w = std::log2((static_cast<double>(px.size()) + 1.0) / (static_cast<double>(c) + 1.0)) / logN;
+        const float wf = static_cast<float>(std::max(0.0, w - 0.45) / 0.55);
+        for (size_t b = p; b < std::min(n, p + L); ++b) cw[b] = std::max(cw[b], wf);
+      }
+      double s = 0;
+      for (float x : cw) s += x;
+      f.m_pcoh = s / static_cast<double>(n);
+      f.has_pcoh = true;
+    }
   }
   return f;
 }
 
 // extract_v3 over many texts on several threads (the models are only read). prompts: empty, or one per text.
 inline std::vector<V3Features> extract_v3_all(const SurpriseModel& sm, const PackIndex& px, const std::vector<std::string>& texts,
-                                              const std::vector<std::string>& prompts = {}, unsigned threads = 4, bool keep_seq = false) {
+                                              const std::vector<std::string>& prompts = {}, unsigned threads = 4, bool keep_seq = false,
+                                              bool v31 = false) {
   std::vector<V3Features> out(texts.size());
   std::atomic<size_t> next{0};
   auto work = [&]() {
-    for (size_t i; (i = next++) < texts.size();) out[i] = extract_v3(sm, px, texts[i], i < prompts.size() ? prompts[i] : std::string(), keep_seq);
+    for (size_t i; (i = next++) < texts.size();)
+      out[i] = extract_v3(sm, px, texts[i], i < prompts.size() ? prompts[i] : std::string(), keep_seq, v31);
   };
   std::vector<std::thread> th;
   for (unsigned k = 1; k < std::max(1u, threads); ++k) th.emplace_back(work);
@@ -3343,12 +3499,30 @@ struct V3Params {
   double lz_w = 0.5, lz_dead = 2;  // MATCH: m_lz's high side counts in C with this weight and dead zone
   double missing_z = 4;
   double disagree = 0.5;  // flag a text when max - min of the three scores exceeds this
+  // v3.1 (profile v31, docs/reports/SCRIBE_V31.md). Profile v3 leaves all of this at its v3 value.
+  bool v31 = false;     // compute and score the v3.1 statistics
+  char grp[W3_N][2];    // group of each statistic's high side and low side ('L', 'S', 'C', 'P' or 0: not counted)
+  double swt[W3_N];     // weight of each statistic's L, S and C evidence
+  double fit_q = 0.9;   // w_fithi: share of words whose fit is above this quantile of the reference words' fit
+  double cp = 0;        // the combination of v2, SURPRISE and MATCH: power mean with this exponent (0: geometric)
   V3Params() {
     m.kap = 0.25;
     m.wC = 6;
     m.deadG = 2;
     m.wP = 20;
     m.tau = 30;
+    for (int k = 0; k < W3_N; ++k) {
+      grp[k][0] = v3_spec(k).plus;
+      grp[k][1] = v3_spec(k).minus;
+      swt[k] = 1;
+    }
+  }
+  // Profile v31's defaults (frozen on development data; docs/reports/SCRIBE_V31.md).
+  void set_v31() { v31 = true; }
+  static int stat_index(const std::string& name) {
+    for (int k = 0; k < W3_N; ++k)
+      if (name == v3_spec(k).name) return k;
+    return -1;
   }
   // "w.tau=6,m.wC=4,lz_w=0.5,..." (w. SURPRISE, m. MATCH)
   bool parse(const std::string& spec) {
@@ -3368,7 +3542,24 @@ struct V3Params {
       else if (k == "lz_dead") lz_dead = x;
       else if (k == "missing") missing_z = x;
       else if (k == "disagree") disagree = x;
-      else if (k.size() > 2 && (k[0] == 'w' || k[0] == 'm') && k[1] == '.') {
+      else if (k == "fit_q") fit_q = x;
+      else if (k == "cp") cp = x;
+      else if (k.rfind("g.", 0) == 0 || k.rfind("wt.", 0) == 0) {  // g.<stat>=XY (groups of the high, low side; 0 = none), wt.<stat>=x
+        const bool g = k[0] == 'g';
+        const int s = stat_index(k.substr(g ? 2 : 3));
+        if (s < 0) return false;
+        if (g) {
+          const std::string v = kv.substr(eq + 1);
+          if (v.size() != 2) return false;
+          for (int side = 0; side < 2; ++side) {
+            const char c = v[static_cast<size_t>(side)];
+            if (c != '0' && c != 'L' && c != 'S' && c != 'C' && c != 'P') return false;
+            grp[s][side] = c == '0' ? 0 : c;
+          }
+        } else {
+          swt[s] = x;
+        }
+      } else if (k.size() > 2 && (k[0] == 'w' || k[0] == 'm') && k[1] == '.') {
         V3MetricParams& mp = k[0] == 'w' ? w : m;
         k = k.substr(2);
         if (k == "dead") mp.dead = x;
@@ -3409,26 +3600,33 @@ class V3Scorer {
 
   // A human reference sample (open continuation).
   void add_reference(const V3Features& f) { ref_[length_bucket(f.bytes)].push_back(f); }
-  // A human continuation of a prompt: only its echo counts (the prompted reference of m_echo).
+  // A human continuation of a prompt: only its prompt statistics count (the prompted reference of m_echo, m_echo32
+  // and, in v3.1, w_pgain, w_lead and m_pcoh).
   void add_reference_echo(const V3Features& f) {
-    if (!f.has_echo) return;
+    if (!f.has_echo && !f.has_pgain) return;
     const int b = length_bucket(f.bytes);
-    echo_[b][0].add(f.m_echo);
-    echo_[b][1].add(f.m_echo32);
-    echo_vals_[b][0].push_back(f.m_echo);
-    echo_vals_[b][1].push_back(f.m_echo32);
+    double x[W3_N];
+    bool has[W3_N];
+    values(f, x, has);
+    for (int k = 0; k < W3_N; ++k)
+      if (is_echo(k) && has[k]) {
+        pq_[b][k].add(x[k]);
+        pvals_[b][k].push_back(x[k]);
+      }
   }
   size_t n_reference(int b) const { return ref_[b].size(); }
-  size_t n_reference_echo(int b) const { return echo_[b][0].size(); }
+  size_t n_reference_echo(int b) const { return pq_[b][M_ECHO].size(); }
   double threshold_lo() const { return th_lo_; }
   double threshold_hi() const { return th_hi_; }
+  double threshold_fit() const { return th_fit_; }
   double group_threshold(int metric, int b, int g) const { return th_[metric][b][g]; }
   double p_threshold(int b, int k) const { return thP_[b][k]; }
   const std::vector<V3Features>& reference(int b) const { return ref_[b]; }
-  // z of each prompted reference continuation's echo (bucket b).
+  // z of each prompted reference continuation's echo (bucket b; which: 0 m_echo, 1 m_echo32, or a statistic index).
   std::vector<double> echo_reference_z(int b, int which = 0) const {
+    const int k = which == 0 ? M_ECHO : which == 1 ? M_ECHO32 : which;
     std::vector<double> z;
-    for (double v : echo_vals_[b][which]) z.push_back(echo_[b][which].z(v));
+    for (double v : pvals_[b][k]) z.push_back(pq_[b][k].z(v));
     return z;
   }
 
@@ -3440,6 +3638,13 @@ class V3Scorer {
     std::sort(all.begin(), all.end());
     th_lo_ = scribe_detail::quantile_sorted(all, params.w_qlo);
     th_hi_ = scribe_detail::quantile_sorted(all, params.w_qhi);
+    if (params.v31) {
+      std::vector<double> fa;
+      for (int b = 0; b < 2; ++b)
+        for (const V3Features& f : ref_[b]) fa.insert(fa.end(), f.fit.begin(), f.fit.end());
+      std::sort(fa.begin(), fa.end());
+      th_fit_ = scribe_detail::quantile_sorted(fa, params.fit_q);
+    }
     for (int b = 0; b < 2; ++b) {
       nref_[b] = ref_[b].size();
       for (int k = 0; k < W3_N; ++k) {
@@ -3458,8 +3663,8 @@ class V3Scorer {
       }
       for (int k = 0; k < W3_N; ++k)
         if (!is_echo(k)) q_[b][k].finish(v3_spec(k).min_sd);
-      echo_[b][0].finish(v3_spec(M_ECHO).min_sd);
-      echo_[b][1].finish(v3_spec(M_ECHO32).min_sd);
+      for (int k = 0; k < W3_N; ++k)
+        if (is_echo(k)) pq_[b][k].finish(v3_spec(k).min_sd);
     }
     for (int b = 0; b < 2; ++b) {
       std::vector<double> E[2][4];
@@ -3484,13 +3689,16 @@ class V3Scorer {
         thP_[b][k] = scribe_detail::quantile_sorted(eP[k], v3_spec(k).metric == 'W' ? params.w.q : params.m.q);
       }
     }
-    for (int b = 0; b < 2; ++b)  // the echo statistics, from the prompted continuations
-      for (int w = 0; w < 2; ++w) {
-        const int eb = echo_[b][w].size() >= 20 ? b : 1 - b;
+    for (int b = 0; b < 2; ++b)  // the prompt statistics, from the prompted continuations
+      for (int k = 0; k < W3_N; ++k) {
+        if (!is_echo(k)) continue;
+        const int eb = pq_[b][k].size() >= 20 ? b : 1 - b;
+        const V3MetricParams& mp = v3_spec(k).metric == 'W' ? params.w : params.m;
+        const double side = params.grp[k][0] == 'P' ? 1.0 : params.grp[k][1] == 'P' ? -1.0 : 0.0;
         std::vector<double> e;
-        for (double v : echo_vals_[eb][w]) e.push_back(std::max(0.0, echo_[eb][w].z(v) - params.m.dead));
+        for (double v : pvals_[eb][k]) e.push_back(std::max(0.0, side * pq_[eb][k].z(v) - mp.dead));
         std::sort(e.begin(), e.end());
-        thP_[b][w == 0 ? M_ECHO : M_ECHO32] = scribe_detail::quantile_sorted(e, params.m.q);
+        thP_[b][k] = scribe_detail::quantile_sorted(e, mp.q);
       }
   }
 
@@ -3531,6 +3739,22 @@ class V3Scorer {
     has[M_ECHO] = f.has_echo;
     x[M_ECHO32] = f.m_echo32;
     has[M_ECHO32] = f.has_echo;
+    if (!params.v31) return;
+    if (f.has_31) {
+      size_t hi = 0;
+      for (float v : f.fit) hi += v > th_fit_;
+      x[W_FIT] = f.w_fit;
+      x[W_FITHI] = static_cast<double>(hi) / static_cast<double>(f.fit.size());
+      has[W_FIT] = has[W_FITHI] = true;
+    }
+    x[W_PGAIN] = f.w_pgain;
+    has[W_PGAIN] = f.has_pgain;
+    x[W_LEAD] = f.w_lead;
+    has[W_LEAD] = f.has_lead;
+    x[M_BRIDGE] = f.m_bridge;
+    has[M_BRIDGE] = f.has_bridge;
+    x[M_PCOH] = f.m_pcoh;
+    has[M_PCOH] = f.has_pcoh;
   }
 
   int bucket(const V3Features& f) const {
@@ -3549,8 +3773,7 @@ class V3Scorer {
       const V3StatSpec& sp = v3_spec(k);
       const int m = sp.metric == 'W' ? 0 : 1;
       const V3MetricParams& mp = m == 0 ? params.w : params.m;
-      const int w = k == M_ECHO32 ? 1 : 0;
-      const QuantileZ& qz = !is_echo(k) ? q_[b][k] : (echo_[b][w].size() >= 20 ? echo_[b][w] : echo_[1 - b][w]);
+      const QuantileZ& qz = !is_echo(k) ? q_[b][k] : (pq_[b][k].size() >= 20 ? pq_[b][k] : pq_[1 - b][k]);
       if (qz.size() < 20) continue;
       double z;
       if (has[k]) {
@@ -3564,12 +3787,12 @@ class V3Scorer {
       }
       o.z[k] = z;
       for (int side = 0; side < 2; ++side) {
-        const char g = side == 0 ? sp.plus : sp.minus;
+        const char g = params.grp[k][side];
         if (!g) continue;
         const double u = side == 0 ? z : -z;
         const int gi = g == 'L' ? 0 : g == 'S' ? 1 : g == 'C' ? 2 : 3;
         double dz = gi == 0 ? mp.deadL : gi == 1 ? mp.deadS : gi == 2 ? mp.deadC : mp.dead;
-        double wt = 1;
+        double wt = params.swt[k];
         if (k == M_LZ && gi == 2) {
           dz = params.lz_dead;
           wt = params.lz_w;
@@ -3607,13 +3830,13 @@ class V3Scorer {
 
  private:
   std::vector<V3Features> ref_[2];
-  static bool is_echo(int k) { return k == M_ECHO || k == M_ECHO32; }
-  QuantileZ q_[2][W3_N], echo_[2][2];
-  std::vector<double> echo_vals_[2][2];
+  static bool is_echo(int k) { return v3_prompted(k); }  // scored against the prompted continuations
+  QuantileZ q_[2][W3_N], pq_[2][W3_N];
+  std::vector<double> pvals_[2][W3_N];
   double present_[2][W3_N] = {};
   double thP_[2][W3_N] = {};  // [bucket][statistic]: the too-predictable side's threshold
   size_t nref_[2] = {0, 0};
-  double th_lo_ = 0, th_hi_ = 0;
+  double th_lo_ = 0, th_hi_ = 0, th_fit_ = 0;
   double th_[2][2][4] = {};  // [metric][bucket][group]
 };
 
@@ -3629,6 +3852,15 @@ inline V3Combined combine_v3(double v2, double surprise, double match, double di
   c.spread = std::max(v2, std::max(surprise, match)) - c.min3;
   c.disagree = c.spread > disagree_at;
   return c;
+}
+
+// SCRIBE v3.1 = the power mean of v2, SURPRISE and MATCH with exponent cp. At cp = 0 it is the geometric mean,
+// exp(-(D_v2 / tau_v2 + D_S / tau_S + D_M / tau_M) / 3): the three deviances add, so a confident catch by one judge
+// (a deviance far beyond any human text's) is not diluted by two judges that see nothing.
+inline double combine_v31(double v2, double surprise, double match, double cp) {
+  const double f = 1e-300, a = std::max(v2, f), b = std::max(surprise, f), c = std::max(match, f);
+  if (cp == 0) return std::exp((std::log(a) + std::log(b) + std::log(c)) / 3.0);
+  return std::pow((std::pow(a, cp) + std::pow(b, cp) + std::pow(c, cp)) / 3.0, 1.0 / cp);
 }
 
 inline std::string v3_json(const ScoredV3& s, const V3Combined& c) {
@@ -3659,7 +3891,12 @@ inline std::string v3_raw_json(const V3Features& f) {
          ",\"w_ac1\":" + opt(f.has_w, f.w_ac1) + ",\"w_ctx\":" + opt(f.has_w, f.w_ctx) + ",\"w_anti\":" + opt(f.has_w, f.w_anti) + ",\"w_spell\":" + opt(f.has_w, f.w_spell) + ",\"w_coh\":" + opt(f.has_w_coh, f.w_coh) +
          ",\"m_med\":" + opt(f.has_m, f.m_med) + ",\"m_p90\":" + opt(f.has_m, f.m_p90) + ",\"m_long\":" + opt(f.has_m, f.m_long) +
          ",\"m_short\":" + opt(f.has_m, f.m_short) + ",\"m_lz\":" + opt(f.has_m, f.m_lz) + ",\"m_tri\":" + opt(f.has_m, f.m_tri) +
-         ",\"m_words\":" + opt(f.has_m, f.m_words) + ",\"m_coh\":" + opt(f.has_m_coh, f.m_coh) + ",\"m_echo\":" + opt(f.has_echo, f.m_echo) + ",\"m_echo32\":" + opt(f.has_echo, f.m_echo32) + "}";
+         ",\"m_words\":" + opt(f.has_m, f.m_words) + ",\"m_coh\":" + opt(f.has_m_coh, f.m_coh) + ",\"m_echo\":" + opt(f.has_echo, f.m_echo) + ",\"m_echo32\":" + opt(f.has_echo, f.m_echo32) +
+         (f.has_31 || f.has_bridge || f.has_pcoh || f.has_pgain
+              ? ",\"w_fit\":" + opt(f.has_31, f.w_fit) + ",\"w_pgain\":" + opt(f.has_pgain, f.w_pgain) + ",\"w_lead\":" + opt(f.has_lead, f.w_lead) +
+                    ",\"m_bridge\":" + opt(f.has_bridge, f.m_bridge) + ",\"m_pcoh\":" + opt(f.has_pcoh, f.m_pcoh)
+              : std::string()) +
+         "}";
 }
 
 // Known-answer checks of the v3 parts (called by the tool's selftest).
@@ -3735,6 +3972,50 @@ inline void scribe_v3_selftest(int& checks, int& fails) {
     check(cp.has_m && cp.m_long > 0.9 && cp.m_echo32 == 0, "copied pack text: nearly all bytes inside long pack matches");
     const V3Features ec = extract_v3(sm, px, "Green trees grow beside the quiet water. Then it rained on the hills.", "Green trees grow beside the quiet water.");
     check(ec.has_echo && ec.m_echo32 > 0.5 && ec.m_echo >= ec.m_echo32, "a copied prompt sentence is echo");
+    // v3.1: an inserted word fits neither neighbour (fit > 0, above every other word), in code length and as strings.
+    {
+      SurpriseModel::Extra31 x0, x1;
+      sm.extra31("The old man was walking slowly along the road.", "", x0);
+      sm.extra31("The old man was walking river slowly along the road.", "", x1);
+      double mx0 = -1e9, others = -1e9;
+      for (float v : x0.fit) mx0 = std::max(mx0, static_cast<double>(v));
+      for (size_t i = 0; i < x1.fit.size(); ++i)
+        if (i != 5) others = std::max(others, static_cast<double>(x1.fit[i]));
+      check(x0.fit.size() == 9 && x1.fit.size() == 10 && x1.fit[5] > 0 && x1.fit[5] > others && x1.fit[5] > mx0 && !x0.has_pgain,
+            "an inserted word has a positive fit, above every word of the sentence");
+      const V3Features b0 = extract_v3(sm, px, "The old man was walking slowly along the road today.", "", false, true);
+      const V3Features b1 = extract_v3(sm, px, "The old man was walking zebra slowly along the road today.", "", false, true);
+      check(b0.has_bridge && b1.has_bridge && b0.m_bridge == 0 && std::fabs(b1.m_bridge - 1.0 / 9.0) < 1e-12 && b1.has_31 && b1.w_fit > b0.w_fit,
+            "m_bridge counts the inserted word (and only it); w_fit rises");
+      const V3Features e0 = extract_v3(sm, px, "v3.1 is off by default: no fit here.", "a prompt");
+      check(!e0.has_31 && !e0.has_bridge && !e0.has_pcoh && !e0.has_pgain && e0.fit.empty(), "extract_v3 without v31 computes no v3.1 statistic");
+    }
+    // v3.1: the prompt's words save bits (more when they are stuffed in), and are shared strings with the prompt.
+    {
+      const std::string a = "The old man was walking slowly along the road. Green trees grow beside the water.";
+      const std::string a_stuffed = "The old man was walking slowly mill along the road mill. Green trees grow mill beside the water.";
+      const V3Features p0 = extract_v3(sm, px, a, "Green trees grow beside the quiet water.", false, true);
+      const V3Features p1 = extract_v3(sm, px, a, "The old man was walking.", false, true);
+      const V3Features q0 = extract_v3(sm, px, a, "The quiet mill.", false, true);
+      const V3Features q1 = extract_v3(sm, px, a_stuffed, "The quiet mill.", false, true);
+      check(p0.has_pgain && p1.has_pgain && q0.has_pgain && q1.has_pgain && q0.w_pgain < q1.w_pgain && p0.w_pgain > q0.w_pgain,
+            "w_pgain rises with the prompt's words in the text (and stuffed in)");
+      check(q0.has_pcoh && q1.has_pcoh && q0.m_pcoh < q1.m_pcoh && p0.m_pcoh > q0.m_pcoh, "m_pcoh rises with the prompt's strings");
+      check(p0.has_lead && p1.has_lead && p1.w_lead > p0.w_lead, "w_lead: the first sentence carries the prompt's words");
+    }
+  }
+  // v3.1: the combination does not dilute one judge's confident catch.
+  {
+    check(std::fabs(combine_v31(0.9, 0.8, 0.7, 1) - 0.8) < 1e-12 && std::fabs(combine_v31(0.5, 0.5, 0.5, 0) - 0.5) < 1e-12 &&
+              std::fabs(combine_v31(0.9, 0.4, 0.6, 0) - std::cbrt(0.9 * 0.4 * 0.6)) < 1e-12,
+          "power mean: cp = 1 is the mean, cp = 0 the geometric mean");
+    check(combine_v31(0.95, 0.95, 1e-9, 0) < 0.01 && combine_v31(0.95, 0.95, 0.0, 0) < 1e-90 && combine_v31(1, 1, 1, -2) == 1.0,
+          "one judge's confident catch is not diluted");
+    V3Params p;
+    p.set_v31();
+    check(p.parse("g.w_fit=S0,wt.m_bridge=0.5,cp=-1,fit_q=0.8") && p.grp[W_FIT][0] == 'S' && p.grp[W_FIT][1] == 0 && p.swt[M_BRIDGE] == 0.5 &&
+              p.cp == -1 && p.fit_q == 0.8 && !p.parse("g.w_fit=X0") && !p.parse("wt.nosuch=1") && p.v31,
+          "V3Params parses the v3.1 keys");
   }
   // The score: a human-typical sample scores high, a far-out one low; the mean of three, the minimum and the flag.
   {
