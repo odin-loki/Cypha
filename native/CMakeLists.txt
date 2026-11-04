@@ -2592,6 +2592,9 @@ target_include_directories(cyphalm_trie PRIVATE
 target_compile_definitions(cyphalm_trie PRIVATE
   "CYPHA_SIMVEC_DEFAULT=\"${CMAKE_CURRENT_SOURCE_DIR}/../data/cyphalm/simvec_ppmi32.bin\"")
 cypha_mingw_apply_exe_link_options(cyphalm_trie)
+# The byte LSTM and the online n-gram run a few threads (ONLINE_LEARNING_UPGRADES.md, "Optimisation").
+find_package(Threads REQUIRED)
+target_link_libraries(cyphalm_trie PRIVATE Threads::Threads)
 add_test(NAME native_cyphalm_trie_selftest COMMAND "$<TARGET_FILE:cyphalm_trie>" selftest)
 set_tests_properties(native_cyphalm_trie_selftest PROPERTIES TIMEOUT 60)
 # --- end B1 block ---------------------------------------------------------------------------------

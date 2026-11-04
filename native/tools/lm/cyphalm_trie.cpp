@@ -7144,6 +7144,29 @@ int cmd_selftest() {
             return 1;
         }
     }
+    {  // ONLINE_LEARNING_UPGRADES "Optimisation": the byte LSTM gives the same numbers on 1 and 4 threads, and main's
+       // (20701dd) numbers: a hash of every distribution over 400 bytes of learning.
+        auto run = [](int threads) {
+            cypha::online::ByteLSTMT<128> L(3, 0.003, 20);
+            L.set_threads(threads);
+            unsigned long long h = 1469598103934665603ull;
+            double P[256];
+            for (unsigned t = 0; t < 400; ++t) {
+                L.dist(P);
+                for (double x : P) {
+                    unsigned long long u;
+                    std::memcpy(&u, &x, 8);
+                    h = (h ^ u) * 1099511628211ull;
+                }
+                L.step(static_cast<std::uint8_t>("the cat sat on the mat. "[t % 24] ^ (t / 97)), true);
+            }
+            return h;
+        };
+        if (run(1) != 0x754aaf289bd24819ull || run(4) != 0x754aaf289bd24819ull) {
+            std::cerr << "selftest: the byte LSTM's numbers changed (threads 1 or 4)\n";
+            return 1;
+        }
+    }
     std::cout << "selftest ok\n";
     return 0;
 }
