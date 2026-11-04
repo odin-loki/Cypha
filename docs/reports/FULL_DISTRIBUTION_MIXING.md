@@ -360,3 +360,97 @@ Not built: `sample` is unchanged, and K5 is the writer. This is what it would ne
 - **`OnlineNgram::dist`** is new, in another session's file. It matched `code()` exactly on all 1 MiB, but two nodes of one byte sharing a hashed slot could make them differ in rare cases.
 - **Prediction, not writing.** Nothing here changes `sample`. Earlier experts that helped prediction lowered SCRIBE when sampled from (§13.15–13.18). See the section above.
 - **Files.** The dumps are on this PC, `~/fullmix_data/x0.fmx` (18 GB) and `x1m.fmx` (28 GB), for more replay tuning. Run outputs: `/mnt/d/cypha_llm/full_mix/`.
+
+## Optimisation and default
+
+2026-11-05 · Odin Loch
+
+**Odin:** "See if you can't optimise all those upgrades before going in." The task: make `--full-mix` cheap, then turn it on by default. Branch `wip/opt-fullmix`, from main 20701dd.
+
+### Where the time went (before)
+
+X2's full-mix pass took about 1700 s on one thread, on top of `context8k`'s own 1726 s. It computed every expert again:
+- **a second byte LSTM** (hidden 256), trained from scratch over the holdout: about 900 s, half the pass;
+- a second online n-gram, pretrained again (24 s, and 588 MB at its peak);
+- a second similar-context expert (14 s to build);
+- the static experts again: the trie's 5, Kneser–Ney, InfiniGram at 5 caps, class, copy;
+- the mixers: about 150–180 s. Replay profile, s per 1 MiB: chain 4, final layer 15, bit inputs 13, **geometric mixing 83** (8,448 logs a byte), bitwise loop 21, learning 10.
+
+### What changed
+
+- **One LSTM and one n-gram.** With the full mix on, the n-gram's and the LSTM's byte loops run inside the full mix's row loop, on `cmd_context8k`'s own instances. The LSTM's `dist()` is read before its `step()`; the n-gram's `dist()` is read before its `code()`. The chain's `plstm` and `pngram` columns, and their bits, are computed by the same calls in the same order, so they are bit-identical. Their lines and chain stages then follow in the old order.
+- **Rows computed ahead, on threads.** Rows come in blocks of 512. While the main thread mixes block b, producer threads compute block b + 1:
+  - the static experts, split over 3 threads, each with its own InfiniGram cursors (a cursor only saves time; it never changes an answer);
+  - similar-context on 1 thread, in order;
+  - the LSTM on 1 thread;
+  - the n-gram on 1 thread.
+
+  That is 7 threads in all. Every value is computed by the same code as before, and every sum keeps its order.
+- **Similar-context is still built again.** It learns online keys as it reads, so the chain's instance, which has read the whole holdout, would see the future. A fresh one reads the holdout in order: 14 s and about 20 MB.
+- **Output order.** The full mix now flushes `std::cout` before it prints. Before, its lines could come out before `online_final_bpc` (X1's file has them at the end, for that reason).
+- **Not changed:** the mixers themselves. The geometric mixer's logs are the mixer's largest part, but in the default run the main thread already waits for the LSTM (below), so speeding them up would not shorten the wall time.
+
+### The default
+
+- `context8k` runs the full mix by default. `--no-full-mix` turns it off.
+- Where it cannot replay the chain, it switches itself off with one stderr note, and the old lines print as before. That is `--gln`, `--doc-boost`, `--final-gate lstm`, `--frozen-mix`, `--no-online-final` or `--bkn-way a`.
+- **A headline line, last:** `context8k_bpc X (SOURCE)`, the best line the run printed. That is the full mix's ABs, else `online_final_bpc`, else the last chain line. `online_final_bpc` and every other line stay.
+- `bench/fuzzy/glnx_prep.sh` passes `--no-full-mix`. Its frozen-chain flags would switch the full mix off anyway. The flag changes its manifest key, so its next run redoes the dump once.
+- `cyphalm_trie` now links `Threads::Threads` (CMake).
+
+### The checks (exact, as the rule asks)
+
+Runs in two waves; each wave's runs side by side under the same load (load about 8–10). Peak RSS from `/usr/bin/time`.
+
+| Run | What | Wall | Peak RSS | Lines |
+|---|---|---:|---:|---|
+| M0b | main 20701dd, `context8k` | 2063 s | 874 MB | the reference (equal to M0) |
+| X2b | main 20701dd, `--full-mix` | 3773 s | 1057 MB | the old full mix (equal to X2) |
+| **N1** | this branch, `context8k` (full mix on) | **2075 s** | **1161 MB** | every arm line = X2's (ABs **1.5051**); every other line = M0b's |
+| N0 | this branch, `--no-full-mix` | 1824 s | 875 MB | = M0b's, line for line, plus `context8k_bpc 1.5793 (online_final)` |
+| N2 | this branch, `--no-ngram --lstm-size 64` (full mix on) | 1425 s | 515 MB | = X1's lines (ABs 1.5499); only the order of X1's arm lines differs (see above) |
+| R64 | main 20701dd, `--no-ngram --lstm-size 64 --full-mix` | 1838 s | 472 MB | = X1's |
+
+Wave 1 is M0b, X2b and N1; wave 2 is N0, N2 and R64. N0's 1824 s against M0b's 2063 s is load: the two waves ran at different times.
+
+Selftest passes. On a small setup first (`--train 1048576 --sample 1179648`), the old and new full mix also gave the same lines (651 s against 419 s).
+
+**The rule holds.**
+- ABs stays 1.5051, and every arm line of X2 is unchanged.
+- Every other line, GEN and TALLY included, is M0's.
+- `--no-ngram --lstm-size 64` reproduces X1.
+- Selftest passes.
+
+### The profile after (N1)
+
+Busy seconds by thread over the row loop (952 s of wall):
+
+| Static experts (3 threads, summed) | Similar-context | LSTM | n-gram | Mixers (main thread) | Main thread waiting |
+|---:|---:|---:|---:|---:|---:|
+| 89 | 578 | **949** | 68 | 181 | 769 |
+
+The mixers' part: chain 9, final layer 20, bit inputs 15, geometric 91, bitwise loop 26, learning 11.
+
+- **The LSTM is the critical path.** The row loop takes as long as the LSTM alone did in M0 (943 s), so the full mix now costs about **+1% wall** (2075 s against 2063 s), against +83% before (X2b).
+- **Memory is +287 MB** against M0 (1161 against 874 MB), and +104 MB against X2b. Before, the second n-gram was built after the first was freed. Now the one n-gram, the mixers' state (178 MB, mostly APM tables), the row blocks (48 MB) and the second similar-context expert are all live at once.
+- **With `--lstm-size 64`**, similar-context (480 s, one thread, in order) becomes the critical path: 1425 s against 1838 s for main's `--full-mix` (−22%).
+
+### What each caller now pays
+
+- **`context8k` with no flags:** about the same wall as before (+1%), +287 MB, and 7 threads for about 16 minutes instead of 1.
+- **`scripts/cypha_report_card.sh`:** its `ctx` part runs `context8k "$E" "$D" $F`, so it gets the full mix (the same cost as above).
+  - Its reader (`cypha_report_card.cpp`, `kCtxPref`) still takes the old chain lines as `context8k`'s headline. It does not read `online_final_bpc` or `context8k_bpc`.
+  - That was left as it is. Putting `context8k_bpc` first in `kCtxPref` would make the card show the headline, but it would change the card's numbers, so it is the cloud session's call.
+- **`bench/fuzzy/glnx_prep.sh`:** unchanged cost (`--no-full-mix`).
+- **`qa`, `sample`, `chat`:** unchanged. The full mix is only in `context8k`.
+
+### Risks before merging
+
+- **Threads.** `context8k` now uses 7 threads by default (3 static, similar-context, LSTM, n-gram, main). On a busy machine its wall depends on getting them. `--no-full-mix` gives the one-thread run.
+- **Memory.** +287 MB at the peak. Halving the blocks (256 rows) would save 24 MB. The APM tables (138 MB) are the rest, and shrinking them would change the numbers.
+- **Another session is speeding up `byte_lstm.hpp` and `online_ngram.hpp`** with byte-identical output and the same interfaces. The full mix calls only `dist()`, `step()`, `code()` and the n-gram's `dist()`, so a merge should not conflict. The arm lines are the check: N1's must stay X2's.
+- **The replica still has to follow the chain.** Arm F checks it on every run (it must equal `online_final_bpc`).
+
+### Files
+
+The 46 GB of tuning dumps (`~/fullmix_data/x0.fmx`, `x1m.fmx`) were deleted after these runs; `full-mix-replay` can remake them with `--full-mix-dump`. The run outputs stay in `/mnt/d/cypha_llm/full_mix/`.
