@@ -377,7 +377,10 @@ struct Args {
     bool online_lambdas = false;                  // §13.22: sample writes with the online mixer's learned lambdas
     // context8k's defaults since 2026-11-04 (§13.18, §13.21, D1-D3): the byte LSTM, the slow and fast chains, and the final
     // layer's sets by copy x byte class x long match. --no-lstm, --one-rate and --final-gate ig restore D0's lines.
-    bool lstm = false, no_lstm = false;           // sample --lstm: the LSTM in writing (off); context8k: on unless --no-lstm
+    // The LSTM is on by default in context8k (§13.18, D1) and in sample (§13.18's LS2: mixed in through the plausibility
+    // gate); --no-lstm leaves it out of both. sample takes the GLN instead when --gln is given.
+    bool lstm = false, no_lstm = false;
+    bool mix_set = false;                         // --gln-mix or --lstm-mix given
     bool two_rates = true;                        // §13.21: slow and fast chains (context8k)
     std::string final_gate = "copy";              // §13.21: the final layer's weight sets: copy (default) or ig
     double dk_plain = 0;                          // DK2: share of don't-know training turns with no token
@@ -468,12 +471,12 @@ Args parse(int argc, char** argv, int from) {
         else if (s == "--frozen-mix") a.online_mix = false;       // §13.15: the frozen chain lines
         else if (s == "--no-online-final") a.online_final = false;  // §13.15
         else if (s == "--no-gln") a.no_gln = true;                // §13.15
-        else if (s == "--gln-mix") a.gln_mix = next(), a.gln = true;     // §13.16
+        else if (s == "--gln-mix") a.gln_mix = next(), a.gln = a.mix_set = true;  // §13.16
         else if (s == "--gln-clean") a.gln_clean = next(), a.gln = true; // §13.16
         else if (s == "--gln-load") a.gln_load = next(), a.gln = true;  // §13.17
         else if (s == "--online-lambdas") a.online_lambdas = true;      // §13.22
         else if (s == "--lstm") a.lstm = true;                          // §13.18
-        else if (s == "--lstm-mix") a.gln_mix = next(), a.lstm = true;  // §13.18: sample mixes the LSTM in this way
+        else if (s == "--lstm-mix") a.gln_mix = next(), a.lstm = a.mix_set = true;  // §13.18: sample mixes the LSTM so
         else if (s == "--two-rates") a.two_rates = true;                // §13.21 (the default)
         else if (s == "--one-rate") a.two_rates = false;                // §13.21: the main chain only
         else if (s == "--no-lstm") a.no_lstm = true;                    // §13.18: context8k without the LSTM
@@ -1641,6 +1644,7 @@ int cmd_sample(const Args& a) {
         std::cerr << "sample: --gln and --lstm: one mixed-in expert at a time\n";
         return 2;
     }
+    const bool use_lstm = !a.no_lstm && !a.gln;  // §13.18: the LSTM writes along by default, unless the GLN does
     double lgln = 0;
     std::vector<double> lcl, lcp, lpl;
     std::vector<std::vector<double>> ldoc;
@@ -1707,7 +1711,7 @@ int cmd_sample(const Args& a) {
             fit_lambdas(pg, pt, one, half, 1, &lgln);
             std::cerr << "gln lambda " << lgln << " (" << gln->bytes() / 1e6 << " MB)\n";
         }
-        if (a.lstm) {  // §13.18: the byte LSTM after every expert, learning online over the holdout; one lambda over the chain
+        if (use_lstm) {  // §13.18: the byte LSTM after every expert, learning online over the holdout; one lambda over the chain
             lstm = std::make_unique<cypha::online::ByteLSTM>();
             std::vector<double> pg(span);
             double P[256];
@@ -1748,8 +1752,10 @@ int cmd_sample(const Args& a) {
     if (gate.k > 0) model_line += "\tgate=" + a.gate;  // GEN-B
     if (a.online_lambdas) model_line += "\tonline_lambdas";  // §13.22
     if (gln) model_line += "\tgln=" + std::to_string(lgln) + ":" + a.gln_mix + (a.gln_clean.empty() ? "" : ":clean");  // §13.15-16
-    if (lstm) model_line += "\tlstm=" + std::to_string(lgln) + ":" + a.gln_mix;  // §13.18
-    const int gmode = a.gln_mix == "gate" ? 3 : a.gln_mix == "geo" ? 2 : a.gln_mix == "after" ? 1 : 0;
+    if (lstm) model_line += "\tlstm=" + std::to_string(lgln) + ":" + (a.mix_set ? a.gln_mix : std::string("gate"));  // §13.18
+    // §13.18 LS2: the LSTM's default mix is the plausibility gate; the GLN's stays linear unless --gln-mix says otherwise.
+    const std::string mix = a.mix_set ? a.gln_mix : (lstm ? std::string("gate") : a.gln_mix);
+    const int gmode = mix == "gate" ? 3 : mix == "geo" ? 2 : mix == "after" ? 1 : 0;
     if (a.gln_mix != "lin" && a.gln_mix != "after" && a.gln_mix != "geo" && a.gln_mix != "gate") {
         std::cerr << "--gln-mix lin|after|geo|gate\n";
         return 2;

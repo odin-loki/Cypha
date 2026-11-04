@@ -1334,3 +1334,18 @@ Even so, each layer-1 weight set sees about half a million bits. The cost is abo
 - SO's best is 0.027 below W0's, beyond the 0.02 allowed. **`--online-lambdas` stays a flag.** The prediction (within ±0.02) missed.
 - The lambdas learned online over the holdout's end fit that text, not the prompts.
 - The writer that wins is K5 (§13.19) in any case, and it has no lambdas.
+
+**§13.18 writing result** (all 250 dev prompts; the LSTM's lambda is 0.055):
+
+| Arm | T 0.6 | T 0.8 | T 1.0 |
+|---|---:|---:|---:|
+| W0: no LSTM | **0.174** [0.137, 0.209] | 0.155 | 0.073 |
+| LS1: linear | 0.110 | 0.119 | 0.068 |
+| LS2: the plausibility gate | 0.137 | **0.155** [0.122, 0.188] | **0.133** [0.102, 0.164] |
+| LS3: product of experts | 0.119 | 0.100 | 0.078 |
+
+- **LS2 is non-inferior:** 0.155 ≥ 0.154. By the rule, `sample` writes with the LSTM in by default, mixed in through the gate. Online learning reaches writing, and SCRIBE does not measurably fall.
+- At T 1.0 the gate is far better than W0 (0.133 against 0.073), as with the GLN: it cuts the tail that T 1.0 lets in.
+- `--no-lstm` gives W0's text; `--lstm-mix lin|geo` gives the other mixes.
+- **Predictions:** LS1 non-inferior missed; LS2 non-inferior held; LS3 not non-inferior held.
+- The byte sampler is now CyphaLM's second writer; K5 (§13.19) writes best.
