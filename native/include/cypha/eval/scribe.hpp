@@ -1,4 +1,5 @@
 // SCRIBE v1: the generated-text quality metric (docs/PLAN.md section 6).
+// (v2 and v3 are further down: ScribeV2Scorer, and SurpriseModel / PackIndex / V3Scorer, docs/reports/SCRIBE_V3.md.)
 //
 // Header-only, standard library only, no neural network. Scope is the OPEN-CONTINUATION profile with
 // axes S (syntax), C (coherence), I (integrity) and E (expression, set level). R (relevance) and B (belief)
@@ -54,6 +55,7 @@
 #pragma once
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -61,10 +63,12 @@
 #include <cstring>
 #include <fstream>
 #include <istream>
+#include <limits>
 #include <numeric>
 #include <random>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -2639,6 +2643,1134 @@ inline void scribe_v2_selftest(int& checks, int& fails) {
               p.on.size() == 1 && !p.counts(V_S2) && p.counts(V_WFREQ) && p.counts(V_S3G) && !p.counts(V_S3) && !p.counts(V_SLMAX),
           "V2Params parse");
     check(!p.parse("bogus=1"), "V2Params rejects unknown keys");
+  }
+}
+
+// ===========================================================================
+// SCRIBE v3: two more judges with other maths, and the mean of three (docs/reports/SCRIBE_V3.md)
+// ===========================================================================
+//
+// v2 rests partly on co-occurrence (word vectors for coherence). v3 adds two judges that read none:
+//   SURPRISE (information theory): the per-word surprisal, in bits, of the text under a model trained on the pack
+//            only, and how it is spread. Too predictable (copied, generic, looping) is as bad as too surprising.
+//   MATCH    (string matching): how the text's bytes match the pack (a suffix array over the pack), the text's own
+//            Lempel-Ziv complexity, and, with a prompt, how much of the text is the prompt again.
+// Each statistic is compared with the human reference samples of its length bucket by v2's ECDF z-score (QuantileZ),
+// two-sided; evidence and score follow v2's form. SCRIBE v3 = mean(v2, SURPRISE, MATCH).
+
+// Character trigram over the bytes of word types, Witten-Bell interpolated down to an add-one unigram over the 256
+// bytes and the end of the word: a proper distribution over all finite byte strings. SURPRISE spells the words the
+// pack's trigram calls <unk> with one trained on the pack's once-seen word types, and numbers with one trained on its
+// number types.
+class SpellModel {
+ public:
+  static constexpr int kSym = 257, kEow = 256, kBow = 257, kCtx = 258;
+  void train(const std::vector<std::string>& types) {
+    n1_.assign(kSym, 0);
+    n2_.assign(static_cast<size_t>(kCtx) * kSym, 0);
+    N2_.assign(kCtx, 0);
+    T2_.assign(kCtx, 0);
+    N3_.assign(static_cast<size_t>(kCtx) * kCtx, 0);
+    T3_.assign(static_cast<size_t>(kCtx) * kCtx, 0);
+    n3_.clear();
+    N1_ = 0;
+    for (const std::string& w : types) {
+      int a = kBow, b = kBow;
+      for (size_t i = 0; i <= w.size(); ++i) {
+        const int c = i < w.size() ? static_cast<unsigned char>(w[i]) : kEow;
+        ++n1_[static_cast<size_t>(c)];
+        ++N1_;
+        if (n2_[static_cast<size_t>(b) * kSym + static_cast<size_t>(c)]++ == 0) ++T2_[static_cast<size_t>(b)];
+        ++N2_[static_cast<size_t>(b)];
+        const size_t ab = static_cast<size_t>(a) * kCtx + static_cast<size_t>(b);
+        if (n3_[static_cast<std::uint32_t>(ab * kSym + static_cast<size_t>(c))]++ == 0) ++T3_[ab];
+        ++N3_[ab];
+        a = b;
+        b = c;
+      }
+    }
+    trained_ = !types.empty();
+  }
+  bool trained() const { return trained_; }
+  // Bits to spell w and end it.
+  double bits(const std::string& w) const {
+    if (!trained_) return 8.0 * static_cast<double>(w.size() + 1);
+    double s = 0;
+    int a = kBow, b = kBow;
+    for (size_t i = 0; i <= w.size(); ++i) {
+      const int c = i < w.size() ? static_cast<unsigned char>(w[i]) : kEow;
+      double p = (static_cast<double>(n1_[static_cast<size_t>(c)]) + 1.0) / (static_cast<double>(N1_) + kSym);
+      const size_t bi = static_cast<size_t>(b);
+      if (N2_[bi]) p = (static_cast<double>(n2_[bi * kSym + static_cast<size_t>(c)]) + T2_[bi] * p) / (static_cast<double>(N2_[bi]) + T2_[bi]);
+      const size_t ab = static_cast<size_t>(a) * kCtx + bi;
+      if (N3_[ab]) {
+        const auto it = n3_.find(static_cast<std::uint32_t>(ab * kSym + static_cast<size_t>(c)));
+        const double n = it == n3_.end() ? 0.0 : static_cast<double>(it->second);
+        p = (n + T3_[ab] * p) / (static_cast<double>(N3_[ab]) + T3_[ab]);
+      }
+      s -= std::log2(p);
+      a = b;
+      b = c;
+    }
+    return s;
+  }
+
+ private:
+  bool trained_ = false;
+  std::uint64_t N1_ = 0;
+  std::vector<std::uint64_t> n1_;
+  std::vector<std::uint32_t> n2_, N2_, T2_, N3_, T3_;
+  std::unordered_map<std::uint32_t, std::uint32_t> n3_;
+};
+
+// ---------------------------------------------------------------------------
+// SURPRISE: the surprisal sequence
+// ---------------------------------------------------------------------------
+
+// The model whose code length SURPRISE reads. Static part: the pack's interpolated Kneser-Ney word trigram
+// (ScribeModel, sentence-internal context, proper over its vocabulary), with <unk> and <num> spelled by SpellModel, so
+// every string has a probability. Dynamic part (the text's own history, as a compressor would use it):
+//   p1(w) = (1 - lambda) p_static(w) + lambda c_H(w) / |H|             unigram cache (Kuhn and De Mori 1990)
+//   p(w)  = (1 - k / (k + beta)) p1(w) + k / (k + beta) [w = w*]       match model: the last k >= kmin words also
+//                                                                      occur earlier, followed there by w*
+// s(w) = -log2 p(w) bits; s0(w) = -log2 p_static(w) (no history). Both are proper code lengths.
+struct SurpriseParams {
+  double lambda = 0.1;  // unigram cache weight
+  double beta = 1.0;    // match model: confidence k / (k + beta) after a match of k words
+  int kmin = 2;         // shortest word match the match model uses
+  double coh_min_bits = 8;  // cohesion gain: only words whose unigram surprisal is at least this (content words)
+};
+
+class SurpriseModel {
+ public:
+  SurpriseParams params;
+  // The spelling models from the pack's word types (the same tokenisation as ScribeModel::train).
+  void train(const ScribeModel& m, const std::vector<std::string>& pack_docs) {
+    m_ = &m;
+    std::unordered_map<std::string, std::uint32_t> cnt;
+    cnt.reserve(1u << 20);
+    std::vector<std::string> toks;
+    for (const std::string& d : pack_docs)
+      for (const std::string& s : split_sentences(d)) {
+        toks.clear();
+        tokenize_words(s, toks);
+        for (const std::string& t : toks) ++cnt[t];
+      }
+    std::vector<std::string> once, nums;
+    uni_.assign(m.vocab_size(), 0.0);
+    double total = 0;
+    for (const auto& kv : cnt) {
+      if (numeric_token(kv.first)) nums.push_back(kv.first);
+      else if (kv.second == 1) once.push_back(kv.first);
+      uni_[m.word_id(kv.first)] += kv.second;  // <unk> and <num> collect their words' counts
+      total += kv.second;
+    }
+    for (double& x : uni_) x = -std::log2((x + 0.5) / (total + 0.5 * static_cast<double>(uni_.size())));
+    std::sort(once.begin(), once.end());
+    std::sort(nums.begin(), nums.end());
+    unk_.train(once);
+    num_.train(nums);
+    n_once_ = once.size();
+    n_nums_ = nums.size();
+  }
+  bool trained() const { return m_ != nullptr && m_->trained(); }  // an untrained spelling model spells 8 bits a byte
+  size_t n_once_types() const { return n_once_; }
+  size_t n_number_types() const { return n_nums_; }
+  double spell_bits(const std::string& w) const { return numeric_token(w) ? num_.bits(w) : unk_.bits(w); }
+
+  // What sequence() computes for one text.
+  struct Seq {
+    std::vector<float> s, s0, su, sp;  // per word: surprisal with the history, without it, under the unigram; spelling bits
+    std::vector<std::string> toks;     // the words
+    std::vector<std::uint16_t> sent;   // the sentence of each word
+    double coh = std::numeric_limits<double>::quiet_NaN();  // cohesion gain (NaN: under two sentences)
+  };
+  // Surprisal of every word token of the text (sentence order). su: the pack unigram's bits plus the same spelling
+  // bits, so su - s0 is the information the trigram context gives about the word.
+  void sequence(const std::string& text, Seq& q) const {
+    q = Seq();
+    if (!trained()) return;
+    const std::vector<std::vector<std::string>> st = sentence_tokens(text);
+    std::vector<std::uint64_t> h;
+    std::unordered_map<std::string, int> seen;
+    size_t H = 0;
+    const double ln2 = std::log(2.0);
+    for (size_t si = 0; si < st.size(); ++si) {
+      const auto& t = st[si];
+      std::uint32_t u = ScribeModel::kBos, v = ScribeModel::kBos;
+      for (const std::string& w : t) {
+        const std::uint32_t id = m_->word_id(w);
+        const double spell = id == ScribeModel::kUnk ? unk_.bits(w) : (id == ScribeModel::kNum ? num_.bits(w) : 0.0);
+        const double b0 = -m_->logp(u, v, id) / ln2 + spell;
+        double p = std::exp2(-b0);
+        if (H > 0) {
+          const auto it = seen.find(w);
+          const double c = it == seen.end() ? 0.0 : static_cast<double>(it->second);
+          p = (1.0 - params.lambda) * p + params.lambda * c / static_cast<double>(H);
+        }
+        // Match model: the longest k >= kmin such that the last k words occurred earlier (most recent on ties).
+        const std::uint64_t hw = scribe_detail::fnv1a(w);
+        const size_t i = h.size();
+        int best_k = 0;
+        std::uint64_t pred = 0;
+        for (size_t j = i; j-- > 1;) {  // the earlier word h[j] followed context h[j-k..j)
+          int k = 0;
+          while (k < 32 && static_cast<size_t>(k) < j && h[j - 1 - static_cast<size_t>(k)] == h[i - 1 - static_cast<size_t>(k)]) ++k;
+          if (k > best_k) {
+            best_k = k;
+            pred = h[j];
+          }
+        }
+        if (best_k >= params.kmin) {
+          const double conf = best_k / (best_k + params.beta);
+          p = (1.0 - conf) * p + (hw == pred ? conf : 0.0);
+        }
+        q.s.push_back(static_cast<float>(-std::log2(std::max(p, 1e-300))));
+        q.s0.push_back(static_cast<float>(b0));
+        q.su.push_back(static_cast<float>(uni_[id] + spell));
+        q.sp.push_back(static_cast<float>(spell));
+        q.toks.push_back(w);
+        q.sent.push_back(static_cast<std::uint16_t>(std::min<size_t>(si, 65535)));
+        h.push_back(hw);
+        ++seen[w];
+        ++H;
+        u = v;
+        v = id;
+      }
+    }
+    // Cohesion as code length: each sentence coded with a unigram cache of the text's OTHER sentences,
+    // p = (1 - lambda) p_static + lambda c_other(w) / |other|; the bits it saves per word, averaged over the sentences.
+    if (st.size() >= 2) {
+      std::unordered_map<std::string, int> all;
+      for (const auto& t : st)
+        for (const std::string& w : t) ++all[w];
+      size_t k = 0;
+      const size_t Hall = q.s0.size();
+      double tot = 0;
+      int nsent = 0;
+      for (const auto& t : st) {
+        std::unordered_map<std::string, int> own;
+        for (const std::string& w : t) ++own[w];
+        const size_t Ho = Hall - t.size();
+        double g = 0;
+        int m = 0;
+        for (const std::string& w : t) {
+          const double b0 = q.s0[k];
+          const double bu = q.su[k++];
+          if (Ho == 0 || bu < params.coh_min_bits) continue;  // content words only
+          const double c = static_cast<double>(all[w] - own[w]);
+          const double p = (1.0 - params.lambda) * std::exp2(-b0) + params.lambda * c / static_cast<double>(Ho);
+          g += b0 + std::log2(std::max(p, 1e-300));
+          ++m;
+        }
+        if (m) {
+          tot += g / m;
+          ++nsent;
+        }
+      }
+      if (nsent) q.coh = tot / nsent;
+    }
+  }
+
+ private:
+  const ScribeModel* m_ = nullptr;
+  SpellModel unk_, num_;
+  std::vector<double> uni_;  // unigram surprisal (bits) of each id of m_, <unk> and <num> as classes
+  size_t n_once_ = 0, n_nums_ = 0;
+};
+
+// ---------------------------------------------------------------------------
+// MATCH: a suffix array over the pack, matching statistics, Lempel-Ziv complexity
+// ---------------------------------------------------------------------------
+
+// The pack's documents joined by '\n' and a suffix array sorted on the first kCap bytes of each suffix (matches are
+// counted up to kCap bytes; a longer one counts as kCap). The texts scored never hold '\n', so no match crosses a
+// document boundary. The longest prefix of a pattern that occurs in the pack is its longest common prefix with one of
+// its two neighbours in the sorted order: one binary search inside the bucket of its first two bytes.
+class PackIndex {
+ public:
+  static constexpr size_t kCap = 64;
+  void build(const std::vector<std::string>& docs, unsigned threads = 4) {
+    text_.clear();
+    size_t tot = 0;
+    for (const std::string& d : docs) tot += d.size() + 1;
+    text_.reserve(tot);
+    for (const std::string& d : docs) {
+      text_ += d;
+      text_.push_back('\n');
+    }
+    for (char& c : text_)
+      if (c == '\0') c = ' ';
+    const size_t N = text_.size();
+    const unsigned char* t = reinterpret_cast<const unsigned char*>(text_.data());
+    for (size_t i = 0; i < N; ++i) {
+      has1_[t[i]] = true;
+      ++n1_[t[i]];
+    }
+    auto key2 = [&](size_t i) { return (static_cast<std::uint32_t>(t[i]) << 8) | (i + 1 < N ? t[i + 1] : 0u); };
+    b2_.assign(65537, 0);
+    for (size_t i = 0; i < N; ++i)
+      if (t[i] != '\n') ++b2_[key2(i) + 1];
+    for (size_t k = 1; k <= 65536; ++k) b2_[k] += b2_[k - 1];
+    sa_.assign(b2_[65536], 0);
+    {
+      std::vector<std::uint32_t> fill(b2_.begin(), b2_.end() - 1);
+      for (size_t i = 0; i < N; ++i)
+        if (t[i] != '\n') sa_[fill[key2(i)]++] = static_cast<std::uint32_t>(i);
+    }
+    std::atomic<size_t> next{0};
+    auto work = [&]() {
+      std::vector<std::pair<std::uint64_t, std::uint32_t>> buf;
+      for (size_t b; (b = next++) < 65536;) {
+        const size_t lo = b2_[b], hi = b2_[b + 1];
+        if (hi - lo < 2) continue;
+        buf.clear();
+        for (size_t r = lo; r < hi; ++r) buf.emplace_back(key8(sa_[r] + 2), sa_[r]);
+        std::sort(buf.begin(), buf.end(), [&](const auto& x, const auto& y) {
+          if (x.first != y.first) return x.first < y.first;
+          return cmp_text(x.second + 10, y.second + 10, kCap - 10) < 0;
+        });
+        for (size_t r = lo; r < hi; ++r) sa_[r] = buf[r - lo].second;
+      }
+    };
+    std::vector<std::thread> th;
+    for (unsigned k = 1; k < std::max(1u, threads); ++k) th.emplace_back(work);
+    work();
+    for (std::thread& x : th) x.join();
+    built_ = true;
+  }
+  bool built() const { return built_; }
+  size_t size() const { return text_.size(); }
+  size_t bytes() const { return text_.size() + sa_.size() * 4 + b2_.size() * 4; }
+
+  // The longest prefix of p[0..len), at most kCap bytes, that occurs in the pack.
+  size_t match(const unsigned char* p, size_t len) const {
+    len = std::min(len, kCap);
+    if (len == 0 || !has1_[p[0]]) return 0;
+    if (len == 1) return 1;
+    const std::uint32_t k = (static_cast<std::uint32_t>(p[0]) << 8) | p[1];
+    const size_t lo = b2_[k], hi = b2_[k + 1];
+    if (lo == hi) return 1;
+    size_t a = lo, b = hi;
+    while (a < b) {
+      const size_t mid = a + (b - a) / 2;
+      if (cmp_pat(sa_[mid] + 2, p + 2, len - 2) < 0) a = mid + 1;
+      else b = mid;
+    }
+    size_t best = 2;
+    if (a < hi) best = std::max(best, 2 + lcp(sa_[a] + 2, p + 2, len - 2));
+    if (a > lo) best = std::max(best, 2 + lcp(sa_[a - 1] + 2, p + 2, len - 2));
+    return best;
+  }
+  // How often p[0..len) occurs in the pack (len <= kCap; a longer string is counted by its first kCap bytes).
+  size_t count(const unsigned char* p, size_t len) const {
+    len = std::min(len, kCap);
+    if (len == 0) return text_.size();
+    if (len == 1) return n1_[p[0]];
+    const std::uint32_t k = (static_cast<std::uint32_t>(p[0]) << 8) | p[1];
+    const size_t lo = b2_[k], hi = b2_[k + 1];
+    if (len == 2) return hi - lo;
+    size_t a = lo, b = hi;
+    while (a < b) {  // first suffix >= p
+      const size_t mid = a + (b - a) / 2;
+      if (cmp_pat(sa_[mid] + 2, p + 2, len - 2) < 0) a = mid + 1;
+      else b = mid;
+    }
+    size_t c = a, e = hi;
+    while (c < e) {  // first suffix that does not start with p
+      const size_t mid = c + (e - c) / 2;
+      if (lcp(sa_[mid] + 2, p + 2, len - 2) == len - 2) c = mid + 1;
+      else e = mid;
+    }
+    return c - a;
+  }
+
+ private:
+  std::uint64_t key8(size_t i) const {
+    std::uint64_t k = 0;
+    for (size_t j = 0; j < 8; ++j) k = (k << 8) | (i + j < text_.size() ? static_cast<unsigned char>(text_[i + j]) : 0u);
+    return k;
+  }
+  int cmp_text(size_t i, size_t j, size_t len) const {
+    const size_t N = text_.size();
+    const size_t li = i < N ? std::min(len, N - i) : 0, lj = j < N ? std::min(len, N - j) : 0;
+    const int r = std::memcmp(text_.data() + std::min(i, N), text_.data() + std::min(j, N), std::min(li, lj));
+    if (r != 0) return r;
+    return li < lj ? -1 : (li > lj ? 1 : 0);
+  }
+  int cmp_pat(size_t i, const unsigned char* q, size_t m) const {
+    const size_t N = text_.size();
+    const size_t li = i < N ? std::min(m, N - i) : 0;
+    const int r = std::memcmp(text_.data() + std::min(i, N), q, li);
+    if (r != 0) return r;
+    return li < m ? -1 : 0;
+  }
+  size_t lcp(size_t i, const unsigned char* q, size_t m) const {
+    const size_t N = text_.size();
+    const size_t li = i < N ? std::min(m, N - i) : 0;
+    size_t k = 0;
+    while (k < li && static_cast<unsigned char>(text_[i + k]) == q[k]) ++k;
+    return k;
+  }
+  bool built_ = false;
+  std::string text_;
+  std::vector<std::uint32_t> sa_, b2_;
+  bool has1_[256] = {};
+  size_t n1_[256] = {};
+};
+
+namespace scribe_detail {
+
+// Lempel-Ziv (1976) complexity: the number of phrases of the LZ76 parsing (Kaspar and Schuster 1987).
+inline size_t lz76_phrases(const std::string& s) {
+  const size_t n = s.size();
+  if (n == 0) return 0;
+  if (n == 1) return 1;
+  size_t c = 1, l = 1, i = 0, k = 1, kmax = 1;
+  while (true) {
+    if (s[i + k - 1] == s[l + k - 1]) {
+      ++k;
+      if (l + k > n) {
+        ++c;
+        break;
+      }
+    } else {
+      if (k > kmax) kmax = k;
+      ++i;
+      if (i == l) {
+        ++c;
+        l += kmax;
+        if (l + 1 > n) break;
+        i = 0;
+        k = 1;
+        kmax = 1;
+      } else {
+        k = 1;
+      }
+    }
+  }
+  return c;
+}
+
+// For each position i of a, the longest common prefix of a[i..] with any b[j..] (at most cap): a naive scan, fine for
+// texts of a few hundred bytes. With self = true, b is a itself and only j < i counts (the text's own past; the
+// source may run on into i, as in LZ77).
+inline std::vector<std::uint16_t> lcp_scan(const std::string& a, const std::string& b, bool self, size_t cap = 64) {
+  std::vector<std::uint16_t> m(a.size(), 0);
+  for (size_t i = 0; i < a.size(); ++i) {
+    size_t best = 0;
+    const size_t jend = self ? i : b.size();
+    for (size_t j = 0; j < jend; ++j) {
+      if (b[j] != a[i]) continue;
+      size_t k = 1;
+      const size_t lim = std::min(cap, std::min(a.size() - i, b.size() - j));
+      while (k < lim && a[i + k] == b[j + k]) ++k;
+      if (k > best) {
+        best = k;
+        if (best >= cap) break;
+      }
+    }
+    m[i] = static_cast<std::uint16_t>(best);
+  }
+  return m;
+}
+
+// Coverage: for each byte j, the longest match m[i] with i <= j < i + m[i].
+inline std::vector<std::uint16_t> match_cover(const std::vector<std::uint16_t>& m) {
+  std::vector<std::uint16_t> c(m.size(), 0);
+  for (size_t i = 0; i < m.size(); ++i)
+    for (size_t j = i; j < std::min(m.size(), i + m[i]); ++j) c[j] = std::max(c[j], m[i]);
+  return c;
+}
+
+inline double quantile_sorted(const std::vector<double>& v, double p) {
+  if (v.empty()) return 0;
+  const double h = p * static_cast<double>(v.size() - 1);
+  const size_t i = static_cast<size_t>(h);
+  const double fr = h - static_cast<double>(i);
+  return i + 1 < v.size() ? v[i] * (1 - fr) + v[i + 1] * fr : v.back();
+}
+
+}  // namespace scribe_detail
+
+// ---------------------------------------------------------------------------
+// The v3 statistics
+// ---------------------------------------------------------------------------
+
+enum V3Stat {
+  // SURPRISE
+  W_MEAN, W_SD, W_AC1, W_LO, W_HI, W_CTX, W_ANTI, W_SPELL, W_COH,
+  // MATCH
+  M_MED, M_P90, M_LONG, M_SHORT, M_LZ, M_TRI, M_COH, M_ECHO, M_ECHO32,
+  W3_N
+};
+
+// Each statistic is two-sided: its z-score is compared with the human reference on both sides, and each side's
+// evidence goes to one group of its metric's deviance (0: that side is not counted, because another statistic of the
+// same group already measures it):
+//   'L' lexical failure (not words)          saturating
+//   'S' order failure (not word order)       saturating
+//   'C' cohesion failure (sentences unrelated, or off the prompt)   graded
+//   'P' too predictable (copied, looping, echoing)                  linear beyond the human threshold
+struct V3StatSpec {
+  const char* name;
+  char metric;      // 'W' SURPRISE, 'M' MATCH
+  double min_sd;    // floor of the tail scale (QuantileZ)
+  char plus, minus; // group of the high side and of the low side
+  char missing;     // side counted (at missing_z) when the statistic is absent where >= 95% of human samples have it
+};
+
+inline const V3StatSpec& v3_spec(int k) {
+  static const V3StatSpec specs[W3_N] = {
+      {"w_mean", 'W', 0.10, 'L', 'P', '+'},   // mean surprisal (bits per word)
+      {"w_sd", 'W', 0.10, 'L', 'P', '+'},     // its standard deviation
+      {"w_ac1", 'W', 0.02, 'P', 'S', '-'},    // its lag-1 autocorrelation (burstiness)
+      {"w_lo", 'W', 0.01, 'P', 'S', '-'},     // share of words below the low threshold (too predictable)
+      {"w_hi", 'W', 0.01, 'L', 'P', '+'},     // share above the high threshold (salad)
+      {"w_ctx", 'W', 0.05, 'P', 'S', '-'},    // information the trigram context gives (unigram bits - trigram bits)
+      {"w_anti", 'W', 0.01, 0, 0, 0},        // share of words the context makes > 2 bits LESS likely (reported only)
+      {"w_spell", 'W', 0.05, 'L', 'P', '+'},  // bits spent spelling words the pack's trigram does not know (per word)
+      {"w_coh", 'W', 0.02, 'P', 'C', '-'},    // bits a sentence's content words save from the other sentences
+      {"m_med", 'M', 0.25, 'P', 0, '-'},      // median longest pack match from each byte
+      {"m_p90", 'M', 0.5, 'P', 'S', '-'},     // its 90th percentile
+      {"m_long", 'M', 0.005, 'P', 0, '-'},    // share of bytes inside pack matches of >= 32 bytes (copying)
+      {"m_short", 'M', 0.005, 'L', 'P', '+'}, // share of bytes only inside pack matches of <= 4 bytes (novel junk)
+      {"m_lz", 'M', 0.01, 'C', 'P', '+'},     // LZ76 complexity, phrases x log2(n) / n
+      {"m_tri", 'M', 0.01, 'P', 'S', '-'},    // share of word starts whose pack match covers >= 3 whole words
+      {"m_coh", 'M', 0.005, 'P', 'C', '-'},   // bytes shared with the other sentences, weighted by their pack information
+      {"m_echo", 'M', 0.005, 'P', 'C', 0},    // share of bytes inside >= 8-byte matches with the prompt (prompted only)
+      {"m_echo32", 'M', 0.005, 'P', 0, 0}};  // share inside >= 32-byte matches with the prompt (copied prompt sentences)
+  return specs[k];
+}
+
+// Raw per-text material of v3. w_lo and w_hi need the reference's thresholds and are finished by V3Scorer::values.
+struct V3Features {
+  size_t bytes = 0;
+  int n_words = 0;
+  std::vector<float> s;  // SURPRISE: per-word surprisal with the history (bits)
+  bool has_w = false, has_w_coh = false;
+  double w_mean = 0, w_sd = 0, w_ac1 = 0, w_ctx = 0, w_anti = 0, w_spell = 0, w_coh = 0;
+  bool has_m = false, has_m_coh = false, has_echo = false;
+  double m_med = 0, m_p90 = 0, m_long = 0, m_short = 0, m_lz = 0, m_tri = 0, m_coh = 0, m_echo = 0, m_echo32 = 0;
+  double m_words = 0;  // reported only: mean number of whole words a pack match covers from a word start
+  SurpriseModel::Seq seq;  // kept only on request (exploration dumps)
+};
+
+inline V3Features extract_v3(const SurpriseModel& sm, const PackIndex& px, const std::string& text, const std::string& prompt = "",
+                             bool keep_seq = false) {
+  using namespace scribe_detail;
+  V3Features f;
+  f.bytes = text.size();
+  SurpriseModel::Seq q;
+  sm.sequence(text, q);
+  f.n_words = static_cast<int>(q.s.size());
+  f.s = q.s;
+  if (f.n_words > 0) {
+    const double n = static_cast<double>(f.n_words);
+    double m = 0, ctx = 0, sp = 0, anti = 0;
+    for (size_t i = 0; i < q.s.size(); ++i) {
+      m += q.s[i];
+      ctx += q.su[i] - q.s0[i];
+      sp += q.sp[i];
+      anti += q.s0[i] - q.su[i] > 2.0;
+    }
+    m /= n;
+    double v = 0, c1 = 0;
+    for (size_t i = 0; i < q.s.size(); ++i) {
+      v += (q.s[i] - m) * (q.s[i] - m);
+      if (i + 1 < q.s.size()) c1 += (q.s[i] - m) * (q.s[i + 1] - m);
+    }
+    f.w_mean = m;
+    f.w_sd = std::sqrt(v / n);
+    f.w_ac1 = v > 0 ? c1 / v : 0.0;
+    f.w_ctx = ctx / n;
+    f.w_spell = sp / n;
+    f.w_anti = anti / n;
+    f.has_w = true;
+    f.w_coh = q.coh;
+    f.has_w_coh = std::isfinite(q.coh);
+  }
+  if (keep_seq) f.seq = std::move(q);
+  const size_t n = text.size();
+  if (!px.built() || n < 8) return f;
+  f.has_m = true;
+  const unsigned char* t = reinterpret_cast<const unsigned char*>(text.data());
+  // Matching statistics: from each byte, the longest prefix of the rest of the text that occurs in the pack.
+  std::vector<std::uint16_t> mp(n);
+  for (size_t i = 0; i < n; ++i) mp[i] = static_cast<std::uint16_t>(px.match(t + i, n - i));
+  {
+    std::vector<double> v(mp.begin(), mp.end());
+    std::sort(v.begin(), v.end());
+    f.m_med = quantile_sorted(v, 0.5);
+    f.m_p90 = quantile_sorted(v, 0.9);
+  }
+  {
+    const std::vector<std::uint16_t> cov = match_cover(mp);
+    size_t lg = 0, sh = 0;
+    for (std::uint16_t c : cov) {
+      lg += c >= 32;
+      sh += c <= 4;
+    }
+    f.m_long = static_cast<double>(lg) / static_cast<double>(n);
+    f.m_short = static_cast<double>(sh) / static_cast<double>(n);
+  }
+  f.m_lz = static_cast<double>(lz76_phrases(text)) * std::log2(static_cast<double>(n)) / static_cast<double>(n);
+  // From each word start, how many whole space-separated words the pack match covers.
+  {
+    double tot = 0;
+    size_t starts = 0, k3 = 0;
+    for (size_t p = 0; p < n; ++p) {
+      if ((p > 0 && text[p - 1] != ' ') || text[p] == ' ') continue;
+      const size_t end = p + mp[p];
+      size_t k = 0, e = p;
+      while (e < n) {
+        size_t q2 = e;
+        while (q2 < n && text[q2] != ' ') ++q2;
+        if (q2 > end) break;
+        ++k;
+        e = q2 + 1;
+      }
+      tot += static_cast<double>(k);
+      k3 += k >= 3;
+      ++starts;
+    }
+    f.m_words = starts ? tot / static_cast<double>(starts) : 0.0;
+    f.m_tri = starts ? static_cast<double>(k3) / static_cast<double>(starts) : 0.0;
+  }
+  // Cohesion: each sentence against the text's other sentences. From each word start, the longest match (>= 5 bytes) in
+  // the other sentences; each byte it covers counts the matched string's information in the pack,
+  // w = log2((N + 1) / (count + 1)) / log2(N + 1) in [0, 1], above a floor of 0.45 (strings the pack holds more than
+  // about N^0.55 times, such as " the ", count nothing): max(0, w - 0.45) / 0.55. Mean over the sentence's bytes, then
+  // over the sentences.
+  {
+    const std::vector<std::string> ss = split_sentences(text);
+    if (ss.size() >= 2) {
+      double sw = 0;
+      const double logN = std::log2(static_cast<double>(px.size()) + 1.0);
+      for (size_t j = 0; j < ss.size(); ++j) {
+        std::string other;
+        for (size_t i = 0; i < ss.size(); ++i)
+          if (i != j) {
+            if (!other.empty()) other.push_back('\n');
+            other += ss[i];
+          }
+        const std::string& s = ss[j];
+        std::vector<float> cw(s.size(), 0.0f);
+        for (size_t p = 0; p < s.size(); ++p) {
+          if (p > 0 && s[p - 1] != ' ') continue;
+          size_t L = 0;
+          for (size_t q2 = 0; q2 < other.size(); ++q2) {
+            if (other[q2] != s[p]) continue;
+            size_t k = 1;
+            const size_t lim = std::min(PackIndex::kCap, std::min(s.size() - p, other.size() - q2));
+            while (k < lim && s[p + k] == other[q2 + k]) ++k;
+            L = std::max(L, k);
+          }
+          if (L < 5) continue;
+          const size_t c = px.count(reinterpret_cast<const unsigned char*>(s.data()) + p, L);
+          const double w = std::log2((static_cast<double>(px.size()) + 1.0) / (static_cast<double>(c) + 1.0)) / logN;
+          const float wf = static_cast<float>(std::max(0.0, w - 0.45) / 0.55);
+          for (size_t b = p; b < p + L; ++b) cw[b] = std::max(cw[b], wf);
+        }
+        double bw = 0;
+        for (float x : cw) bw += x;
+        sw += bw / static_cast<double>(s.size());
+      }
+      f.m_coh = sw / static_cast<double>(ss.size());
+      f.has_m_coh = true;
+    }
+  }
+  // Echo: the share of the text's bytes inside matches of >= 8 bytes with the prompt.
+  if (!prompt.empty()) {
+    const std::vector<std::uint16_t> me = lcp_scan(text, prompt, false);
+    std::vector<std::uint16_t> e8(n, 0), e32(n, 0);
+    for (size_t i = 0; i < n; ++i) {
+      if (me[i] >= 8) e8[i] = me[i];
+      if (me[i] >= 32) e32[i] = me[i];
+    }
+    const std::vector<std::uint16_t> ce = match_cover(e8), ce32 = match_cover(e32);
+    size_t ae = 0, ae32 = 0;
+    for (size_t i = 0; i < n; ++i) {
+      ae += ce[i] > 0;
+      ae32 += ce32[i] > 0;
+    }
+    f.m_echo = static_cast<double>(ae) / static_cast<double>(n);
+    f.m_echo32 = static_cast<double>(ae32) / static_cast<double>(n);
+    f.has_echo = true;
+  }
+  return f;
+}
+
+// extract_v3 over many texts on several threads (the models are only read). prompts: empty, or one per text.
+inline std::vector<V3Features> extract_v3_all(const SurpriseModel& sm, const PackIndex& px, const std::vector<std::string>& texts,
+                                              const std::vector<std::string>& prompts = {}, unsigned threads = 4, bool keep_seq = false) {
+  std::vector<V3Features> out(texts.size());
+  std::atomic<size_t> next{0};
+  auto work = [&]() {
+    for (size_t i; (i = next++) < texts.size();) out[i] = extract_v3(sm, px, texts[i], i < prompts.size() ? prompts[i] : std::string(), keep_seq);
+  };
+  std::vector<std::thread> th;
+  for (unsigned k = 1; k < std::max(1u, threads); ++k) th.emplace_back(work);
+  work();
+  for (std::thread& x : th) x.join();
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// The v3 scores
+// ---------------------------------------------------------------------------
+
+// One new metric's deviance, v2's form with two-sided evidence split by side (u = the bad side's |z|):
+//   L = sum of max(0, u - deadL) over the lexical sides, S = the same over the order sides (deadS)
+//   C = sum of max(0, u - deadC) over the cohesion sides (m_lz's high side: lz_w max(0, u - lz_dead))
+//   G = sum of max(0, u - deadG) over the too-predictable sides (graded)
+//   X = sum over the too-predictable sides of max(0, e_k - th_k), e_k = max(0, u_k - dead), th_k = the q quantile of
+//       e_k over the human reference samples of the bucket (for the echo, over the prompted reference continuations)
+//   D = cap sat(L - thL) + cap sat(S - thS) + wC C + wG G + wP X,   sat(x) = 1 - exp(-max(0, x) / kap)
+//   thL, thS = the q quantiles of L and S over the human reference samples of the length bucket
+//   score = exp(-D / tau)
+// Chosen on development ladder A and its attack battery (docs/reports/SCRIBE_V3.md); tau puts the mean score of dev A's
+// human samples at v2's (0.909).
+struct V3MetricParams {
+  double dead = 1, deadL = 4, deadS = 1, deadC = 0, deadG = 1.5;
+  double cap = 30, kap = 2, wC = 4, wG = 1, wP = 8, q = 0.99, tau = 20;
+};
+
+struct V3Params {
+  V3MetricParams w, m;    // SURPRISE, MATCH
+  double w_qlo = 0.25;    // w_lo: words below this quantile of the reference words' surprisal
+  double w_qhi = 0.90;    // w_hi: words above this one
+  double lz_w = 0.5, lz_dead = 2;  // MATCH: m_lz's high side counts in C with this weight and dead zone
+  double missing_z = 4;
+  double disagree = 0.5;  // flag a text when max - min of the three scores exceeds this
+  V3Params() {
+    m.kap = 0.25;
+    m.wC = 6;
+    m.deadG = 2;
+    m.wP = 20;
+    m.tau = 30;
+  }
+  // "w.tau=6,m.wC=4,lz_w=0.5,..." (w. SURPRISE, m. MATCH)
+  bool parse(const std::string& spec) {
+    size_t p = 0;
+    while (p < spec.size()) {
+      size_t e = spec.find(',', p);
+      if (e == std::string::npos) e = spec.size();
+      const std::string kv = spec.substr(p, e - p);
+      p = e + 1;
+      const size_t eq = kv.find('=');
+      if (eq == std::string::npos) return false;
+      std::string k = kv.substr(0, eq);
+      const double x = std::strtod(kv.c_str() + eq + 1, nullptr);
+      if (k == "w_qlo") w_qlo = x;
+      else if (k == "w_qhi") w_qhi = x;
+      else if (k == "lz_w") lz_w = x;
+      else if (k == "lz_dead") lz_dead = x;
+      else if (k == "missing") missing_z = x;
+      else if (k == "disagree") disagree = x;
+      else if (k.size() > 2 && (k[0] == 'w' || k[0] == 'm') && k[1] == '.') {
+        V3MetricParams& mp = k[0] == 'w' ? w : m;
+        k = k.substr(2);
+        if (k == "dead") mp.dead = x;
+        else if (k == "deadL") mp.deadL = x;
+        else if (k == "deadS") mp.deadS = x;
+        else if (k == "deadC") mp.deadC = x;
+        else if (k == "deadG") mp.deadG = x;
+        else if (k == "wG") mp.wG = x;
+        else if (k == "cap") mp.cap = x;
+        else if (k == "kap") mp.kap = x;
+        else if (k == "wC") mp.wC = x;
+        else if (k == "wP") mp.wP = x;
+        else if (k == "q") mp.q = x;
+        else if (k == "tau") mp.tau = x;
+        else return false;
+      } else {
+        return false;
+      }
+    }
+    return true;
+  }
+};
+
+struct ScoredV3 {
+  double z[W3_N] = {};
+  bool has[W3_N] = {};
+  bool imputed[W3_N] = {};
+  double E[2][4] = {};   // [SURPRISE, MATCH][L, S, C, G] evidence sums (G: the too-predictable sides, graded)
+  double eP[W3_N] = {};  // each statistic's evidence on its too-predictable side
+  double Dg[2][4] = {};  // their terms of D
+  double D[2] = {};
+  double surprise = 0, match = 0;
+};
+
+class V3Scorer {
+ public:
+  V3Params params;
+
+  // A human reference sample (open continuation).
+  void add_reference(const V3Features& f) { ref_[length_bucket(f.bytes)].push_back(f); }
+  // A human continuation of a prompt: only its echo counts (the prompted reference of m_echo).
+  void add_reference_echo(const V3Features& f) {
+    if (!f.has_echo) return;
+    const int b = length_bucket(f.bytes);
+    echo_[b][0].add(f.m_echo);
+    echo_[b][1].add(f.m_echo32);
+    echo_vals_[b][0].push_back(f.m_echo);
+    echo_vals_[b][1].push_back(f.m_echo32);
+  }
+  size_t n_reference(int b) const { return ref_[b].size(); }
+  size_t n_reference_echo(int b) const { return echo_[b][0].size(); }
+  double threshold_lo() const { return th_lo_; }
+  double threshold_hi() const { return th_hi_; }
+  double group_threshold(int metric, int b, int g) const { return th_[metric][b][g]; }
+  double p_threshold(int b, int k) const { return thP_[b][k]; }
+  const std::vector<V3Features>& reference(int b) const { return ref_[b]; }
+  // z of each prompted reference continuation's echo (bucket b).
+  std::vector<double> echo_reference_z(int b, int which = 0) const {
+    std::vector<double> z;
+    for (double v : echo_vals_[b][which]) z.push_back(echo_[b][which].z(v));
+    return z;
+  }
+
+  // Word thresholds from the pooled reference words, then the z-transforms, then the group thresholds.
+  void finish() {
+    std::vector<double> all;
+    for (int b = 0; b < 2; ++b)
+      for (const V3Features& f : ref_[b]) all.insert(all.end(), f.s.begin(), f.s.end());
+    std::sort(all.begin(), all.end());
+    th_lo_ = scribe_detail::quantile_sorted(all, params.w_qlo);
+    th_hi_ = scribe_detail::quantile_sorted(all, params.w_qhi);
+    for (int b = 0; b < 2; ++b) {
+      nref_[b] = ref_[b].size();
+      for (int k = 0; k < W3_N; ++k) {
+        q_[b][k] = QuantileZ();
+        present_[b][k] = 0;
+      }
+      for (const V3Features& f : ref_[b]) {
+        double x[W3_N];
+        bool has[W3_N];
+        values(f, x, has);
+        for (int k = 0; k < W3_N; ++k)
+          if (has[k] && !is_echo(k)) {
+            q_[b][k].add(x[k]);
+            ++present_[b][k];
+          }
+      }
+      for (int k = 0; k < W3_N; ++k)
+        if (!is_echo(k)) q_[b][k].finish(v3_spec(k).min_sd);
+      echo_[b][0].finish(v3_spec(M_ECHO).min_sd);
+      echo_[b][1].finish(v3_spec(M_ECHO32).min_sd);
+    }
+    for (int b = 0; b < 2; ++b) {
+      std::vector<double> E[2][4];
+      for (const V3Features& f : ref_[b]) {
+        const ScoredV3 o = evidence(f);
+        for (int m = 0; m < 2; ++m)
+          for (int g = 0; g < 4; ++g) E[m][g].push_back(o.E[m][g]);
+      }
+      for (int m = 0; m < 2; ++m)
+        for (int g = 0; g < 4; ++g) {
+          std::sort(E[m][g].begin(), E[m][g].end());
+          th_[m][b][g] = scribe_detail::quantile_sorted(E[m][g], m == 0 ? params.w.q : params.m.q);
+        }
+      // Too predictable: each statistic counts only beyond what the q share of human samples show on it.
+      std::vector<double> eP[W3_N];
+      for (const V3Features& f : ref_[b]) {
+        const ScoredV3 o = evidence(f);
+        for (int k = 0; k < W3_N; ++k) eP[k].push_back(o.eP[k]);
+      }
+      for (int k = 0; k < W3_N; ++k) {
+        std::sort(eP[k].begin(), eP[k].end());
+        thP_[b][k] = scribe_detail::quantile_sorted(eP[k], v3_spec(k).metric == 'W' ? params.w.q : params.m.q);
+      }
+    }
+    for (int b = 0; b < 2; ++b)  // the echo statistics, from the prompted continuations
+      for (int w = 0; w < 2; ++w) {
+        const int eb = echo_[b][w].size() >= 20 ? b : 1 - b;
+        std::vector<double> e;
+        for (double v : echo_vals_[eb][w]) e.push_back(std::max(0.0, echo_[eb][w].z(v) - params.m.dead));
+        std::sort(e.begin(), e.end());
+        thP_[b][w == 0 ? M_ECHO : M_ECHO32] = scribe_detail::quantile_sorted(e, params.m.q);
+      }
+  }
+
+  // The raw value of each statistic and whether the text has it.
+  void values(const V3Features& f, double* x, bool* has) const {
+    for (int k = 0; k < W3_N; ++k) has[k] = false;
+    if (f.has_w) {
+      size_t lo = 0, hi = 0;
+      for (float v : f.s) {
+        lo += v < th_lo_;
+        hi += v > th_hi_;
+      }
+      const double n = static_cast<double>(f.s.size());
+      x[W_MEAN] = f.w_mean;
+      x[W_SD] = f.w_sd;
+      x[W_AC1] = f.w_ac1;
+      x[W_LO] = static_cast<double>(lo) / n;
+      x[W_HI] = static_cast<double>(hi) / n;
+      x[W_CTX] = f.w_ctx;
+      x[W_SPELL] = f.w_spell;
+      x[W_ANTI] = f.w_anti;
+      for (int k : {W_MEAN, W_SD, W_AC1, W_LO, W_HI, W_CTX, W_ANTI, W_SPELL}) has[k] = true;
+    }
+    x[W_COH] = f.w_coh;
+    has[W_COH] = f.has_w_coh;
+    if (f.has_m) {
+      x[M_MED] = f.m_med;
+      x[M_P90] = f.m_p90;
+      x[M_LONG] = f.m_long;
+      x[M_SHORT] = f.m_short;
+      x[M_LZ] = f.m_lz;
+      x[M_TRI] = f.m_tri;
+      for (int k : {M_MED, M_P90, M_LONG, M_SHORT, M_LZ, M_TRI}) has[k] = true;
+    }
+    x[M_COH] = f.m_coh;
+    has[M_COH] = f.has_m_coh;
+    x[M_ECHO] = f.m_echo;
+    has[M_ECHO] = f.has_echo;
+    x[M_ECHO32] = f.m_echo32;
+    has[M_ECHO32] = f.has_echo;
+  }
+
+  int bucket(const V3Features& f) const {
+    const int b = length_bucket(f.bytes);
+    return nref_[b] < 20 && nref_[1 - b] >= 20 ? 1 - b : b;
+  }
+
+  // z-scores and group evidence (no thresholds).
+  ScoredV3 evidence(const V3Features& f) const {
+    ScoredV3 o;
+    const int b = bucket(f);
+    double x[W3_N];
+    bool has[W3_N];
+    values(f, x, has);
+    for (int k = 0; k < W3_N; ++k) {
+      const V3StatSpec& sp = v3_spec(k);
+      const int m = sp.metric == 'W' ? 0 : 1;
+      const V3MetricParams& mp = m == 0 ? params.w : params.m;
+      const int w = k == M_ECHO32 ? 1 : 0;
+      const QuantileZ& qz = !is_echo(k) ? q_[b][k] : (echo_[b][w].size() >= 20 ? echo_[b][w] : echo_[1 - b][w]);
+      if (qz.size() < 20) continue;
+      double z;
+      if (has[k]) {
+        z = qz.z(x[k]);
+        o.has[k] = true;
+      } else if (sp.missing && !is_echo(k) && present_[b][k] >= 0.95 * static_cast<double>(nref_[b])) {
+        z = sp.missing == '+' ? params.missing_z : -params.missing_z;
+        o.imputed[k] = true;
+      } else {
+        continue;
+      }
+      o.z[k] = z;
+      for (int side = 0; side < 2; ++side) {
+        const char g = side == 0 ? sp.plus : sp.minus;
+        if (!g) continue;
+        const double u = side == 0 ? z : -z;
+        const int gi = g == 'L' ? 0 : g == 'S' ? 1 : g == 'C' ? 2 : 3;
+        double dz = gi == 0 ? mp.deadL : gi == 1 ? mp.deadS : gi == 2 ? mp.deadC : mp.dead;
+        double wt = 1;
+        if (k == M_LZ && gi == 2) {
+          dz = params.lz_dead;
+          wt = params.lz_w;
+        }
+        if (gi == 3) {
+          o.E[m][3] += std::max(0.0, u - mp.deadG);
+          o.eP[k] = std::max(0.0, u - mp.dead);
+        } else {
+          o.E[m][gi] += wt * std::max(0.0, u - dz);
+        }
+      }
+    }
+    return o;
+  }
+
+  ScoredV3 score(const V3Features& f) const {
+    ScoredV3 o = evidence(f);
+    const int b = bucket(f);
+    for (int m = 0; m < 2; ++m) {
+      const V3MetricParams& mp = m == 0 ? params.w : params.m;
+      auto sat = [&](double x) { return mp.cap * (1.0 - std::exp(-std::max(0.0, x) / mp.kap)); };
+      o.Dg[m][0] = sat(o.E[m][0] - th_[m][b][0]);
+      o.Dg[m][1] = sat(o.E[m][1] - th_[m][b][1]);
+      o.Dg[m][2] = mp.wC * o.E[m][2];
+      double ex = 0;
+      for (int k = 0; k < W3_N; ++k)
+        if ((v3_spec(k).metric == 'W') == (m == 0)) ex += std::max(0.0, o.eP[k] - thP_[b][k]);
+      o.Dg[m][3] = mp.wG * o.E[m][3] + mp.wP * ex;
+      o.D[m] = o.Dg[m][0] + o.Dg[m][1] + o.Dg[m][2] + o.Dg[m][3];
+    }
+    o.surprise = std::exp(-o.D[0] / params.w.tau);
+    o.match = std::exp(-o.D[1] / params.m.tau);
+    return o;
+  }
+
+ private:
+  std::vector<V3Features> ref_[2];
+  static bool is_echo(int k) { return k == M_ECHO || k == M_ECHO32; }
+  QuantileZ q_[2][W3_N], echo_[2][2];
+  std::vector<double> echo_vals_[2][2];
+  double present_[2][W3_N] = {};
+  double thP_[2][W3_N] = {};  // [bucket][statistic]: the too-predictable side's threshold
+  size_t nref_[2] = {0, 0};
+  double th_lo_ = 0, th_hi_ = 0;
+  double th_[2][2][4] = {};  // [metric][bucket][group]
+};
+
+// SCRIBE v3 = the mean of v2, SURPRISE and MATCH; also their minimum, and a flag when they disagree.
+struct V3Combined {
+  double v3 = 0, min3 = 0, spread = 0;
+  bool disagree = false;
+};
+inline V3Combined combine_v3(double v2, double surprise, double match, double disagree_at = 0.5) {
+  V3Combined c;
+  c.v3 = (v2 + surprise + match) / 3.0;
+  c.min3 = std::min(v2, std::min(surprise, match));
+  c.spread = std::max(v2, std::max(surprise, match)) - c.min3;
+  c.disagree = c.spread > disagree_at;
+  return c;
+}
+
+inline std::string v3_json(const ScoredV3& s, const V3Combined& c) {
+  std::string o = "{\"surprise\":" + scribe_num(s.surprise) + ",\"match\":" + scribe_num(s.match) + ",\"min3\":" + scribe_num(c.min3) +
+                  ",\"spread\":" + scribe_num(c.spread) + ",\"disagree\":" + (c.disagree ? "1" : "0");
+  const char* G = "LSCP";
+  for (int m = 0; m < 2; ++m) {
+    o += m == 0 ? ",\"surprise_D\":{" : ",\"match_D\":{";
+    o += "\"D\":" + scribe_num(s.D[m]);
+    for (int g = 0; g < 4; ++g) o += ",\"D" + std::string(1, G[g]) + "\":" + scribe_num(s.Dg[m][g]) + ",\"" + std::string(1, G[g]) + "\":" + scribe_num(s.E[m][g]);
+    o += "}";
+  }
+  o += ",\"z\":{";
+  bool first = true;
+  for (int k = 0; k < W3_N; ++k) {
+    if (!s.has[k] && !s.imputed[k]) continue;
+    if (!first) o += ",";
+    first = false;
+    o += "\"" + std::string(v3_spec(k).name) + "\":" + scribe_num(s.z[k], 4);
+  }
+  o += "}}";
+  return o;
+}
+
+inline std::string v3_raw_json(const V3Features& f) {
+  auto opt = [](bool h, double x) { return h ? scribe_num(x) : std::string("null"); };
+  return "{\"n_words\":" + std::to_string(f.n_words) + ",\"w_mean\":" + opt(f.has_w, f.w_mean) + ",\"w_sd\":" + opt(f.has_w, f.w_sd) +
+         ",\"w_ac1\":" + opt(f.has_w, f.w_ac1) + ",\"w_ctx\":" + opt(f.has_w, f.w_ctx) + ",\"w_anti\":" + opt(f.has_w, f.w_anti) + ",\"w_spell\":" + opt(f.has_w, f.w_spell) + ",\"w_coh\":" + opt(f.has_w_coh, f.w_coh) +
+         ",\"m_med\":" + opt(f.has_m, f.m_med) + ",\"m_p90\":" + opt(f.has_m, f.m_p90) + ",\"m_long\":" + opt(f.has_m, f.m_long) +
+         ",\"m_short\":" + opt(f.has_m, f.m_short) + ",\"m_lz\":" + opt(f.has_m, f.m_lz) + ",\"m_tri\":" + opt(f.has_m, f.m_tri) +
+         ",\"m_words\":" + opt(f.has_m, f.m_words) + ",\"m_coh\":" + opt(f.has_m_coh, f.m_coh) + ",\"m_echo\":" + opt(f.has_echo, f.m_echo) + ",\"m_echo32\":" + opt(f.has_echo, f.m_echo32) + "}";
+}
+
+// Known-answer checks of the v3 parts (called by the tool's selftest).
+inline void scribe_v3_selftest(int& checks, int& fails) {
+  auto check = [&](bool ok, const char* what) {
+    ++checks;
+    if (!ok) {
+      ++fails;
+      std::printf("FAIL v3: %s\n", what);
+    }
+  };
+  // LZ76: the classic example 0001101001000101 parses 0 | 001 | 10 | 100 | 1000 | 101.
+  check(scribe_detail::lz76_phrases("0001101001000101") == 6, "lz76 of the Lempel-Ziv example");
+  check(scribe_detail::lz76_phrases("aaaaaaaa") == 2 && scribe_detail::lz76_phrases("") == 0, "lz76 of a run");
+  // Spelling model: proper (the single-symbol words and the empty word take at most all the mass) and it prefers words
+  // like its training types.
+  {
+    SpellModel sp;
+    sp.train({"cat", "car", "cart", "dog", "door", "dot"});
+    double mass = std::exp2(-sp.bits(""));
+    for (int c = 1; c < 256; ++c) mass += std::exp2(-sp.bits(std::string(1, static_cast<char>(c))));
+    check(mass > 0 && mass <= 1.0 + 1e-9, "spelling model is sub-normalised over short strings");
+    check(sp.bits("cat") < sp.bits("xqz") && sp.bits("cart") < sp.bits("zzzz"), "spelling model prefers its own spellings");
+  }
+  // Suffix array: longest match and counts against a brute-force scan.
+  {
+    const std::vector<std::string> docs = {"the cat sat on the mat", "a cat and a hat", "mathematics"};
+    PackIndex px;
+    px.build(docs, 2);
+    std::string all;
+    for (const std::string& d : docs) all += d + "\n";
+    bool ok = true;
+    for (const std::string q : {"the cat", "cat sat on the hat", "mat", "hatx", "zebra", "a", "at", "matrix", "e mat"}) {
+      size_t best = 0;
+      for (size_t i = 0; i < all.size(); ++i) {
+        size_t k = 0;
+        while (k < q.size() && i + k < all.size() && all[i + k] == q[k]) ++k;
+        best = std::max(best, k);
+      }
+      size_t cnt = 0;
+      for (size_t i = 0; i + q.size() <= all.size(); ++i) cnt += all.compare(i, q.size(), q) == 0;
+      ok = ok && px.match(reinterpret_cast<const unsigned char*>(q.data()), q.size()) == best &&
+           px.count(reinterpret_cast<const unsigned char*>(q.data()), q.size()) == cnt;
+    }
+    check(ok, "suffix array match and count equal a brute-force scan");
+  }
+  // SURPRISE: the history makes a repeated sentence cheap; MATCH: copying the pack and the prompt are seen.
+  {
+    std::vector<std::string> docs;
+    for (int i = 0; i < 30; ++i)
+      docs.push_back("The quick brown fox jumps over the lazy dog near the river bank today. The old man was walking slowly along the road. "
+                     "Green trees grow beside the quiet water. A small boat " + std::to_string(i) + " drifted past the mill.");
+    ScribeModel m;
+    m.train(docs, 2);
+    SurpriseModel sm;
+    sm.train(m, docs);
+    sm.params.coh_min_bits = 0;  // the toy vocabulary has no rare words
+    PackIndex px;
+    px.build(docs, 2);
+    SurpriseModel::Seq q;
+    sm.sequence("The green boat was near the old dog. The green boat was near the old dog.", q);
+    double a = 0, b = 0;
+    const size_t h = q.s.size() / 2;
+    for (size_t i = 0; i < h; ++i) a += q.s[i];
+    for (size_t i = h; i < q.s.size(); ++i) b += q.s[i];
+    check(q.s.size() == 16 && b < 0.5 * a, "the repeat of a sentence costs under half the bits");
+    check(std::isfinite(q.coh) && q.coh > 0, "a repeated sentence has a cohesion gain");
+    SurpriseModel::Seq r;
+    sm.sequence("Zxqvbk plorf wumbatz.", r);
+    check(r.s.size() == 3 && r.s[0] > 20 && r.sp[0] > 10, "non-words are spelled at a high cost");
+    const V3Features cp = extract_v3(sm, px, "The quick brown fox jumps over the lazy dog near the river bank today. The old man was walking slowly.",
+                                     "Green trees grow beside the quiet water.");
+    check(cp.has_m && cp.m_long > 0.9 && cp.m_echo32 == 0, "copied pack text: nearly all bytes inside long pack matches");
+    const V3Features ec = extract_v3(sm, px, "Green trees grow beside the quiet water. Then it rained on the hills.", "Green trees grow beside the quiet water.");
+    check(ec.has_echo && ec.m_echo32 > 0.5 && ec.m_echo >= ec.m_echo32, "a copied prompt sentence is echo");
+  }
+  // The score: a human-typical sample scores high, a far-out one low; the mean of three, the minimum and the flag.
+  {
+    V3Scorer v;
+    std::mt19937_64 r(5);
+    std::normal_distribution<double> N(0.0, 1.0);
+    auto mk = [&](double shift) {
+      V3Features f;
+      f.bytes = 500;
+      f.n_words = 90;
+      f.has_w = f.has_w_coh = f.has_m = f.has_m_coh = true;
+      for (int i = 0; i < 90; ++i) f.s.push_back(static_cast<float>(std::max(0.0, 9 + 5 * N(r))));
+      f.w_mean = 9.5 + 0.8 * N(r) + shift;
+      f.w_sd = 5 + 0.5 * N(r);
+      f.w_ac1 = 0.05 * N(r);
+      f.w_ctx = 3 + 0.4 * N(r);
+      f.w_spell = 1 + 0.3 * N(r);
+      f.w_coh = 0.7 + 0.3 * N(r);
+      f.m_med = 11 + N(r);
+      f.m_p90 = 18 + N(r);
+      f.m_long = 0.0;
+      f.m_short = 0.01 + 0.002 * N(r);
+      f.m_lz = 3 + 0.1 * N(r);
+      f.m_tri = 0.25 + 0.05 * N(r);
+      f.m_coh = 0.15 + 0.05 * N(r);
+      return f;
+    };
+    for (int i = 0; i < 1000; ++i) v.add_reference(mk(0));
+    v.finish();
+    const ScoredV3 a = v.score(mk(0)), b = v.score(mk(-12)), c = v.score(mk(30));
+    check(a.surprise > 0.5 && b.surprise < 0.5 * a.surprise && c.surprise < 0.5 * a.surprise, "too predictable and too surprising both lower SURPRISE");
+    check(a.match > 0.5, "a human-typical sample keeps MATCH high");
+    const V3Combined k = combine_v3(0.9, 0.3, 0.6);
+    check(std::fabs(k.v3 - 0.6) < 1e-12 && std::fabs(k.min3 - 0.3) < 1e-12 && k.disagree && !combine_v3(0.9, 0.8, 0.7).disagree, "mean, minimum, disagreement");
+    V3Params p;
+    check(p.parse("w.tau=10,m.wC=2,lz_w=0.25") && p.w.tau == 10 && p.m.wC == 2 && p.lz_w == 0.25 && !p.parse("w.bogus=1"), "V3Params parse");
   }
 }
 

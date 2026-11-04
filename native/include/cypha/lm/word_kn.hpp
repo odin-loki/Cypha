@@ -50,6 +50,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <functional>
@@ -68,7 +69,19 @@ namespace cypha::cyphalm::wkn {
 inline constexpr std::uint32_t kUnk = 0, kBos = 1;
 inline constexpr std::size_t kVmax = 32000;     // fuzzy_bake.py VMAX
 inline constexpr std::uint64_t kSeed = 20261101;  // fuzzy_bake.py SEED
-inline constexpr int kOrder = 5;
+inline constexpr int kOrder = 5;      // K5's order (the default)
+inline constexpr int kMaxOrder = 7;   // --k5-order N: up to 7 (context keys are 128 bits: six 16-bit ids)
+using Key = unsigned __int128;        // a context: w-1 in bits 0-15, w-2 in bits 16-31, ...
+inline std::size_t key_hash(Key k) {
+    const auto lo = static_cast<std::uint64_t>(k), hi = static_cast<std::uint64_t>(k >> 64);
+    std::uint64_t x = lo ^ (hi * 0x9E3779B97F4A7C15ull) ^ 0x2545F4914F6CDD1Dull;
+    x = (x ^ (x >> 30)) * 0xBF58476D1CE4E5B9ull;
+    x = (x ^ (x >> 27)) * 0x94D049BB133111EBull;
+    return static_cast<std::size_t>(x ^ (x >> 31));
+}
+struct KeyHasher {
+    std::size_t operator()(Key k) const { return key_hash(k); }
+};
 
 // ---------------------------------------------------------------- tokens
 
@@ -163,22 +176,62 @@ inline std::uint64_t mix64(std::uint64_t x) {  // splitmix64's finaliser
 
 // ---------------------------------------------------------------- the estimate
 
+// §K5 upgrades, step 2b: dynamic counts. The prompt's n-grams and those of the text written so far, for one
+// continuation only (the shared model never changes). In a context, a dynamic count d is discounted by Dd and the
+// discounted mass goes to the lower order, so every distribution still sums to one:
+//   P_k(w | c) = [(n(cw) - D) + L (d(cw) - Dd)] / (n(c) + L d(c)) + [sum D + L Dd types(c)] / (n(c) + L d(c)) P_{k-1}(w | c').
+// Where the shared model has not seen a context and the overlay has, the overlay alone fills that order.
+class Overlay {
+ public:
+    struct Ctx {
+        std::vector<std::pair<std::uint16_t, double>> e;  // (word, count)
+        double tot = 0;
+    };
+    double L = 1.0, Dd = 0.5;
+    int order = kOrder;
+    void push(std::uint32_t w) {
+        hist_.push_back(w);
+        const std::size_t t = hist_.size() - 1;
+        for (int k = 2; k <= order; ++k) {
+            const auto n = static_cast<std::size_t>(k - 1);
+            if (t < n) break;
+            Key key = 0;
+            for (std::size_t i = 0; i < n; ++i) key |= Key{hist_[t - 1 - i]} << (16 * i);
+            Ctx& c = m_[k][key];
+            bool found = false;
+            for (auto& [x, d] : c.e)
+                if (x == w) d += 1, found = true;
+            if (!found) c.e.emplace_back(static_cast<std::uint16_t>(w), 1.0);
+            c.tot += 1;
+        }
+    }
+    const Ctx* find(int k, Key key) const {
+        const auto it = m_[k].find(key);
+        return it == m_[k].end() ? nullptr : &it->second;
+    }
+
+ private:
+    std::vector<std::uint32_t> hist_;
+    std::unordered_map<Key, Ctx, KeyHasher> m_[kMaxOrder + 1];
+};
+
 class WordKN {
  public:
-    // ids: the training stream (documents as BOS + token ids), every id below V <= 65,536.
-    void build(const std::vector<std::uint32_t>& ids, std::size_t V) {
+    // ids: the training stream (documents as BOS + token ids), every id below V <= 65,536. order: 2 to kMaxOrder.
+    void build(const std::vector<std::uint32_t>& ids, std::size_t V, int order = kOrder) {
         V_ = V;
-        constexpr int L = kOrder - 1;
+        order_ = std::clamp(order, 2, kMaxOrder);
+        const int L = order_ - 1;
         std::vector<Pair> pr;
         if (ids.size() > static_cast<std::size_t>(L)) {
-            pr.reserve(ids.size() - L);
-            for (std::size_t t = L; t < ids.size(); ++t) {
-                std::uint64_t k = 0;
-                for (int i = 0; i < L; ++i) k |= std::uint64_t{ids[t - 1 - static_cast<std::size_t>(i)]} << (16 * i);
+            pr.reserve(ids.size() - static_cast<std::size_t>(L));
+            for (std::size_t t = static_cast<std::size_t>(L); t < ids.size(); ++t) {
+                Key k = 0;
+                for (int i = 0; i < L; ++i) k |= Key{ids[t - 1 - static_cast<std::size_t>(i)]} << (16 * i);
                 pr.push_back({k, static_cast<std::uint16_t>(ids[t])});
             }
         }
-        for (int k = kOrder; k >= 2; --k) {
+        for (int k = order_; k >= 2; --k) {
             std::sort(pr.begin(), pr.end());
             Level& lv = lv_[k];
             lv = Level{};
@@ -197,7 +250,7 @@ class WordKN {
             lv.off.push_back(static_cast<std::uint32_t>(lv.ids.size()));
             finish(lv, cnt);
             if (k > 2) {  // the next order's pairs: this order's distinct entries, the farthest context word dropped
-                const std::uint64_t mask = (std::uint64_t{1} << (16 * (k - 2))) - 1;
+                const Key mask = (Key{1} << (16 * (k - 2))) - 1;
                 pr.clear();
                 for (std::size_t c = 0; c < lv.keys.size(); ++c)
                     for (std::uint32_t e = lv.off[c]; e < lv.off[c + 1]; ++e) pr.push_back({lv.keys[c] & mask, lv.ids[e]});
@@ -215,48 +268,71 @@ class WordKN {
     }
     // The vocabulary by its order-1 probability, most probable first: every word outside the stored contexts' entries
     // keeps this order in any distribution, which makes a tight threshold for the most probable words (K5::generate).
+    // (With a class floor, base != p1, the threshold is not tight; K5::generate then sorts all words.)
     const std::vector<std::uint32_t>& by_p1() const { return by_p1_; }
+    const std::vector<double>& p1() const { return p1_; }
+    int order() const { return order_; }
 
-    // P(. | ctx) into p[0, V): ctx[0, n) is the history, its last word last.
-    void dist(const std::uint32_t* ctx, std::size_t n, double* p) const {
-        std::copy(p1_.begin(), p1_.end(), p);
-        for (int k = 2; k <= kOrder; ++k) {
+    // P(. | ctx) into p[0, V): ctx[0, n) is the history, its last word last. ov: the continuation's dynamic counts;
+    // base: the floor distribution in place of order 1 (§K5 upgrades step 3, class backoff). Without either, the walk
+    // is exactly K5's.
+    void dist(const std::uint32_t* ctx, std::size_t n, double* p, const Overlay* ov = nullptr, const double* base = nullptr) const {
+        if (base) std::copy(base, base + V_, p);
+        else std::copy(p1_.begin(), p1_.end(), p);
+        bool main_ok = true;
+        for (int k = 2; k <= order_; ++k) {
             const std::size_t L = static_cast<std::size_t>(k - 1);
             if (n < L) break;
-            std::uint64_t key = 0;
-            for (std::size_t i = 0; i < L; ++i) key |= std::uint64_t{ctx[n - 1 - i]} << (16 * i);
+            Key key = 0;
+            for (std::size_t i = 0; i < L; ++i) key |= Key{ctx[n - 1 - i]} << (16 * i);
             const Level& lv = lv_[k];
-            const auto it = std::lower_bound(lv.keys.begin(), lv.keys.end(), key);
-            if (it == lv.keys.end() || *it != key) break;
-            const auto c = static_cast<std::size_t>(it - lv.keys.begin());
-            const double g = lv.gam[c];
+            std::ptrdiff_t c = -1;
+            if (main_ok) {
+                const auto it = std::lower_bound(lv.keys.begin(), lv.keys.end(), key);
+                if (it != lv.keys.end() && *it == key) c = it - lv.keys.begin();
+                else main_ok = false;
+            }
+            const Overlay::Ctx* oc = ov && k <= ov->order ? ov->find(k, key) : nullptr;
+            if (!oc) {
+                if (c < 0) break;
+                const double g = lv.gam[static_cast<std::size_t>(c)];
+                for (std::size_t w = 0; w < V_; ++w) p[w] *= g;
+                for (std::uint32_t e = lv.off[static_cast<std::size_t>(c)]; e < lv.off[static_cast<std::size_t>(c) + 1]; ++e) p[lv.ids[e]] += lv.disc[e];
+                continue;
+            }
+            const double T = c >= 0 ? lv.tot[static_cast<std::size_t>(c)] : 0.0, G = c >= 0 ? lv.gam[static_cast<std::size_t>(c)] * T : 0.0;
+            const double den = T + ov->L * oc->tot;
+            const double g = (G + ov->L * ov->Dd * static_cast<double>(oc->e.size())) / den;
             for (std::size_t w = 0; w < V_; ++w) p[w] *= g;
-            for (std::uint32_t e = lv.off[c]; e < lv.off[c + 1]; ++e) p[lv.ids[e]] += lv.disc[e];
+            if (c >= 0)
+                for (std::uint32_t e = lv.off[static_cast<std::size_t>(c)]; e < lv.off[static_cast<std::size_t>(c) + 1]; ++e) p[lv.ids[e]] += lv.disc[e] * T / den;
+            for (const auto& [w, d] : oc->e) p[w] += ov->L * (d - ov->Dd) / den;
         }
     }
     std::size_t vocab_size() const { return V_; }
     std::size_t contexts(int k) const { return lv_[k].keys.size(); }
-    std::size_t entries(int k) const { return lv_[k].ids.size(); }
+    std::size_t entries(int k) const { return k <= order_ ? lv_[k].ids.size() : 0; }
     const double* discounts(int k) const { return lv_[k].D; }
     std::size_t bytes() const {
         std::size_t b = p1_.size() * 8;
-        for (int k = 2; k <= kOrder; ++k)
-            b += lv_[k].keys.size() * 16 + lv_[k].off.size() * 4 + lv_[k].ids.size() * 10;
+        for (int k = 2; k <= order_; ++k)
+            b += lv_[k].keys.size() * 32 + lv_[k].off.size() * 4 + lv_[k].ids.size() * 10;
         return b;
     }
 
  private:
     struct Pair {
-        std::uint64_t key;
+        Key key;
         std::uint16_t w;
         bool operator<(const Pair& o) const { return key != o.key ? key < o.key : w < o.w; }
     };
     struct Level {
-        std::vector<std::uint64_t> keys;  // contexts, ascending: w-1 in bits 0-15, w-2 in bits 16-31, ...
+        std::vector<Key> keys;            // contexts, ascending: w-1 in bits 0-15, w-2 in bits 16-31, ...
         std::vector<std::uint32_t> off;   // entries of context c: [off[c], off[c + 1])
         std::vector<std::uint16_t> ids;   // the next words, ascending within a context
         std::vector<double> disc;         // (n(c w) - D) / n(c)
         std::vector<double> gam;          // sum D / n(c)
+        std::vector<double> tot;          // n(c), for the dynamic counts
         double D[4] = {0, 0, 0, 0};
     };
     static void finish(Level& lv, const std::vector<std::uint32_t>& cnt) {
@@ -271,6 +347,7 @@ class WordKN {
         lv.D[3] = std::max(0.0, 3 - 4 * Y * nj[4] / nj[3]);
         const std::size_t C = lv.keys.size();
         lv.gam.assign(C, 0.0);
+        lv.tot.assign(C, 0.0);
         lv.disc.resize(cnt.size());
         for (std::size_t c = 0; c < C; ++c) {
             double tot = 0, g = 0;
@@ -281,12 +358,142 @@ class WordKN {
                 g += dc;
             }
             lv.gam[c] = g / tot;
+            lv.tot[c] = tot;
         }
     }
     std::size_t V_ = 0;
+    int order_ = kOrder;
     std::vector<double> p1_;
     std::vector<std::uint32_t> by_p1_;
-    Level lv_[kOrder + 1];
+    Level lv_[kMaxOrder + 1];
+};
+
+// §K5 upgrades, step 3: Martin, Liermann and Ney's exchange algorithm (bench/fuzzy/so_bench.py exchange): each word
+// seen at least min_count times, most frequent first, moves to the class that most raises the class-bigram
+// likelihood. Ids are by frequency (K5's vocabulary), so the start deals them to the K classes in turn. <unk> and <s>
+// keep classes K and K + 1. Returns each word's class; loglik gets the likelihood after each pass.
+inline std::vector<std::uint32_t> exchange_classes(const std::vector<std::uint32_t>& ids, std::size_t V, std::size_t K,
+                                                   int passes, std::size_t min_count, std::vector<double>* loglik = nullptr) {
+    const std::size_t KK = K + 2;
+    std::vector<std::uint32_t> cls(V);
+    for (std::size_t w = 0; w < V; ++w) cls[w] = w == kUnk ? static_cast<std::uint32_t>(K) : w == kBos ? static_cast<std::uint32_t>(K + 1) : static_cast<std::uint32_t>((w - 2) % K);
+    std::vector<std::uint64_t> bg;
+    bg.reserve(ids.size());
+    for (std::size_t t = 1; t < ids.size(); ++t) bg.push_back(std::uint64_t{ids[t - 1]} * V + ids[t]);
+    std::sort(bg.begin(), bg.end());
+    struct E {
+        std::uint32_t x;
+        double c;
+    };
+    std::vector<std::vector<E>> out(V), in(V);
+    std::vector<double> freq(V, 0.0);
+    for (const std::uint32_t w : ids) freq[w] += 1;
+    for (std::size_t a = 0; a < bg.size();) {
+        std::size_t b = a;
+        while (b < bg.size() && bg[b] == bg[a]) ++b;
+        const auto x = static_cast<std::uint32_t>(bg[a] / V), y = static_cast<std::uint32_t>(bg[a] % V);
+        out[x].push_back({y, static_cast<double>(b - a)});
+        in[y].push_back({x, static_cast<double>(b - a)});
+        a = b;
+    }
+    std::vector<double> M(KK * KK, 0.0), Lr(KK, 0.0), Rc(KK, 0.0);
+    for (std::size_t x = 0; x < V; ++x)
+        for (const E& e : out[x]) M[cls[x] * KK + cls[e.x]] += e.c, Lr[cls[x]] += e.c, Rc[cls[e.x]] += e.c;
+    const auto xl = [](double v) { return v > 0 ? v * std::log(v) : 0.0; };
+    const auto ll = [&] {
+        double s = 0;
+        for (const double v : M) s += xl(v);
+        for (std::size_t k = 0; k < KK; ++k) s -= xl(Lr[k]) + xl(Rc[k]);
+        return s;
+    };
+    if (loglik) loglik->assign(1, ll());
+    std::vector<std::uint32_t> words;
+    for (std::uint32_t w = 2; w < V; ++w)
+        if (freq[w] >= static_cast<double>(min_count)) words.push_back(w);  // ids are already most frequent first
+    std::vector<double> rw(KK, 0.0), cw(KK, 0.0), gain(K, 0.0);
+    std::vector<std::uint32_t> nzr, nzc;
+    for (int ps = 0; ps < passes; ++ps) {
+        for (const std::uint32_t w : words) {
+            nzr.clear(), nzc.clear();
+            double selfc = 0, nl = 0, nr = 0;
+            for (const E& e : out[w]) {
+                nl += e.c;
+                if (e.x == w) {
+                    selfc += e.c;
+                    continue;
+                }
+                if (rw[cls[e.x]] == 0) nzr.push_back(cls[e.x]);
+                rw[cls[e.x]] += e.c;
+            }
+            for (const E& e : in[w]) {
+                nr += e.c;
+                if (e.x == w) continue;
+                if (cw[cls[e.x]] == 0) nzc.push_back(cls[e.x]);
+                cw[cls[e.x]] += e.c;
+            }
+            const std::uint32_t a0 = cls[w];
+            for (const std::uint32_t j : nzr) M[a0 * KK + j] -= rw[j];
+            for (const std::uint32_t i : nzc) M[i * KK + a0] -= cw[i];
+            M[a0 * KK + a0] -= selfc;
+            Lr[a0] -= nl, Rc[a0] -= nr;
+            std::size_t best = a0;
+            double bg2 = -1e300;
+            for (std::size_t k = 0; k < K; ++k) {
+                double g = 0;
+                for (const std::uint32_t j : nzr) g += xl(M[k * KK + j] + rw[j]) - xl(M[k * KK + j]);
+                for (const std::uint32_t i : nzc) g += xl(M[i * KK + k] + cw[i]) - xl(M[i * KK + k]);
+                g -= (xl(Lr[k] + nl) - xl(Lr[k])) + (xl(Rc[k] + nr) - xl(Rc[k]));
+                if (g > bg2) bg2 = g, best = k;
+            }
+            for (const std::uint32_t j : nzr) M[best * KK + j] += rw[j];
+            for (const std::uint32_t i : nzc) M[i * KK + best] += cw[i];
+            M[best * KK + best] += selfc;
+            Lr[best] += nl, Rc[best] += nr;
+            cls[w] = static_cast<std::uint32_t>(best);
+            for (const std::uint32_t j : nzr) rw[j] = 0;
+            for (const std::uint32_t i : nzc) cw[i] = 0;
+        }
+        if (loglik) loglik->push_back(ll());
+    }
+    return cls;
+}
+
+// The class model: P(w | h) = P(c(w) | c(h-2), c(h-1)) P(w | c(w)), Kneser-Ney of order 3 over class ids (so_bench.py
+// ClassTri), words within a class by count.
+class ClassModel {
+ public:
+    void build(const std::vector<std::uint32_t>& ids, std::size_t V, std::size_t K, int passes = 6) {
+        V_ = V;
+        cls_ = exchange_classes(ids, V, K, passes, 3, &loglik_);
+        std::vector<std::uint32_t> cids(ids.size());
+        for (std::size_t t = 0; t < ids.size(); ++t) cids[t] = cls_[ids[t]];
+        kn_.build(cids, K + 2, 3);
+        std::vector<double> cnt(V, 0.01), ctot(K + 2, 0.0);
+        for (const std::uint32_t w : ids) cnt[w] += 1;
+        for (std::size_t w = 0; w < V; ++w) ctot[cls_[w]] += cnt[w];
+        pwc_.resize(V);
+        for (std::size_t w = 0; w < V; ++w) pwc_[w] = cnt[w] / ctot[cls_[w]];
+        K_ = K;
+    }
+    bool on() const { return V_ > 0; }
+    void dist(const std::uint32_t* ctx, std::size_t n, double* p) const {
+        std::uint32_t cc[2];
+        const std::size_t m = std::min<std::size_t>(n, 2);
+        for (std::size_t i = 0; i < m; ++i) cc[i] = cls_[ctx[n - m + i]];
+        std::vector<double> pc(K_ + 2);
+        kn_.dist(cc, m, pc.data());
+        double z = 0;
+        for (std::size_t w = 0; w < V_; ++w) z += (p[w] = pc[cls_[w]] * pwc_[w]);
+        for (std::size_t w = 0; w < V_; ++w) p[w] /= z;
+    }
+    const std::vector<double>& loglik() const { return loglik_; }
+    const std::vector<std::uint32_t>& classes() const { return cls_; }
+
+ private:
+    std::size_t V_ = 0, K_ = 0;
+    std::vector<std::uint32_t> cls_;
+    std::vector<double> pwc_, loglik_;
+    WordKN kn_;
 };
 
 // ---------------------------------------------------------------- bans
@@ -295,6 +502,7 @@ class WordKN {
 class RepeatBan {
  public:
     static constexpr std::size_t W = 11;
+    RepeatBan() = default;
     explicit RepeatBan(std::string_view text) { add(text); }
     void add(std::string_view b) {
         const std::size_t old = text_.size();
@@ -437,10 +645,187 @@ struct Options {
     double scorer_w = 0.25;
     bool cap = true;           // apply the model's copy cap (K5::load's cap; a model built with cap 0 has none)
     double temperature = 1.0;  // fuzzy_bake.py: 1.0
-    double cand_mass = 0.995, nucleus = 0.9;
-    std::size_t cand_max = 3000;
+    double cand_mass = 0.995;  // --k5-cand-mass P
+    double nucleus = 0.8;      // --k5-nucleus P: 0.8, adopted by K5_UPGRADES.md step 1 (§13.19's K5: 0.9)
+    std::size_t cand_max = 3000;              // --k5-cand-max N
     int max_words = 300;
     std::size_t bytes = 600;
+    // docs/reports/K5_UPGRADES.md. The defaults are the adopted arms (nucleus 0.8, 256 exchange classes as the backoff
+    // floor, the 8-candidate sentence gate by prompt association); --k5-base k5 restores §13.19's K5 (k5_v1 below).
+    std::uint64_t seed_off = 0;                        // --k5-seed N: seeds 20261101 + N + the prompt's index
+    double cache_w = 0, cache_w2 = 0, cache_r = 0.99;  // step 2a: --k5-cache W, --k5-cache2 W2, --k5-cache-decay R
+    double dyn = 0;                                    // step 2b: --k5-dyn L (the dynamic counts' weight)
+    int order = kOrder;                                // step 3: --k5-order N (build)
+    std::size_t classes = 256;                         // step 3: --k5-classes K (build; exchange classes; 0: none)
+    int class_mode = 1;                                // --k5-class-mode backoff (1) | mix (2)
+    double class_w = 0.1;                              // --k5-class-w W (mix)
+    int gate_k = 8;                                    // step 4: --k5-gate K[,wf=..][,wp=..][,wm=..][,min=..][,max=..] (1: off)
+    double gate_wf = 0, gate_wp = 1, gate_wm = 5;
+    std::size_t gate_min = 24, gate_max = 240;
+    // The settings that differ from K5's, for the MODEL line (empty for K5 itself).
+    std::string describe() const {
+        std::string s;
+        const auto add = [&](const char* k, double v) {
+            char b[64];
+            std::snprintf(b, sizeof b, "\t%s=%g", k, v);
+            s += b;
+        };
+        const Options d;
+        if (nucleus != d.nucleus) add("nucleus", nucleus);
+        if (cand_mass != d.cand_mass) add("cand_mass", cand_mass);
+        if (cand_max != d.cand_max) add("cand_max", static_cast<double>(cand_max));
+        if (seed_off) add("seed_off", static_cast<double>(seed_off));
+        if (cache_w > 0 || cache_w2 > 0) add("cache", cache_w), add("cache2", cache_w2), add("cache_decay", cache_r);
+        if (dyn > 0) add("dyn", dyn);
+        if (order != kOrder) add("order", order);
+        if (classes != d.classes || class_mode != d.class_mode || class_w != d.class_w)
+            add("classes", static_cast<double>(classes)), add(class_mode == 2 ? "class_mix" : "class_backoff", class_mode == 2 ? class_w : 1);
+        if (gate_k != d.gate_k || gate_wf != d.gate_wf || gate_wp != d.gate_wp || gate_wm != d.gate_wm || gate_min != d.gate_min || gate_max != d.gate_max)
+            add("gate", gate_k > 1 ? gate_k : 0), add("wf", gate_wf), add("wp", gate_wp), add("wm", gate_wm);
+        return s;
+    }
+};
+
+// §13.19's K5, before K5_UPGRADES.md: nucleus 0.9, no classes, no gate (--k5-base k5).
+inline Options k5_v1() {
+    Options o;
+    o.nucleus = 0.9;
+    o.classes = 0;
+    o.gate_k = 0, o.gate_wf = 1, o.gate_wp = 0;
+    return o;
+}
+
+// Reads one --k5-... flag of K5_UPGRADES.md into o. Returns false and err for a bad value or an unknown name.
+inline bool apply_flag(const std::string& name, const std::string& val, Options& o, std::string& err) {
+    const auto num = [&](double& x, double lo, double hi) {
+        char* e = nullptr;
+        x = std::strtod(val.c_str(), &e);
+        if (val.empty() || *e || !(x >= lo && x <= hi)) {
+            err = name + ": bad value " + val;
+            return false;
+        }
+        return true;
+    };
+    double x = 0;
+    if (name == "--k5-base") {  // reset every K5 setting: k5 (§13.19's K5) or k5up (the defaults); later flags apply on top
+        if (val != "k5" && val != "k5up") return err = name + ": k5 or k5up", false;
+        const auto keep_scorer = o.scorer;
+        o = val == "k5" ? k5_v1() : Options{};
+        o.scorer = keep_scorer;
+        return true;
+    }
+    if (name == "--k5-seed") return num(x, 0, 1e15) && ((o.seed_off = static_cast<std::uint64_t>(x)), true);
+    if (name == "--k5-nucleus") return num(o.nucleus, 1e-6, 1);
+    if (name == "--k5-cand-mass") return num(o.cand_mass, 1e-6, 1);
+    if (name == "--k5-cand-max") return num(x, 1, 1e6) && ((o.cand_max = static_cast<std::size_t>(x)), true);
+    if (name == "--k5-cache") return num(o.cache_w, 0, 0.9);
+    if (name == "--k5-cache2") return num(o.cache_w2, 0, 0.9);
+    if (name == "--k5-cache-decay") return num(o.cache_r, 0.5, 1);
+    if (name == "--k5-dyn") return num(o.dyn, 0, 1e6);
+    if (name == "--k5-order") return num(x, 2, kMaxOrder) && ((o.order = static_cast<int>(x)), true);
+    if (name == "--k5-classes") return num(x, 0, 4096) && ((o.classes = static_cast<std::size_t>(x)), true);
+    if (name == "--k5-class-w") return num(o.class_w, 0, 1);
+    if (name == "--k5-class-mode") {
+        if (val != "backoff" && val != "mix") return err = name + ": backoff or mix", false;
+        o.class_mode = val == "mix" ? 2 : 1;
+        return true;
+    }
+    if (name == "--k5-gate") {
+        std::size_t a = 0;
+        bool first = true;
+        while (a <= val.size()) {
+            std::size_t b = val.find(',', a);
+            if (b == std::string::npos) b = val.size();
+            const std::string f = val.substr(a, b - a);
+            char* e = nullptr;
+            if (first) {
+                o.gate_k = static_cast<int>(std::strtol(f.c_str(), &e, 10));
+                if (f.empty() || *e || o.gate_k < 1 || o.gate_k > 64) return err = name + ": K in [1, 64]", false;
+            } else {
+                const std::size_t q = f.find('=');
+                if (q == std::string::npos) return err = name + ": bad field " + f, false;
+                const std::string k = f.substr(0, q);
+                const double v = std::strtod(f.c_str() + q + 1, &e);
+                if (*e) return err = name + ": bad field " + f, false;
+                if (k == "wf") o.gate_wf = v;
+                else if (k == "wp") o.gate_wp = v;
+                else if (k == "wm") o.gate_wm = v;
+                else if (k == "min") o.gate_min = static_cast<std::size_t>(v);
+                else if (k == "max") o.gate_max = static_cast<std::size_t>(v);
+                else return err = name + ": unknown field " + k, false;
+            }
+            first = false;
+            a = b + 1;
+        }
+        return true;
+    }
+    err = "unknown flag " + name;
+    return false;
+}
+
+// §K5 upgrades, step 2a: the word cache of one continuation. Each word of the prompt and of the text so far weighs
+// R^(its age in words); unigram and (previous word, word) pairs. <unk> and <s> are never cached.
+class WordCache {
+ public:
+    void init(std::size_t V, double r) {
+        c1_.assign(V, 0.0);
+        r_ = r;
+    }
+    void push(std::uint32_t w) {
+        scale_ /= r_;
+        if (scale_ > 1e200) rescale();
+        if (w >= 2) {
+            if (c1_[w] == 0) present_.push_back(w);
+            c1_[w] += scale_;
+            z1_ += scale_;
+            if (prev_ >= 2) {
+                Big& b = c2_[prev_];
+                bool found = false;
+                for (auto& [x, c] : b.e)
+                    if (x == w) c += scale_, found = true;
+                if (!found) b.e.emplace_back(w, scale_);
+                b.tot += scale_;
+            }
+        }
+        prev_ = w;
+    }
+    // p <- (1 - a1 - a2) p + a1 cache1 + a2 cache2(. | previous word); a2 is 0 when the previous word has no cached pair.
+    void apply(double* p, std::size_t V, double w1, double w2) const {
+        const Big* b = nullptr;
+        if (w2 > 0 && prev_ >= 2) {
+            const auto it = c2_.find(prev_);
+            if (it != c2_.end()) b = &it->second;
+        }
+        const double a1 = z1_ > 0 ? w1 : 0.0, a2 = b ? w2 : 0.0;
+        if (a1 == 0 && a2 == 0) return;
+        const double f = 1 - a1 - a2;
+        for (std::size_t w = 0; w < V; ++w) p[w] *= f;
+        if (a1 > 0)
+            for (const std::uint32_t x : present_) p[x] += a1 * c1_[x] / z1_;
+        if (a2 > 0)
+            for (const auto& [x, c] : b->e) p[x] += a2 * c / b->tot;
+    }
+
+ private:
+    struct Big {
+        std::vector<std::pair<std::uint32_t, double>> e;
+        double tot = 0;
+    };
+    void rescale() {
+        const double f = 1 / scale_;
+        for (const std::uint32_t x : present_) c1_[x] *= f;
+        z1_ *= f;
+        for (auto& [k, b] : c2_) {
+            for (auto& [x, c] : b.e) c *= f;
+            b.tot *= f;
+        }
+        scale_ = 1;
+    }
+    std::vector<double> c1_;
+    std::vector<std::uint32_t> present_;
+    std::unordered_map<std::uint32_t, Big> c2_;
+    double z1_ = 0, scale_ = 1, r_ = 0.99;
+    std::uint32_t prev_ = kBos;
 };
 
 struct GenStats {
@@ -451,23 +836,26 @@ struct GenStats {
     std::size_t cap_mass_steps = 0;  // ... of which the cap removed mass the draw could reach (inside the 0.9 nucleus)
     std::size_t rep_lifted = 0;      // steps at which the repeat ban left nothing and was lifted
     std::size_t cap_outside = 0;     // steps at which the cap left no candidate (a word from outside them was taken)
+    std::size_t gate_sents = 0, gate_cands = 0;  // §K5 upgrades step 4: sentences gated, candidates written
     void add(const GenStats& o) {
         steps += o.steps, rep_banned += o.rep_banned, cap_steps += o.cap_steps, cap_banned += o.cap_banned;
         cap_mass_steps += o.cap_mass_steps, rep_lifted += o.rep_lifted, cap_outside += o.cap_outside;
+        gate_sents += o.gate_sents, gate_cands += o.gate_cands;
     }
 };
 
 class K5 {
  public:
     // Training text: one document per line. Returns false (and err) if it cannot be read or holds no tokens.
-    bool load(const std::string& path, int cap, std::string& err) {
+    // bo: the build options (order, classes); null for K5's. vmax: the vocabulary cap (K5_SCALE: --k5-vmax).
+    bool load(const std::string& path, int cap, std::string& err, const Options* bo = nullptr, std::size_t vmax = kVmax) {
         std::ifstream in(path, std::ios::binary);
         if (!in) {
             err = "cannot read " + path;
             return false;
         }
         const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-        build(text, cap);
+        build(text, cap, bo ? bo->order : kOrder, bo ? bo->classes : 0, vmax);
         if (vocab_.size() <= 2) {
             err = path + " holds no tokens seen twice";
             return false;
@@ -475,7 +863,9 @@ class K5 {
         return true;
     }
 
-    void build(std::string_view text, int cap) {
+    // vmax: the vocabulary's size cap (K5_SCALE: --k5-vmax), at most 65,536 (ids are 16 bits).
+    void build(std::string_view text, int cap, int order = kOrder, std::size_t classes = 0, std::size_t vmax = kVmax) {
+        vmax = std::min<std::size_t>(vmax, 65536);
         const auto t0 = std::chrono::steady_clock::now();
         // Types in first-occurrence order and every token's type (~0u: a document's start).
         std::unordered_map<std::string_view, std::uint32_t> type;
@@ -501,20 +891,21 @@ class K5 {
             }
             a = b + 1;
         }
-        std::vector<std::uint32_t> order(tview.size());
-        for (std::uint32_t i = 0; i < order.size(); ++i) order[i] = i;
-        std::stable_sort(order.begin(), order.end(), [&](std::uint32_t x, std::uint32_t y) { return tcount[x] > tcount[y]; });
+        std::vector<std::uint32_t> order_t(tview.size());
+        for (std::uint32_t i = 0; i < order_t.size(); ++i) order_t[i] = i;
+        std::stable_sort(order_t.begin(), order_t.end(), [&](std::uint32_t x, std::uint32_t y) { return tcount[x] > tcount[y]; });
         vocab_ = {"<unk>", "<s>"};
         std::vector<std::uint32_t> id_of(tview.size(), kUnk);
-        for (const std::uint32_t t : order) {
-            if (tcount[t] < 2 || vocab_.size() >= kVmax) break;
+        for (const std::uint32_t t : order_t) {
+            if (tcount[t] < 2 || vocab_.size() >= vmax) break;
             id_of[t] = static_cast<std::uint32_t>(vocab_.size());
             vocab_.emplace_back(tview[t]);
         }
         tid_.clear();
         tid_.reserve(vocab_.size() * 2);
         for (std::uint32_t i = 0; i < vocab_.size(); ++i) tid_.emplace(vocab_[i], i);
-        std::vector<std::uint32_t> ids;
+        std::vector<std::uint32_t>& ids = ids_;
+        ids.clear();
         ids.reserve(seq.size());
         unk_ = 0;
         for (const std::uint32_t s : seq) {
@@ -522,10 +913,23 @@ class K5 {
             unk_ += s != ~0u && id_of[s] == kUnk;
         }
         tokens_ = ids.size();
-        kn_.build(ids, vocab_.size());
+        kn_.build(ids, vocab_.size(), order);
         run13_.build(ids, 13);  // fuzzy_bake.py has_run: the measure of verbatim runs of more than 12 tokens
         if (cap > 0 && cap + 1 != 13) capset_.build(ids, cap + 1);
         cap_ = cap;
+        // Each word's positions (the sentence gate's prompt association) and counts.
+        const std::size_t V = vocab_.size();
+        cnt_.assign(V, 0.0);
+        pos_off_.assign(V + 1, 0);
+        for (const std::uint32_t w : ids) cnt_[w] += 1, ++pos_off_[w + 1];
+        for (std::size_t w = 0; w < V; ++w) pos_off_[w + 1] += pos_off_[w];
+        pos_.resize(ids.size());
+        {
+            std::vector<std::uint32_t> at(pos_off_.begin(), pos_off_.end() - 1);
+            for (std::size_t t = 0; t < ids.size(); ++t) pos_[at[ids[t]]++] = static_cast<std::uint32_t>(t);
+        }
+        if (classes > 0) cm_.build(ids, V, classes);
+        else cm_ = ClassModel{};
         secs_ = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
     }
 
@@ -535,6 +939,7 @@ class K5 {
     }
     const std::vector<std::string>& vocab() const { return vocab_; }
     const WordKN& kn() const { return kn_; }
+    const ClassModel& classes() const { return cm_; }
     const NgramSet& cap_set() const { return cap_ + 1 == 13 ? run13_ : capset_; }
     int cap() const { return cap_; }
     std::size_t docs() const { return docs_; }
@@ -550,209 +955,170 @@ class K5 {
         return run13_.any(ids);
     }
 
-    // fuzzy_bake.py cont_bits: bits of the continuation's tokens under KN (no zeroing; an unknown word gets <unk>'s
-    // mass) and the bytes of their pieces.
-    std::pair<double, double> cont_bits(std::string_view prompt, std::string_view cont) const {
-        std::vector<std::uint32_t> ctx = {kBos};
+    // One continuation's state: the context, the repeat ban, the text, and the online parts (step 2).
+    struct State {
+        std::vector<std::uint32_t> ctx;
         std::string prev;
         bool has_prev = false;
+        RepeatBan rep;
+        std::string out;
+        Overlay ov;
+        WordCache cache;
+        int step = 0;
+    };
+    State start(std::string_view prompt, const Options& o) const {
+        State s;
+        s.ctx = {kBos};
         tokenize(prompt, [&](std::string_view t) {
-            ctx.push_back(id(t));
-            prev.assign(t);
-            has_prev = true;
+            s.ctx.push_back(id(t));
+            s.prev.assign(t);
+            s.has_prev = true;
         });
-        std::vector<double> p(vocab_.size());
+        s.rep = RepeatBan(prompt);
+        if (o.dyn > 0) {
+            s.ov.L = o.dyn;
+            s.ov.order = kn_.order();
+            for (const std::uint32_t w : s.ctx) s.ov.push(w);
+        }
+        if (o.cache_w > 0 || o.cache_w2 > 0) {
+            s.cache.init(vocab_.size(), o.cache_r);
+            for (const std::uint32_t w : s.ctx) s.cache.push(w);
+        }
+        return s;
+    }
+    // The state reads word w (the online parts learn it).
+    static void learn(State& s, std::uint32_t w, const Options& o) {
+        s.ctx.push_back(w);
+        if (o.dyn > 0) s.ov.push(w);
+        if (o.cache_w > 0 || o.cache_w2 > 0) s.cache.push(w);
+    }
+    // P(. | state) into p: K5 (with the dynamic counts and the class floor), then the class mix, then the cache.
+    void model_dist(const State& s, const Options& o, double* p, std::vector<double>& tmp) const {
+        const std::size_t V = vocab_.size();
+        const double* base = nullptr;
+        if (cm_.on()) {
+            tmp.resize(V);
+            cm_.dist(s.ctx.data(), s.ctx.size(), tmp.data());
+            if (o.class_mode == 1) base = tmp.data();
+        }
+        kn_.dist(s.ctx.data(), s.ctx.size(), p, o.dyn > 0 ? &s.ov : nullptr, base);
+        if (cm_.on() && o.class_mode == 2)
+            for (std::size_t w = 0; w < V; ++w) p[w] = (1 - o.class_w) * p[w] + o.class_w * tmp[w];
+        if (o.cache_w > 0 || o.cache_w2 > 0) s.cache.apply(p, V, o.cache_w, o.cache_w2);
+    }
+
+    // fuzzy_bake.py cont_bits: bits of the continuation's tokens under KN (no zeroing; an unknown word gets <unk>'s
+    // mass) and the bytes of their pieces. With o, the online parts read the prompt and each continuation word in turn.
+    std::pair<double, double> cont_bits(std::string_view prompt, std::string_view cont, const Options& o = Options{}) const {
+        State s = start(prompt, o);
+        std::vector<double> p(vocab_.size()), tmp;
         double bits = 0, nb = 0;
         tokenize(cont, [&](std::string_view t) {
             const std::uint32_t y = id(t);
-            kn_.dist(ctx.data(), ctx.size(), p.data());
+            model_dist(s, o, p.data(), tmp);
             bits -= std::log2(std::max(p[y], 1e-12));
-            nb += static_cast<double>(piece(t, prev, has_prev).size());
-            ctx.push_back(y);
-            prev.assign(t);
-            has_prev = true;
+            nb += static_cast<double>(piece(t, s.prev, s.has_prev).size());
+            learn(s, y, o);
+            s.prev.assign(t);
+            s.has_prev = true;
         });
         return {bits, nb};
     }
 
-    // fuzzy_bake.py generate_one: the continuation of prompt, seeded with seed.
+    // §K5 upgrades step 4: the association of every word with the prompt's words, the mean over the prompt's words v
+    // outside the 100 most frequent of PPMI(v, w) = max(0, log2(c(v, w) N / (2 W c(v) c(w)))), c(v, w) counted within W
+    // words in a document of the training text, kept only when c(v, w) >= 2. K5's own counts; nothing of SCRIBE.
+    std::vector<double> prompt_assoc(const std::vector<std::uint32_t>& ctx, std::size_t W = 10, std::size_t skip_top = 100) const {
+        const std::size_t V = vocab_.size();
+        std::vector<double> a(V, 0.0), c(V, 0.0);
+        std::vector<std::uint32_t> vs, touched;
+        for (const std::uint32_t v : ctx)
+            if (v >= 2 + skip_top && std::find(vs.begin(), vs.end(), v) == vs.end()) vs.push_back(v);
+        if (vs.empty()) return a;
+        const double N = static_cast<double>(ids_.size());
+        for (const std::uint32_t v : vs) {
+            touched.clear();
+            for (std::uint32_t e = pos_off_[v]; e < pos_off_[v + 1]; ++e) {
+                const std::size_t t = pos_[e];
+                for (std::size_t j = t; j-- > 0 && t - j <= W;) {
+                    if (ids_[j] == kBos) break;
+                    if (c[ids_[j]] == 0) touched.push_back(ids_[j]);
+                    c[ids_[j]] += 1;
+                }
+                for (std::size_t j = t + 1; j < ids_.size() && j - t <= W; ++j) {
+                    if (ids_[j] == kBos) break;
+                    if (c[ids_[j]] == 0) touched.push_back(ids_[j]);
+                    c[ids_[j]] += 1;
+                }
+            }
+            for (const std::uint32_t w : touched) {
+                if (c[w] >= 2 && w >= 2) {
+                    const double pmi = std::log2(c[w] * N / (2.0 * static_cast<double>(W) * cnt_[v] * cnt_[w]));
+                    if (pmi > 0) a[w] += pmi;
+                }
+                c[w] = 0;
+            }
+        }
+        for (double& x : a) x /= static_cast<double>(vs.size());
+        return a;
+    }
+
+    // fuzzy_bake.py generate_one: the continuation of prompt, seeded with seed. With o.gate_k > 1, the sentence gate.
     std::string generate(std::string_view prompt, std::uint64_t seed, const Options& o, GenStats* st = nullptr) const {
-        std::mt19937_64 rng(seed);
         GenStats g;
-        std::vector<std::uint32_t> ctx = {kBos};
-        std::string prev;
-        bool has_prev = false;
-        tokenize(prompt, [&](std::string_view t) {
-            ctx.push_back(id(t));
-            prev.assign(t);
-            has_prev = true;
-        });
-        RepeatBan rep(prompt);
-        const NgramSet& cs = cap_set();
-        std::unique_ptr<ByteScorer> bs = o.scorer ? o.scorer() : nullptr;  // §13.24
-        if (bs) bs->begin(prompt);
-        std::vector<double> rw;
         const std::size_t V = vocab_.size();
         if (V <= 2) return {};  // no word but <unk> and <s>
-        std::vector<double> p(V);
-        std::vector<std::uint32_t> top, cand, kept;
-        top.reserve(V);
-        std::vector<std::string> pieces;
-        std::vector<char> rb, cb;
-        std::string out;
-        // Words of equal probability (common in the tail: the same continuation count, no stored context) are ordered
-        // by a hash salted per step, not by id: ids follow frequency, and the most frequent of a tied tail block are words
-        // that follow one word only ("Angeles", "Shrugged", and sentence openers such as "Instead" and "Moreover", which
-        // only follow a full stop), which an id order would let in whenever a cut splits the block. numpy's argpartition
-        // and argsort leave ties in no particular order.
-        std::uint64_t salt = 0;
-        const auto above = [&](std::uint32_t x, std::uint32_t y) {
-            if (p[x] != p[y]) return p[x] > p[y];
-            const std::uint64_t hx = mix64(x ^ salt), hy = mix64(y ^ salt);
-            return hx != hy ? hx < hy : x < y;
-        };
-        for (int step = 0; step < o.max_words; ++step) {
-            salt = mix64(seed ^ mix64(static_cast<std::uint64_t>(step) + 0x5EED));
-            ++g.steps;
-            kn_.dist(ctx.data(), ctx.size(), p.data());
-            if (o.temperature != 1.0)
-                for (double& x : p) x = std::pow(x, 1.0 / o.temperature);
-            p[kUnk] = p[kBos] = 0;
-            double z = 0;
-            for (const double x : p) z += x;
-            for (double& x : p) x /= z;
-            // Candidates: the cand_max most probable (ties by the salted hash), cut where their cumulative mass reaches
-            // cand_mass.
-            // tau, the least p among m words of positive p (the first m by p1), is at most the m-th largest p, so the
-            // words with p >= tau hold the m most probable.
-            const std::size_t m = std::min(o.cand_max, V - 2);
-            double tau = 1;
-            for (std::size_t i = 0, got = 0; got < m; ++i) {
-                const std::uint32_t x = kn_.by_p1()[i];
-                if (p[x] > 0) tau = std::min(tau, p[x]), ++got;
-                if (i + 1 == V) {
-                    tau = 0;
-                    break;
-                }
+        State s = start(prompt, o);
+        Scratch sc;
+        sc.p.resize(V);
+        if (o.gate_k <= 1) {
+            std::mt19937_64 rng(seed);
+            std::unique_ptr<ByteScorer> bs = o.scorer ? o.scorer() : nullptr;  // §13.24
+            if (bs) bs->begin(prompt);
+            while (s.step < o.max_words) {
+                const std::uint64_t salt = mix64(seed ^ mix64(static_cast<std::uint64_t>(s.step) + 0x5EED));
+                step_word(s, rng, salt, o, g, bs.get(), sc, nullptr);
+                if (s.out.size() >= o.bytes) break;
             }
-            top.clear();
-            for (std::uint32_t x = 0; x < V; ++x)
-                if (p[x] >= tau) top.push_back(x);
-            std::partial_sort(top.begin(), top.begin() + static_cast<std::ptrdiff_t>(m), top.end(), above);
-            cand.clear();
-            double cum = 0;
-            for (std::size_t i = 0; i < m; ++i) {
-                cand.push_back(top[i]);
-                cum += p[top[i]];
-                if (cum >= o.cand_mass) break;
+        } else {
+            // The sentence gate: K candidates from the same state, each with its own stream; the best by CyphaLM's
+            // own score is kept.
+            const std::vector<double> assoc = o.gate_wp != 0 ? prompt_assoc(s.ctx) : std::vector<double>{};
+            for (std::uint64_t sent = 0; s.step < o.max_words && s.out.size() < o.bytes; ++sent) {
+                State best;
+                GenStats bg;
+                double bscore = 0;
+                for (int k = 0; k < o.gate_k; ++k) {
+                    State c = s;
+                    GenStats gk;
+                    const std::uint64_t cs = mix64(seed ^ mix64(0x6A7E000000ull + sent * 256 + static_cast<std::uint64_t>(k)));
+                    std::mt19937_64 rng(cs);
+                    const std::size_t b0 = c.out.size();
+                    double slp = 0, spmi = 0;
+                    std::size_t nw = 0;
+                    while (c.step < o.max_words && c.out.size() < o.bytes) {
+                        const std::uint64_t salt = mix64(cs ^ mix64(static_cast<std::uint64_t>(c.step) + 0x5EED));
+                        double lp = 0;
+                        const std::uint32_t w = step_word(c, rng, salt, o, gk, nullptr, sc, &lp);
+                        slp += lp, spmi += assoc.empty() ? 0.0 : assoc[w], ++nw;
+                        const std::size_t nb = c.out.size() - b0;
+                        const std::string& t = vocab_[w];
+                        if (nb >= o.gate_max) break;
+                        if (nb >= o.gate_min && (t == "." || t == "!" || t == "?" || t == "\n")) break;
+                    }
+                    std::size_t mk = 0;
+                    for (std::size_t i = b0; i < c.out.size(); ++i) mk += std::string_view("[]{}|=<>&*#").find(c.out[i]) != std::string_view::npos;
+                    const double nb = static_cast<double>(std::max<std::size_t>(c.out.size() - b0, 1)), n = static_cast<double>(std::max<std::size_t>(nw, 1));
+                    const double score = o.gate_wf * slp / n + o.gate_wp * spmi / n - o.gate_wm * static_cast<double>(mk) / nb;
+                    ++g.gate_cands;
+                    if (k == 0 || score > bscore) bscore = score, best = std::move(c), bg = gk;
+                }
+                s = std::move(best);
+                g.add(bg);
+                ++g.gate_sents;
             }
-            // Bans.
-            const std::size_t nc = cand.size();
-            pieces.resize(nc);
-            rb.assign(nc, 0);
-            cb.assign(nc, 0);
-            std::uint64_t hp = 0;
-            const bool capped = o.cap && cs.prefix(ctx, hp);
-            std::size_t ncap = 0;
-            bool any_kept = false, any_cap_ok = false;
-            for (std::size_t i = 0; i < nc; ++i) {
-                pieces[i] = piece(vocab_[cand[i]], prev, has_prev);
-                cb[i] = capped && cs.has(fnv_step(hp, cand[i]));
-                rb[i] = rep.banned(pieces[i]);
-                ncap += cb[i];
-                g.rep_banned += rb[i] && !cb[i];
-                any_cap_ok = any_cap_ok || !cb[i];
-                any_kept = any_kept || (!rb[i] && !cb[i]);
-            }
-            g.cap_banned += ncap;
-            g.cap_steps += ncap > 0;
-            std::uint32_t w = 0;
-            std::string s;
-            if (!any_cap_ok) {  // the cap removed every candidate: the most probable word anywhere that it allows
-                ++g.cap_outside;
-                top.resize(V);
-                for (std::uint32_t x = 0; x < V; ++x) top[x] = x;
-                std::sort(top.begin(), top.end(), above);
-                for (const std::uint32_t x : top)
-                    if (p[x] > 0 && !cs.has(fnv_step(hp, x))) {
-                        w = x;
-                        break;
-                    }
-                s = piece(vocab_[w], prev, has_prev);
-            } else {
-                if (!any_kept) {
-                    ++g.rep_lifted;
-                    std::fill(rb.begin(), rb.end(), 0);
-                }
-                kept.clear();
-                double zk = 0;
-                for (std::size_t i = 0; i < nc; ++i)
-                    if (!rb[i] && !cb[i]) kept.push_back(static_cast<std::uint32_t>(i)), zk += p[cand[i]];
-                // Nucleus over the kept words, then one draw (numpy's choice: the first cdf entry above u).
-                std::size_t k = 0;
-                double c2 = 0;
-                while (k < kept.size()) {
-                    c2 += p[cand[kept[k]]] / zk;
-                    ++k;
-                    if (c2 >= o.nucleus) break;
-                }
-                if (ncap > 0) {  // was a word the cap removed inside the nucleus the draw would have had without it?
-                    double zu = 0, cu = 0;
-                    for (std::size_t i = 0; i < nc; ++i)
-                        if (!rb[i]) zu += p[cand[i]];
-                    for (std::size_t i = 0; i < nc; ++i) {
-                        if (rb[i]) continue;
-                        if (cb[i]) {
-                            ++g.cap_mass_steps;
-                            break;
-                        }
-                        cu += p[cand[i]] / zu;
-                        if (cu >= o.nucleus) break;
-                    }
-                }
-                double zn = 0;
-                for (std::size_t i = 0; i < k; ++i) zn += p[cand[kept[i]]];
-                // §13.24: the byte scorer reranks the words inside the nucleus.
-                rw.resize(k);
-                for (std::size_t i = 0; i < k; ++i) rw[i] = p[cand[kept[i]]] / zn;
-                if (bs && k > 1) {
-                    std::vector<double> lb(k);
-                    double mx = -1e300;
-                    for (std::size_t i = 0; i < k; ++i) {
-                        lb[i] = bs->score(pieces[kept[i]]);
-                        if (o.scorer_mode == 3) lb[i] -= bs->prior(pieces[kept[i]]);
-                        mx = std::max(mx, lb[i]);
-                    }
-                    double zb = 0, zr = 0;
-                    for (std::size_t i = 0; i < k; ++i) zb += std::exp2(lb[i] - mx);
-                    for (std::size_t i = 0; i < k; ++i) {
-                        const double pb = std::exp2(lb[i] - mx) / zb;
-                        rw[i] = o.scorer_mode == 3 ? std::exp2(std::log2(std::max(rw[i], 1e-300)) + o.scorer_w * (lb[i] - mx))
-                              : o.scorer_mode == 2 ? (1 - o.scorer_w) * rw[i] + o.scorer_w * pb
-                                                   : std::exp2((1 - o.scorer_w) * std::log2(std::max(rw[i], 1e-300)) +
-                                                               o.scorer_w * std::log2(std::max(pb, 1e-300)));
-                        zr += rw[i];
-                    }
-                    for (double& x : rw) x /= zr;
-                }
-                const double u = static_cast<double>(rng() >> 11) * 0x1.0p-53;
-                std::size_t j = 0;
-                double cdf = 0;
-                for (; j + 1 < k; ++j) {
-                    cdf += rw[j];
-                    if (cdf > u) break;
-                }
-                w = cand[kept[j]];
-                s = std::move(pieces[kept[j]]);
-            }
-            out += s;
-            rep.add(s);
-            if (bs) bs->advance(s);
-            ctx.push_back(w);
-            prev = vocab_[w];
-            has_prev = true;
-            if (out.size() >= o.bytes) break;
         }
+        std::string out = std::move(s.out);
         if (out.size() > o.bytes) {  // cut to the byte limit; a character the cut splits is dropped (decode "ignore")
             out.resize(o.bytes);
             std::size_t i = out.size();
@@ -769,10 +1135,193 @@ class K5 {
     }
 
  private:
+    struct Scratch {
+        std::vector<double> p, pre, tmp, rw;
+        std::vector<std::uint32_t> top, cand, kept;
+        std::vector<std::string> pieces;
+        std::vector<char> rb, cb;
+    };
+    // One step of generate_one on s: draws a word, writes its piece and learns it. lp (if not null): log2 of the
+    // word's probability under the model before temperature, <unk> and <s> removed (the gate's fluency).
+    std::uint32_t step_word(State& s, std::mt19937_64& rng, std::uint64_t salt, const Options& o, GenStats& g, ByteScorer* bs,
+                            Scratch& sc, double* lp) const {
+        const std::size_t V = vocab_.size();
+        std::vector<double>& p = sc.p;
+        std::vector<std::uint32_t>&top = sc.top, &cand = sc.cand, &kept = sc.kept;
+        ++g.steps;
+        ++s.step;
+        model_dist(s, o, p.data(), sc.tmp);
+        if (lp && o.temperature != 1.0) sc.pre = p;
+        if (o.temperature != 1.0)
+            for (double& x : p) x = std::pow(x, 1.0 / o.temperature);
+        p[kUnk] = p[kBos] = 0;
+        double z = 0;
+        for (const double x : p) z += x;
+        for (double& x : p) x /= z;
+        // Words of equal probability (common in the tail: the same continuation count, no stored context) are ordered
+        // by a hash salted per step, not by id: ids follow frequency, and the most frequent of a tied tail block are words
+        // that follow one word only ("Angeles", "Shrugged", and sentence openers such as "Instead" and "Moreover", which
+        // only follow a full stop), which an id order would let in whenever a cut splits the block. numpy's argpartition
+        // and argsort leave ties in no particular order.
+        const auto above = [&](std::uint32_t x, std::uint32_t y) {
+            if (p[x] != p[y]) return p[x] > p[y];
+            const std::uint64_t hx = mix64(x ^ salt), hy = mix64(y ^ salt);
+            return hx != hy ? hx < hy : x < y;
+        };
+        // Candidates: the cand_max most probable (ties by the salted hash), cut where their cumulative mass reaches
+        // cand_mass.
+        // tau, the least p among m words of positive p (the first m by p1), is at most the m-th largest p, so the
+        // words with p >= tau hold the m most probable (for any distribution; tight when only stored contexts differ
+        // from the order-1 ranking).
+        const std::size_t m = std::min(o.cand_max, V - 2);
+        double tau = 1;
+        for (std::size_t i = 0, got = 0; got < m; ++i) {
+            const std::uint32_t x = kn_.by_p1()[i];
+            if (p[x] > 0) tau = std::min(tau, p[x]), ++got;
+            if (i + 1 == V) {
+                tau = 0;
+                break;
+            }
+        }
+        top.clear();
+        for (std::uint32_t x = 0; x < V; ++x)
+            if (p[x] >= tau) top.push_back(x);
+        const std::size_t mm = std::min(m, top.size());
+        std::partial_sort(top.begin(), top.begin() + static_cast<std::ptrdiff_t>(mm), top.end(), above);
+        cand.clear();
+        double cum = 0;
+        for (std::size_t i = 0; i < mm; ++i) {
+            cand.push_back(top[i]);
+            cum += p[top[i]];
+            if (cum >= o.cand_mass) break;
+        }
+        // Bans.
+        const std::size_t nc = cand.size();
+        sc.pieces.resize(nc);
+        sc.rb.assign(nc, 0);
+        sc.cb.assign(nc, 0);
+        std::vector<std::string>& pieces = sc.pieces;
+        std::vector<char>&rb = sc.rb, &cb = sc.cb;
+        const NgramSet& cs = cap_set();
+        std::uint64_t hp = 0;
+        const bool capped = o.cap && cs.prefix(s.ctx, hp);
+        std::size_t ncap = 0;
+        bool any_kept = false, any_cap_ok = false;
+        for (std::size_t i = 0; i < nc; ++i) {
+            pieces[i] = piece(vocab_[cand[i]], s.prev, s.has_prev);
+            cb[i] = capped && cs.has(fnv_step(hp, cand[i]));
+            rb[i] = s.rep.banned(pieces[i]);
+            ncap += cb[i];
+            g.rep_banned += rb[i] && !cb[i];
+            any_cap_ok = any_cap_ok || !cb[i];
+            any_kept = any_kept || (!rb[i] && !cb[i]);
+        }
+        g.cap_banned += ncap;
+        g.cap_steps += ncap > 0;
+        std::uint32_t w = 0;
+        std::string str;
+        if (!any_cap_ok) {  // the cap removed every candidate: the most probable word anywhere that it allows
+            ++g.cap_outside;
+            top.resize(V);
+            for (std::uint32_t x = 0; x < V; ++x) top[x] = x;
+            std::sort(top.begin(), top.end(), above);
+            for (const std::uint32_t x : top)
+                if (p[x] > 0 && !cs.has(fnv_step(hp, x))) {
+                    w = x;
+                    break;
+                }
+            str = piece(vocab_[w], s.prev, s.has_prev);
+        } else {
+            if (!any_kept) {
+                ++g.rep_lifted;
+                std::fill(rb.begin(), rb.end(), 0);
+            }
+            kept.clear();
+            double zk = 0;
+            for (std::size_t i = 0; i < nc; ++i)
+                if (!rb[i] && !cb[i]) kept.push_back(static_cast<std::uint32_t>(i)), zk += p[cand[i]];
+            // Nucleus over the kept words, then one draw (numpy's choice: the first cdf entry above u).
+            std::size_t k = 0;
+            double c2 = 0;
+            while (k < kept.size()) {
+                c2 += p[cand[kept[k]]] / zk;
+                ++k;
+                if (c2 >= o.nucleus) break;
+            }
+            if (ncap > 0) {  // was a word the cap removed inside the nucleus the draw would have had without it?
+                double zu = 0, cu = 0;
+                for (std::size_t i = 0; i < nc; ++i)
+                    if (!rb[i]) zu += p[cand[i]];
+                for (std::size_t i = 0; i < nc; ++i) {
+                    if (rb[i]) continue;
+                    if (cb[i]) {
+                        ++g.cap_mass_steps;
+                        break;
+                    }
+                    cu += p[cand[i]] / zu;
+                    if (cu >= o.nucleus) break;
+                }
+            }
+            double zn = 0;
+            for (std::size_t i = 0; i < k; ++i) zn += p[cand[kept[i]]];
+            // §13.24: the byte scorer reranks the words inside the nucleus.
+            std::vector<double>& rw = sc.rw;
+            rw.resize(k);
+            for (std::size_t i = 0; i < k; ++i) rw[i] = p[cand[kept[i]]] / zn;
+            if (bs && k > 1) {
+                std::vector<double> lb(k);
+                double mx = -1e300;
+                for (std::size_t i = 0; i < k; ++i) {
+                    lb[i] = bs->score(pieces[kept[i]]);
+                    if (o.scorer_mode == 3) lb[i] -= bs->prior(pieces[kept[i]]);
+                    mx = std::max(mx, lb[i]);
+                }
+                double zb = 0, zr = 0;
+                for (std::size_t i = 0; i < k; ++i) zb += std::exp2(lb[i] - mx);
+                for (std::size_t i = 0; i < k; ++i) {
+                    const double pb = std::exp2(lb[i] - mx) / zb;
+                    rw[i] = o.scorer_mode == 3 ? std::exp2(std::log2(std::max(rw[i], 1e-300)) + o.scorer_w * (lb[i] - mx))
+                          : o.scorer_mode == 2 ? (1 - o.scorer_w) * rw[i] + o.scorer_w * pb
+                                               : std::exp2((1 - o.scorer_w) * std::log2(std::max(rw[i], 1e-300)) +
+                                                           o.scorer_w * std::log2(std::max(pb, 1e-300)));
+                    zr += rw[i];
+                }
+                for (double& x : rw) x /= zr;
+            }
+            const double u = static_cast<double>(rng() >> 11) * 0x1.0p-53;
+            std::size_t j = 0;
+            double cdf = 0;
+            for (; j + 1 < k; ++j) {
+                cdf += rw[j];
+                if (cdf > u) break;
+            }
+            w = cand[kept[j]];
+            str = std::move(pieces[kept[j]]);
+        }
+        if (lp) {
+            if (o.temperature != 1.0) {
+                const double zr = 1 - sc.pre[kUnk] - sc.pre[kBos];
+                *lp = std::log2(std::max(sc.pre[w] / zr, 1e-300));
+            } else {
+                *lp = std::log2(std::max(p[w], 1e-300));
+            }
+        }
+        s.out += str;
+        s.rep.add(str);
+        if (bs) bs->advance(str);
+        learn(s, w, o);
+        s.prev = vocab_[w];
+        s.has_prev = true;
+        return w;
+    }
+
     std::vector<std::string> vocab_;
     std::unordered_map<std::string, std::uint32_t> tid_;
     WordKN kn_;
+    ClassModel cm_;
     NgramSet run13_, capset_;
+    std::vector<std::uint32_t> ids_, pos_off_, pos_;
+    std::vector<double> cnt_;
     int cap_ = 12;
     std::size_t docs_ = 0, tokens_ = 0, unk_ = 0;
     double secs_ = 0;
@@ -813,13 +1362,25 @@ inline double copy32_share(std::string_view ref, const std::vector<std::string>&
 inline int run_sample(const std::string& text_path, int cap, const std::vector<std::string>& prompts,
                       const std::vector<std::string>& conts, const std::vector<std::string>& outs, int per_file,
                       std::size_t bytes, const std::vector<double>& temps,
-                      const std::function<std::string(const std::string&)>& esc, const Options* base = nullptr) {
+                      const std::function<std::string(const std::string&)>& esc, const Options* base = nullptr,
+                      std::uint64_t seed = kSeed, std::size_t vmax = kVmax) {  // K5_SCALE: --k5-seed, --k5-vmax
     std::string err;
     K5 m;
-    if (!m.load(text_path, cap, err)) {
+    const Options bo = base ? *base : Options{};
+    if (bo.gate_k > 1 && bo.scorer) {
+        std::cerr << "--k5-gate does not take --k5-lstm\n";
+        return 2;
+    }
+    if (!m.load(text_path, cap, err, &bo, vmax)) {
         std::cerr << "--k5: " << err << "\n";
         return 1;
     }
+    if (m.classes().on()) {
+        std::fprintf(stderr, "k5: %zu exchange classes (%s); class-bigram loglik", bo.classes, bo.class_mode == 2 ? "mix" : "backoff");
+        for (const double x : m.classes().loglik()) std::fprintf(stderr, " %.0f", x);
+        std::fprintf(stderr, "\n");
+    }
+    if (!bo.describe().empty()) std::fprintf(stderr, "k5: options%s\n", bo.describe().c_str());
     std::fprintf(stderr, "k5: %zu docs, %zu tokens (unk %.4f), vocab %zu; entries o2 %zu o3 %zu o4 %zu o5 %zu; cap %d (%zu windows); "
                  "%.1f MB; built in %.1f s\n", m.docs(), m.tokens(), static_cast<double>(m.unk()) / static_cast<double>(std::max<std::size_t>(m.tokens(), 1)),
                  m.vocab().size(), m.kn().entries(2), m.kn().entries(3), m.kn().entries(4), m.kn().entries(5), cap,
@@ -835,10 +1396,11 @@ inline int run_sample(const std::string& text_path, int cap, const std::vector<s
             Options o = base ? *base : Options{};
             o.temperature = temps[ti];
             o.bytes = bytes;
-            gens[j] = m.generate(prompts[id], kSeed + id + 7919 * ti, o, &gst[j]);
+            gens[j] = m.generate(prompts[id], seed + o.seed_off + id + 7919 * ti, o, &gst[j]);
         }
     };
-    const unsigned nth = std::max(1u, std::min(4u, std::thread::hardware_concurrency()));
+    unsigned nth = std::max(1u, std::min(4u, std::thread::hardware_concurrency()));
+    if (const char* e = std::getenv("K5_THREADS")) nth = std::max(1, std::atoi(e));  // K5_UPGRADES.md: the gate's runs
     std::vector<std::thread> pool;
     for (unsigned t = 1; t < nth; ++t) pool.emplace_back(work);
     work();
@@ -855,7 +1417,7 @@ inline int run_sample(const std::string& text_path, int cap, const std::vector<s
             std::cerr << "cannot write " << outs[f] << "\n";
             return 1;
         }
-        out << "MODEL\tk5\tclean=" << text_path << "\tcap=" << cap << "\tvocab=" << m.vocab().size() << "\n";
+        out << "MODEL\tk5\tclean=" << text_path << "\tcap=" << cap << "\tvocab=" << m.vocab().size() << bo.describe() << "\n";
         for (int k = 0; k < per_file; ++k) {
             const std::size_t id = f * static_cast<std::size_t>(per_file) + static_cast<std::size_t>(k);
             out << "PROMPT\t" << id << "\t" << esc(prompts[id]) << "\n";
@@ -870,10 +1432,11 @@ inline int run_sample(const std::string& text_path, int cap, const std::vector<s
     std::fprintf(stderr, "k5: %zu words; repeat ban removed %zu candidates, lifted at %zu steps; cap removed %zu candidates at %zu steps "
                  "(%zu inside the draw's nucleus), left none at %zu\n", all.steps, all.rep_banned, all.rep_lifted, all.cap_banned,
                  all.cap_steps, all.cap_mass_steps, all.cap_outside);
+    if (all.gate_sents) std::fprintf(stderr, "k5: the gate kept %zu sentences of %zu candidates\n", all.gate_sents, all.gate_cands);
     if (!conts.empty()) {
         double b = 0, n = 0;
         for (std::size_t k = 0; k < np && k < conts.size(); ++k) {
-            const auto [x, y] = m.cont_bits(prompts[k], conts[k]);
+            const auto [x, y] = m.cont_bits(prompts[k], conts[k], bo);
             b += x, n += y;
         }
         std::printf("GEN_EVAL k5_cont_bpb %.6f (word-level; an unknown word costs <unk>'s bits)\n", n > 0 ? b / n : 0.0);
@@ -1028,7 +1591,7 @@ inline bool self_test(std::string& err) {
     // The cap: after twelve words of the repeated sentence the thirteenth is never written; with --k5-cap 0 it is.
     {
         const std::string pr = "One two three four five six seven eight nine ten eleven twelve";
-        Options o;
+        Options o = k5_v1();
         o.bytes = 120;
         int with = 0, without = 0;
         GenStats st;
@@ -1045,6 +1608,111 @@ inline bool self_test(std::string& err) {
         const std::string g1 = m.generate("The cat saw", 5, o), g2 = m.generate("The cat saw", 5, o);
         if (g1 != g2 || g1.empty() || g1.size() > o.bytes || g1.find("<unk>") != std::string::npos || m.has_run13(g1)) {
             err = "generate: " + g1;
+            return false;
+        }
+    }
+    // K5_UPGRADES.md: the flags, the online parts, orders 6 and 7, the classes and the gate.
+    {
+        Options o;
+        std::string e;
+        Options v1;
+        if (!apply_flag("--k5-base", "k5", v1, e) || v1.nucleus != 0.9 || v1.classes != 0 || v1.gate_k != 0 ||
+            !apply_flag("--k5-gate", "4,wf=1,wp=0.5,wm=5", o, e) || o.gate_k != 4 || o.gate_wp != 0.5 || !apply_flag("--k5-cache", "0.1", o, e) ||
+            apply_flag("--k5-nucleus", "1.5", o, e) || apply_flag("--k5-bogus", "1", o, e) || !apply_flag("--k5-class-mode", "mix", o, e) ||
+            o.class_mode != 2 || Options{}.describe() != "") {
+            err = "apply_flag";
+            return false;
+        }
+    }
+    const auto sums = [&](const K5& mm, const Options& o, const char* what) {
+        for (const char* c : ctxs) {
+            K5::State s = mm.start(c, o);
+            for (const auto& t : tokens("the river . It saw"))  // the online parts also learn a few words
+                K5::learn(s, mm.id(t), o);
+            std::vector<double> q(mm.vocab().size()), tmp;
+            mm.model_dist(s, o, q.data(), tmp);
+            double z = 0, lo = 1;
+            for (const double x : q) z += x, lo = std::min(lo, x);
+            if (std::fabs(z - 1) > 1e-9 || lo < 0) {
+                err = std::string(what) + " does not sum to one after \"" + c + "\" (" + std::to_string(z) + ")";
+                return false;
+            }
+        }
+        return true;
+    };
+    {
+        Options o = k5_v1();
+        o.dyn = 3;
+        if (!sums(m, o, "dynamic counts")) return false;
+        o = k5_v1();
+        o.cache_w = 0.2, o.cache_w2 = 0.1, o.cache_r = 0.9;
+        if (!sums(m, o, "the cache")) return false;
+        // The dynamic counts raise a word the prompt put after its context; the shared model is unchanged.
+        Options d = k5_v1();
+        d.dyn = 5;
+        const std::string pr = "The cat lost Paris. The cat lost";
+        const auto prob = [&](const Options& oo) {
+            K5::State s = m.start(pr, oo);
+            std::vector<double> q(V), tmp;
+            m.model_dist(s, oo, q.data(), tmp);
+            return q[m.id("Paris")];
+        };
+        const double p0 = prob(k5_v1()), p1 = prob(d), p2 = prob(k5_v1());
+        if (!(p1 > p0) || p2 != p0) {
+            err = "dynamic counts do not raise the prompt's continuation";
+            return false;
+        }
+        // K5's own path: cont_bits with default options is the plain walk.
+        if (m.cont_bits("The cat", "saw the river.").first != m.cont_bits("The cat", "saw the river.", k5_v1()).first) {
+            err = "cont_bits";
+            return false;
+        }
+    }
+    for (int ord : {6, 7}) {
+        K5 m6;
+        m6.build(text, 12, ord);
+        if (m6.kn().order() != ord || m6.kn().entries(ord) == 0 || !sums(m6, k5_v1(), "order 6/7")) {
+            if (err.empty()) err = "order " + std::to_string(ord);
+            return false;
+        }
+        Options o = k5_v1();
+        o.dyn = 2;
+        if (!sums(m6, o, "order 6/7 with dynamic counts")) return false;
+    }
+    {
+        K5 mc;
+        mc.build(text, 12, kOrder, 8);
+        const auto& ll = mc.classes().loglik();
+        if (!mc.classes().on() || ll.size() != 7 || ll.back() < ll.front()) {
+            err = "exchange classes";
+            return false;
+        }
+        Options o = k5_v1();
+        if (!sums(mc, o, "class backoff")) return false;
+        o.class_mode = 2, o.class_w = 0.3;
+        if (!sums(mc, o, "class mix")) return false;
+    }
+    {  // The gate: deterministic, within the budget, no copy run; K 1 is K5 itself.
+        Options o = k5_v1();
+        o.bytes = 200;
+        const std::string a0 = m.generate("The cat saw", 9, o);
+        Options g1 = o;
+        g1.gate_k = 1;
+        Options g4 = o;
+        g4.gate_k = 4, g4.gate_wp = 1;
+        GenStats st;
+        const std::string a1 = m.generate("The cat saw", 9, g1), b1 = m.generate("The old man found Paris", 9, g4, &st),
+                          b2 = m.generate("The old man found Paris", 9, g4);
+        if (a0 != a1 || b1 != b2 || b1.empty() || b1.size() > o.bytes || m.has_run13(b1) || st.gate_sents == 0 ||
+            st.gate_cands != st.gate_sents * 4) {
+            err = "gate: " + b1;
+            return false;
+        }
+        const auto as = m.prompt_assoc({kBos, m.id("Paris"), m.id("river")}, 10, 0);
+        double mx = 0;
+        for (const double x : as) mx = std::max(mx, x);
+        if (!(mx > 0)) {
+            err = "prompt association";
             return false;
         }
     }

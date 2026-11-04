@@ -1,0 +1,16 @@
+docs_in 141633
+bytes_in 429182099
+forbid gena_texts.txt spans_in_set 315799 docs_hit 4288 windows_hit 28472
+forbid scribe_reftest.txt spans_in_set 8325008 docs_hit 73802 windows_hit 20529256
+docs_dropped_over_10pct 40832
+bytes_dropped 86629760
+docs_with_sentences_cut 33621
+sentences_cut 78332
+bytes_cut 12949070
+docs_emptied_by_cuts 6
+max_rounds 2
+docs_out 100795
+bytes_out 329603263
+info scribe_pack.txt spans_in_set 17313084 kept_docs_hit 36085 windows_hit 595653
+info gena_source.txt spans_in_set 12958741 kept_docs_hit 31820 windows_hit 511882
+recheck_kept_docs_with_forbidden_span 0

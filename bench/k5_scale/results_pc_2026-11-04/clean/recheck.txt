@@ -1,0 +1,1 @@
+check train_all.txt: 100795 documents, 0 hold a forbidden span (8640295 spans in the set)

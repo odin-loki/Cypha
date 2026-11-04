@@ -60,6 +60,8 @@ struct ByteIn {
     const double* doc[3] = {};               // the document parts trig, cache, topic (nullptr: part off)
     int doc_b[3] = {};
     const double* lstm = nullptr;            // the byte LSTM (ByteLSTM::dist)
+    const double* ngram = nullptr;           // the online n-gram, mixed (OnlineNgram::dist; nullptr: off)
+    const double* ngram_o = nullptr;         // ... and each order's, [order * 256 + byte]
 };
 
 /// What the chain holds: which stages are on, their bucket counts, the doc stage's frozen lambdas (fit on the first
@@ -70,6 +72,7 @@ struct ChainSpec {
     std::vector<double> doc_lam;  // [part * doc_buckets + bucket]
     bool doc_on[3] = {false, true, false};
     std::string final_gate = "copy";  // copy | ig
+    int ngram_orders = 0;             // the online n-gram's orders (0: no n-gram stage; ONLINE_LEARNING_UPGRADES)
 };
 
 /// Tuning knobs (k=v,k=v). Defaults are the registered ones (FULL_DISTRIBUTION_MIXING.md).
@@ -375,18 +378,24 @@ class FullMixer {
             sim_[r].init(cs.sim_buckets, rates[r]);
             copy_[r].init(cs.copy_buckets, rates[r]);
             lstm_[r].init(cs.ig_buckets, rates[r]);
+            ngram_[r].init(cs.ig_buckets, rates[r]);
         }
         // The final layer: 23 row values, the LSTM, the slow and fast chains, then the chain (cyphalm_trie context8k).
-        nfin_ = 24 + (cs.lstm ? 1 : 0) + (cs.two_rates ? 2 : 0);
+        // With the online n-gram (main since ONLINE_LEARNING_UPGRADES): its mixed probability and each order's come after
+        // the slow and fast chains, before the chain.
+        const int ng = cs.ngram_orders > 0 ? 1 + cs.ngram_orders : 0;
+        nfin_ = 24 + (cs.lstm ? 1 : 0) + (cs.two_rates ? 2 : 0) + ng;
+        kRaw_ = 16 + ng;
+        kAll_ = kRaw_ + 8;
         fw_.assign(80 * static_cast<std::size_t>(nfin_), 0.01 / (1.0 + 0.01 * (nfin_ - 1)));
         for (int g = 0; g < 80; ++g) fw_[static_cast<std::size_t>(g) * nfin_ + (nfin_ - 1)] = 1.0 / (1.0 + 0.01 * (nfin_ - 1));
-        // Bitwise inputs: the "all" list (see inputs()) plus copy's adaptive input and a bias; the raw list likewise.
-        nall_ = kAll + 2;
-        nraw_ = kRaw + 2;
+        // Bitwise inputs: the "all" list (see kAll_) plus copy's adaptive input and a bias; the raw list likewise.
+        nall_ = kAll_ + 2;
+        nraw_ = kRaw_ + 2;
         const std::vector<int> sets = {256, 32 * 8, 8 * 4 * 8, 5 * 256};
-        mixA_ = std::make_unique<BitMixer>(nall_, sets, kAll - 1, P.lr1, P.lr2, P.lr_decay, P.eps);  // starts at Fn
+        mixA_ = std::make_unique<BitMixer>(nall_, sets, kAll_ - 1, P.lr1, P.lr2, P.lr_decay, P.eps);  // starts at Fn
         mixR_ = std::make_unique<BitMixer>(nraw_, sets, kRawTM, P.lr1, P.lr2, P.lr_decay, P.eps);    // starts at the trie mixture
-        geo_ = std::make_unique<GeoMix>(kAll + 1, 80, kAll - 1, P.lrb, P.lr_decay);                   // + copy's one-hot
+        geo_ = std::make_unique<GeoMix>(kAll_ + 1, 80, kAll_ - 1, P.lrb, P.lr_decay);                   // + copy's one-hot
         abmix_ = std::make_unique<BitMixer>(2, std::vector<int>{8}, 0, P.lr1, P.lr2, 0, P.eps);
         for (auto* s : {&sseF_, &sseA_, &sseR_, &sseB_}) *s = std::make_unique<Sse>(P);
         copy_ok_.assign(8 * 8, {1.0, 2.0});
@@ -439,6 +448,11 @@ class FullMixer {
                     const double l = cs_.doc_lam[static_cast<std::size_t>(q * cs_.doc_buckets + in.doc_b[q])];
                     for (int s = 0; s < 256; ++s) ch[0][s] = l * in.doc[q][s] + (1 - l) * ch[0][s];
                 }
+        double ngp[256];
+        if (cs_.ngram_orders > 0) {  // pngram = max(P(y), 1e-12), a lambda per InfiniGram bucket, before the LSTM
+            for (int s = 0; s < 256; ++s) ngp[s] = std::max(in.ngram[s], 1e-12);
+            stage(ngram_, ngp, in.ig_b);
+        }
         if (cs_.lstm) stage(lstm_, lst, in.ig_b);
         chain_y_ = ch[0][y];
         snap3_y_ = snap_[3][y];
@@ -475,6 +489,12 @@ class FullMixer {
         if (cs_.two_rates)
             for (int r = 1; r < 3; ++r, ++nq)
                 for (int s = 0; s < 256; ++s) q[nq][s] = std::max(1e-9, ch[r][s]);
+        if (cs_.ngram_orders > 0) {
+            for (int s = 0; s < 256; ++s) q[nq][s] = std::max(1e-9, ngp[s]);
+            ++nq;
+            for (int o = 0; o < cs_.ngram_orders; ++o, ++nq)
+                for (int s = 0; s < 256; ++s) q[nq][s] = std::max(1e-9, fl(in.ngram_o[o * 256 + s]));
+        }
         for (int s = 0; s < 256; ++s) q[nq][s] = std::max(1e-9, fl(ch[0][s]));
         ++nq;
         const int bc = byte_class(static_cast<unsigned char>(in.prev));
@@ -495,22 +515,35 @@ class FullMixer {
         fsum_acc_ += fsum;
 
         // ---- the inputs of the PAQ mixers (unnormalised is fine for bits; geo normalises)
-        const double* all[kAll] = {in.trie[0], in.trie[1], in.trie[2], in.trie[3], in.trie[4], TM, in.kn,
-                                   in.ig[0], in.ig[1], in.ig[2], in.ig[3], in.ig[4], in.cls, in.sim,
-                                   in.doc[1] ? in.doc[1] : (in.doc[0] ? in.doc[0] : in.doc[2]), cs_.lstm ? lst : nullptr,
-                                   snap_[0], snap_[1], snap_[2], snap_[3], ch[0],
-                                   cs_.two_rates ? ch[1] : nullptr, cs_.two_rates ? ch[2] : nullptr, Fn};
-        double bits[kAll][8];
-        for (int j = 0; j < kAll; ++j) {
+        const double* all[kMax];
+        {
+            int n = 0;
+            for (const double* d : {in.trie[0], in.trie[1], in.trie[2], in.trie[3], in.trie[4], static_cast<const double*>(TM), in.kn,
+                                    in.ig[0], in.ig[1], in.ig[2], in.ig[3], in.ig[4], in.cls, in.sim,
+                                    in.doc[1] ? in.doc[1] : (in.doc[0] ? in.doc[0] : in.doc[2]),
+                                    cs_.lstm ? static_cast<const double*>(lst) : nullptr})
+                all[n++] = d;
+            if (cs_.ngram_orders > 0) {
+                all[n++] = in.ngram;
+                for (int o = 0; o < cs_.ngram_orders; ++o) all[n++] = in.ngram_o + o * 256;
+            }
+            for (const double* d : {static_cast<const double*>(snap_[0]), static_cast<const double*>(snap_[1]),
+                                    static_cast<const double*>(snap_[2]), static_cast<const double*>(snap_[3]),
+                                    static_cast<const double*>(ch[0]), cs_.two_rates ? static_cast<const double*>(ch[1]) : nullptr,
+                                    cs_.two_rates ? static_cast<const double*>(ch[2]) : nullptr, static_cast<const double*>(Fn)})
+                all[n++] = d;
+        }
+        double bits[kMax][8];
+        for (int j = 0; j < kAll_; ++j) {
             if (all[j]) path_bits(all[j], y, bits[j]);
             else std::fill(bits[j], bits[j] + 8, 0.5);
         }
 
         // ---- B: geometric mixing of the normalised, floored distributions (and copy's one-hot)
-        double Lb[kAll + 1][256];
-        const double* L[kAll + 1];
-        for (int j = 0; j <= kAll; ++j) {
-            const double* d = j < kAll ? all[j] : (in.cpred >= 0 ? copy1 : nullptr);
+        double Lb[kMax + 1][256];
+        const double* L[kMax + 1];
+        for (int j = 0; j <= kAll_; ++j) {
+            const double* d = j < kAll_ ? all[j] : (in.cpred >= 0 ? copy1 : nullptr);
             if (!d) {
                 L[j] = nullptr;
                 continue;
@@ -554,16 +587,16 @@ class FullMixer {
             }
             const int ctx[4] = {static_cast<int>(c0), std::min(in.ig_b, 31) * 8 + j, (cb * 4 + cst) * 8 + j,
                                 bc * 256 + static_cast<int>(c0)};
-            double xa[kAll + 2], xr[kRaw + 2];
-            for (int i = 0; i < kAll; ++i) xa[i] = stretch_eps(bits[i][j], P_.eps);
-            xa[kAll] = xc;
-            xa[kAll + 1] = 0.25;
-            for (int i = 0; i < kRaw; ++i) xr[i] = xa[i];
-            xr[kRaw] = xc;
-            xr[kRaw + 1] = 0.25;
+            double xa[kMax + 2], xr[kMax + 2];
+            for (int i = 0; i < kAll_; ++i) xa[i] = stretch_eps(bits[i][j], P_.eps);
+            xa[kAll_] = xc;
+            xa[kAll_ + 1] = 0.25;
+            for (int i = 0; i < kRaw_; ++i) xr[i] = xa[i];
+            xr[kRaw_] = xc;
+            xr[kRaw_ + 1] = 0.25;
             const double pA = std::clamp(mixA_->p(xa, ctx, j), P_.eps, 1 - P_.eps);
             const double pR = std::clamp(mixR_->p(xr, ctx, j), P_.eps, 1 - P_.eps);
-            const double pFs = sseF_->p(std::clamp(bits[kAll - 1][j], P_.eps, 1 - P_.eps), in, c0, j);
+            const double pFs = sseF_->p(std::clamp(bits[kAll_ - 1][j], P_.eps, 1 - P_.eps), in, c0, j);
             const double pAs = sseA_->p(pA, in, c0, j);
             const double pRs = sseR_->p(pR, in, c0, j);
             const double pBs = sseB_->p(std::clamp(bitsB[j], P_.eps, 1 - P_.eps), in, c0, j);
@@ -629,15 +662,16 @@ class FullMixer {
 
  private:
     // The "all" list: 0-4 trie experts, 5 trie mixture, 6 KN, 7-11 InfiniGram caps, 12 class, 13 similar, 14 doc,
-    // 15 LSTM, 16-19 the chain after InfiniGram/class/similar/copy, 20 the chain, 21-22 slow and fast chains, 23 Fn.
-    // The raw list is its first 16 (no chain, no final layer).
-    static constexpr int kAll = 24, kRaw = 16, kRawTM = 5;
+    // 15 LSTM, then (with the n-gram) the mixed n-gram and each order, then the chain after InfiniGram/class/similar/
+    // copy, the chain, the slow and fast chains, and Fn last. The raw list is everything before the chain (kRaw_).
+    static constexpr int kMax = 48, kRawTM = 5;
+    int kAll_ = 24, kRaw_ = 16;
     ChainSpec cs_;
     Params P_;
     std::size_t half_;
     int nr_ = 1, nfin_ = 0, nall_ = 0, nraw_ = 0;
     double tw_[6] = {};
-    EgState kn_[3], ig_[3], cls_[3], sim_[3], copy_[3], lstm_[3];
+    EgState kn_[3], ig_[3], cls_[3], sim_[3], copy_[3], lstm_[3], ngram_[3];
     double snap_[4][256] = {};
     std::vector<double> fw_;
     std::vector<std::array<double, 256>> q_;
@@ -656,7 +690,7 @@ class FullMixer {
 /// distributions as float32, in ByteIn's order (trie 5, KN, InfiniGram 5, class, similar, the doc parts that are on,
 /// LSTM). Absent distributions are written as zeros. full-mix-replay reads it into the same FullMixer.
 struct DumpHeader {
-    char magic[4] = {'F', 'M', 'X', '1'};
+    char magic[4] = {'F', 'M', 'X', '2'};  // FMX2: then a uint32, the n-gram's orders; FMX1 (X0's dump) has no n-gram
     std::uint64_t H = 0, half = 0;
     std::uint8_t kn = 0, cls = 0, sim = 0, copy = 0, doc = 0, lstm = 0, two_rates = 0, gate_copy = 1;
     std::uint8_t doc_on[3] = {};
@@ -672,7 +706,7 @@ struct DumpSide {
 };
 inline constexpr int kDumpDists = 5 + 1 + 5 + 1 + 1 + 3 + 1;
 
-inline void dump_byte(std::ofstream& f, const ByteIn& in) {
+inline void dump_byte(std::ofstream& f, const ByteIn& in, int ngram_orders = 0) {
     DumpSide s{};
     s.y = static_cast<std::uint8_t>(in.y), s.prev = static_cast<std::uint8_t>(in.prev), s.prev2 = static_cast<std::uint8_t>(in.prev2);
     s.em = in.em, s.pred = static_cast<std::uint8_t>(in.pred), s.kn_b = static_cast<std::uint8_t>(in.kn_b);
@@ -694,13 +728,20 @@ inline void dump_byte(std::ofstream& f, const ByteIn& in) {
     put(in.sim);
     for (int q = 0; q < 3; ++q) put(in.doc[q]);
     put(in.lstm);
+    if (ngram_orders > 0) {
+        put(in.ngram);
+        for (int o = 0; o < ngram_orders; ++o) put(in.ngram_o + o * 256);
+    }
 }
 
 /// cyphalm_trie full-mix-replay FILE [PARAMS]: every arm over the dump; prints full_mix_arm lines.
 inline int replay(const std::string& path, const std::string& params) {
     std::ifstream f(path, std::ios::binary);
     DumpHeader hd;
-    if (!f.read(reinterpret_cast<char*>(&hd), sizeof hd) || std::memcmp(hd.magic, "FMX1", 4) != 0) {
+    std::uint32_t ngo = 0;
+    if (!f.read(reinterpret_cast<char*>(&hd), sizeof hd) ||
+        (std::memcmp(hd.magic, "FMX1", 4) != 0 && std::memcmp(hd.magic, "FMX2", 4) != 0) ||
+        (hd.magic[3] == '2' && !f.read(reinterpret_cast<char*>(&ngo), sizeof ngo)) || ngo > 16) {
         std::cerr << "full-mix-replay: cannot read " << path << "\n";
         return 2;
     }
@@ -717,10 +758,12 @@ inline int replay(const std::string& path, const std::string& params) {
     cs.kn_buckets = hd.kn_buckets;
     cs.doc_buckets = hd.doc_buckets;
     cs.doc_lam.assign(hd.doc_lam, hd.doc_lam + 3 * 21);
+    cs.ngram_orders = static_cast<int>(ngo);
+    const int nd = kDumpDists + (ngo ? 1 + static_cast<int>(ngo) : 0);
     FullMixer fm(cs, P, hd.half);
     fm.set_trie_weights(hd.tw);
-    std::vector<float> fb(kDumpDists * 256);
-    std::vector<double> db(kDumpDists * 256);
+    std::vector<float> fb(static_cast<std::size_t>(nd) * 256);
+    std::vector<double> db(static_cast<std::size_t>(nd) * 256);
     for (std::uint64_t k = 0; k < hd.H; ++k) {
         DumpSide s;
         if (!f.read(reinterpret_cast<char*>(&s), sizeof s) ||
@@ -747,6 +790,7 @@ inline int replay(const std::string& path, const std::string& params) {
             in.doc_b[q] = s.doc_b[q];
         }
         in.lstm = hd.lstm ? d + 256 * 16 : nullptr;
+        if (ngo) in.ngram = d + 256 * 17, in.ngram_o = d + 256 * 18;
         fm.step(in, k);
         if ((k + 1) % 262144 == 0) std::cerr << "replay " << (k + 1) << " bytes\n";
     }

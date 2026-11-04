@@ -1,6 +1,6 @@
 // SCRIBE: the generated-text metric (docs/PLAN.md section 6). One tool for every use; it replaces
 // scribe_ladder.cpp (v0 and v1). Library: native/include/cypha/eval/scribe.hpp (header-only, no neural network).
-// Reports: docs/reports/SCRIBE_V0.md, SCRIBE_V1.md, SCRIBE_V2.md. Plan of the v2 study: docs/SCRIBE_PAPER_PLAN.md.
+// Reports: docs/reports/SCRIBE_V0.md, SCRIBE_V1.md, SCRIBE_V2.md, SCRIBE_V3.md. Plan of the v2 study: docs/SCRIBE_PAPER_PLAN.md.
 //
 // Subcommands
 //   docs     SRC --out F                                    cleaned documents, one JSON object per line
@@ -14,16 +14,23 @@
 //                                                           model output -> the text that is scored (and that every
 //                                                           baseline scores): continuation = whitespace collapsed and the
 //                                                           unterminated tail cut; wikiraw = v1's clean_generated_text
-//   ladder   --pack SRC --ref SRC --test SRC [--vectors P] [--profile v1|v2] [--seed S] [--chain-rng]
+//   ladder   --pack SRC --ref SRC --test SRC [--vectors P] [--profile v1|v2|v3] [--seed S] [--chain-rng]
 //            [--gen-trie F] [--model F]... [--export DIR] [--label L]
-//                                                           the PLAN 6.4 V1 control ladder (and model rungs), report on stdout
-//   score    --pack SRC --ref SRC [--vectors P] [--profile v1|v2] [--v2 PARAMS] [--ref-prompts F] --in F --out G
+//                                                           the PLAN 6.4 V1 control ladder (and model rungs), report on stdout;
+//                                                           --profile v3 adds the table of v2, SURPRISE, MATCH, their mean (v3)
+//                                                           and minimum for every rung and pair (docs/reports/SCRIBE_V3.md)
+//   attacks  --pack SRC --ref SRC --test SRC --vectors P [--seed S] [--n 200] [--outside SRC] [--export DIR]
+//                                                           v3's attack battery on prompt / continuation pairs of SRC: every
+//                                                           attack x metric, and the registered rule (exit 3 if it fails)
+//   score    --pack SRC --ref SRC [--vectors P] [--profile v1|v2|v3] [--v2 PARAMS] [--v3 PARAMS] [--ref-prompts F] --in F --out G
 //                                                           every text of F scored: axes, sub-scores, raw statistics; a text
 //                                                           with a "prompt" also gets the relevance statistics (R, scored
 //                                                           against --ref-prompts, and counted in D only with wR > 0).
 //                                                           --window: a long text scores the mean over its sentence windows
 //                                                           of 300-600 B; --ref-whole: reference documents are samples as
-//                                                           they are (short whole texts such as ROC stories)
+//                                                           they are (short whole texts such as ROC stories). With --profile
+//                                                           v3 the headline "scribe" is scribe_v3 = mean(scribe_v2, surprise,
+//                                                           match), and min3 / disagree are added; MATCH's echo uses "prompt"
 //   windows  --in F --out G                                 each text cut into its --window scoring windows (prompt kept)
 //   selftest                                                known-answer checks (CTest native_scribe_selftest)
 //
@@ -39,6 +46,7 @@
 
 #include "cypha/eval/scribe.hpp"
 
+#include <array>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -65,7 +73,7 @@ double now_s() {
 double g_t0 = now_s();
 // Profiling counters (printed with --timing): seconds in extract_features (v1 statistics, sentence vectors) and in
 // ScribeV2Scorer::extend (skeleton, word rarity, 8-gram copy, relevance), and the number of texts featurised.
-double g_t_extract = 0, g_t_extend = 0, g_t_pack_model = 0, g_t_pack_v2 = 0, g_t_pack_vec = 0;
+double g_t_extract = 0, g_t_extend = 0, g_t_pack_model = 0, g_t_pack_v2 = 0, g_t_pack_vec = 0, g_t_v3 = 0;
 std::size_t g_n_feat = 0;
 
 
@@ -529,11 +537,16 @@ struct Ctx {
   SurfaceRef surf;
   ScribeScorer scorer;   // v1
   ScribeV2Scorer v2;     // v2
+  SurpriseModel sm;      // v3: SURPRISE's model (on top of `model`)
+  PackIndex px;          // v3: MATCH's suffix array over the pack
+  V3Scorer v3s;          // v3: SURPRISE and MATCH against the reference
   WordDict dict;
   bool use_vectors = false;
   std::string profile = "v2";
   std::size_t n_pack_docs = 0, pack_bytes = 0, n_ref_std = 0, n_ref_short = 0;
   std::vector<Features> ref_feats;  // reference samples, both buckets
+  std::vector<std::string> ref_texts;  // their texts (same order)
+  bool v3() const { return profile == "v3"; }
   const SentenceEmbedder* embedder() const { return use_vectors ? &emb : nullptr; }
 };
 
@@ -544,6 +557,23 @@ void set_v2_params(Ctx& c, const std::string& spec) {
   if (spec.empty()) return;
   if (!c.v2.params.parse(spec)) {
     std::fprintf(stderr, "bad --v2 parameters: %s\n", spec.c_str());
+    std::exit(2);
+  }
+}
+
+// --v3 "w.tau=..,m.wC=..,..." (V3Params::parse), before the reference is built.
+void set_v3_params(Ctx& c, const std::string& spec) {
+  if (c.profile != "v1" && c.profile != "v2" && c.profile != "v2p" && c.profile != "v3") {
+    std::fprintf(stderr, "unknown --profile %s (v1, v2, v2p or v3)\n", c.profile.c_str());
+    std::exit(2);
+  }
+  if (spec.empty()) return;
+  if (!c.v3()) {
+    std::fprintf(stderr, "--v3 needs --profile v3\n");
+    std::exit(2);
+  }
+  if (!c.v3s.params.parse(spec)) {
+    std::fprintf(stderr, "bad --v3 parameters: %s\n", spec.c_str());
     std::exit(2);
   }
 }
@@ -562,6 +592,15 @@ void build_pack(Ctx& c, const std::vector<std::string>& pack_docs, const std::st
   c.v2.train_pack(pack_docs);
   g_t_pack_v2 = now_s() - t0;
   for (const auto& d : pack_docs) surface_add_vocab(c.surf, d);
+  if (c.v3()) {
+    t0 = now_s();
+    c.sm.train(c.model, pack_docs);
+    const double t1 = now_s();
+    c.px.build(pack_docs, 4);
+    std::fprintf(stderr, "[%.0fs] v3: spelling models from %zu once-seen and %zu number types (%.1f s); pack suffix array over %zu bytes, %.0f MB (%.1f s)\n",
+                 now_s() - g_t0, c.sm.n_once_types(), c.sm.n_number_types(), t1 - t0, c.px.size(), static_cast<double>(c.px.bytes()) / 1048576.0,
+                 now_s() - t1);
+  }
   std::fprintf(stderr, "[%.0fs] pack: %zu docs, %zu bytes; vocab %zu, %zu trigrams\n", now_s() - g_t0, c.n_pack_docs, c.pack_bytes,
                c.model.vocab_size(), c.model.n_trigrams());
   if (vec_prefix.empty()) {
@@ -604,6 +643,65 @@ Features featurize(Ctx& c, const std::string& text, const std::string& prompt = 
   return f;
 }
 
+struct PromptPair {
+  std::string prompt, cont;
+  int doc = 0;
+};
+
+// Prompt / true continuation pairs, at most one per document, in a random document order: a run of whole sentences of
+// 100-300 bytes from a random sentence, then the next whole sentences, 400-600 bytes (target drawn uniformly), at least
+// 3 sentences (cmd_prompts' rule).
+std::vector<PromptPair> make_prompt_pairs(const std::vector<std::string>& docs, std::size_t n, std::mt19937_64& rng) {
+  std::vector<std::size_t> order(docs.size());
+  std::iota(order.begin(), order.end(), std::size_t{0});
+  std::shuffle(order.begin(), order.end(), rng);
+  std::uniform_real_distribution<double> U(0.0, 1.0);
+  std::vector<PromptPair> out;
+  for (std::size_t d : order) {
+    if (out.size() >= n) break;
+    const std::vector<std::string> s = split_sentences(docs[d]);
+    if (s.size() < 5) continue;
+    for (int tries = 0; tries < 6; ++tries) {
+      const std::size_t i0 = static_cast<std::size_t>(U(rng) * static_cast<double>(s.size() - 4));
+      std::size_t j = i0, pb = 0;
+      while (j < s.size() && pb < 100) pb += s[j++].size() + (pb ? 1 : 0);
+      if (pb < 100 || pb > 300) continue;
+      const double target = 400.0 + U(rng) * 200.0;
+      std::size_t k = j, cb = 0;
+      while (k < s.size() && static_cast<double>(cb) < target) cb += s[k++].size() + (cb ? 1 : 0);
+      if (cb < 400 || cb > 600 || k - j < 3) continue;
+      PromptPair p;
+      for (std::size_t q = i0; q < j; ++q) p.prompt += (q > i0 ? " " : "") + s[q];
+      for (std::size_t q = j; q < k; ++q) p.cont += (q > j ? " " : "") + s[q];
+      p.doc = static_cast<int>(d);
+      out.push_back(std::move(p));
+      break;
+    }
+  }
+  return out;
+}
+
+// v3's reference: the same human samples as v2's (SURPRISE and MATCH), and, for MATCH's echo, the continuations of up
+// to 1,000 prompts drawn from the reference documents with a generator of its own (v2's draws are not touched).
+void build_reference_v3(Ctx& c, const std::vector<std::string>& ref_docs) {
+  if (!c.v3()) return;
+  const double t0 = now_s();
+  for (const V3Features& f : extract_v3_all(c.sm, c.px, c.ref_texts)) c.v3s.add_reference(f);
+  std::mt19937_64 prng(20261104);
+  const std::vector<PromptPair> pp = make_prompt_pairs(ref_docs, 1000, prng);
+  std::vector<std::string> texts, prompts;
+  for (const PromptPair& p : pp) {
+    texts.push_back(p.cont);
+    prompts.push_back(p.prompt);
+  }
+  for (const V3Features& f : extract_v3_all(c.sm, c.px, texts, prompts)) c.v3s.add_reference_echo(f);
+  c.v3s.finish();
+  std::fprintf(stderr,
+               "[%.0fs] v3 reference: %zu standard + %zu short samples, %zu prompted continuations for the echo; word thresholds %.2f / %.2f bits "
+               "(%.1f s)\n",
+               now_s() - g_t0, c.v3s.n_reference(1), c.v3s.n_reference(0), pp.size(), c.v3s.threshold_lo(), c.v3s.threshold_hi(), now_s() - t0);
+}
+
 // Reference samples from ref_docs with rng (v1's draw order: standard first, then short). ref_prompts (optional):
 // JSONL of human prompt / continuation pairs (`scribe prompts` on the reference range) for the relevance statistics.
 // ref_whole: every reference document is one sample as it is (for sets whose units are short whole texts, such as
@@ -637,7 +735,10 @@ void build_reference(Ctx& c, const std::vector<std::string>& ref_docs, std::mt19
   }
   c.ref_feats.reserve(ref_std.size() + ref_short.size());
   for (const auto* v : {&ref_std, &ref_short})
-    for (const Sample& s : *v) c.ref_feats.push_back(featurize(c, s.text));
+    for (const Sample& s : *v) {
+      c.ref_feats.push_back(featurize(c, s.text));
+      c.ref_texts.push_back(s.text);
+    }
   for (const Features& f : c.ref_feats) {
     c.scorer.add_reference(f);
     c.v2.add_reference(f);
@@ -662,32 +763,49 @@ void build_reference(Ctx& c, const std::vector<std::string>& ref_docs, std::mt19
     c.surf.ref_loop[b] = sn[b] ? sl[b] / sn[b] : 0;
   }
   std::fprintf(stderr, "[%.0fs] reference: %zu standard + %zu short samples\n", now_s() - g_t0, c.n_ref_std, c.n_ref_short);
+  build_reference_v3(c, ref_docs);
 }
 
-// The per-sample result in both profiles.
+// The per-sample result in every profile (v3 only with --profile v3).
 struct Result {
   Scored v1;
   ScoredV2 v2;
   double surface = 0;
-  double headline(const std::string& profile) const { return profile == "v1" ? v1.scribe : v2.scribe; }  // v2 or v2p
+  bool has_v3 = false;
+  ScoredV3 v3;
+  V3Combined comb;
+  double headline(const std::string& profile) const {
+    if (profile == "v3") return comb.v3;
+    return profile == "v1" ? v1.scribe : v2.scribe;  // v2 or v2p
+  }
 };
 
-Result score_one(const Ctx& c, const Features& f, const std::string& text) {
+Result score_one(const Ctx& c, const Features& f, const std::string& text, const V3Features* f3 = nullptr) {
   Result r;
   r.v1 = c.scorer.score(f);
   r.v2 = c.v2.score(f);
   r.surface = surface_S(c.surf, text);
+  if (c.v3() && f3) {
+    r.has_v3 = true;
+    r.v3 = c.v3s.score(*f3);
+    r.comb = combine_v3(r.v2.scribe, r.v3.surprise, r.v3.match, c.v3s.params.disagree);
+  }
   return r;
 }
 
-// The JSON members of one scored sample: headline, both profiles, raw statistics.
-std::string result_json(const Features& f, const Result& r, const std::string& profile) {
+// The JSON members of one scored sample: headline, every profile, raw statistics.
+std::string result_json(const Features& f, const Result& r, const std::string& profile, const V3Features* f3 = nullptr) {
   std::string o = "\"scribe\":" + num(r.headline(profile)) + ",\"scribe_v1\":" + num(r.v1.scribe) + ",\"scribe_v2\":" + num(r.v2.scribe) +
                   ",\"surface_s\":" + num(r.surface);
+  if (r.has_v3)
+    o += ",\"scribe_v3\":" + num(r.comb.v3) + ",\"surprise\":" + num(r.v3.surprise) + ",\"match\":" + num(r.v3.match) + ",\"min3\":" + num(r.comb.min3) +
+         ",\"disagree\":" + (r.comb.disagree ? "1" : "0");
   o += ",\"v1\":{\"S\":" + num(r.v1.S) + ",\"C\":" + num(f.has_c ? r.v1.C : NAN) + ",\"I\":" + num(r.v1.I) + ",\"s_gate\":" + (r.v1.s_gate ? "1" : "0") +
        ",\"i_gate\":" + (r.v1.i_gate ? "1" : "0") + "}";
   o += ",\"v2\":" + v2_json(r.v2);
+  if (r.has_v3) o += ",\"v3\":" + v3_json(r.v3, r.comb);
   o += ",\"raw\":" + features_json(f);
+  if (r.has_v3 && f3) o += ",\"raw3\":" + v3_raw_json(*f3);
   return o;
 }
 
@@ -876,7 +994,9 @@ int cmd_prepare(const Args& a) {
 struct Rung {
   std::string key, name;
   std::vector<std::string> texts, ids, kinds;
+  std::vector<std::string> prompts;  // v3: the prompt of each text ("" when none)
   std::vector<Features> feats;
+  std::vector<V3Features> f3;        // v3 only
   std::vector<Result> res;
   std::vector<double> scribe, surf;
   std::pair<double, double> ci_scribe{0, 0}, ci_surf{0, 0};
@@ -892,7 +1012,7 @@ std::string fmt_ci(double m, std::pair<double, double> ci, int prec = 3) {
 }
 
 struct GenSet {
-  std::vector<std::string> texts, kinds;
+  std::vector<std::string> texts, kinds, prompts;  // prompts: the PROMPT line before each GEN line ("" if none)
   std::size_t lines = 0, dropped = 0;
 };
 
@@ -900,8 +1020,13 @@ struct GenSet {
 GenSet load_gen_trie(const std::string& path) {
   GenSet g;
   std::ifstream in(path);
-  std::string line;
+  std::string line, prompt;
   while (std::getline(in, line)) {
+    if (line.compare(0, 7, "PROMPT\t") == 0) {
+      const std::size_t t2 = line.find('\t', 7);
+      prompt = t2 == std::string::npos ? std::string() : unescape_gen(line.substr(t2 + 1));
+      continue;
+    }
     if (line.compare(0, 4, "GEN\t") != 0) continue;
     const std::size_t t2 = line.find('\t', 4);
     if (t2 == std::string::npos) continue;
@@ -913,8 +1038,94 @@ GenSet load_gen_trie(const std::string& path) {
     }
     g.texts.push_back(text);
     g.kinds.push_back(line.substr(4, t2 - 4));
+    g.prompts.push_back(prompt);
   }
   return g;
+}
+
+// The v3 reference as scored by itself (z of every statistic), and the echo reference's z: for design work.
+void export_v3_reference(const Ctx& c, const std::string& dir) {
+  std::ofstream o(dir + "/reference3.jsonl");
+  for (int b = 0; b < 2; ++b) {
+    for (const V3Features& f : c.v3s.reference(b)) {
+      const ScoredV3 s = c.v3s.score(f);
+      o << "{\"bucket\":" << b << ",\"v3\":" << v3_json(s, combine_v3(1, s.surprise, s.match)) << ",\"raw3\":" << v3_raw_json(f) << "}\n";
+    }
+    const std::vector<double> z8 = c.v3s.echo_reference_z(b, 0), z32 = c.v3s.echo_reference_z(b, 1);
+    for (std::size_t i = 0; i < z8.size(); ++i)
+      o << "{\"bucket\":" << b << ",\"echo_z\":" << num(z8[i], 6) << ",\"echo32_z\":" << num(z32[i], 6) << "}\n";
+  }
+}
+
+// The v3 section of the ladder report: each judge on its own (v2, SURPRISE, MATCH), their mean (v3) and their minimum,
+// per rung and per adjacent pair of every chain. PASS = accuracy >= 0.95 and disjoint 95% intervals, as for v2.
+void print_v3_ladder(const Ctx& c, const std::vector<Rung>& rungs, const std::vector<std::pair<std::string, std::vector<std::size_t>>>& chains,
+                     std::uint64_t seed) {
+  const char* mname[5] = {"v2", "SURPRISE", "MATCH", "v3", "min of 3"};
+  const std::size_t R = rungs.size();
+  std::vector<std::array<std::vector<double>, 5>> sc(R);
+  std::vector<std::array<std::pair<double, double>, 5>> ci(R);
+  for (std::size_t i = 0; i < R; ++i) {
+    for (const Result& x : rungs[i].res) {
+      sc[i][0].push_back(x.v2.scribe);
+      sc[i][1].push_back(x.v3.surprise);
+      sc[i][2].push_back(x.v3.match);
+      sc[i][3].push_back(x.comb.v3);
+      sc[i][4].push_back(x.comb.min3);
+    }
+    for (int m = 0; m < 5; ++m) ci[i][static_cast<std::size_t>(m)] = bootstrap_mean_ci(sc[i][static_cast<std::size_t>(m)], 1000, 5000 + seed % 1000 + 10 * i + static_cast<std::size_t>(m));
+  }
+  std::printf("\n## SCRIBE v3: the three judges and their mean\n\n");
+  std::printf("v3 = mean(v2, SURPRISE, MATCH). Reference word thresholds for SURPRISE: %.2f and %.2f bits; MATCH's echo reference: %zu standard + %zu short "
+              "prompted continuations.\n\n",
+              c.v3s.threshold_lo(), c.v3s.threshold_hi(), c.v3s.n_reference_echo(1), c.v3s.n_reference_echo(0));
+  std::printf("| rung | n | v2 | SURPRISE | MATCH | v3 | min of 3 | disagree |\n|---|---|---|---|---|---|---|---|\n");
+  for (std::size_t i = 0; i < R; ++i) {
+    if (rungs[i].res.empty()) continue;
+    double dis = 0;
+    for (const Result& x : rungs[i].res) dis += x.comb.disagree;
+    std::printf("| %s | %zu", rungs[i].name.c_str(), rungs[i].res.size());
+    for (int m = 0; m < 5; ++m)
+      std::printf(" | %s", fmt_ci(mean_of(sc[i][static_cast<std::size_t>(m)]), ci[i][static_cast<std::size_t>(m)]).c_str());
+    std::printf(" | %.0f%% |\n", 100.0 * dis / static_cast<double>(rungs[i].res.size()));
+  }
+  std::printf("\nDeviance terms (mean over samples; L lexical, S order, C cohesion, P too predictable):\n\n");
+  std::printf("| rung | SURPRISE D | D_L | D_S | D_C | D_P | MATCH D | D_L | D_S | D_C | D_P |\n|---|---|---|---|---|---|---|---|---|---|---|\n");
+  for (std::size_t i = 0; i < R; ++i) {
+    if (rungs[i].res.empty()) continue;
+    double a[2][5] = {};
+    for (const Result& x : rungs[i].res)
+      for (int m = 0; m < 2; ++m) {
+        a[m][0] += x.v3.D[m];
+        for (int g = 0; g < 4; ++g) a[m][g + 1] += x.v3.Dg[m][g];
+      }
+    const double n = static_cast<double>(rungs[i].res.size());
+    std::printf("| %s", rungs[i].name.c_str());
+    for (int m = 0; m < 2; ++m)
+      for (int g = 0; g < 5; ++g) std::printf(" | %.2f", a[m][g] / n);
+    std::printf(" |\n");
+  }
+  for (const auto& ch : chains) {
+    std::printf("\n### v3 parts: %s\n\n| upper > lower | v2 | | SURPRISE | | MATCH | | v3 | | min of 3 | |\n|---|---|---|---|---|---|---|---|---|---|---|\n",
+                ch.first.c_str());
+    int np = 0, pass[5] = {0, 0, 0, 0, 0};
+    for (std::size_t k = 0; k + 1 < ch.second.size(); ++k) {
+      const std::size_t x = ch.second[k], y = ch.second[k + 1];
+      std::printf("| %s > %s", rungs[x].name.c_str(), rungs[y].name.c_str());
+      for (int m = 0; m < 5; ++m) {
+        const std::size_t mm = static_cast<std::size_t>(m);
+        const double acc = pairwise_accuracy(sc[x][mm], sc[y][mm]);
+        const bool ok = acc >= 0.95 && ci[x][mm].first > ci[y][mm].second;
+        pass[m] += ok;
+        std::printf(" | %.3f | %s", acc, ok ? "PASS" : (acc >= 0.95 ? "FAIL (overlap)" : "FAIL"));
+      }
+      std::printf(" |\n");
+      ++np;
+    }
+    std::printf("\nPairs passed (%s):", ch.first.c_str());
+    for (int m = 0; m < 5; ++m) std::printf(" %s %d of %d%s", mname[m], pass[m], np, m < 4 ? ";" : "");
+    std::printf("\n");
+  }
 }
 
 int cmd_ladder(const Args& a) {
@@ -928,6 +1139,7 @@ int cmd_ladder(const Args& a) {
   const std::vector<std::string> test_docs = load_docs(a.get("--test"));
   std::fprintf(stderr, "[%.0fs] docs: pack %zu, ref %zu, test %zu\n", now_s() - g_t0, pack_docs.size(), ref_docs.size(), test_docs.size());
   set_v2_params(c, a.get("--v2"));
+  set_v3_params(c, a.get("--v3"));
   build_pack(c, pack_docs, a.get("--vectors"));
   std::mt19937_64 rng(ref_seed);
   build_reference(c, ref_docs, rng, a.get("--ref-prompts"), a.has("--ref-whole"), std::strtoull(a.get("--ref-n", "0").c_str(), nullptr, 10));
@@ -975,8 +1187,12 @@ int cmd_ladder(const Args& a) {
   for (std::size_t i = 0; i < gen.texts.size(); ++i) {
     rungs[R_TRIE].texts.push_back(gen.texts[i]);
     rungs[R_TRIE].kinds.push_back(gen.kinds[i]);
+    rungs[R_TRIE].prompts.push_back(gen.prompts[i]);
     const int slot = gen.kinds[i] == "trie_T0.6" ? R_T06 : (gen.kinds[i] == "trie_T0.8" ? R_T08 : (gen.kinds[i] == "trie_T1.0" ? R_T10 : -1));
-    if (slot >= 0) rungs[static_cast<std::size_t>(slot)].texts.push_back(gen.texts[i]);
+    if (slot >= 0) {
+      rungs[static_cast<std::size_t>(slot)].texts.push_back(gen.texts[i]);
+      rungs[static_cast<std::size_t>(slot)].prompts.push_back(gen.prompts[i]);
+    }
   }
   // Model rungs: prepared JSONL files, one rung per "system".
   std::vector<std::size_t> model_rungs;
@@ -995,6 +1211,7 @@ int cmd_ladder(const Args& a) {
       }
       rungs[it->second].texts.push_back(j.get("text"));
       rungs[it->second].ids.push_back(j.get("id"));
+      rungs[it->second].prompts.push_back(j.get("prompt"));
     }
   }
   for (Rung& r : rungs) {
@@ -1006,13 +1223,14 @@ int cmd_ladder(const Args& a) {
       }
     r.feats.reserve(r.texts.size());
     for (const std::string& t : r.texts) r.feats.push_back(featurize(c, t));
+    if (c.v3()) r.f3 = extract_v3_all(c.sm, c.px, r.texts, r.prompts);
   }
   std::fprintf(stderr, "[%.0fs] %s: features extracted\n", now_s() - g_t0, label.c_str());
 
   std::uint64_t bseed = 100 + seed % 1000;
   for (Rung& r : rungs) {
     for (std::size_t i = 0; i < r.feats.size(); ++i) {
-      r.res.push_back(score_one(c, r.feats[i], r.texts[i]));
+      r.res.push_back(score_one(c, r.feats[i], r.texts[i], c.v3() ? &r.f3[i] : nullptr));
       r.scribe.push_back(r.res.back().headline(c.profile));
       r.surf.push_back(r.res.back().surface);
     }
@@ -1056,6 +1274,8 @@ int cmd_ladder(const Args& a) {
   chains.push_back({"control ladder (no model rung)", {R_HUMAN, R_SS, R_WS, R_RL, R_RLET, R_REP}});
   for (std::size_t m : model_rungs) chains.push_back({"model " + rungs[m].name, {R_HUMAN, m, R_SS, R_WS, R_RL, R_RLET, R_REP}});
   std::printf("\n## Ladders: pairwise ordering accuracy over all (upper, lower) pairs (ties = 1/2) and disjoint 95%% intervals; PASS needs both (accuracy >= 0.95)\n");
+  std::vector<std::pair<std::string, std::vector<std::size_t>>> chain_idx;
+  for (const Chain& ch : chains) chain_idx.emplace_back(ch.name, ch.idx);
   for (const Chain& ch : chains) {
     std::printf("\n### %s\n\n| upper > lower | SCRIBE acc | disjoint | | surface S acc | disjoint | |\n|---|---|---|---|---|---|---|\n", ch.name.c_str());
     int ps = 0, pu = 0, np = 0;
@@ -1120,6 +1340,7 @@ int cmd_ladder(const Args& a) {
                 pearson(rungs[R_SHORT].scribe, bs), spearman(rungs[R_SHORT].scribe, bs), pearson(sc_all, by_all), spearman(sc_all, by_all),
                 mean_of(rungs[R_HUMAN].scribe), mean_of(rungs[R_SHORT].scribe));
   }
+  if (c.v3()) print_v3_ladder(c, rungs, chain_idx, seed);
   // ---- export: every rung's texts and per-sample scores, and the reference statistics.
   const std::string dir = a.get("--export");
   if (!dir.empty()) {
@@ -1128,11 +1349,35 @@ int cmd_ladder(const Args& a) {
     for (const Rung& r : rungs)
       for (std::size_t i = 0; i < r.texts.size(); ++i) {
         ot << text_line(r.ids[i], label, r.key, r.texts[i], "", "", r.kinds.empty() ? "" : "\"meta\":{\"kind\":\"" + json_escape(r.kinds[i]) + "\"}") << "\n";
-        os << "{\"id\":\"" << json_escape(r.ids[i]) << "\",\"system\":\"" << json_escape(r.key) << "\"," << result_json(r.feats[i], r.res[i], c.profile)
-           << "}\n";
+        os << "{\"id\":\"" << json_escape(r.ids[i]) << "\",\"system\":\"" << json_escape(r.key) << "\","
+           << result_json(r.feats[i], r.res[i], c.profile, c.v3() ? &r.f3[i] : nullptr) << "}\n";
       }
     for (std::size_t i = 0; i < c.ref_feats.size(); ++i)
       orf << "{\"id\":\"ref/" << i << "\",\"raw\":" << features_json(c.ref_feats[i]) << ",\"v2\":" << v2_json(c.v2.score(c.ref_feats[i])) << "}\n";
+    if (c.v3()) export_v3_reference(c, dir);
+    if (c.v3()) {  // v3 material: raw statistics with each word's surprisal (with and without the history, unigram)
+      std::ofstream ov(dir + "/v3raw.jsonl");
+      auto dump = [&](const std::string& id, const std::string& sys, const V3Features& f) {
+        auto arr = [&](const char* k, const std::vector<float>& x) {
+          ov << ",\"" << k << "\":[";
+          for (std::size_t q = 0; q < x.size(); ++q) ov << (q ? "," : "") << num(x[q], 4);
+          ov << "]";
+        };
+        ov << "{\"id\":\"" << json_escape(id) << "\",\"system\":\"" << json_escape(sys) << "\",\"bytes\":" << f.bytes;
+        arr("s", f.seq.s);
+        arr("s0", f.seq.s0);
+        arr("su", f.seq.su);
+        ov << ",\"sent\":[";
+        for (std::size_t k = 0; k < f.seq.sent.size(); ++k) ov << (k ? "," : "") << int(f.seq.sent[k]);
+        ov << "],\"raw3\":" << v3_raw_json(f) << "}\n";
+      };
+      const std::vector<V3Features> rf = extract_v3_all(c.sm, c.px, c.ref_texts, {}, 4, true);
+      for (std::size_t i = 0; i < rf.size(); ++i) dump("ref/" + std::to_string(i), "ref", rf[i]);
+      for (const Rung& r : rungs) {
+        const std::vector<V3Features> v = extract_v3_all(c.sm, c.px, r.texts, r.prompts, 4, true);
+        for (std::size_t i = 0; i < v.size(); ++i) dump(r.ids[i], r.key, v[i]);
+      }
+    }
     std::fprintf(stderr, "exported to %s\n", dir.c_str());
   }
   std::fprintf(stderr, "[%.0fs] done\n", now_s() - g_t0);
@@ -1184,6 +1429,7 @@ int cmd_score(const Args& a) {
   const std::vector<std::string> pack_docs = load_docs(a.get("--pack"));
   const std::vector<std::string> ref_docs = load_docs(a.get("--ref"));
   set_v2_params(c, a.get("--v2"));
+  set_v3_params(c, a.get("--v3"));
   build_pack(c, pack_docs, a.get("--vectors"));
   std::mt19937_64 rng(std::strtoull(a.get("--ref-seed", "20261027").c_str(), nullptr, 10));
   build_reference(c, ref_docs, rng, a.get("--ref-prompts"), a.has("--ref-whole"), std::strtoull(a.get("--ref-n", "0").c_str(), nullptr, 10));
@@ -1194,7 +1440,13 @@ int cmd_score(const Args& a) {
   for (const JsonObj& j : in) {
     const std::string text = j.get("text");
     const Features f = featurize(c, text, j.get("prompt"));
-    Result r = score_one(c, f, text);
+    V3Features f3;
+    if (c.v3()) {
+      const double tv = now_s();
+      f3 = extract_v3(c.sm, c.px, text, j.get("prompt"));
+      g_t_v3 += now_s() - tv;
+    }
+    Result r = score_one(c, f, text, c.v3() ? &f3 : nullptr);
     std::string extra;
     if (windowed) {
       // The text's score is the mean over its windows; raw statistics stay those of the whole text.
@@ -1204,7 +1456,11 @@ int cmd_score(const Args& a) {
         m.v1 = r.v1;
         double n = 0;
         for (const std::string& wt : ws) {
-          const Result x = score_one(c, featurize(c, wt, j.get("prompt")), wt);
+          V3Features w3;
+          if (c.v3()) w3 = extract_v3(c.sm, c.px, wt, j.get("prompt"));
+          const Result x = score_one(c, featurize(c, wt, j.get("prompt")), wt, c.v3() ? &w3 : nullptr);
+          m.v3.surprise += x.v3.surprise;
+          m.v3.match += x.v3.match;
           m.v1.scribe += x.v1.scribe;
           m.v2.scribe += x.v2.scribe;
           m.surface += x.surface;
@@ -1224,21 +1480,335 @@ int cmd_score(const Args& a) {
         m.v1.scribe = (m.v1.scribe - r.v1.scribe) / n;
         for (double* x : {&m.v2.scribe, &m.surface, &m.v2.D, &m.v2.DL, &m.v2.DS, &m.v2.DC, &m.v2.DI, &m.v2.DR, &m.v2.L, &m.v2.S, &m.v2.C, &m.v2.I, &m.v2.R})
           *x /= n;
+        if (r.has_v3) {  // v3: the mean of the windows' SURPRISE and MATCH, combined with the windows' mean v2
+          m.has_v3 = true;
+          m.v3.surprise /= n;
+          m.v3.match /= n;
+          m.comb = combine_v3(m.v2.scribe, m.v3.surprise, m.v3.match, c.v3s.params.disagree);
+        }
         r = m;
       }
       extra = ",\"windows\":" + std::to_string(ws.size());
     }
-    o << "{\"id\":\"" << json_escape(j.get("id")) << "\",\"system\":\"" << json_escape(j.get("system")) << "\"," << result_json(f, r, c.profile) << extra << "}\n";
+    o << "{\"id\":\"" << json_escape(j.get("id")) << "\",\"system\":\"" << json_escape(j.get("system")) << "\"," << result_json(f, r, c.profile, c.v3() ? &f3 : nullptr)
+      << extra << "}\n";
   }
   const double dt = now_s() - t1;
   std::fprintf(stderr, "[%.0fs] scored %zu texts in %.2f s (%.0f texts/s)\n", now_s() - g_t0, in.size(), dt, dt > 0 ? double(in.size()) / dt : 0.0);
   if (a.has("--timing"))
     std::fprintf(stderr,
                  "TIMING {\"pack_bytes\":%zu,\"pack_model_s\":%.3f,\"pack_v2_s\":%.3f,\"pack_vectors_s\":%.3f,\"n_featurised\":%zu,"
-                 "\"extract_ms\":%.4f,\"extend_ms\":%.4f,\"score_texts\":%zu,\"score_s\":%.3f,\"texts_per_s\":%.1f,\"total_s\":%.2f}\n",
+                 "\"extract_ms\":%.4f,\"extend_ms\":%.4f,\"v3_ms\":%.4f,\"score_texts\":%zu,\"score_s\":%.3f,\"texts_per_s\":%.1f,\"total_s\":%.2f}\n",
                  c.pack_bytes, g_t_pack_model, g_t_pack_v2, g_t_pack_vec, g_n_feat, 1000 * g_t_extract / std::max<std::size_t>(1, g_n_feat),
-                 1000 * g_t_extend / std::max<std::size_t>(1, g_n_feat), in.size(), dt, dt > 0 ? double(in.size()) / dt : 0.0, now_s() - g_t0);
+                 1000 * g_t_extend / std::max<std::size_t>(1, g_n_feat), 1000 * g_t_v3 / std::max<std::size_t>(1, in.size()), in.size(), dt,
+                 dt > 0 ? double(in.size()) / dt : 0.0, now_s() - g_t0);
   return 0;
+}
+
+// ===========================================================================
+// attacks (SCRIBE v3's battery; docs/reports/SCRIBE_V3.md)
+// ===========================================================================
+
+// v2's study used this paragraph for its generic attack (scripts/scribe_eval/attacks.py); v3 reuses it unchanged.
+const char* kGenericParagraph =
+    "This is a topic that has many different aspects. It is important to consider the wider context before reaching any conclusion. Experts "
+    "have offered a range of views on the question over the years. In general, the answer depends on the situation and on the people involved. "
+    "More research will be needed before the matter can be understood fully.";
+
+// Candidate sentences for the co-occurrence attack: prose-like sentences of 40-300 bytes with at least 5 words, and the
+// word-vector rows of their content words.
+struct CoocPool {
+  std::vector<std::string> sents;
+  std::vector<std::vector<int>> rows;
+};
+
+CoocPool cooc_pool(const Ctx& c, const std::vector<std::string>& docs) {
+  CoocPool p;
+  std::vector<std::string> toks;
+  std::unordered_set<std::string> seen;
+  for (const std::string& d : docs)
+    for (const std::string& s : split_sentences(d)) {
+      if (s.size() < 40 || s.size() > 300 || !is_upper_a(static_cast<unsigned char>(s[0])) || !scribe_detail::ends_terminal(s)) continue;
+      toks.clear();
+      tokenize_words(s, toks);
+      if (toks.size() < 5 || !seen.insert(s).second) continue;
+      std::vector<int> r;
+      for (const std::string& w : toks)
+        if (c.v2.content_word(w)) {
+          const int i = c.wv.index(w);
+          if (i >= 0) r.push_back(i);
+        }
+      if (r.size() < 2) continue;
+      p.sents.push_back(s);
+      p.rows.push_back(std::move(r));
+    }
+  return p;
+}
+
+// The crude version of K5's gate: score every pool sentence by the mean, over its content words, of their cosine with
+// the mean vector of the prompt's content words (PPMI-SVD vectors: co-occurrence); take the best sentences until the
+// text holds 400-600 bytes and at least 3 sentences.
+std::string cooc_select(const Ctx& c, const CoocPool& pool, const std::string& prompt) {
+  std::vector<std::string> toks;
+  for (const auto& t : sentence_tokens(prompt)) toks.insert(toks.end(), t.begin(), t.end());
+  const std::size_t dim = c.wv.dim();
+  std::vector<double> u(dim, 0.0);
+  int nu = 0;
+  for (const std::string& w : toks)
+    if (c.v2.content_word(w)) {
+      const int i = c.wv.index(w);
+      if (i < 0) continue;
+      const float* r = c.wv.row(i);
+      for (std::size_t k = 0; k < dim; ++k) u[k] += r[k];
+      ++nu;
+    }
+  if (nu == 0 || pool.sents.empty()) return "";
+  std::vector<float> a(c.wv.size());
+  for (std::size_t i = 0; i < a.size(); ++i) {
+    const float* r = c.wv.row(static_cast<int>(i));
+    double d = 0;
+    for (std::size_t k = 0; k < dim; ++k) d += r[k] * u[k];
+    a[i] = static_cast<float>(d / nu);
+  }
+  std::vector<std::pair<float, std::size_t>> sc(pool.sents.size());
+  for (std::size_t j = 0; j < pool.sents.size(); ++j) {
+    double s = 0;
+    for (int i : pool.rows[j]) s += a[static_cast<std::size_t>(i)];
+    sc[j] = {static_cast<float>(s / static_cast<double>(pool.rows[j].size())), j};
+  }
+  const std::size_t top = std::min<std::size_t>(200, sc.size());
+  std::partial_sort(sc.begin(), sc.begin() + static_cast<std::ptrdiff_t>(top), sc.end(), [](const auto& x, const auto& y) { return x.first > y.first; });
+  std::string out;
+  int ns = 0;
+  for (std::size_t k = 0; k < top && (out.size() < 400 || ns < 3); ++k) {
+    const std::string& s = pool.sents[sc[k].second];
+    if (out.size() + 1 + s.size() > 600) continue;
+    if (!out.empty()) out.push_back(' ');
+    out += s;
+    ++ns;
+  }
+  return out;
+}
+
+// The prompt's content words as written (punctuation stripped), rarest in the pack first, at most 5, no repeats.
+std::vector<std::string> prompt_keywords(const Ctx& c, const std::string& prompt) {
+  std::vector<std::pair<double, std::string>> v;
+  std::unordered_set<std::string> seen;
+  for (std::string w : split_ws(prompt)) {
+    while (!w.empty() && !scribe_detail::is_alnum_a(static_cast<unsigned char>(w.back())) && static_cast<unsigned char>(w.back()) < 0x80) w.pop_back();
+    std::size_t b = 0;
+    while (b < w.size() && !scribe_detail::is_alnum_a(static_cast<unsigned char>(w[b])) && static_cast<unsigned char>(w[b]) < 0x80) ++b;
+    w = w.substr(b);
+    std::vector<std::string> t;
+    tokenize_words(w, t);
+    if (t.size() != 1 || w.size() < 3 || !c.v2.content_word(t[0]) || !seen.insert(t[0]).second) continue;
+    v.emplace_back(-c.v2.rarity(t[0]), w);
+  }
+  std::sort(v.begin(), v.end());
+  std::vector<std::string> out;
+  for (std::size_t i = 0; i < v.size() && out.size() < 5; ++i) out.push_back(v[i].second);
+  if (out.empty()) out.push_back("it");
+  return out;
+}
+
+// Inserts the keywords (cycling) after every 4th word of text.
+std::string stuff_keywords(const std::string& text, const std::vector<std::string>& kw) {
+  std::vector<std::string> w = split_ws(text), o;
+  std::size_t k = 0;
+  for (std::size_t i = 0; i < w.size(); ++i) {
+    o.push_back(w[i]);
+    if (i % 4 == 3 && i + 1 < w.size()) o.push_back(kw[k++ % kw.size()]);
+  }
+  return join(o);
+}
+
+int cmd_attacks(const Args& a) {
+  Ctx c;
+  c.profile = "v3";
+  const std::string label = a.get("--label", "attacks");
+  const std::uint64_t ref_seed = std::strtoull(a.get("--ref-seed", "20261027").c_str(), nullptr, 10);
+  const std::uint64_t seed = std::strtoull(a.get("--seed", "31415926").c_str(), nullptr, 10);
+  const std::size_t n = std::strtoull(a.get("--n", "200").c_str(), nullptr, 10);
+  const std::vector<std::string> pack_docs = load_docs(a.get("--pack"));
+  const std::vector<std::string> ref_docs = load_docs(a.get("--ref"));
+  const std::vector<std::string> test_docs = load_docs(a.get("--test"));
+  if (a.get("--vectors").empty()) {
+    std::fprintf(stderr, "attacks needs --vectors (the co-occurrence attack and v2's coherence read them)\n");
+    return 2;
+  }
+  set_v2_params(c, a.get("--v2"));
+  set_v3_params(c, a.get("--v3"));
+  build_pack(c, pack_docs, a.get("--vectors"));
+  std::mt19937_64 rrng(ref_seed);
+  build_reference(c, ref_docs, rrng);
+  std::mt19937_64 rng(seed);
+  const std::vector<PromptPair> pairs = make_prompt_pairs(test_docs, n, rng);
+  const std::size_t N = pairs.size();
+  if (N < 50) {
+    std::fprintf(stderr, "too few prompts (%zu)\n", N);
+    return 1;
+  }
+  // Pack samples to copy, a derangement for "another document", and the sentence pool for the shuffle.
+  std::vector<Sample> copies = pick(make_samples(pack_docs, 400, 600, 3, 1, rng), N, rng);
+  std::vector<std::size_t> perm(N);
+  std::iota(perm.begin(), perm.end(), std::size_t{0});
+  std::shuffle(perm.begin(), perm.end(), rng);
+  for (std::size_t i = 0; i < N; ++i)
+    if (perm[i] == i) std::swap(perm[i], perm[(i + 1) % N]);
+  std::vector<std::pair<int, std::string>> pool;
+  for (const PromptPair& p : pairs)
+    for (const std::string& x : split_sentences(p.cont)) pool.emplace_back(p.doc, x);
+  const double tp = now_s();
+  const CoocPool cp = cooc_pool(c, pack_docs);
+  CoocPool co;
+  if (!a.get("--outside").empty()) co = cooc_pool(c, load_docs(a.get("--outside")));
+  std::fprintf(stderr, "[%.0fs] co-occurrence pools: %zu pack sentences, %zu outside (%.1f s)\n", now_s() - g_t0, cp.sents.size(), co.sents.size(), now_s() - tp);
+  // Registered attacks first; the extras (reported only) after them.
+  const std::vector<std::string> names = {"human",         "copy_pack", "echo_repeat", "echo_copy", "stuff_human", "stuff_generic", "loop",
+                                          "generic",       "shuffle_docs", "cooc_pack", "reorder",   "cooc_out",    "offprompt"};
+  const std::size_t n_registered = 10;  // human + 9 attacks
+  std::vector<std::vector<std::string>> T(names.size(), std::vector<std::string>(N));
+  std::vector<std::string> cooc_p(N), cooc_o(N);
+  {
+    std::atomic<std::size_t> next{0};
+    auto work = [&]() {
+      for (std::size_t i; (i = next++) < N;) {
+        cooc_p[i] = cooc_select(c, cp, pairs[i].prompt);
+        if (!co.sents.empty()) cooc_o[i] = cooc_select(c, co, pairs[i].prompt);
+      }
+    };
+    std::vector<std::thread> th;
+    for (int k = 1; k < 4; ++k) th.emplace_back(work);
+    work();
+    for (std::thread& x : th) x.join();
+  }
+  std::mt19937_64 arng(seed + 7);
+  for (std::size_t i = 0; i < N; ++i) {
+    const PromptPair& p = pairs[i];
+    const std::vector<std::string> kw = prompt_keywords(c, p.prompt);
+    const std::vector<std::string> cs = split_sentences(p.cont);
+    std::string echo = p.prompt;
+    while (echo.size() < p.cont.size()) echo += " " + p.prompt;
+    std::string ecopy = p.prompt;
+    for (const std::string& x : cs) {
+      if (ecopy.size() + 1 + x.size() > 600) break;
+      ecopy += " " + x;
+    }
+    std::string loop;
+    const std::string two = cs.size() >= 2 ? cs[0] + " " + cs[1] : p.cont;
+    while (loop.size() < p.cont.size()) loop += (loop.empty() ? "" : " ") + two;
+    std::vector<std::string> ro = cs;
+    for (int tries = 0; tries < 10 && ro == cs; ++tries) std::shuffle(ro.begin(), ro.end(), arng);
+    T[0][i] = p.cont;
+    T[1][i] = copies[i % copies.size()].text;
+    T[2][i] = echo;
+    T[3][i] = ecopy;
+    T[4][i] = stuff_keywords(pairs[perm[i]].cont, kw);
+    T[5][i] = stuff_keywords(kGenericParagraph, kw);
+    T[6][i] = loop;
+    T[7][i] = kGenericParagraph;
+    T[8][i] = ctl_shuffle_sentences(Sample{p.cont, p.doc}, pool, arng);
+    T[9][i] = cooc_p[i];
+    T[10][i] = join(ro);
+    T[11][i] = cooc_o[i];
+    T[12][i] = pairs[perm[i]].cont;
+  }
+  // Score: v2 open profile (no prompt), v3 with the prompt.
+  std::vector<std::string> prompts(N);
+  for (std::size_t i = 0; i < N; ++i) prompts[i] = pairs[i].prompt;
+  std::vector<std::array<std::vector<double>, 4>> S(names.size());
+  std::vector<std::vector<Result>> res(names.size());
+  std::vector<std::vector<Features>> feats(names.size());
+  std::vector<std::vector<V3Features>> f3(names.size());
+  for (std::size_t k = 0; k < names.size(); ++k) {
+    if (T[k][0].empty() && k >= n_registered) continue;  // an extra that was not built
+    f3[k] = extract_v3_all(c.sm, c.px, T[k], prompts);
+    for (std::size_t i = 0; i < N; ++i) {
+      feats[k].push_back(featurize(c, T[k][i]));
+      res[k].push_back(score_one(c, feats[k][i], T[k][i], &f3[k][i]));
+      const Result& r = res[k].back();
+      S[k][0].push_back(r.v2.scribe);
+      S[k][1].push_back(r.v3.surprise);
+      S[k][2].push_back(r.v3.match);
+      S[k][3].push_back(r.comb.v3);
+    }
+  }
+  const char* mname[4] = {"v2", "SURPRISE", "MATCH", "v3"};
+  std::printf("# SCRIBE v3 attack battery: %s (%s)\n\n", label.c_str(), a.get("--test").c_str());
+  std::printf("%zu prompt / continuation pairs (seed %llu), one per document; every attack built from them; scored with the prompt (v2: open "
+              "profile). Pack %s, reference %s, co-occurrence pools: %zu pack sentences, %zu outside (%s).\n\n",
+              N, static_cast<unsigned long long>(seed), a.get("--pack").c_str(), a.get("--ref").c_str(), cp.sents.size(), co.sents.size(),
+              a.get("--outside", "none").c_str());
+  std::printf("Mean score (P(human > attack) over all pairs, ties 1/2). Caught: the judge ranks human text above the attack with "
+              "accuracy >= 0.95. Rule (registered attacks): v3 >= 0.95 and caught by SURPRISE or MATCH.\n\n");
+  std::printf("| attack | n | v2 | SURPRISE | MATCH | v3 | caught by | rule |\n|---|---|---|---|---|---|---|---|\n");
+  int rule_ok = 0, rule_n = 0;
+  for (std::size_t k = 0; k < names.size(); ++k) {
+    if (S[k][0].empty()) continue;
+    std::printf("| %s%s | %zu", names[k].c_str(), k >= n_registered ? " (extra)" : "", S[k][0].size());
+    double accs[4];
+    for (int m = 0; m < 4; ++m) {
+      const double mu = mean_of(S[k][static_cast<std::size_t>(m)]);
+      if (k == 0) {
+        std::printf(" | %.3f", mu);
+        continue;
+      }
+      accs[m] = pairwise_accuracy(S[0][static_cast<std::size_t>(m)], S[k][static_cast<std::size_t>(m)]);
+      std::printf(" | %.3f (%.3f)", mu, accs[m]);
+    }
+    if (k == 0) {
+      std::printf(" | | |\n");
+      continue;
+    }
+    std::string by;
+    for (int m = 0; m < 3; ++m)
+      if (accs[m] >= 0.95) by += std::string(by.empty() ? "" : ", ") + mname[m];
+    const bool ok = accs[3] >= 0.95 && (accs[1] >= 0.95 || accs[2] >= 0.95);
+    if (k < n_registered) {
+      ++rule_n;
+      rule_ok += ok;
+    }
+    std::printf(" | %s | %s |\n", by.empty() ? "none" : by.c_str(), k < n_registered ? (ok ? "PASS" : "FAIL") : "(reported only)");
+  }
+  std::printf("\nRule: %d of %d registered attacks pass.\n", rule_ok, rule_n);
+  // Deviance terms per attack.
+  std::printf("\n| attack | SURPRISE D_L | D_S | D_C | D_P | MATCH D_L | D_S | D_C | D_P | v2 D_L | D_S | D_C | D_I | disagree |\n|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n");
+  for (std::size_t k = 0; k < names.size(); ++k) {
+    if (res[k].empty()) continue;
+    double g[2][4] = {}, v2g[4] = {}, dis = 0;
+    for (const Result& r : res[k]) {
+      for (int m = 0; m < 2; ++m)
+        for (int q = 0; q < 4; ++q) g[m][q] += r.v3.Dg[m][q];
+      v2g[0] += r.v2.DL;
+      v2g[1] += r.v2.DS;
+      v2g[2] += r.v2.DC;
+      v2g[3] += r.v2.DI;
+      dis += r.comb.disagree;
+    }
+    const double nn = static_cast<double>(res[k].size());
+    std::printf("| %s", names[k].c_str());
+    for (int m = 0; m < 2; ++m)
+      for (int q = 0; q < 4; ++q) std::printf(" | %.2f", g[m][q] / nn);
+    for (int q = 0; q < 4; ++q) std::printf(" | %.2f", v2g[q] / nn);
+    std::printf(" | %.0f%% |\n", 100 * dis / nn);
+  }
+  const std::string dir = a.get("--export");
+  if (!dir.empty()) {
+    std::filesystem::create_directories(dir);
+    export_v3_reference(c, dir);
+    std::ofstream ot(dir + "/texts.jsonl"), os(dir + "/scores.jsonl");
+    for (std::size_t k = 0; k < names.size(); ++k)
+      for (std::size_t i = 0; i < res[k].size(); ++i) {
+        char id[96];
+        std::snprintf(id, sizeof id, "%s/%s/%04zu", label.c_str(), names[k].c_str(), i);
+        ot << text_line(id, label, names[k], T[k][i], pairs[i].prompt) << "\n";
+        os << "{\"id\":\"" << json_escape(id) << "\",\"system\":\"" << json_escape(names[k]) << "\"," << result_json(feats[k][i], res[k][i], "v3", &f3[k][i])
+           << "}\n";
+      }
+    std::fprintf(stderr, "exported to %s\n", dir.c_str());
+  }
+  std::fprintf(stderr, "[%.0fs] done\n", now_s() - g_t0);
+  return rule_ok == rule_n ? 0 : 3;
 }
 
 // ===========================================================================
@@ -1401,6 +1971,7 @@ int selftest() {
     CHECK(text_windows("Short text. Only two sentences.").size() == 1);
   }
   scribe_v2_selftest(g_checks, g_fail);
+  scribe_v3_selftest(g_checks, g_fail);
   std::printf("scribe selftest: %d checks, %d failed\n", g_checks, g_fail);
   return g_fail ? 1 : 0;
 }
@@ -1410,7 +1981,7 @@ int selftest() {
 int main(int argc, char** argv) {
   if (argc < 2) {
     std::fprintf(stderr,
-                 "usage: scribe <docs|prompts|samples|prepare|ladder|score|selftest> ...  (see the header of native/tools/eval/scribe.cpp)\n");
+                 "usage: scribe <docs|prompts|samples|prepare|ladder|score|attacks|windows|selftest> ...  (see the header of native/tools/eval/scribe.cpp)\n");
     return 2;
   }
   const std::string cmd = argv[1];
@@ -1423,6 +1994,7 @@ int main(int argc, char** argv) {
   if (cmd == "ladder") return cmd_ladder(a);
   if (cmd == "score") return cmd_score(a);
   if (cmd == "windows") return cmd_windows(a);
+  if (cmd == "attacks") return cmd_attacks(a);
   std::fprintf(stderr, "unknown subcommand %s\n", cmd.c_str());
   return 2;
 }

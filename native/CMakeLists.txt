@@ -2461,6 +2461,8 @@ set_tests_properties(native_ecs_lci_test PROPERTIES TIMEOUT 120)
 # run by hand (docs/reports/SCRIBE_V2.md); the self-test needs no corpus.
 add_executable(scribe tools/eval/scribe.cpp)
 target_include_directories(scribe PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
+find_package(Threads REQUIRED)  # SCRIBE v3 builds its pack suffix array and features on std::thread
+target_link_libraries(scribe PRIVATE Threads::Threads)
 cypha_mingw_apply_exe_link_options(scribe)
 add_test(NAME native_scribe_selftest COMMAND "$<TARGET_FILE:scribe>" selftest)
 set_tests_properties(native_scribe_selftest PROPERTIES TIMEOUT 120)

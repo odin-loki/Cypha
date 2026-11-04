@@ -1428,5 +1428,118 @@ The flags stay (`--k5-lstm`, `--k5-lstm-mix`, `--final-gate lstm`, `lstm-train`)
   1. K5 upgrades: tuning; online cache and counts; order 6 and word classes; a sentence gate; a content plan. Branch `wip/k5-upgrades`, report [reports/K5_UPGRADES.md](reports/K5_UPGRADES.md).
   2. K5 on clean Wikipedia from enwik9, past enwik8's bytes, checked for overlap with GEN-A and SCRIBE. Branch `wip/k5-scale`, report [reports/K5_SCALE.md](reports/K5_SCALE.md).
   3. Online learning in the mixer: an online n-gram expert, document-aware learning, a bigger LSTM. Branch `wip/online-upgrades`, report [reports/ONLINE_LEARNING_UPGRADES.md](reports/ONLINE_LEARNING_UPGRADES.md).
-  4. Whole-distribution mixing with APM/SSE, PAQ-style. Branch `wip/full-mix`, report [reports/FULL_DISTRIBUTION_MIXING.md](reports/FULL_DISTRIBUTION_MIXING.md).
+  4. Whole-distribution mixing with APM/SSE, PAQ-style. Branch `wip/full-mix`, report `docs/reports/FULL_DISTRIBUTION_MIXING.md` on that branch (not merged yet).
 - The cloud session merges each branch and adds its results here and to the record.
+
+**Results from Odin's PC** (2026-11-04; merged to main):
+
+| Session | What changed | GEN-A dev | GEN-A test (one read) | Report |
+|---|---|---|---|---|
+| K5 upgrades | Nucleus 0.8; 256 exchange classes as K5's backoff floor; an 8-candidate sentence gate that keeps the sentence whose words co-occur most with the prompt's in K5's own training text | 0.498 [0.469, 0.528]; 4 seeds 0.493–0.505 against K5's 0.312–0.362 | **0.524 [0.493, 0.552]** against 0.305 | [K5_UPGRADES.md](reports/K5_UPGRADES.md) |
+| K5 at scale | 330 MB of clean Wikipedia from enwik9 past enwik8, overlap with GEN-A and SCRIBE removed (0 on recheck) | 4-seed mean 0.390 against 0.344 | **0.380 [0.353, 0.406]** against 0.305 | [K5_SCALE.md](reports/K5_SCALE.md) |
+
+- **Both are adopted by their registered rules.**
+  - K5's default is now the upgraded sampler. `--k5-base k5` writes §13.19's text line for line, checked in the cloud.
+  - The recommended training text is `train_all.txt`, 330 MB. It needs about 7 GB of RAM and a 65 s build.
+  - The cloud check of the new default gives 0.498 [0.469, 0.528] on dev, the same as the PC, with copy32 0.038 and 0 samples over the 12-word cap.
+- **What failed (K5 upgrades):**
+  - The word cache and dynamic counts lower K5's bits the most (to 1.488), but they lower SCRIBE. Prediction is not generation, again.
+  - Orders 6 and 7 add nothing.
+  - A 65,536-word vocabulary lowers SCRIBE.
+  - The content plan was skipped: GEN-E's fact store is in the cloud, not on the PC.
+- **Copying at scale.** On 330 MB, copy32 rises to 0.17: 17% of written bytes match some 32-byte span of the training text. The 12-word cap still holds.
+- **A caution on the judge (raised by the PC session).** The sentence gate scores co-occurrence with the prompt. SCRIBE's coherence axis also rests on co-occurrence (word vectors), and most of the gate's gain is on that axis (D_C 4.15 → 3.41). Part of the gain may be two co-occurrence measures agreeing rather than better text. By §1.3 it needs a judge of another kind: Odin's own blind ratings, or the second benchmark. Until then the gate's gain is provisional.
+- **Not yet run:** the two together (the upgraded K5 on the 330 MB text).
+- **Seeds:** `--k5-seed S` is absolute; a value below 20261101 is an offset, so both reports' seeds reproduce.
+
+### 13.26 Online learning upgrades and SCRIBE v3 (2026-11-04; results)
+
+**Online learning** (Odin's PC; [reports/ONLINE_LEARNING_UPGRADES.md](reports/ONLINE_LEARNING_UPGRADES.md)). Rules and predictions were registered in the report before each phase.
+
+| Arm | What | Bits per byte | Against the old default |
+|---|---|---:|---:|
+| B0 | the old default (D3) on the PC | 1.6232 | — |
+| N2 | an online n-gram expert, PAQ-style (orders 1–6, 8, 12; 24 table bits) | 1.5913 | −0.0319 |
+| L3 | the byte LSTM at hidden 256, window 20 | 1.6026 | −0.0206 |
+| D1, D2 | larger online steps after each page start | 1.6246, 1.6239 | +0.0014, +0.0007 |
+| **C (N2 + L3)** | **the new default** | **1.5793** | **−0.0439** |
+
+- **Adopted by rule 1.** `context8k` now runs the n-gram and the 256/20 LSTM. Answers are unchanged.
+- The old default is `--no-ngram --lstm-size 64`. It reproduces B0 byte for byte; the new default reproduces C byte for byte.
+- **The cost:** +61% wall time (45 against 28 minutes) and peak RSS 828 MB against 247 MB. The time is the bigger LSTM; the memory is the n-gram's tables. `--ngram-tb 22` saves 440 MB for 0.007 bits per byte.
+- **What failed:** document-aware steps, and long BPTT windows (50, 100).
+- **Untested:** whether the n-gram or the bigger LSTM help `sample` or K5. By every earlier result (§13.24), they will not.
+- The cloud build of the merge passes `cyphalm_trie selftest`.
+
+**SCRIBE v3** ([reports/SCRIBE_V3.md](reports/SCRIBE_V3.md)). Odin: "Make another two metrics with different maths that complement each other and take the average of all 3. Make it fool proof."
+
+- **SURPRISE**: the text's code length under a model of the pack (Kneser–Ney trigram, spelling models, a cache and a match model). Two-sided: too predictable loses as surely as salad.
+- **MATCH**: matching statistics against a suffix array of the pack, the text's own LZ76 complexity, and echo of the prompt.
+- **v3** is the mean of v2, SURPRISE and MATCH. It also reports the minimum of the three and a `disagree` flag.
+- **The ladder (fresh data, read once):** v3 passes all 5 pairs, SURPRISE all 5, MATCH 4 (human > sentences shuffled 0.940).
+- **Not fool-proof yet.** The attack rule passed 5 of 9:
+  - caught: copying, echo, loops, co-occurrence collages from the pack;
+  - missed: copied prompt sentences then a continuation (v3 0.948; MATCH alone catches it), keyword stuffing into human text (0.825) and into a generic paragraph (0.457), a generic paragraph (0.930; SURPRISE and MATCH catch it, the mean dilutes it);
+  - invisible to all three: sentences reordered within a text.
+- **K5 cross-check:** old K5 → upgraded K5 is v2 +0.145, SURPRISE −0.106, MATCH −0.009, v3 +0.011 (inside the intervals). **The new judges do not confirm the sentence gate's gain.** SURPRISE finds the gated text too predictable: 7.4 bits a word against human text's 9.5. The gate stays provisional (§13.25) until Odin's blind ratings.
+- v2 is unchanged and stays the score of record for comparisons with earlier results. v3, `min3` and `disagree` are reported next to it from now on.
+- No fresh enwik8 range is left for another frozen read of a SCRIBE change. A v3.1 can take its fresh read from enwik9 past enwik8. SCRIBE's design never read it. K5's 330 MB training text comes from there, which does not matter for the judge's own ladder and attacks.
+
+### 13.27 Results: the 1 TB trie (§13.20), the wider GLN (§13.23) and 1 November's runs (2026-11-04)
+
+Collected from the reports on Odin's PC: `D:\cypha_llm\big1tb\report.txt`, `D:\cypha_llm\glnwide\report.txt` (with 1 November's report appended word for word) and `D:\cypha_llm\gln1g\report.txt`. Every job exited cleanly before the PC's WSL restart.
+
+**§13.20, the 1 TB trie.** The binary was the morning's default without the GLN (C2: online chain and final layer, no LSTM, no n-gram).
+
+| | B0: 7 MiB wiki trie | B1: 1 TB trie |
+|---|---:|---:|
+| Trie only | 2.3161 | 3.1146 |
+| Trie + BKN | 2.0278 | 2.0408 |
+| Last chain line | 1.6704 | 1.6638 |
+| **`online_final_bpc`** | **1.6534** | **1.6473** |
+| Wall, peak RSS | 18:15, 251 MB | 13:50, 1.22 GB |
+
+- **B1 is 0.0061 lower: the rule (0.005) holds.** The 1 TB trie is the recommended `context8k` model file. It is a file, not a code default.
+- The prediction (B1 1.640–1.650) held.
+- Answers are the same for both.
+- The two packed 1 TB files (`trie_1tb.pk`, `model2/trie_model2.pk`) differ only in the trie-only line (3.1146, 3.1132).
+- **Not yet measured:** the 1 TB trie under the current default (n-gram and LSTM 256/20). The n-gram already covers much of what a bigger trie adds, so the gain may shrink.
+
+**Writing with the 1 TB trie** (S1, `sample`, SCRIBE v2 on 250 dev prompts):
+
+| T | S1 | S1, model 2 |
+|---|---|---|
+| 0.6 | **0.138** [0.106, 0.173] | 0.141 [0.110, 0.176] |
+| 0.8 | 0.118 | 0.114 |
+| 1.0 | 0.082 | 0.093 |
+
+- The best is 0.138, below the rule's 0.154 (W0's 0.174 − 0.02). **Not recommended for writing.** The prediction (0.15–0.20) missed.
+- Its text still drifts into wiki markup and lists.
+
+**§13.23, the wider GLN at 1 GiB** (reported only; no rule).
+- GW trained in 4 h 02 min on one core: 1.58 GB peak, a 409.5 MB file. Its online bits per byte on C4 held at 1.97–1.99. The last MiB is 1.990, against the narrow GLN's 2.004.
+  - 0.014 lower. **The prediction (at least 0.03 lower) missed.**
+- On the enwik8 holdout (P2b, `--gln-load` without `--no-gln`; the registered P2 had `--no-gln`, which switches the GLN off, and so matched B0 exactly):
+
+| | 7 MiB GLN (P0) | Narrow, 1 GiB (P1) | Wide, 1 GiB (P2b) |
+|---|---:|---:|---:|
+| GLN alone | 1.9455 | 2.1751 | 2.1289 |
+| `online_final_bpc` | **1.6206** | 1.6403 | 1.6359 |
+
+  - Wider helps a little (−0.004 against P1) but stays worse than the 7 MiB GLN. **The prediction held.**
+- Writing (G3, the gate mix): 0.143 at T 0.6, 0.131 at T 0.8, 0.124 at T 1.0. The same as the narrow GLN's best (0.143). **The prediction held.** W0 is 0.174 and K5 0.524.
+- **The GLN stays off.** Width and scale on web text do not fix the domain.
+
+**1 November's runs, collected at last:**
+- **R3:** frozen chain 1.6971, final layer 1.6678. The two binaries' dumps are identical.
+- **Half-spaces in the GLN** (bits per byte):
+
+| Half-spaces | 64 KiB | 512 KiB |
+|---:|---:|---:|
+| 2 | 2.0960 | 2.0173 |
+| 4 | **2.0821** | 2.0021 |
+| 6 | 2.0854 | **1.9967** |
+| 8 | 2.0943 | 1.9982 |
+
+  - The best count rises with data, from 4 at 64 KiB to 6 at 512 KiB. §13.23's choice of 6 for layer 1 fits.
+- **GLNB writing:** best 0.046, against K5's 0.241 in the same run.
