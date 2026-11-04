@@ -287,6 +287,7 @@
 #include "cypha/online/bitwise_gln.hpp"
 #include "cypha/online/content_mixer.hpp"
 #include "cypha/online/full_mixer.hpp"  // FULL_DISTRIBUTION_MIXING.md: context8k --full-mix
+#include "cypha/online/meta_mixer.hpp"  // META_MIXING.md: context8k --meta-mix
 #include "cypha/online/online_ngram.hpp"
 
 #include <cctype>
@@ -420,6 +421,9 @@ struct Args {
     // --full-mix-params k=v,...
     bool full_mix = true;
     std::string full_mix_dump, full_mix_params;
+    // META_MIXING.md: --meta-mix (meta mixers beside the full mix's arms; off by default), --meta-mix-params k=v,...
+    bool meta_mix = false;
+    std::string meta_mix_params;
     std::vector<std::pair<std::string, std::string>> k5_opts;  // docs/reports/K5_UPGRADES.md: every other --k5-... flag
 };
 
@@ -516,6 +520,8 @@ Args parse(int argc, char** argv, int from) {
         else if (s == "--no-full-mix") a.full_mix = false;              // FULL_DISTRIBUTION_MIXING.md: the lines before it
         else if (s == "--full-mix-dump") a.full_mix_dump = next(), a.full_mix = true;
         else if (s == "--full-mix-params") a.full_mix_params = next(), a.full_mix = true;
+        else if (s == "--meta-mix") a.meta_mix = true;                  // META_MIXING.md (off by default)
+        else if (s == "--meta-mix-params") a.meta_mix_params = next(), a.meta_mix = true;
         else if (s == "--ngram") a.ngram = true;                        // ONLINE_LEARNING_UPGRADES
         else if (s == "--no-ngram") a.ngram = false;                    // ONLINE_LEARNING_UPGRADES: B0's lines
         else if (s == "--ngram-orders") a.ngram_orders = next(), a.ngram = true;
@@ -954,6 +960,9 @@ struct FullMixRun {
     std::unique_ptr<DocTopic> dt;
     cypha::online::fullmix::Params P;
     std::unique_ptr<cypha::online::fullmix::FullMixer> fm;
+    cypha::online::metamix::Params MP;                    // META_MIXING.md: --meta-mix
+    std::unique_ptr<cypha::online::metamix::MetaMixer> mm;
+    int mhead = -1;
     int head = -1;
     std::vector<double> chain_y;
     double maxd3 = 0, maxng = 0, t_static = 0, t_sim = 0, t_lstm = 0, t_ng = 0, t_main = 0, t_wait = 0, seconds = 0;
@@ -983,6 +992,12 @@ struct FullMixRun {
         if (!a.no_doc && !(dt = make_doc(a.doc.empty() ? std::string("cache") : a.doc, data.data(), kTrain, rc))) return rc ? rc : 1;
         if (!P.parse(a.full_mix_params)) {
             std::cerr << "--full-mix-params k=v,... (lr1 lr2 lrb apm eps floor decay ssef a2bits headline)\n";
+            return 2;
+        }
+        std::string err;
+        if (a.meta_mix && (!MP.parse(a.meta_mix_params) || !MP.check(err))) {
+            std::cerr << "--meta-mix-params k=v,... (sel l2 m1lr1 m1lr2 scales m2m m2eta m2share m2geta m2gshare m3a m3eta m3lctx "
+                         "headline) " << err << "\n";
             return 2;
         }
         return 0;
@@ -1047,6 +1062,11 @@ struct FullMixRun {
         if (head < 0) {
             std::cerr << "--full-mix-params headline=ARM (F Fn Fs A As Rs B Bs ABs)\n";
             return 2;
+        }
+        if (a.meta_mix) {  // META_MIXING.md: a read-only hook; the full mix's arms are unchanged
+            mm = std::make_unique<cypha::online::metamix::MetaMixer>(cs, P, MP, half);
+            mhead = mm->arm(MP.headline);
+            fm->set_hook(mm.get());
         }
         std::ofstream df;
         if (!a.full_mix_dump.empty()) {
@@ -1186,6 +1206,14 @@ struct FullMixRun {
                      "full_mix state_bytes %zu seconds %.1f | thread busy s: static %.1f (%d threads) sim %.1f lstm %.1f ngram %.1f "
                      "mix %.1f; main waited %.1f | mixer s: %s\n",
                      fm->bytes(), seconds, t_static, kStatic, t_sim, t_lstm, t_ng, t_main, t_wait, fm->profile().c_str());
+        if (mm) {  // META_MIXING.md
+            std::ostringstream m;
+            mm->report(m);
+            std::printf("%smeta_mix_bpc %.4f (arm %s; first half %.4f)\n", m.str().c_str(), mm->bpc(1, mhead), MP.headline.c_str(),
+                        mm->bpc(0, mhead));
+            std::fflush(stdout);
+            std::fprintf(stderr, "meta_mix state_bytes %zu\n", mm->bytes());
+        }
     }
     double headline_bpc() const { return fm->bpc(1, head); }
 };
@@ -1200,6 +1228,7 @@ int cmd_context8k(const Args& a) {
                      "no --doc-boost (--no-full-mix silences this)\n";
         full_mix = false;
     }
+    if (a.meta_mix && !full_mix) std::cerr << "meta mix off: it runs beside the full mix (META_MIXING.md)\n";
     Config cfg = a.cfg;
     std::vector<std::uint8_t> data;
     double w[6];
@@ -7685,6 +7714,9 @@ int main(int argc, char** argv) {
     if (cmd == "simpair") return cmd_simpair(std::vector<std::string>(argv + 2, argv + argc));  // A4e
     if (cmd == "gln-train") return cmd_gln_train(std::vector<std::string>(argv + 2, argv + argc));  // §13.17
     if (cmd == "lstm-train") return cmd_lstm_train(std::vector<std::string>(argv + 2, argv + argc));  // §13.24
+    if (cmd == "meta-mix-replay" && argc >= 3)  // META_MIXING.md: FILE [FULL_MIX_PARAMS] [META_PARAMS] [first-half]
+        return cypha::online::metamix::replay(argv[2], argc > 3 ? argv[3] : "", argc > 4 ? argv[4] : "",
+                                              argc > 5 && std::string(argv[5]) == "first-half");
     if (cmd == "full-mix-replay" && argc >= 3)  // FULL_DISTRIBUTION_MIXING.md: replay context8k --full-mix-dump's inputs
         return cypha::online::fullmix::replay(argv[2], argc > 3 ? argv[3] : "");
     Args a = parse(argc, argv, 2);
