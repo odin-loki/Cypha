@@ -1597,13 +1597,30 @@ int cmd_sample(const Args& a) {
         std::unique_ptr<cypha::online::ByteLSTM> kl;
         if (!a.k5_lstm.empty()) {  // §13.24: the byte LSTM reranks the words inside K5's nucleus
             kl = cypha::online::ByteLSTM::load_file(a.k5_lstm);
-            if (!kl || (a.k5_lstm_mix != "geo" && a.k5_lstm_mix != "lin")) {
-                std::cerr << "--k5-lstm: cannot read " << a.k5_lstm << " (or --k5-lstm-mix is not geo or lin)\n";
+            if (!kl || (a.k5_lstm_mix != "geo" && a.k5_lstm_mix != "lin" && a.k5_lstm_mix != "pmi")) {
+                std::cerr << "--k5-lstm: cannot read " << a.k5_lstm << " (or --k5-lstm-mix is not geo, lin or pmi)\n";
                 return 2;
             }
             struct LstmScorer : cypha::cyphalm::wkn::ByteScorer {
                 cypha::online::ByteLSTM L;
-                explicit LstmScorer(const cypha::online::ByteLSTM& m) : L(m) {}
+                cypha::online::ByteLSTM::State st0;  // the state after reading one space: the prior's context
+                std::unordered_map<std::string, double> pri;
+                explicit LstmScorer(const cypha::online::ByteLSTM& m) : L(m) { st0 = L.save(); }
+                double prior(std::string_view piece) override {
+                    const std::string key(piece);
+                    const auto it = pri.find(key);
+                    if (it != pri.end()) return it->second;
+                    const auto st = L.save();
+                    L.restore(st0);
+                    double P[256], lb = 0;
+                    for (const char c : piece) {
+                        L.dist(P);
+                        lb += std::log2(std::max(P[static_cast<std::uint8_t>(c)], 1e-300));
+                        L.step(static_cast<std::uint8_t>(c), false);
+                    }
+                    L.restore(st);
+                    return pri[key] = lb;
+                }
                 void begin(std::string_view prompt) override {
                     for (const char c : prompt) L.step(static_cast<std::uint8_t>(c), false);
                 }
@@ -1624,7 +1641,7 @@ int cmd_sample(const Args& a) {
             };
             const cypha::online::ByteLSTM* km = kl.get();
             base.scorer = [km] { return std::make_unique<LstmScorer>(*km); };
-            base.scorer_mode = a.k5_lstm_mix == "lin" ? 2 : 1;
+            base.scorer_mode = a.k5_lstm_mix == "pmi" ? 3 : a.k5_lstm_mix == "lin" ? 2 : 1;
             base.scorer_w = a.k5_lstm_w;
             std::cerr << "k5: the byte LSTM " << a.k5_lstm << " reranks the nucleus (" << a.k5_lstm_mix << ", w " << a.k5_lstm_w << ")\n";
         }

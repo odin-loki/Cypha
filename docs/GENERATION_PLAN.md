@@ -1377,3 +1377,22 @@ Even so, each layer-1 weight set sees about half a million bits. The cost is abo
 - KL1 is non-inferior (0.33–0.37): the LSTM only reranks words K5 already allows, and it has learned the same prose.
 - KL2 and KL3 fall below K5.
 - D5 is within ±0.003 of D3.
+
+**Results** (2026-11-04, this container, 250 dev prompts):
+
+| Arm | SCRIBE v2 [95%] | Surface S | copy32 | Mean word length | Distinct words |
+|---|---:|---:|---:|---:|---:|
+| K5 | **0.353** [0.318, 0.384] | 0.928 | 0.035 | 4.31 | 0.171 |
+| KL1: geo, w 0.25 | 0.149 [0.120, 0.181] | 0.970 | 0.004 | 3.48 | 0.076 |
+| KL2: geo, w 0.5 | 0.018 | 0.958 | 0.001 | — | — |
+| KL3: lin, w 0.25 | 0.106 | 0.935 | 0.017 | — | — |
+
+- No KL arm is non-inferior, so K5 stays without the LSTM. All three predictions missed.
+- **Why: a length bias.** A byte model scores a word by the product of its bytes' probabilities, so short, common words win. With the LSTM, the mean word is 3.5 letters against 4.3, and half as many distinct words are used ("as a group of the same name; most of the north to the …").
+- The LSTM is about 90× slower inside K5: 125 ms a word, because it scores every word in the nucleus.
+- **D5** (`--final-gate lstm`) scores 1.6345 against D3's 1.6238, so it is worse; the copy × class × long-match context stays. The prediction (within ±0.003) missed.
+
+**The length-bias fix** (registered before the run). The byte LSTM should add only what the context tells it, not its own prior on words. DExperts' form: p_K5 × (p_LSTM(word | context) ÷ p_LSTM(word | a space))^w, normalised over K5's nucleus (`--k5-lstm-mix pmi`). The prior is the LSTM's probability of the word's bytes after reading one space, so it cancels the length and frequency bias, which K5 already weighs.
+- **Arms:** KL4 pmi w 0.5; KL5 pmi w 1.0 (250 dev prompts).
+- **Rule:** as above (non-inferior to K5's 0.353, then one test read).
+- **Prediction:** KL4 is non-inferior, and its mean word length and distinct-word share are within 5% of K5's.

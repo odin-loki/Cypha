@@ -422,11 +422,15 @@ struct ByteScorer {
     virtual void begin(std::string_view prompt) = 0;
     virtual double score(std::string_view piece) = 0;
     virtual void advance(std::string_view piece) = 0;
+    // §13.24 pmi: log2 of the piece's probability with no context (the model's own prior on it), so the rerank can keep
+    // only what the context adds. A byte model's prior favours short, common words, which K5 already weighs.
+    virtual double prior(std::string_view) { return 0; }
 };
 
 struct Options {
     // §13.24: the byte scorer (made once per continuation) and how it reranks the words inside the nucleus: 1 a product
-    // of experts, p_k5^(1 - w) * p_bytes^w; 2 linear, (1 - w) p_k5 + w p_bytes, each normalised over the nucleus. K5
+    // of experts, p_k5^(1 - w) * p_bytes^w; 2 linear, (1 - w) p_k5 + w p_bytes, each normalised over the nucleus; 3 pmi,
+    // p_k5 * (p_bytes / p_bytes_prior)^w (DExperts' form: the byte model adds only what the context tells it). K5
     // still chooses the candidates and the nucleus (the plausibility gate of §13.16).
     std::function<std::unique_ptr<ByteScorer>()> scorer;
     int scorer_mode = 1;
@@ -714,12 +718,17 @@ class K5 {
                 if (bs && k > 1) {
                     std::vector<double> lb(k);
                     double mx = -1e300;
-                    for (std::size_t i = 0; i < k; ++i) mx = std::max(mx, lb[i] = bs->score(pieces[kept[i]]));
+                    for (std::size_t i = 0; i < k; ++i) {
+                        lb[i] = bs->score(pieces[kept[i]]);
+                        if (o.scorer_mode == 3) lb[i] -= bs->prior(pieces[kept[i]]);
+                        mx = std::max(mx, lb[i]);
+                    }
                     double zb = 0, zr = 0;
                     for (std::size_t i = 0; i < k; ++i) zb += std::exp2(lb[i] - mx);
                     for (std::size_t i = 0; i < k; ++i) {
                         const double pb = std::exp2(lb[i] - mx) / zb;
-                        rw[i] = o.scorer_mode == 2 ? (1 - o.scorer_w) * rw[i] + o.scorer_w * pb
+                        rw[i] = o.scorer_mode == 3 ? std::exp2(std::log2(std::max(rw[i], 1e-300)) + o.scorer_w * (lb[i] - mx))
+                              : o.scorer_mode == 2 ? (1 - o.scorer_w) * rw[i] + o.scorer_w * pb
                                                    : std::exp2((1 - o.scorer_w) * std::log2(std::max(rw[i], 1e-300)) +
                                                                o.scorer_w * std::log2(std::max(pb, 1e-300)));
                         zr += rw[i];
