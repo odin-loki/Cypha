@@ -996,7 +996,7 @@ int full_mix_context8k(const Args& a, const PackedModel& pm, const double w[6], 
     std::fflush(stdout);
     std::ostringstream o;
     fm.report(o);
-    std::cout << o.str() << "full_mix_check chain_max_abs_diff " << maxd << " after_copy_max_abs_diff " << maxd3 << "\n";
+    std::printf("%sfull_mix_check chain_max_abs_diff %.3g after_copy_max_abs_diff %.3g\n", o.str().c_str(), maxd, maxd3);
     std::cerr << "full_mix state_bytes " << fm.bytes() << " seconds "
               << std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count() << "\n";
     return 0;

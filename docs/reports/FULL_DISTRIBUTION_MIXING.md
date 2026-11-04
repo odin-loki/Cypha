@@ -104,3 +104,74 @@ Written before any result below was seen.
 - P4: As − F is between −0.015 and −0.035. This is the headline prediction.
 - P5: Bs is within 0.01 of As.
 - P6: Rs (no chain and no final layer as inputs) is within ±0.03 of F.
+
+## B0: this PC's baseline
+
+`context8k` as it is (origin/main c7dd132). It ran beside X0 while the PC was heavily loaded by another project's builds (load 35–90 on 64 threads), so wall times are slow and noisy.
+
+| | Bits per byte (second half) |
+|---|---:|
+| Last chain line (`…_doc_lstm_bpc`) | 1.6570 |
+| `online_final_bpc` | **1.6232** |
+
+Wall 3403 s; peak RSS 250 MB. The cloud printed 1.6238 for the same code; this PC gives 1.6232.
+
+## X0: the plumbing (development run)
+
+`context8k --full-mix --full-mix-dump x0.fmx`, with the first settings (lr1 0.002, lr2 0.005, lrb 0.002, APM rate 0.02, SSE combined by a learned mixer).
+- **Every line B0 prints, X0 prints identically:** 0 differing lines outside the `full_mix` lines. The TALLY and GEN lines are unchanged.
+- **Arm F is 1.6232,** the same as B0's `online_final_bpc`. The replica of the final layer on whole distributions is exact at the true byte.
+- **The replica chain matches the chain** on every byte (the maximum difference printed as 0.0000 at 4 decimals; X1 prints it in full).
+- F's whole distribution sums to 0.99983 on average. The missing mass is the zero experts and the floors.
+- Wall 4868 s (B0 + 1465 s); the full-mix pass alone took 1616 s, most of it the experts computed again. Peak RSS 446 MB (+196 MB; the mixers' state is 178 MB, most of it APM tables). The dump is 18.3 GB.
+- P1 held.
+
+First half only (the second half was not read until X1):
+
+| Arm | F | Fn | Fs | A | As | Rs | B | Bs | ABs |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| X0, first half | 1.6333 | 1.6329 | 1.6028 | 1.6012 | 1.5966 | 1.6599 | 1.6706 | 1.6416 | 1.5813 |
+
+## Tuning (replay, first half only)
+
+`full-mix-replay x0.fmx PARAMS`, 190–225 s each, six at a time. With X0's settings the replay gives X0's numbers to 4 decimals. Bits per byte on the holdout's **first half** (F 1.6333, Fn 1.6329 in every row):
+
+| Settings | Fs | A | As | Rs | B | Bs | ABs |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| X0's (lr1 0.002, lr2 0.005, lrb 0.002, apm 0.02, ssef 1) | 1.6028 | 1.6012 | 1.5966 | 1.6599 | 1.6706 | 1.6416 | 1.5813 |
+| lr1 0.001 | 1.6030 | 1.5872 | 1.5829 | 1.6606 | 1.6706 | 1.6404 | 1.5741 |
+| lr1 0.005 | 1.6057 | 1.6537 | 1.6453 | 1.6977 | 1.6706 | 1.6469 | 1.6030 |
+| lr1 0.01 | 1.6124 | 1.7401 | 1.7205 | 1.7687 | 1.6706 | 1.6562 | 1.6303 |
+| lrb 0.0005 | 1.6028 | 1.6012 | 1.5966 | 1.6599 | 1.6057 | 1.5891 | 1.5739 |
+| lrb 0.0002 | 1.6028 | 1.6012 | 1.5966 | 1.6599 | 1.6010 | 1.5828 | 1.5728 |
+| lr1 0.0005, lrb 0.0002 | 1.6044 | 1.5846 | 1.5804 | 1.6782 | 1.6010 | 1.5831 | 1.5735 |
+| lr1 0.0002, lrb 0.0002 | 1.6079 | 1.5887 | 1.5850 | 1.7193 | 1.6010 | 1.5856 | 1.5796 |
+| lr1 0.001, lrb 0.0001 | 1.6030 | 1.5872 | 1.5829 | 1.6606 | 1.6031 | 1.5826 | 1.5726 |
+| lr1 0.001, lrb 0.0002, lr2 0.002 | 1.6023 | 1.5829 | 1.5764 | 1.6539 | 1.6010 | 1.5816 | 1.5673 |
+| … lr2 0.01 | 1.6043 | 1.5950 | 1.5934 | 1.6716 | 1.6010 | 1.5837 | 1.5781 |
+| … lr2 0.002, apm 0.01 | 1.6070 | 1.5872 | 1.5847 | 1.6641 | 1.6010 | 1.5851 | 1.5736 |
+| … lr2 0.001 | 1.6021 | 1.5816 | 1.5742 | 1.6519 | 1.6010 | 1.5814 | 1.5658 |
+| … lr2 0.0005 | 1.6020 | 1.5811 | 1.5731 | 1.6511 | 1.6010 | 1.5813 | 1.5651 |
+| … lr2 0.002, apm 0.03 | 1.6002 | 1.5829 | 1.5755 | 1.6519 | 1.6010 | 1.5801 | 1.5661 |
+| … lr2 0.002, ssef 0 (fixed average) | 1.6084 | 1.5829 | 1.5757 | 1.6544 | 1.6010 | 1.5824 | 1.5647 |
+| … lr2 0.002, order-2 APM 2^20 (+415 MB) | 1.6022 | 1.5829 | 1.5764 | 1.6539 | 1.6010 | 1.5816 | 1.5672 |
+| … lr2 0.002, decay 1e-4 | 1.6023 | 1.5783 | 1.5695 | 1.6660 | 1.6007 | 1.5803 | 1.5686 |
+| … lr2 0.0005, apm 0.03 | 1.5999 | 1.5811 | 1.5721 | 1.6489 | 1.6010 | 1.5798 | 1.5640 |
+| … lr2 0.0005, apm 0.03, decay 1e-4 | 1.5999 | 1.5788 | 1.5678 | 1.6629 | 1.6007 | 1.5785 | 1.5663 |
+| … lr2 0.0005, apm 0.03, decay 3e-5 | 1.5999 | 1.5769 | 1.5672 | 1.6507 | 1.6001 | 1.5785 | 1.5641 |
+| lr1 0.002, lr2 0.0005, apm 0.03, decay 1e-4 | 1.5997 | 1.5760 | 1.5669 | 1.6394 | 1.6007 | 1.5789 | 1.5647 |
+| **lr1 0.001, lrb 0.0002, lr2 0.0005, apm 0.03, ssef 0** | 1.6050 | 1.5811 | 1.5728 | 1.6507 | 1.6010 | 1.5800 | **1.5621** |
+| lr1 0.001, lrb 0.0002, lr2 0.0002, apm 0.03 | 1.5999 | 1.5809 | 1.5716 | 1.6488 | 1.6010 | 1.5798 | 1.5637 |
+
+What tuning showed:
+- Every mixer wants small steps. X0's rates were 2–10× too large. The geometric mixer was worse than Fn until lrb fell to 0.0002.
+- A bigger order-2 APM (2^20 contexts, +415 MB) gains nothing.
+- A decaying step helps As alone but not ABs.
+- Mixing As and Bs per bit (ABs) is the best arm in every row: the two mixers make different errors.
+
+**Chosen for X1** (by the headline arm's first half): **ABs**, with lr1 0.001, lr2 0.0005, lrb 0.0002, APM rate 0.03, SSE combined by a fixed average (ssef 0), order-2 APM 2^18, no decay. They are now the defaults in `Params`. On the first half ABs is 1.5621, against F's 1.6333 (−0.071).
+
+Before X1 the code was read again for any use of the true byte before its prediction:
+- the chain's and the final layer's weights learn only after the whole distribution is formed;
+- each bit's inputs, copy's state and the APM contexts read only the partial byte and earlier bytes;
+- the selftest checks that a bitwise arm's 256 probabilities sum to 1.

@@ -74,11 +74,13 @@ struct ChainSpec {
 
 /// Tuning knobs (k=v,k=v). Defaults are the registered ones (FULL_DISTRIBUTION_MIXING.md).
 struct Params {
-    double lr1 = 0.002, lr2 = 0.005, lrb = 0.002, apm_rate = 0.02, eps = 1e-6, floor = 1e-6;
+    // Chosen on the holdout's first half by replay (FULL_DISTRIBUTION_MIXING.md, "Tuning"); X0 ran with lr1 0.002,
+    // lr2 0.005, lrb 0.002, apm 0.02, ssef 1, headline As.
+    double lr1 = 0.001, lr2 = 0.0005, lrb = 0.0002, apm_rate = 0.03, eps = 1e-6, floor = 1e-6;
     double lr_decay = 0;      // lr_t = lr / (1 + t * lr_decay) per weight set, t = updates of that set
-    int sse_final = 1;        // 0: fixed average (mixer + APMs) / n in the probability domain; 1: learned in stretch
+    int sse_final = 0;        // 0: fixed average (mixer + APMs) / n in the probability domain; 1: learned in stretch
     int a2_bits = 18;         // the order-2 APM: (two previous bytes, partial byte) hashed into 2^a2_bits contexts
-    std::string headline = "As";
+    std::string headline = "ABs";
     bool parse(const std::string& s) {
         std::size_t at = 0;
         while (at < s.size()) {
