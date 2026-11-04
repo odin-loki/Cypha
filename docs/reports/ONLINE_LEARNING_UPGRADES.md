@@ -107,3 +107,40 @@ A longer window means fewer Adam steps (one per window), so it learns slower at 
 - D1 and D2: within ±0.003 of B0. The doc cache already resets at each page, and exponentiated gradient already moves fast.
 - L1: −0.003 to −0.008. L2: 0 to −0.006 (few updates). L3: −0.008 to −0.015 (the LSTM alone about 0.15 better).
 - Every arm's `TALLY` lines equal B0's.
+
+## Phase 1: results so far (B0, N1, N2, D1, D2, L1; L2 and L3 still running)
+
+| Arm | `online_final_bpc` | Against B0 | Chain line | Alone | Wall | Peak RSS | Answers |
+|---|---:|---:|---:|---:|---:|---:|---|
+| B0 | 1.6232 | — | 1.6570 | LSTM 2.6526 | 55:27 | 255 MB | — |
+| N1 `--ngram` | 1.5986 | −0.0246 | 1.6296 | n-gram 1.8281 | 56:02 (+1%) | 404 MB (+149) | match |
+| N2 `--ngram --ngram-tb 24` | **1.5913** | **−0.0319** | 1.6188 | n-gram 1.7555 | 56:09 (+1%) | 825 MB (+570) | match |
+| D1 `--doc-boost 3 --doc-span 1024` | 1.6246 | +0.0014 | 1.6570 | — | 54:54 | 256 MB | match |
+| D2 `--doc-boost 2 --doc-span 4096` | 1.6239 | +0.0007 | 1.6569 | — | 55:11 | 257 MB | match |
+| L1 `--lstm-size 128 --lstm-window 50` | 1.6132 | −0.0100 | 1.6492 | LSTM 2.4568 | 57:42 (+4%) | 244 MB | match |
+
+"Answers" compares every `GEN` and `TALLY` line with B0's. The doc boost ran over 159 page starts in the holdout.
+
+- B0 on this PC gives 1.6232 (the cloud gave 1.6238 for the same build).
+- **The n-gram wins.** N1 is −0.0246 (0.01 needed), wall +1%, RSS +149 MB. N2 is −0.0319, 0.0073 below N1 (0.003 needed), wall +1%, RSS +570 MB (700 allowed). By rule 3, **N2 is chosen**. The n-gram costs about a minute (counts and online pass), not more.
+- **The doc boost loses.** Both variants are slightly worse. Faster steps at a page start add noise more than they adapt. The doc cache already resets at each page.
+- **L1 is exactly at its threshold:** −0.0100 printed to 4 decimals, with 0.01 needed. It is held as "not decided" until L2 and L3 are read: if one of them wins it is chosen anyway; if neither wins, L1 is read at the printed precision (−0.0100 meets "at least 0.01").
+- Predictions: N1 (−0.012, range −0.005 to −0.020) missed: the gain is twice as large. N2 (0.004 below N1) missed: 0.0073. D1 and D2 within ±0.003 held. L1 (−0.003 to −0.008) missed: −0.010.
+
+## Phase 2: registered before its runs
+
+L2 and L3 were still running when this was written, so the combined arm is launched for each possible LSTM outcome at once. Only the one the phase 1 rules pick is read as **C**; the others are reported as extras.
+
+| Arm | Flags | Read as C when |
+|---|---|---|
+| C-L1 | `--ngram --ngram-tb 24 --lstm-size 128 --lstm-window 50` | L1 is the LSTM chosen |
+| C-L3 | `--ngram --ngram-tb 24 --lstm-size 256 --lstm-window 20` | L3 is the LSTM chosen |
+| C-L2 | `--ngram --ngram-tb 24 --lstm-size 256 --lstm-window 100` | L2 is the LSTM chosen |
+| L4 | `--lstm-size 128 --lstm-window 20` | an extra arm (not eligible for a default; it only shows whether the window or the size matters) |
+
+**Rules for the defaults:**
+1. C becomes `context8k`'s default if its `online_final_bpc` is at least 0.003 below N2's, and its answers match B0's. Otherwise N2 alone becomes the default (`--ngram --ngram-tb 24`) and the LSTM stays 64/20.
+2. The new default is built in (no flag needed) and run once with no flags. It must reproduce C's (or N2's) output line for line. `--no-ngram` and `--lstm-size 64 --lstm-window 20` then restore B0's lines, and that run must reproduce B0 line for line.
+3. Doc boost stays a flag, off.
+
+**Predictions:** C is about the sum of its parts less a little: N2 plus 70% of the LSTM's gain (the n-gram and the bigger LSTM both add context the chain lacked, and they overlap). C-L1 near 1.584. L4 between L1 and B0 (window 20 learns faster but the model is small).
