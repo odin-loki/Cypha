@@ -1440,7 +1440,7 @@ The flags stay (`--k5-lstm`, `--k5-lstm-mix`, `--final-gate lstm`, `lstm-train`)
 
 - **Both are adopted by their registered rules.**
   - K5's default is now the upgraded sampler. `--k5-base k5` writes §13.19's text line for line, checked in the cloud.
-  - The recommended training text is `train_all.txt`, 330 MB. It needs about 7 GB of RAM and a 65 s build.
+  - The recommended training text is `train_all.txt`, 330 MB. It needs about 7 GB of RAM and a 65 s build. (For the old K5 only: the upgraded K5 does not gain from it, §13.29.)
   - The cloud check of the new default gives 0.498 [0.469, 0.528] on dev, the same as the PC, with copy32 0.038 and 0 samples over the 12-word cap.
 - **What failed (K5 upgrades):**
   - The word cache and dynamic counts lower K5's bits the most (to 1.488), but they lower SCRIBE. Prediction is not generation, again.
@@ -1577,3 +1577,36 @@ Odin's ask was "fool proof". v3 missed 4 of 9 attacks (§13.26), so v3.1 went af
 - **Cost:** 448 texts a second and 491 MB, against v3's 518 and 493.
 - **Byte for byte:** v1, v2 and v3 are unchanged. The agent checked them all; the cloud spot check repeated dev A for v3 and dev B for v2.
 - **Use:** report v2 (the score of record), v3.1, and the three parts. A text-level judge built from statistics can be gamed by anything fluent and on-topic. Odin's blind ratings, or a judge of another kind, stay the check for any claimed gain in writing.
+
+### 13.29 Results: whole-distribution mixing, and the upgraded K5 at scale (2026-11-04)
+
+**Whole-distribution mixing, PAQ-style** (Odin's PC; [reports/FULL_DISTRIBUTION_MIXING.md](reports/FULL_DISTRIBUTION_MIXING.md)). `context8k --full-mix` builds each expert's whole 256-byte distribution, replays today's chain and final layer on them exactly (arm F equals `online_final_bpc`, difference 0), then mixes them nonlinearly:
+- bitwise logistic mixing with four weight sets;
+- geometric mixing with learned exponents;
+- adaptive probability maps (SSE) after each.
+
+The headline arm ABs mixes the two per bit. Settings were tuned by replay on the holdout's first half only. Each read was registered before it ran.
+
+| Run | Baseline `online_final_bpc` | ABs | Change | Time | Peak RSS |
+|---|---:|---:|---:|---|---|
+| X1, the old default (no n-gram, LSTM 64) | 1.6232 | 1.5499 | −0.0733 | +77% | +222 MB |
+| **X2, main's default** | **1.5793** | **1.5051** | **−0.0742** | +99% (3434 s against 1726 s) | 1098 MB (+224) |
+
+- **Both rules hold.** Answers and every other line are unchanged. `cyphalm_trie selftest` passes on the cloud build of the merge.
+- Normalising the final layer alone gains nothing (1.5793). All the gain comes from the nonlinear mixing: SSE alone −0.025, the bitwise mixer with SSE −0.060, the two together −0.074.
+- **It is behind the flag `--full-mix`, off by default.** It doubles `context8k`'s time. Turning it on by default is Odin's call. Folding the pass into the final layer's loop would remove most of the extra time.
+- Risks:
+  - One 1 MiB holdout, and no bootstrap interval (per-byte bits were not kept).
+  - Any change to the chain or the final layer must be copied into `full_mixer.hpp`; arm F shows it if not. `--gln`, `--doc-boost` and `--final-gate lstm` are refused with it.
+- `sample` does not use it. Writing from it would need the extra experts at every written byte and frozen learned state, and it would face the SCRIBE test every mixed-in predictor has failed so far.
+
+**The upgraded K5 on 330 MB** (Odin's PC; [reports/K5_SCALE.md](reports/K5_SCALE.md), "The upgraded K5 at scale"). Registered before the reads: adopt it if its 4-seed dev mean beats the upgraded K5 on 7 MB by at least 0.02.
+
+| Arm | v2 (4 seeds) | SURPRISE | MATCH | v3 | copy32 | Build, peak RAM |
+|---|---|---:|---:|---:|---:|---|
+| U8: upgraded K5, 7 MB | **0.500** (0.496–0.505) | 0.595 | 0.578 | 0.558 | 0.043 | 16 s, 0.30 GB |
+| C1: upgraded K5, 330 MB | 0.479 (0.462–0.502) | 0.596 | 0.565 | 0.547 | 0.236 | 170 s, 8.67 GB |
+
+- **The rule fails** (−0.021). No test read. **The upgraded K5 stays on the 7 MB enwik8 text.** This replaces §13.25's recommendation of `train_all.txt`, which was for the old K5.
+- Copying rises to a quarter of written bytes (copy32 0.236). The 12-word cap held.
+- **SCRIBE v3 does not confirm the old K5's gain from more text either:** v2 +0.046, v3 +0.001, SURPRISE −0.034. With §13.26's finding on the sentence gate, both of 4 November's writing gains rest on v2 alone.

@@ -9,8 +9,9 @@ Odin asked: "Make sure you document everything we have tried and the results." T
 | Task | What CyphaLM uses now | Score |
 |---|---|---|
 | Writing | **K5, upgraded** (nucleus 0.8, 256 exchange classes, the prompt-association sentence gate), 12-word copy cap: `sample --k5 CLEAN.txt` | GEN-A test SCRIBE v2 **0.524** [0.493, 0.552] (gate provisional: needs a judge of another kind); plain K5 0.305 |
-| Writing, scale | Plain K5 on 330 MB of clean enwik9 Wikipedia | test **0.380** [0.353, 0.406] |
+| Writing, scale | Plain K5 on 330 MB of clean enwik9: test 0.380. The upgraded K5 does not gain from it (dev 0.479 against 0.500 on 7 MB), so the writer stays on 7 MB | test 0.380 (plain K5 only) |
 | Writing, bytes | The byte sampler (`sample`), no LSTM, no GLN | dev 0.174 at T 0.6; test 0.147 |
+| Prediction, `--full-mix` | the default below, then whole-distribution mixing with SSE (PAQ-style); off by default (twice the time) | **1.5051** bits per byte, about 1.1 GB |
 | Prediction | `context8k`: online chain (exponentiated gradient), online n-gram expert, byte LSTM at 256/20, slow and fast chains, online final layer with the copy gate | **1.5793** bits per byte (holdout second half, Odin's PC), 828 MB |
 | Prediction, earlier on 4 November | the same without the n-gram, LSTM at 64 (`--no-ngram --lstm-size 64`) | 1.6238 (cloud), 1.6232 (PC), 247–269 MB |
 | Prediction before 1 November | the frozen chain | 1.6979 |
@@ -18,7 +19,7 @@ Odin asked: "Make sure you document everything we have tried and the results." T
 
 The two headline facts:
 - Writing on SCRIBE v2 test: 0.147 (bytes) → 0.305 (K5) → 0.524 (upgraded K5). The last step is provisional: SCRIBE v3's new judges do not confirm it (§3).
-- Prediction fell by 0.119 bits per byte: 1.6971 → 1.5793 on Odin's PC.
+- Prediction fell by 0.119 bits per byte by default (1.6971 → 1.5793 on Odin's PC), and by 0.192 with `--full-mix` (1.5051).
 
 They came from different changes. What predicts better did not write better, in every experiment.
 
@@ -35,6 +36,7 @@ They came from different changes. What predicts better did not write better, in 
 | K5: sentence gate, 8 candidates, prompt association | [K5_UPGRADES](K5_UPGRADES.md) | 0.498; **test 0.524** | **Adopted** (provisional: judge caution) |
 | K5 on clean enwik9: 7 / 30 / 100 / 300 / 330 MB | [K5_SCALE](K5_SCALE.md) | 0.350 / 0.375 / 0.363 / 0.382 / 0.390 (4-seed mean); **test 0.380** | **Adopted** as the training text |
 | K5 with a 65,536-word vocabulary | [K5_SCALE](K5_SCALE.md) | −0.010 to −0.016 | No |
+| Upgraded K5 on 330 MB (C1) | [K5_SCALE](K5_SCALE.md), §13.29 | 0.479 against 0.500 on 7 MB (4 seeds) | No: the writer stays on 7 MB |
 | 10 fuzzy experts mixed into K5 | §13.7 | all lower (ALL: 0.218) | Stopped for writing |
 | Self-organising structure (exchange classes etc.) | §13.9 | exchange classes 0.327 | Not adopted for writing |
 | GLN mixed into the byte sampler | §13.15 | 0.065 (10 prompts; W0 0.256) | No: pulled the text into XML |
@@ -77,6 +79,8 @@ What the writing results say:
 | Larger online steps after each page start (D1, D2) | §13.26 | 1.6246, 1.6239 | No |
 | Bigger LSTM: 128/50, 256/100, 256/20, 128/20 | §13.26 | 1.6132, 1.6097, **1.6026**, 1.6118 | 256/20 **adopted** |
 | **N2 + LSTM 256/20 (C)** | §13.26 | **1.5793** (+61% time, 828 MB) | **The default now** |
+| Whole-distribution mixing with SSE, ABs, on the old default (X1) | §13.29 | 1.5499 against 1.6232 | Rule holds |
+| **The same on the new default (X2)** | §13.29 | **1.5051** against 1.5793 (−0.074; twice the time, +224 MB) | Rule holds; flag `--full-mix`, off until Odin decides |
 
 Alone, as experts:
 - the GLN scores 1.94 bits per byte (7 MiB of counts, the fixed LSTM);
@@ -92,6 +96,7 @@ What the prediction results say:
 - **Scale on the wrong text hurts.** 1 GiB of web text made the GLN worse on Wikipedia.
 - **The biggest single gain was an old idea:** a PAQ-style bitwise n-gram learning online (−0.032). With the bigger LSTM it gives −0.044, 85% of the two gains added.
 - **Faster learning at page starts adds noise.** The online steps already move fast enough.
+- **The biggest gain of the week was in how experts are combined, not in a new expert:** PAQ's nonlinear mixing and SSE on whole distributions gave −0.074 on top of everything else.
 
 ## 3. The judge: SCRIBE v3 ([SCRIBE_V3](SCRIBE_V3.md), §13.26)
 
@@ -113,6 +118,7 @@ Odin: "Make another two metrics with different maths that complement each other 
 - Fresh read (enwik9): ladder 5 of 5, registered attacks **9 of 9** (v3: 5 of 9), human 0.904.
 - **8 new attacks held out until the fresh read: 2 of 8 caught.** Stuffing at one word in 7, a template with the prompt's names, a title swap and loosely related sentences get through.
 - K5 gate: v3.1 +0.048, most of it from v2. Still not confirmed by a judge of another kind.
+- v3 does not confirm the old K5's gain from 330 MB of text either (v2 +0.046, v3 +0.001). Both of 4 November's writing gains rest on v2 alone.
 
 ## 4. Smaller findings and fixes
 
@@ -130,12 +136,13 @@ Odin: "Make another two metrics with different maths that complement each other 
 | R3, the half-space test, GLNB's writing (1 Nov) | Odin's PC | **Collected**: R3 1.6971 / 1.6678; best half-spaces 4 → 6 as data grows; GLNB writing 0.046 (§13.27) |
 | K5 upgrades | Odin's PC | **Done**: test 0.524 → [K5_UPGRADES.md](K5_UPGRADES.md) |
 | K5 on clean Wikipedia from enwik9 | Odin's PC | **Done**: test 0.380 → [K5_SCALE.md](K5_SCALE.md) |
-| Upgraded K5 on the 330 MB text (the two together) | Odin's PC | Running again after the PC's restart; v3 reported next to v2 |
+| Upgraded K5 on the 330 MB text (the two together) | Odin's PC | **Done**: 0.479 against 0.500, rule fails; stays on 7 MB (§13.29) |
 | The 1 TB trie under the current default (n-gram, LSTM 256/20) | Odin's PC | Not run |
 | A judge of another kind for the sentence gate (Odin's blind ratings) | Odin | Next |
 | Online n-gram expert, document-aware learning, a bigger LSTM | Odin's PC | **Done**: 1.5793 → [ONLINE_LEARNING_UPGRADES.md](ONLINE_LEARNING_UPGRADES.md) |
 | SCRIBE v3 | cloud | **Done**: ladder 5 of 5, attacks 5 of 9 → [SCRIBE_V3.md](SCRIBE_V3.md) |
 | SCRIBE v3.1: catch keyword stuffing and generic paragraphs; fresh read on enwik9 | cloud | **Done**: registered attacks 9 of 9, held-out 2 of 8 → [SCRIBE_V31.md](SCRIBE_V31.md) |
-| Whole-distribution mixing with APM/SSE (PAQ-style) | Odin's PC | Checks passed; tuned on the first half (ABs 1.5621 against 1.6333); the registered read X1 running again after the PC's restart → branch `wip/full-mix` |
+| Whole-distribution mixing with APM/SSE (PAQ-style) | Odin's PC | **Done**: 1.5051 on the new default (−0.074); behind `--full-mix` → [FULL_DISTRIBUTION_MIXING.md](FULL_DISTRIBUTION_MIXING.md) |
+| `--full-mix` on by default (twice `context8k`'s time) | Odin | To decide |
 
 This record is updated as those land.
