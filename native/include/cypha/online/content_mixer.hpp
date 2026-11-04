@@ -83,6 +83,9 @@ inline bool g_online_lambdas_out = false;
 // read all three and pick. The main chain (0.02) is unchanged by them.
 inline std::vector<std::vector<double>>* g_rate_chains = nullptr;
 inline constexpr double kRateSteps[2] = {0.005, 0.08};
+// ONLINE_LEARNING_UPGRADES (docs/reports/ONLINE_LEARNING_UPGRADES.md, context8k --doc-boost): with g_step_mult set, every
+// online stage's step at byte k is multiplied by (*g_step_mult)[k] (larger just after a "<page>" starts). Unset: as before.
+inline const std::vector<double>* g_step_mult = nullptr;
 
 // One stage by exponentiated gradient at step eta over cur (see online_mix); lam gets the last weights when given.
 inline void eg_stage(const std::vector<double>& pe, const std::vector<int>& bk, int nb, std::vector<double>& cur,
@@ -94,7 +97,8 @@ inline void eg_stage(const std::vector<double>& pe, const std::vector<int>& bk, 
         const double prev = cur[k], l = we[b], p = l * pe[k] + (1 - l) * prev;
         cur[k] = p;
         const double pp = std::max(p, 1e-300);
-        double e = we[b] * std::exp(eta * std::min(pe[k] / pp, 30.0)), c = wc[b] * std::exp(eta * std::min(prev / pp, 30.0));
+        const double et = g_step_mult ? eta * (*g_step_mult)[k] : eta;
+        double e = we[b] * std::exp(et * std::min(pe[k] / pp, 30.0)), c = wc[b] * std::exp(et * std::min(prev / pp, 30.0));
         double z = e + c;
         e = std::max(e / z, 1e-4);
         c = std::max(c / z, 1e-4);
@@ -335,10 +339,12 @@ class OnlineFinal {
         return p;
     }
 
-    void update(int set, const double* q, double p) {
+    /// mult scales the step (context8k --doc-boost); 1 is the step as before.
+    void update(int set, const double* q, double p, double mult = 1.0) {
         double* w = &w_[static_cast<std::size_t>(set) * n_];
+        const double eta = mult == 1.0 ? 0.05 : 0.05 * mult;
         double z = 0;
-        for (int j = 0; j < n_; ++j) z += (w[j] *= std::exp(0.05 * std::min(q[j] / std::max(p, 1e-300), 30.0)));
+        for (int j = 0; j < n_; ++j) z += (w[j] *= std::exp(eta * std::min(q[j] / std::max(p, 1e-300), 30.0)));
         double z2 = 0;
         for (int j = 0; j < n_; ++j) z2 += (w[j] = std::max(w[j] / z, 1e-7));
         for (int j = 0; j < n_; ++j) w[j] /= z2;

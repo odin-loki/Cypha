@@ -279,6 +279,7 @@
 #include "cypha/knowledge/unknown_signals.hpp"
 #include "cypha/online/bitwise_gln.hpp"
 #include "cypha/online/content_mixer.hpp"
+#include "cypha/online/online_ngram.hpp"
 
 #include <cctype>
 #include <chrono>
@@ -383,6 +384,16 @@ struct Args {
     bool mix_set = false;                         // --gln-mix or --lstm-mix given
     bool two_rates = true;                        // §13.21: slow and fast chains (context8k)
     std::string final_gate = "copy";              // §13.21: the final layer's weight sets: copy (default) or ig
+    // ONLINE_LEARNING_UPGRADES (docs/reports/ONLINE_LEARNING_UPGRADES.md), context8k only: --ngram (the online n-gram
+    // expert: a chain stage and final-layer inputs), --doc-boost B [--doc-span N] (online steps x B for the first N bytes
+    // of each page), --lstm-size 64|128|256 and --lstm-window T (the chain's LSTM; 64 and 20 as before).
+    bool ngram = false;
+    std::string ngram_orders = "1,2,3,4,5,6,8,12";
+    int ngram_tb = 22, ngram_cap = 60;
+    double ngram_lr = 0.005;
+    double doc_boost = 1.0;
+    int doc_span = 1024;
+    int lstm_size = 64, lstm_window = 20;
     double dk_plain = 0;                          // DK2: share of don't-know training turns with no token
     std::string fam_ent_at = "all";               // DK2: where --fam-ent's frames go (all | answer | start)
     bool copy_frame = false;                      // DK2: copy a frame's entity, not its end; the tag may repeat the message
@@ -483,6 +494,15 @@ Args parse(int argc, char** argv, int from) {
         else if (s == "--one-rate") a.two_rates = false;                // §13.21: the main chain only
         else if (s == "--no-lstm") a.no_lstm = true;                    // §13.18: context8k without the LSTM
         else if (s == "--final-gate") a.final_gate = next();            // §13.21
+        else if (s == "--ngram") a.ngram = true;                        // ONLINE_LEARNING_UPGRADES
+        else if (s == "--ngram-orders") a.ngram_orders = next(), a.ngram = true;
+        else if (s == "--ngram-tb") a.ngram_tb = std::atoi(next()), a.ngram = true;
+        else if (s == "--ngram-cap") a.ngram_cap = std::atoi(next()), a.ngram = true;
+        else if (s == "--ngram-lr") a.ngram_lr = std::atof(next()), a.ngram = true;
+        else if (s == "--doc-boost") a.doc_boost = std::atof(next());
+        else if (s == "--doc-span") a.doc_span = std::atoi(next());
+        else if (s == "--lstm-size") a.lstm_size = std::atoi(next());
+        else if (s == "--lstm-window") a.lstm_window = std::atoi(next());
         else if (s == "--gln") a.gln = true;                      // §13.15
         else if (s == "--gln-feedback") a.gln = a.gln_feedback = true;  // §13.15
         else if (s == "--dk-plain") a.dk_plain = std::atof(next());  // DK2
@@ -948,6 +968,20 @@ int cmd_context8k(const Args& a) {
     const std::size_t H = kSample - kTrain, half = H / 2;
     g_online_mix = a.online_mix;
     if (a.online_mix) std::cout << "online_mix on (the chain's lambdas learn online, GENERATION_PLAN §13.12)\n";
+    // ONLINE_LEARNING_UPGRADES --doc-boost B: every online step (the chain's stages and the final layer) is x B for the
+    // first --doc-span bytes after each "<page>" in the holdout; 1 elsewhere.
+    std::vector<double> step_mult;
+    if (a.doc_boost != 1.0) {
+        step_mult.assign(H, 1.0);
+        std::size_t page = SIZE_MAX, pages = 0;
+        for (std::size_t k = 0; k < H; ++k) {
+            const std::size_t i = kTrain + k;
+            if (i >= 6 && std::memcmp(data.data() + i - 6, "<page>", 6) == 0) page = k, ++pages;
+            if (page != SIZE_MAX && k - page < static_cast<std::size_t>(a.doc_span)) step_mult[k] = a.doc_boost;
+        }
+        cypha::online::g_step_mult = &step_mult;
+        std::cerr << "doc_boost " << a.doc_boost << " over the first " << a.doc_span << " bytes of " << pages << " pages\n";
+    }
     std::vector<double> pt(H);
     for (std::size_t k = 0; k < H; ++k) {
         const std::size_t i = kTrain + k;
@@ -1196,38 +1230,104 @@ int cmd_context8k(const Args& a) {
         std::cerr << "--final-gate lstm needs the LSTM (drop --no-lstm)\n";
         return 2;
     }
-    if (!a.no_lstm) {  // the default in context8k since §13.18's D1
-        cypha::online::ByteLSTM L;
-        plstm.resize(H);
-        double R[4][cypha::online::ByteLSTM::H];
-        if (a.final_gate == "lstm") {
-            std::mt19937_64 rr(7);
-            std::normal_distribution<double> nd(0.0, 1.0);
-            for (auto& row : R)
-                for (double& x : row) x = nd(rr);
-            lgate.resize(H);
+    // ONLINE_LEARNING_UPGRADES --ngram: the online n-gram expert (cypha::online::OnlineNgram; hashed bit counts of orders
+    // --ngram-orders with 8-bit slot checks, pretrained on wiki train, then predicting and learning byte by byte over wiki
+    // train's last MiB and the holdout) as a chain stage (a lambda per InfiniGram bucket, online) before the LSTM, and as
+    // final-layer inputs: its mixed probability and each order's.
+    std::vector<double> pngram;
+    std::vector<std::vector<float>> pngram_o;
+    if (a.ngram) {
+        cypha::online::OnlineNgram::Params np;
+        np.orders.clear();
+        for (std::size_t p0 = 0; p0 < a.ngram_orders.size();) {
+            const std::size_t p1 = std::min(a.ngram_orders.find(',', p0), a.ngram_orders.size());
+            np.orders.push_back(std::atoi(a.ngram_orders.substr(p0, p1 - p0).c_str()));
+            p0 = p1 + 1;
         }
-        double P[256], lb = 0;
+        np.tb = a.ngram_tb;
+        np.cap = a.ngram_cap;
+        np.lr = a.ngram_lr;
+        if (np.orders.empty() || np.orders.size() > 16 || !std::is_sorted(np.orders.begin(), np.orders.end()) ||
+            np.orders.back() > 64 || np.cap < 2 || np.cap > 500) {
+            std::cerr << "--ngram-orders: 1 to 16 ascending orders up to 64; --ngram-cap 2..500\n";
+            return 2;
+        }
+        const auto t0 = std::chrono::steady_clock::now();
+        cypha::online::OnlineNgram ng(np);
+        const std::size_t warm = std::min<std::size_t>(kTrain, std::size_t{1} << 20);
+        ng.pretrain(data.data(), kTrain - warm);
+        double po[32], nb = 0;
+        for (std::size_t i = kTrain - warm; i < kTrain; ++i) ng.code(data[i], po);
+        pngram.resize(H);
+        pngram_o.assign(static_cast<std::size_t>(ng.orders()), std::vector<float>(H));
         for (std::size_t k = 0; k < H; ++k) {
-            if (!lgate.empty()) {
-                int g = 0;
-                for (int m = 0; m < 4; ++m) {
-                    double d = 0;
-                    for (int q = 0; q < cypha::online::ByteLSTM::H; ++q) d += R[m][q] * L.h()[static_cast<std::size_t>(q)];
-                    if (d > 0) g |= 1 << m;
-                }
-                lgate[k] = static_cast<std::uint8_t>(g);
-            }
-            L.dist(P);
-            plstm[k] = std::max(P[data[kTrain + k]], 1e-12);
-            if (k >= half) lb += -std::log2(plstm[k]);
-            L.step(data[kTrain + k], true);
+            pngram[k] = std::max(ng.code(data[kTrain + k], po), 1e-12);
+            for (int q = 0; q < ng.orders(); ++q) pngram_o[static_cast<std::size_t>(q)][k] = static_cast<float>(po[q]);
+            if (k >= half) nb += -std::log2(pngram[k]);
         }
-        std::cout << "lstm_alone_bpc " << lb / static_cast<double>(H - half) << "\n";
+        std::cout << "ngram_alone_bpc " << nb / static_cast<double>(H - half) << "\n";
+        std::cerr << "ngram orders " << a.ngram_orders << " tb " << np.tb << " cap " << np.cap << " lr " << np.lr << ": "
+                  << ng.bytes() / 1e6 << " MB, " << std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count()
+                  << " s\n";
+        mix_into(pngram, bk8k, half, kBuckets, base);
+        chain_line("_ngram");
+    }
+    if (!a.no_lstm) {  // the default in context8k since §13.18's D1
+        // ONLINE_LEARNING_UPGRADES: --lstm-size picks the hidden size (64, 128, 256) and --lstm-window the BPTT window; 64
+        // and 20 are the LSTM of §13.18, unchanged.
+        auto lstm_pass = [&](auto& L) {
+            constexpr int LH = std::remove_reference_t<decltype(L)>::H;
+            const auto t0 = std::chrono::steady_clock::now();
+            plstm.resize(H);
+            std::vector<double> R(4 * static_cast<std::size_t>(LH));
+            if (a.final_gate == "lstm") {
+                std::mt19937_64 rr(7);
+                std::normal_distribution<double> nd(0.0, 1.0);
+                for (double& x : R) x = nd(rr);
+                lgate.resize(H);
+            }
+            double P[256], lb = 0;
+            for (std::size_t k = 0; k < H; ++k) {
+                if (!lgate.empty()) {
+                    int g = 0;
+                    for (int m = 0; m < 4; ++m) {
+                        double d = 0;
+                        for (int q = 0; q < LH; ++q) d += R[static_cast<std::size_t>(m) * LH + q] * L.h()[static_cast<std::size_t>(q)];
+                        if (d > 0) g |= 1 << m;
+                    }
+                    lgate[k] = static_cast<std::uint8_t>(g);
+                }
+                L.dist(P);
+                plstm[k] = std::max(P[data[kTrain + k]], 1e-12);
+                if (k >= half) lb += -std::log2(plstm[k]);
+                L.step(data[kTrain + k], true);
+            }
+            std::cout << "lstm_alone_bpc " << lb / static_cast<double>(H - half) << "\n";
+            std::cerr << "lstm hidden " << LH << " window " << a.lstm_window << ": "
+                      << std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count() << " s\n";
+        };
+        if (a.lstm_window < 1 || a.lstm_window > 1000) {
+            std::cerr << "--lstm-window 1..1000\n";
+            return 2;
+        }
+        if (a.lstm_size == 64) {
+            cypha::online::ByteLSTMT<64> L(0, 0.003, a.lstm_window);
+            lstm_pass(L);
+        } else if (a.lstm_size == 128) {
+            cypha::online::ByteLSTMT<128> L(0, 0.003, a.lstm_window);
+            lstm_pass(L);
+        } else if (a.lstm_size == 256) {
+            cypha::online::ByteLSTMT<256> L(0, 0.003, a.lstm_window);
+            lstm_pass(L);
+        } else {
+            std::cerr << "--lstm-size 64|128|256\n";
+            return 2;
+        }
         mix_into(plstm, bk8k, half, kBuckets, base);
         chain_line("_lstm");
     }
     cypha::online::g_rate_chains = nullptr;  // §13.21: the slow and fast chains are complete
+    cypha::online::g_step_mult = nullptr;    // the chain is complete; the final layer reads step_mult itself
     if (dump || a.online_final) {
         // GLNX (docs/GENERATION_PLAN.md §13.10): one row of float32 per holdout byte. Columns, in order: the byte; the trie's
         // 5 experts' probability of it and the match (hit, present); the trie mixture; Kneser-Ney (prob, bucket);
@@ -1244,7 +1344,8 @@ int cmd_context8k(const Args& a) {
         // (cypha::online::OnlineFinal; kIn picks its inputs from the row, the chain last).
         static const int kIn[24] = {1, 2, 3, 4, 5, 6, 8, 9, 11, 12, 13, 14, 15, 18, 20, 22, 25, 27, 29, 31, 32, 33, 34, 35};
         // The inputs: 23 of the row's values, then the GLN, the LSTM, the slow and fast chains when present, then the chain.
-        const int nin = 24 + !pgln.empty() + !plstm.empty() + 2 * !rate_chains.empty();
+        const int nin = 24 + !pgln.empty() + !plstm.empty() + 2 * !rate_chains.empty() +
+                        (pngram.empty() ? 0 : 1 + static_cast<int>(pngram_o.size()));
         cypha::online::OnlineFinal fin(80, nin);
         const bool copy_gate = a.final_gate == "copy";
         if (a.final_gate != "copy" && a.final_gate != "ig" && a.final_gate != "lstm") {
@@ -1300,19 +1401,23 @@ int cmd_context8k(const Args& a) {
                 const int g = !lgate.empty() ? lgate[k] * 5 + bc  // §13.24
                               : copy_gate ? copy_bucket(cn) * 10 + bc * 2 + (n8k[k] >= 16 ? 1 : 0)
                                           : std::min(static_cast<int>(bk8k[k]), 15) * 5 + bc;
-                double q[28];
+                double q[48];
                 int nq = 0;
                 for (int j = 0; j < 23; ++j) q[nq++] = std::max(1e-9, static_cast<double>(row[kIn[j]]));
                 if (!pgln.empty()) q[nq++] = std::max(1e-9, pgln[k]);
                 if (!plstm.empty()) q[nq++] = std::max(1e-9, plstm[k]);
                 for (const auto& rc : rate_chains) q[nq++] = std::max(1e-9, rc[k]);
+                if (!pngram.empty()) {  // ONLINE_LEARNING_UPGRADES --ngram: the mixed n-gram, then each order
+                    q[nq++] = std::max(1e-9, pngram[k]);
+                    for (const auto& po : pngram_o) q[nq++] = std::max(1e-9, static_cast<double>(po[k]));
+                }
                 q[nq++] = std::max(1e-9, static_cast<double>(row[kIn[23]]));
                 const double p = fin.predict(g, q);
                 if (k >= half) {
                     fin_bits += -std::log2(std::max(p, 1e-12));
                     chain_bits += -std::log2(std::max(base[k], 1e-12));
                 }
-                fin.update(g, q, p);
+                fin.update(g, q, p, step_mult.empty() ? 1.0 : step_mult[k]);
             }
         }
         if (dump) std::cerr << "dumped " << H << " rows of " << C << " columns to " << a.dump_experts << " (half " << half << ")\n";
