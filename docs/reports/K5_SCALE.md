@@ -218,3 +218,34 @@ The test gain is +0.075, and the intervals do not overlap. No other test read wa
 - On Odin's PC: the texts in `/mnt/d/cypha_llm/k5scale/clean/` (`train_7M.txt` … `train_all.txt`, plus the cleaned dump `clean_e9.txt` and the kept documents `kept_e9.txt`); the reads in `/mnt/d/cypha_llm/k5scale/reads/`; the build in `~/cypha_build/k5scale/`; the worktree `/home/odin/k5scale_wt`.
 
 **To use it:** `cyphalm_trie sample ENWIK8 OUT.gen.txt --prompts-file … --prompts 250 --k5 /mnt/d/cypha_llm/k5scale/clean/train_all.txt`.
+
+## The upgraded K5 at scale (registered 2026-11-05, before the reads)
+
+**The question.** Does the upgraded K5 (the default since K5_UPGRADES.md: nucleus 0.8, 256 exchange classes as the backoff floor, the 8-candidate sentence gate by prompt association) gain from `train_all.txt` as the old K5 did?
+
+**Setup.** `origin/main` 6aed3eb, rebuilt (`cyphalm_trie selftest` ok; `scribe selftest` 90 checks, 0 failed). `K5_THREADS=4`. `scripts/k5_scale_read.sh` now also runs `scribe ladder --profile v3` and reports v2, SURPRISE, MATCH, v3, min3 and the disagree share for the K5 rung. The decision stays on v2.
+
+**Reproduction checks (made before registering, on 6aed3eb).**
+
+| check | expected | got |
+|---|---|---|
+| `--k5-base k5` on `train_all.txt`, seed 20261101 | NALL 0.412, the same samples | 0.412 [0.387, 0.439]; samples byte-identical to NALL's (MODEL lines aside) |
+| the new default on the 7 MB enwik8 `train.txt` (U8), seed 20261101 | 0.498 [0.469, 0.528] (the cloud) | 0.498 [0.469, 0.528] |
+
+`--k5-base k5` on `train_all.txt` now peaks at 8.45 GB (6.77 GB before; the context keys are 128 bits since K5_UPGRADES).
+
+**The arms.** Both on GEN-A dev, 250 prompts, seeds 20261101, 20262101, 20263101 and 20264101:
+- **U8**: the new default K5 on the 7 MB enwik8 `train.txt` (the baseline).
+- **C1**: the new default K5 on `train_all.txt` (329.6 MB).
+
+**The rule.**
+- C1 is adopted as the recommended writer if its 4-seed mean SCRIBE v2 is at least 0.02 above U8's 4-seed mean, with no sample over the 12-word cap.
+- copy32, build time and peak RAM are reported. If the class build or the gate's co-occurrence counts are too slow or too big at 330 MB, that is reported with what was measured.
+- If the rule holds, one GEN-A test read of C1 (seed 20261101), against U8's test 0.524 [0.493, 0.552]. The test split is not read otherwise.
+
+**The prediction.**
+- Q1. U8's 4 seeds: mean about 0.50 (K5_UPGRADES: 0.493–0.505).
+- Q2. C1's mean is about 0.03 above U8's (range 0.00 to +0.06). The old K5 gained +0.046; the gate and nucleus 0.8 already take part of what more text gives. The rule holds with probability about 55%.
+- Q3. C1's copy32 is 0.18–0.25 (higher than NALL's 0.17: nucleus 0.8 draws more from the top). 0 samples over the cap.
+- Q4. C1's build takes 3–10 minutes (the exchange classes over 12× the bigrams) and peaks at 10–14 GB.
+- Q5. SCRIBE v3 gains less than v2 between U8 and C1 (under +0.02), and the new judges disagree with v2 about the size of the gain.
