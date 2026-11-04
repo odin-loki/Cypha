@@ -4,6 +4,8 @@
 
 SCRIBE v3 is the mean of three judges: v2 (unchanged), SURPRISE (information theory) and MATCH (string matching). Each gives a score in [0, 1], with human text near the top. v3 also reports the minimum of the three, and flags a text when they disagree.
 
+**Follow-up: SCRIBE v3.1** ([SCRIBE_V31.md](SCRIBE_V31.md), `--profile v31`). It takes the geometric mean of the three judges, so one judge's confident catch is not diluted. It adds statistics for keyword stuffing (words that fit neither neighbour) and a group for bland text, and it reads a fresh region of enwik9. v3 below is unchanged.
+
 ## Why
 
 CyphaLM's best writer, K5, gained a lot on SCRIBE v2 with a sentence gate that picks sentences by word co-occurrence with the prompt (docs/reports/K5_UPGRADES.md, step 4). Most of the gain is on v2's coherence axis, which also rests on co-occurrence (PPMI-SVD word vectors). Part of the gain may be agreement between two co-occurrence measures. The two new judges read no word vectors and no co-occurrence statistics.
