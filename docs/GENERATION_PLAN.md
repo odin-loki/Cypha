@@ -1651,3 +1651,19 @@ The headline arm ABs mixes the two per bit. Settings were tuned by replay on the
 - the LSTM;
 - the online n-gram;
 - the whole-distribution mixing with SSE.
+
+### 13.31 A blind LLM reading of K5's sentence gate (registered 2026-11-04, before the ratings)
+
+**Odin:** "That's too much reading. Just use GPT2 or you rate it."
+
+- **Why not GPT-2:** its perplexity rewards predictable text. That is the flaw SCRIBE v3's SURPRISE found in the gated K5, so GPT-2 would be biased toward the gate.
+- **The judges:** four independent Claude raters (subagents). Each gets only the texts in its prompt, no tools and no files, so it cannot see the key.
+- **The items:** 50 GEN-A dev prompts: the 10 on Odin's rating page, plus 40 drawn with seed 20261105, leaving out the first sheet's 8. Each prompt has three continuations: the real text, the old K5 and the new (gated) K5. All are cut at a word boundary near 460 characters and shown in random order as A, B and C.
+- **Who rates what:** raters 1 and 2 rate prompts 1–25, and raters 3 and 4 rate prompts 26–50. Each rater sees its own order and its own A/B/C labels. Each text gets 1–10 for how well it reads as coherent, on-topic prose.
+- **Rule:** the gate's gain counts as confirmed if new K5 minus old K5, averaged over the two raters per prompt and then over the 50 prompts, is above 0, with a 95% bootstrap interval over prompts that excludes 0. Both rater pairs must agree on the sign.
+- **Predictions:**
+  - human text about 8;
+  - both K5s about 2–4;
+  - new minus old about +0.5, with the rule holding (about 60%);
+  - raters agreeing at r ≥ 0.6 per text.
+- Items and key: `bench/blind/llm_rating/`, key base64-encoded.
