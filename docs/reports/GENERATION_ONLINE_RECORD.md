@@ -43,6 +43,9 @@ They came from different changes. What predicts better did not write better, in 
 | Online lambdas in the sampler | §13.22 | 0.147 | No (−0.027) |
 | Byte LSTM in the sampler | §13.18 | gate 0.155 (non-inferior); linear 0.119; geo 0.119 | Was default briefly; taken out (Odin: "go with K5") |
 | K5 + byte LSTM | §13.24 | geo 0.149; linear 0.106; DExperts' prior fix 0.221 | No: a length bias, then blander text |
+| The 1 TB trie in the byte sampler | §13.27 | 0.138 (T 0.6) | No (rule 0.154) |
+| The wider GLN (1 GiB, 128 × 6 then 16 × 4), gate mix | §13.27 | 0.143 | No (reported only) |
+| GLNB writing (1 November) | §13.27 | 0.046 | No |
 
 What the writing results say:
 - **Whole words counted on clean prose** is the one change that moved writing a lot: K5. Clean text alone on bytes failed, and tokens alone on raw XML failed (GEN-A, T4).
@@ -63,6 +66,8 @@ What the writing results say:
 | + GLN, bitwise GLN with an LSTM (C3) | §13.15 | 1.6214 | Default 3–4 Nov, then off (Odin) |
 | GLN + the mixer's feedback (C4, recurrent) | §13.15 | 1.6213 | No gain |
 | GLN trained on 1 GiB of C4 (P1) | §13.17 | 1.6403 against 1.6206 on the PC | Worse: wrong domain |
+| Wider GLN on the same 1 GiB (P2b) | §13.27 | 1.6359 | Still worse than the 7 MiB GLN |
+| The 1 TB trie (B1 against B0, the C2 chain without the GLN) | §13.27 | 1.6473 against 1.6534 | **Recommended model file** (rule 0.005); not yet run on the current default |
 | **Byte LSTM as a chain stage and input (D1)** | §13.18 | 1.6311 | **Default** |
 | Two learning rates + copy gate (D2) | §13.21 | 1.6489 | **Default** |
 | **D1 + D2 (D3)** | §13.21 | **1.6238** | **The default now** |
@@ -115,16 +120,17 @@ Odin: "Make another two metrics with different maths that complement each other 
 
 | Item | Where | State |
 |---|---|---|
-| Wider 3-level GLN on 1 GiB (§13.23) | Odin's PC | Training; its online bits on C4 are 1.93–1.98 against the narrow GLN's 2.004 |
-| The 1 TB trie with the online mixer (§13.20) | Odin's PC | Asked; not yet reported |
-| R3, the half-space test, GLNB's writing (1 Nov) | Odin's PC, `/mnt/d/cypha_llm/r3_glnb/` | Never collected; asked again with §13.23 |
+| Wider 3-level GLN on 1 GiB (§13.23) | Odin's PC | **Done**: 1.6359, writing 0.143; GLN stays off (§13.27) |
+| The 1 TB trie with the online mixer (§13.20) | Odin's PC | **Done**: −0.0061 (recommended file); writing 0.138, no (§13.27) |
+| R3, the half-space test, GLNB's writing (1 Nov) | Odin's PC | **Collected**: R3 1.6971 / 1.6678; best half-spaces 4 → 6 as data grows; GLNB writing 0.046 (§13.27) |
 | K5 upgrades | Odin's PC | **Done**: test 0.524 → [K5_UPGRADES.md](K5_UPGRADES.md) |
 | K5 on clean Wikipedia from enwik9 | Odin's PC | **Done**: test 0.380 → [K5_SCALE.md](K5_SCALE.md) |
-| Upgraded K5 on the 330 MB text (the two together) | Odin's PC | Next |
+| Upgraded K5 on the 330 MB text (the two together) | Odin's PC | Running again after the PC's restart; v3 reported next to v2 |
+| The 1 TB trie under the current default (n-gram, LSTM 256/20) | Odin's PC | Not run |
 | A judge of another kind for the sentence gate (Odin's blind ratings) | Odin | Next |
 | Online n-gram expert, document-aware learning, a bigger LSTM | Odin's PC | **Done**: 1.5793 → [ONLINE_LEARNING_UPGRADES.md](ONLINE_LEARNING_UPGRADES.md) |
 | SCRIBE v3 | cloud | **Done**: ladder 5 of 5, attacks 5 of 9 → [SCRIBE_V3.md](SCRIBE_V3.md) |
 | SCRIBE v3.1: catch keyword stuffing and generic paragraphs; fresh read on enwik9 | cloud | Proposed |
-| Whole-distribution mixing with APM/SSE (PAQ-style) | Odin's PC | Checks passed, headline runs interrupted (PC offline) → branch `wip/full-mix` |
+| Whole-distribution mixing with APM/SSE (PAQ-style) | Odin's PC | Checks passed; tuned on the first half (ABs 1.5621 against 1.6333); the registered read X1 running again after the PC's restart → branch `wip/full-mix` |
 
 This record is updated as those land.

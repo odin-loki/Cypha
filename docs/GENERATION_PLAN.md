@@ -1484,3 +1484,62 @@ The flags stay (`--k5-lstm`, `--k5-lstm-mix`, `--final-gate lstm`, `lstm-train`)
 - **K5 cross-check:** old K5 → upgraded K5 is v2 +0.145, SURPRISE −0.106, MATCH −0.009, v3 +0.011 (inside the intervals). **The new judges do not confirm the sentence gate's gain.** SURPRISE finds the gated text too predictable: 7.4 bits a word against human text's 9.5. The gate stays provisional (§13.25) until Odin's blind ratings.
 - v2 is unchanged and stays the score of record for comparisons with earlier results. v3, `min3` and `disagree` are reported next to it from now on.
 - No fresh enwik8 range is left for another frozen read of a SCRIBE change. A v3.1 can take its fresh read from enwik9 past enwik8. SCRIBE's design never read it. K5's 330 MB training text comes from there, which does not matter for the judge's own ladder and attacks.
+
+### 13.27 Results: the 1 TB trie (§13.20), the wider GLN (§13.23) and 1 November's runs (2026-11-04)
+
+Collected from the reports on Odin's PC: `D:\cypha_llm\big1tb\report.txt`, `D:\cypha_llm\glnwide\report.txt` (with 1 November's report appended word for word) and `D:\cypha_llm\gln1g\report.txt`. Every job exited cleanly before the PC's WSL restart.
+
+**§13.20, the 1 TB trie.** The binary was the morning's default without the GLN (C2: online chain and final layer, no LSTM, no n-gram).
+
+| | B0: 7 MiB wiki trie | B1: 1 TB trie |
+|---|---:|---:|
+| Trie only | 2.3161 | 3.1146 |
+| Trie + BKN | 2.0278 | 2.0408 |
+| Last chain line | 1.6704 | 1.6638 |
+| **`online_final_bpc`** | **1.6534** | **1.6473** |
+| Wall, peak RSS | 18:15, 251 MB | 13:50, 1.22 GB |
+
+- **B1 is 0.0061 lower: the rule (0.005) holds.** The 1 TB trie is the recommended `context8k` model file. It is a file, not a code default.
+- The prediction (B1 1.640–1.650) held.
+- Answers are the same for both.
+- The two packed 1 TB files (`trie_1tb.pk`, `model2/trie_model2.pk`) differ only in the trie-only line (3.1146, 3.1132).
+- **Not yet measured:** the 1 TB trie under the current default (n-gram and LSTM 256/20). The n-gram already covers much of what a bigger trie adds, so the gain may shrink.
+
+**Writing with the 1 TB trie** (S1, `sample`, SCRIBE v2 on 250 dev prompts):
+
+| T | S1 | S1, model 2 |
+|---|---|---|
+| 0.6 | **0.138** [0.106, 0.173] | 0.141 [0.110, 0.176] |
+| 0.8 | 0.118 | 0.114 |
+| 1.0 | 0.082 | 0.093 |
+
+- The best is 0.138, below the rule's 0.154 (W0's 0.174 − 0.02). **Not recommended for writing.** The prediction (0.15–0.20) missed.
+- Its text still drifts into wiki markup and lists.
+
+**§13.23, the wider GLN at 1 GiB** (reported only; no rule).
+- GW trained in 4 h 02 min on one core: 1.58 GB peak, a 409.5 MB file. Its online bits per byte on C4 held at 1.97–1.99. The last MiB is 1.990, against the narrow GLN's 2.004.
+  - 0.014 lower. **The prediction (at least 0.03 lower) missed.**
+- On the enwik8 holdout (P2b, `--gln-load` without `--no-gln`; the registered P2 had `--no-gln`, which switches the GLN off, and so matched B0 exactly):
+
+| | 7 MiB GLN (P0) | Narrow, 1 GiB (P1) | Wide, 1 GiB (P2b) |
+|---|---:|---:|---:|
+| GLN alone | 1.9455 | 2.1751 | 2.1289 |
+| `online_final_bpc` | **1.6206** | 1.6403 | 1.6359 |
+
+  - Wider helps a little (−0.004 against P1) but stays worse than the 7 MiB GLN. **The prediction held.**
+- Writing (G3, the gate mix): 0.143 at T 0.6, 0.131 at T 0.8, 0.124 at T 1.0. The same as the narrow GLN's best (0.143). **The prediction held.** W0 is 0.174 and K5 0.524.
+- **The GLN stays off.** Width and scale on web text do not fix the domain.
+
+**1 November's runs, collected at last:**
+- **R3:** frozen chain 1.6971, final layer 1.6678. The two binaries' dumps are identical.
+- **Half-spaces in the GLN** (bits per byte):
+
+| Half-spaces | 64 KiB | 512 KiB |
+|---:|---:|---:|
+| 2 | 2.0960 | 2.0173 |
+| 4 | **2.0821** | 2.0021 |
+| 6 | 2.0854 | **1.9967** |
+| 8 | 2.0943 | 1.9982 |
+
+  - The best count rises with data, from 4 at 64 KiB to 6 at 512 KiB. §13.23's choice of 6 for layer 1 fits.
+- **GLNB writing:** best 0.046, against K5's 0.241 in the same run.
