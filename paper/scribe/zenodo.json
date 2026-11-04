@@ -1,5 +1,5 @@
 {
-  "title": "SCRIBE: Scoring Generated Text Against Human Text With Counts Alone",
+  "title": "SCRIBE v3: Three Count-Based Judges of Generated Text",
   "upload_type": "publication",
   "publication_type": "preprint",
   "creators": [
@@ -7,7 +7,7 @@
       "name": "Loch, Odin"
     }
   ],
-  "description": "SCRIBE is a metric for generated text that uses no neural network. It computes about twenty statistics of a text from counts. They cover how much each word's context predicts it beyond its frequency, for words and for word classes; whether the words are real; whether sentences are well formed; how much the sentences share vocabulary and topic, using count-based word vectors; repetition; copying of the training text; and overlap with a prompt. Each statistic is read as a robust z-score against human reference text of the same genre and length. Lexical and syntactic failures count as categorical, saturating evidence, coherence as graded evidence, and repetition only beyond what 99% of human samples show. SCRIBE v2 was designed on development text and then frozen. On fresh Wikipedia text it is the only per-text metric tested that passes all five pairs of a control ladder: human text, then sentences shuffled across documents, words shuffled within sentences, random words, random letters and a repeated phrase, with pairwise accuracies of 0.975 to 1.000. GPT-2 perplexity, a CoLA acceptability classifier, embedding coherence and the usual diversity statistics each pass one or two pairs. SCRIBE v2 also passes on web text, and 3 of 5 pairs on novels. It follows seven of nine held-out kinds of damage and catches copying, prompt echo, keyword stuffing and loops. In its prompted form it separates the right answer to a Dolly question from a fluent answer to another question (accuracy 0.961). On HANNA stories it correlates with human coherence ratings (Kendall 0.194) better than BLEU and ROUGE-L and as well as ChatGPT, though there a plain repetition count does as well. It is stable across seeds, across training-text sizes from 8 to 128 MiB, and with 100 or more reference samples per length bucket. It scores about 1,000 texts per second on one CPU core with 0.4 GB of memory. Its blind spots are sentence order, truncated sentences, factual errors, and text that is more predictable than human text: it rates GPT-2 top-k samples above human web text, and it cannot rank models that all write word salad. Of twenty predictions registered before testing, eight hit, seven missed and five could not be tested as registered.",
+  "description": "SCRIBE is a metric for generated text built from counts alone, with no neural network. Version 1.0 described SCRIBE v2, which reads about twenty statistics of a text against human reference text and passes a control ladder of degraded text where standard per-text metrics fail. This version adds two judges of other kinds. SURPRISE reads the text's code length word by word under a count model of the pack (a Kneser–Ney trigram with spelling models, a cache and a match model), two-sided, so text more predictable than human text loses as surely as salad. MATCH reads matching statistics against a suffix array of the pack, the text's Lempel–Ziv complexity and echo of a prompt. Neither uses word vectors or co-occurrence. They were built because a writer, K5, gained +0.145 on v2 from a sentence gate that picks sentences by word co-occurrence with the prompt, while v2's coherence axis also rests on co-occurrence. The new judges do not confirm that gain (SURPRISE −0.106) or a later gain from more training text. SCRIBE v3, the plain mean of v2, SURPRISE and MATCH, passed its fresh control ladder but caught only 5 of 9 registered attacks, because one judge's catch was diluted. SCRIBE v3.1, the recommended form, is the geometric mean of v2 and new versions of the judges that add statistics for words that fit neither neighbour and for bland text. On two fresh Wikipedia regions it passes all five ladder pairs (0.966–0.968 on the hardest) and all 9 registered attacks (v2: 5), catching copied prompt sentences, keyword stuffing at one word in five or more, and generic paragraphs. It ranks human web text above every GPT-2 top-k system (Spearman +0.90; v2 −0.70), fixing v2's \"too typical\" blind spot in the mean, and it sees relevance to a story prompt (HANNA Kendall 0.169; v2 0.017). It scores about 590 texts per second on one CPU core. It is not fool-proof: it passes only 2 and 3 of 8 held-out attacks; stuffing at one word in seven, a template with the prompt's names, a title swap and loosely related fluent sentences get through. Sentence order, truncated sentences and truth are invisible to all three judges; it does not rank models that all write salad, passes 3 of 5 pairs on novels and 4 of 5 on web text, cannot tell a right answer from another question's on Dolly, and needs 500 reference samples per bucket. Its agreement with people is about v2's. Of twenty predictions registered before this version's reads, twelve hit, five hit in part and three missed.",
   "keywords": [
     "natural language generation",
     "evaluation metrics",
@@ -16,11 +16,17 @@
     "meta-evaluation",
     "n-gram models",
     "count-based methods",
-    "control ladders"
+    "control ladders",
+    "information theory",
+    "surprisal",
+    "suffix arrays",
+    "string matching",
+    "adversarial attacks",
+    "pre-registration"
   ],
   "license": "cc-by-4.0",
-  "version": "1.0",
+  "version": "2.0",
   "language": "eng",
-  "publication_date": "2026-10-28",
-  "notes": "Three files: SCRIBE_paper.pdf (the paper, CC BY 4.0); SCRIBE_code_v1.0.zip (all code: the SCRIBE metric and tool in C++20, the word-vector builder, the evaluation and run scripts, the study plan with the registered predictions, the freeze record and the paper source; GNU AGPL v3); SCRIBE_results_v1.0.zip (every result table of the paper as Markdown, CSV and JSON). No third-party text is redistributed; the code's data.py downloads and prepares every dataset."
+  "publication_date": "2026-11-04",
+  "notes": "Version 2.0 of this record (version 1.0, 28 October 2026, described SCRIBE v2). Three files: SCRIBE_paper.pdf (the paper, CC BY 4.0); SCRIBE_code_v2.0.zip (all code: the SCRIBE metric and tool in C++20 with profiles v1, v2, v3 and v3.1, the word-vector builder, the evaluation and run scripts, every version's freeze record, this version's registration with its predictions, and the paper source; GNU AGPL v3); SCRIBE_results_v2.0.zip (every result table of versions 2.0 and 1.0 as Markdown, CSV and JSON). No third-party text is redistributed; the code's data.py downloads and prepares every dataset."
 }
