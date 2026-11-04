@@ -100,6 +100,45 @@ public:
         return pm;
     }
 
+    // FULL_DISTRIBUTION_MIXING.md (context8k --full-mix): the whole next-byte distribution, mixed (P[256]) and each
+    // order's (Po[q * 256 + s]), from the state code() predicts from, learning nothing. A slot that another context
+    // holds reads as unseen, as claim() leaves it. code(y) then gives P[y] (unless two nodes of one byte share a slot).
+    void dist(double* P, double* Po) {
+        ctx();
+        double pn[256], pq[32][256];
+        double x[33];
+        for (unsigned c0 = 1; c0 < 256; ++c0) {
+            const int j = 31 - __builtin_clz(c0);
+            int seen = 0;
+            for (int q = 0; q < O_; ++q) {
+                const std::size_t key = slot(q, c0);
+                const bool mine = !p_.check || ck_[static_cast<std::size_t>(q)][key] == check(q, c0);
+                const std::uint16_t c = mine ? n_[q][key] : 0, c1 = mine ? n1_[q][key] : 0;
+                const double p = (c1 / 128.0 + 0.4) / (c / 128.0 + 0.8);
+                pq[q][c0] = p;
+                x[q] = c ? gln_stretch(p) : 0.0;
+                if (c) seen = q + 1;
+            }
+            x[O_] = 1.0;
+            const double* w = &W_[(static_cast<std::size_t>(j) * (O_ + 1) + seen) * K_];
+            double s = 0;
+            for (int k = 0; k < K_; ++k) s += w[k] * x[k];
+            pn[c0] = std::clamp(gln_squash(s), 1e-5, 1 - 1e-5);
+        }
+        for (unsigned y = 0; y < 256; ++y) {
+            double pm = 1.0;
+            for (int q = 0; q < O_; ++q) Po[q * 256 + y] = 1.0;
+            unsigned c0 = 1;
+            for (int j = 0; j < 8; ++j) {
+                const unsigned bit = (y >> (7 - j)) & 1u;
+                pm *= bit ? pn[c0] : 1 - pn[c0];
+                for (int q = 0; q < O_; ++q) Po[q * 256 + y] *= bit ? pq[q][c0] : 1 - pq[q][c0];
+                c0 = (c0 << 1) | bit;
+            }
+            P[y] = pm;
+        }
+    }
+
     std::size_t bytes() const {
         std::size_t b = W_.size() * sizeof(double);
         for (const auto& t : n_) b += 2 * t.size() * sizeof(std::uint16_t);
@@ -123,9 +162,12 @@ private:
                                          (k * 0xC2B2AE3D27D4EB4Full)) >> 7 & mask_[static_cast<std::size_t>(q)]);
     }
     // The slot's check (from the hash's high bits, never 0); a slot held by another context is cleared and taken over.
-    void claim(int q, std::size_t key, unsigned c0) {
+    std::uint8_t check(int q, unsigned c0) const {
         const std::uint64_t h = hh_[static_cast<std::size_t>(q)] * 0xD6E8FEB86659FD93ull + c0 * 0x9E3779B97F4A7C15ull;
-        const std::uint8_t c = static_cast<std::uint8_t>((h >> 56) | 1u);
+        return static_cast<std::uint8_t>((h >> 56) | 1u);
+    }
+    void claim(int q, std::size_t key, unsigned c0) {
+        const std::uint8_t c = check(q, c0);
         std::uint8_t& s = ck_[static_cast<std::size_t>(q)][key];
         if (s != c) {
             s = c;

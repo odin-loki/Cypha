@@ -276,8 +276,9 @@ inline std::vector<std::vector<double>> fit_doc(const cyphalm::DocTopic& dt, con
 // GEN-C2: fit_doc's mixture in less memory (context8k, qa's holdout). One stream from the train end; each part's
 // predictions are kept over the first half only, where its lambdas are fit (over cur, in DocTopic's part order) and it
 // is mixed; the second half is mixed as the stream reads it. The same numbers as fit_doc; no DOC lines.
+// lam_out (FULL_DISTRIBUTION_MIXING.md, context8k --full-mix): when given, gets the fitted lambdas, [part * kBuckets + bucket].
 inline void mix_doc_into(const cyphalm::DocTopic& dt, const std::uint8_t* data, std::size_t train, std::size_t half,
-                         std::vector<double>& cur) {
+                         std::vector<double>& cur, std::vector<double>* lam_out = nullptr) {
     const std::size_t span = cur.size(), h = std::min(half, span);
     const auto& p = dt.params();
     const bool on[cyphalm::DocTopic::kParts] = {p.trig, p.cache, p.topic};
@@ -303,6 +304,7 @@ inline void mix_doc_into(const cyphalm::DocTopic& dt, const std::uint8_t* data, 
         std::vector<double>().swap(pe[q]);
         std::vector<int>().swap(bk[q]);
     }
+    if (lam_out) lam_out->assign(&lam[0][0], &lam[0][0] + cyphalm::DocTopic::kParts * cyphalm::DocTopic::kBuckets);
     for (std::size_t k = h; k < span; ++k) {
         for (int q = 0; q < cyphalm::DocTopic::kParts; ++q)
             if (on[q]) {

@@ -286,6 +286,7 @@
 #include "cypha/knowledge/unknown_signals.hpp"
 #include "cypha/online/bitwise_gln.hpp"
 #include "cypha/online/content_mixer.hpp"
+#include "cypha/online/full_mixer.hpp"  // FULL_DISTRIBUTION_MIXING.md: context8k --full-mix
 #include "cypha/online/online_ngram.hpp"
 
 #include <cctype>
@@ -413,6 +414,10 @@ struct Args {
     std::size_t k5_vmax = cypha::cyphalm::wkn::kVmax;    // K5_SCALE: --k5-vmax V
     std::string k5_lstm, k5_lstm_mix = "geo";     // §13.24: --k5-lstm FILE (lstm-train's), reranking K5's nucleus
     double k5_lstm_w = 0.25;                      // §13.24: --k5-lstm-w W, the byte LSTM's weight
+    // FULL_DISTRIBUTION_MIXING.md: context8k --full-mix (whole-distribution mixing, PAQ's way; off by default),
+    // --full-mix-dump FILE (its inputs, for full-mix-replay), --full-mix-params k=v,...
+    bool full_mix = false;
+    std::string full_mix_dump, full_mix_params;
     std::vector<std::pair<std::string, std::string>> k5_opts;  // docs/reports/K5_UPGRADES.md: every other --k5-... flag
 };
 
@@ -505,6 +510,9 @@ Args parse(int argc, char** argv, int from) {
         else if (s == "--one-rate") a.two_rates = false;                // §13.21: the main chain only
         else if (s == "--no-lstm") a.no_lstm = true;                    // §13.18: context8k without the LSTM
         else if (s == "--final-gate") a.final_gate = next();            // §13.21
+        else if (s == "--full-mix") a.full_mix = true;                  // FULL_DISTRIBUTION_MIXING.md
+        else if (s == "--full-mix-dump") a.full_mix_dump = next(), a.full_mix = true;
+        else if (s == "--full-mix-params") a.full_mix_params = next(), a.full_mix = true;
         else if (s == "--ngram") a.ngram = true;                        // ONLINE_LEARNING_UPGRADES
         else if (s == "--no-ngram") a.ngram = false;                    // ONLINE_LEARNING_UPGRADES: B0's lines
         else if (s == "--ngram-orders") a.ngram_orders = next(), a.ngram = true;
@@ -918,6 +926,164 @@ bool good_start(const std::string& l);
 std::vector<double> mix_plan_into(const ContentPlanStore& st, const std::map<std::string, std::vector<std::string>>& frames,
                                   const std::uint8_t* data, std::size_t train, std::size_t half, std::vector<double>& cur);
 
+// FULL_DISTRIBUTION_MIXING.md: context8k --full-mix. One more pass over the holdout: every expert's whole next-byte
+// distribution (rebuilt as the chain built it: the similar-context and document experts and the LSTM are built again,
+// deterministically), streamed into cypha::online::fullmix::FullMixer, which replays the online chain and final layer
+// on whole distributions (checked against the chain here) and runs the PAQ-style arms. Prints full_mix_bpc (the
+// headline arm, second half) and every arm's first and second half. Nothing above it changes.
+int full_mix_context8k(const Args& a, const PackedModel& pm, const double w[6], const std::vector<std::uint8_t>& data,
+                       std::size_t kTrain, std::size_t half, const cypha::cyphalm::bkn::ByteKN* kn,
+                       const FmInfiniGram& ig, const ClassContext* cc, const std::vector<double>& doc_lam,
+                       const std::vector<double>& base, const std::vector<float>* snap3) {
+    namespace fx = cypha::online::fullmix;
+    if (!a.online_mix || !a.online_final || a.gln || a.bkn_way == "a" || (a.final_gate != "copy" && a.final_gate != "ig") ||
+        a.doc_boost != 1.0) {
+        std::cerr << "--full-mix needs the online chain and final layer, no GLN, --bkn-way b, --final-gate copy|ig, no --doc-boost\n";
+        return 2;
+    }
+    const auto t0 = std::chrono::steady_clock::now();
+    const std::size_t H = base.size();
+    int rc = 0;
+    const auto sc = default_sim(a, data.data(), kTrain, rc);
+    if (rc) return rc;
+    std::unique_ptr<DocTopic> dt;
+    if (!a.no_doc && !(dt = make_doc(a.doc.empty() ? std::string("cache") : a.doc, data.data(), kTrain, rc))) return rc ? rc : 1;
+    fx::ChainSpec cs;
+    cs.kn = kn != nullptr, cs.cls = cc != nullptr, cs.sim = sc != nullptr, cs.copy = !a.no_copy, cs.doc = dt != nullptr;
+    cs.lstm = !a.no_lstm, cs.two_rates = a.two_rates, cs.final_gate = a.final_gate;
+    cs.kn_buckets = kn ? kn->buckets() : 1, cs.ig_buckets = kBuckets, cs.cls_buckets = ClassContext::kBuckets;
+    cs.sim_buckets = SimilarContext::kBuckets, cs.copy_buckets = kCopyBuckets, cs.doc_buckets = DocTopic::kBuckets;
+    cs.doc_lam = doc_lam;
+    if (dt) {
+        const auto& dp = dt->params();
+        cs.doc_on[0] = dp.trig, cs.doc_on[1] = dp.cache, cs.doc_on[2] = dp.topic;
+    }
+    // The online n-gram (ONLINE_LEARNING_UPGRADES), built and warmed as the chain built it; dist() gives its whole
+    // distributions, then code() learns the byte as in the chain.
+    std::unique_ptr<cypha::online::OnlineNgram> ng;
+    if (a.ngram) {
+        cypha::online::OnlineNgram::Params np;
+        np.orders.clear();
+        for (std::size_t p0 = 0; p0 < a.ngram_orders.size();) {
+            const std::size_t p1 = std::min(a.ngram_orders.find(',', p0), a.ngram_orders.size());
+            np.orders.push_back(std::atoi(a.ngram_orders.substr(p0, p1 - p0).c_str()));
+            p0 = p1 + 1;
+        }
+        np.tb = a.ngram_tb, np.cap = a.ngram_cap, np.lr = a.ngram_lr;
+        ng = std::make_unique<cypha::online::OnlineNgram>(np);
+        const std::size_t warm = std::min<std::size_t>(kTrain, std::size_t{1} << 20);
+        ng->pretrain(data.data(), kTrain - warm);
+        double po[32];
+        for (std::size_t i = kTrain - warm; i < kTrain; ++i) ng->code(data[i], po);
+        cs.ngram_orders = ng->orders();
+    }
+    // The byte LSTM at the chain's size and window.
+    std::function<void(double*)> lstm_dist;
+    std::function<void(std::uint8_t)> lstm_step;
+    std::shared_ptr<void> lstm_hold;
+    auto make_lstm = [&](auto tag) {
+        using T = typename decltype(tag)::type;
+        auto L = std::make_shared<T>(0, 0.003, a.lstm_window);
+        lstm_dist = [L](double* p) { L->dist(p); };
+        lstm_step = [L](std::uint8_t y) { L->step(y, true); };
+        lstm_hold = L;
+    };
+    if (cs.lstm) {
+        if (a.lstm_size == 64) make_lstm(std::type_identity<cypha::online::ByteLSTMT<64>>{});
+        else if (a.lstm_size == 128) make_lstm(std::type_identity<cypha::online::ByteLSTMT<128>>{});
+        else make_lstm(std::type_identity<cypha::online::ByteLSTMT<256>>{});
+    }
+    fx::Params P;
+    if (!P.parse(a.full_mix_params)) {
+        std::cerr << "--full-mix-params k=v,... (lr1 lr2 lrb apm eps floor decay ssef a2bits headline)\n";
+        return 2;
+    }
+    fx::FullMixer fm(cs, P, half);
+    fm.set_trie_weights(w);
+    const int head = fm.arm(P.headline);
+    if (head < 0) {
+        std::cerr << "--full-mix-params headline=ARM (F Fn Fs A As Rs B Bs ABs)\n";
+        return 2;
+    }
+    std::ofstream df;
+    if (!a.full_mix_dump.empty()) {
+        df.open(a.full_mix_dump, std::ios::binary);
+        fx::DumpHeader hd;
+        hd.H = H, hd.half = half, hd.kn = cs.kn, hd.cls = cs.cls, hd.sim = cs.sim, hd.copy = cs.copy, hd.doc = cs.doc;
+        hd.lstm = cs.lstm, hd.two_rates = cs.two_rates, hd.gate_copy = cs.final_gate == "copy";
+        for (int q = 0; q < 3; ++q) hd.doc_on[q] = cs.doc_on[q];
+        hd.kn_buckets = cs.kn_buckets, hd.doc_buckets = cs.doc_buckets;
+        std::copy(w, w + 6, hd.tw);
+        std::copy(doc_lam.begin(), doc_lam.end(), hd.doc_lam);
+        df.write(reinterpret_cast<const char*>(&hd), sizeof hd);
+        const std::uint32_t ngo = static_cast<std::uint32_t>(cs.ngram_orders);
+        df.write(reinterpret_cast<const char*>(&ngo), sizeof ngo);
+    }
+    std::unique_ptr<DocTopic::Stream> ds;
+    if (dt) ds = std::make_unique<DocTopic::Stream>(*dt);
+    static const int caps[5] = {4, 16, 64, 512, 8192};
+    FmInfiniGram::Cursor cur[5];
+    int prev[5] = {-1, -1, -1, -1, -1};
+    double maxd = 0, maxd3 = 0, maxng = 0;
+    std::vector<double> Png(256), Pngo(static_cast<std::size_t>(std::max(cs.ngram_orders, 1)) * 256);
+    for (std::size_t k = 0; k < H; ++k) {
+        const std::size_t i = kTrain + k;
+        fx::ByteIn in;
+        in.y = data[i], in.prev = data[i - 1], in.prev2 = data[i - 2];
+        double e[5][256];
+        unsigned pred = 0;
+        pm.fill_experts(data.data(), i, kTrain, Mode::Synth, e, in.em, pred, false);
+        in.pred = pred;
+        for (int j = 0; j < 5; ++j) in.trie[j] = e[j];
+        double Pk[256];
+        if (kn) {
+            int band = 0;
+            const int d = kn->dist(data.data(), i, Pk, &band);
+            in.kn = Pk, in.kn_b = d == 0 ? 0 : (d - 1) * 3 + band;
+        }
+        double Pi[5][256];
+        for (int c = 0; c < 5; ++c) {
+            const std::size_t len = std::min<std::size_t>(i, static_cast<std::size_t>(caps[c]));
+            const int hint = prev[c] < 0 ? -1 : std::min(prev[c] + 1, caps[c]);
+            const auto r = ig.query(data.data() + (i - len), len, caps[c], hint, 1, cur[c]);
+            prev[c] = r.n;
+            if (r.total) {
+                for (int s = 0; s < 256; ++s) Pi[c][s] = static_cast<double>(r.count[s]) / static_cast<double>(r.total);
+                in.ig[c] = Pi[c];
+            }
+            if (c == 4) in.ig_b = bucket(r.n, r.total), in.ig_n = r.n;
+        }
+        double Pc[256], Ps[256], Pd[3][256], Pl[256];
+        if (cc) in.cls_b = ClassContext::bucket(cc->predict(data.data(), i, Pc)), in.cls = Pc;
+        if (sc) in.sim_b = SimilarContext::bucket(sc->predict(data.data(), i, Ps)), in.sim = Ps;
+        in.cpred = copy_pred(data.data(), i, in.cn);
+        if (ds)
+            for (int q = 0; q < 3; ++q)
+                if (cs.doc_on[q]) in.doc_b[q] = ds->predict(q, Pd[q]), in.doc[q] = Pd[q];
+        if (cs.lstm) lstm_dist(Pl), in.lstm = Pl;
+        if (ng) ng->dist(Png.data(), Pngo.data()), in.ngram = Png.data(), in.ngram_o = Pngo.data();
+        fm.step(in, k);
+        if (df.is_open()) fx::dump_byte(df, in, cs.ngram_orders);
+        maxd = std::max(maxd, std::abs(fm.chain_y() - base[k]));
+        if (snap3) maxd3 = std::max(maxd3, std::abs(static_cast<double>(static_cast<float>(fm.snap3_y())) - (*snap3)[k]));
+        if (ds) ds->feed(data[i]);
+        if (cs.lstm) lstm_step(data[i]);
+        if (ng) {
+            double po[32];
+            maxng = std::max(maxng, std::abs(ng->code(data[i], po) - Png[data[i]]));
+        }
+    }
+    std::printf("full_mix_bpc %.4f (arm %s; first half %.4f)\n", fm.bpc(1, head), P.headline.c_str(), fm.bpc(0, head));
+    std::fflush(stdout);
+    std::ostringstream o;
+    fm.report(o);
+    std::printf("%sfull_mix_check chain_max_abs_diff %.3g after_copy_max_abs_diff %.3g ngram_dist_max_abs_diff %.3g\n",
+                o.str().c_str(), maxd, maxd3, maxng);
+    std::cerr << "full_mix state_bytes " << fm.bytes() << " seconds "
+              << std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count() << "\n";
+    return 0;
+}
+
 int cmd_context8k(const Args& a) {
     Config cfg = a.cfg;
     std::vector<std::uint8_t> data;
@@ -1174,11 +1340,12 @@ int cmd_context8k(const Args& a) {
     // GEN-C2 (docs/reports/GEN_C_TOPIC_CACHE.md, "GEN-C2"): the document experts' cache (--doc SPEC to read another
     // setting), last, over wiki train's words; its lambdas on the first half, its line on the second. --no-doc leaves
     // it out. The answers below never read it.
+    std::vector<double> doc_lam;  // --full-mix reads the doc stage's lambdas
     if (!a.no_doc) {
         int drc = 0;
         const auto dt = make_doc(a.doc.empty() ? std::string("cache") : a.doc, data.data(), kTrain, drc);
         if (!dt) return drc ? drc : 1;
-        mix_doc_into(*dt, data.data(), kTrain, half, base);
+        mix_doc_into(*dt, data.data(), kTrain, half, base, &doc_lam);
         chain_line("_doc");
         if (keep) {  // GLNX: the document experts' parts over the whole holdout, as mix_doc_into reads them
             const auto& dp = dt->params();
@@ -1443,6 +1610,11 @@ int cmd_context8k(const Args& a) {
             std::cout << "online_final_bpc " << fin_bits / static_cast<double>(H - half) << " (chain "
                       << chain_bits / static_cast<double>(H - half) << ")\n";
     }
+    // FULL_DISTRIBUTION_MIXING.md: --full-mix mixes every expert's whole distribution, PAQ's way, after the final layer.
+    if (a.full_mix)
+        if (const int frc = full_mix_context8k(a, pm, w, data, kTrain, half, kn.get(), ig, cc.get(), doc_lam, base,
+                                               snaps.size() == 4 ? &snaps[3] : nullptr))
+            return frc;
 
     const int edges[] = {4, 8, 16, 32, 64, 256, 1024, 8193};
     const char* names[] = {"<4", "4-7", "8-15", "16-31", "32-63", "64-255", "256-1023", "1024-8192"};
@@ -6920,6 +7092,58 @@ int cmd_selftest() {
             return 1;
         }
     }
+    {  // FULL_DISTRIBUTION_MIXING.md: the 8 path bits give back D(y) / sum D; a bitwise mixer with SSE, learning bit by
+       // bit along each byte's path, gives the 256 bytes probabilities that sum to 1.
+        namespace fx = cypha::online::fullmix;
+        std::mt19937 rr(5);
+        std::uniform_real_distribution<double> u01(0, 1);
+        double D[3][256];
+        for (auto& d : D)
+            for (double& x : d) x = std::pow(u01(rr), 6);
+        double z = 0;
+        for (double x : D[0]) z += x;
+        bool okf = true;
+        for (unsigned y : {0u, 65u, 200u, 255u}) {
+            double b[8], p = 1;
+            fx::path_bits(D[0], y, b);
+            for (int j = 0; j < 8; ++j) p *= (y >> (7 - j)) & 1 ? b[j] : 1 - b[j];
+            okf = okf && std::fabs(p - D[0][y] / z) < 1e-12;
+        }
+        fx::Params P;
+        P.a2_bits = 8;
+        fx::BitMixer m0(4, {256, 8}, 0, 0.02, 0.02, 0, P.eps);
+        fx::Sse s0(P);
+        fx::ByteIn in;
+        auto code = [&](fx::BitMixer& m, fx::Sse& s, unsigned y) {  // P(y) bit by bit, learning each bit
+            double bits[3][8], p = 1;
+            for (int j = 0; j < 3; ++j) fx::path_bits(D[j], y, bits[j]);
+            unsigned c0 = 1;
+            for (int j = 0; j < 8; ++j) {
+                const int bit = (y >> (7 - j)) & 1;
+                double x[4] = {0, 0, 0, 0.25};
+                for (int q = 0; q < 3; ++q) x[q] = fx::stretch_eps(bits[q][j], P.eps);
+                const int ctx[2] = {static_cast<int>(c0), j};
+                const double pb = s.p(std::clamp(m.p(x, ctx, j), P.eps, 1 - P.eps), in, c0, j);
+                p *= bit ? pb : 1 - pb;
+                m.update(bit);
+                s.update(bit);
+                c0 = c0 * 2 + static_cast<unsigned>(bit);
+            }
+            return p;
+        };
+        for (unsigned t = 0; t < 300; ++t) code(m0, s0, (t * 37 + t / 7) & 255);  // learn a little first
+        double sum = 0;
+        for (unsigned y = 0; y < 256; ++y) {
+            fx::BitMixer m = m0;
+            fx::Sse s = s0;
+            sum += code(m, s, y);
+        }
+        okf = okf && std::fabs(sum - 1) < 1e-9;
+        if (!okf) {
+            std::cerr << "selftest: full mixer's bit decomposition or normalisation wrong (sum " << sum << ")\n";
+            return 1;
+        }
+    }
     std::cout << "selftest ok\n";
     return 0;
 }
@@ -7279,6 +7503,8 @@ int main(int argc, char** argv) {
     if (cmd == "simpair") return cmd_simpair(std::vector<std::string>(argv + 2, argv + argc));  // A4e
     if (cmd == "gln-train") return cmd_gln_train(std::vector<std::string>(argv + 2, argv + argc));  // §13.17
     if (cmd == "lstm-train") return cmd_lstm_train(std::vector<std::string>(argv + 2, argv + argc));  // §13.24
+    if (cmd == "full-mix-replay" && argc >= 3)  // FULL_DISTRIBUTION_MIXING.md: replay context8k --full-mix-dump's inputs
+        return cypha::online::fullmix::replay(argv[2], argc > 3 ? argv[3] : "");
     Args a = parse(argc, argv, 2);
     if (!a.ok) {
         usage();
