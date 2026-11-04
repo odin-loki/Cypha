@@ -384,16 +384,17 @@ struct Args {
     bool mix_set = false;                         // --gln-mix or --lstm-mix given
     bool two_rates = true;                        // §13.21: slow and fast chains (context8k)
     std::string final_gate = "copy";              // §13.21: the final layer's weight sets: copy (default) or ig
-    // ONLINE_LEARNING_UPGRADES (docs/reports/ONLINE_LEARNING_UPGRADES.md), context8k only: --ngram (the online n-gram
-    // expert: a chain stage and final-layer inputs), --doc-boost B [--doc-span N] (online steps x B for the first N bytes
-    // of each page), --lstm-size 64|128|256 and --lstm-window T (the chain's LSTM; 64 and 20 as before).
-    bool ngram = false;
+    // ONLINE_LEARNING_UPGRADES (docs/reports/ONLINE_LEARNING_UPGRADES.md), context8k only: the online n-gram expert (a chain
+    // stage and final-layer inputs; 24 table bits) and the LSTM at hidden 256 (window 20) are the defaults since its C-L3
+    // arm (2026-11-04); --no-ngram and --lstm-size 64 restore the lines before. --doc-boost B [--doc-span N] (online steps
+    // x B for the first N bytes of each page) lost and stays off.
+    bool ngram = true;
     std::string ngram_orders = "1,2,3,4,5,6,8,12";
-    int ngram_tb = 22, ngram_cap = 60;
+    int ngram_tb = 24, ngram_cap = 60;
     double ngram_lr = 0.005;
     double doc_boost = 1.0;
     int doc_span = 1024;
-    int lstm_size = 64, lstm_window = 20;
+    int lstm_size = 256, lstm_window = 20;
     double dk_plain = 0;                          // DK2: share of don't-know training turns with no token
     std::string fam_ent_at = "all";               // DK2: where --fam-ent's frames go (all | answer | start)
     bool copy_frame = false;                      // DK2: copy a frame's entity, not its end; the tag may repeat the message
@@ -495,6 +496,7 @@ Args parse(int argc, char** argv, int from) {
         else if (s == "--no-lstm") a.no_lstm = true;                    // §13.18: context8k without the LSTM
         else if (s == "--final-gate") a.final_gate = next();            // §13.21
         else if (s == "--ngram") a.ngram = true;                        // ONLINE_LEARNING_UPGRADES
+        else if (s == "--no-ngram") a.ngram = false;                    // ONLINE_LEARNING_UPGRADES: B0's lines
         else if (s == "--ngram-orders") a.ngram_orders = next(), a.ngram = true;
         else if (s == "--ngram-tb") a.ngram_tb = std::atoi(next()), a.ngram = true;
         else if (s == "--ngram-cap") a.ngram_cap = std::atoi(next()), a.ngram = true;
