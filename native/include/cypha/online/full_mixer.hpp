@@ -24,6 +24,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cctype>
 #include <cmath>
 #include <cstdint>
@@ -407,8 +408,10 @@ class FullMixer {
 
     /// One holdout byte k: every arm predicts it, is scored, then learns it.
     void step(const ByteIn& in, std::size_t k) {
+        t_last_ = std::chrono::steady_clock::now();
         const unsigned y = in.y;
         static const double zero[256] = {};
+        tick(0);
         // ---- the chain on whole distributions (cyphalm_trie context8k's order; content_mixer.hpp's arithmetic)
         double TM[256];
         {
@@ -457,6 +460,7 @@ class FullMixer {
         chain_y_ = ch[0][y];
         snap3_y_ = snap_[3][y];
 
+        tick(1);
         // ---- the final layer on whole distributions (OnlineFinal's arithmetic; the row's values as float)
         auto fl = [](double v) { return static_cast<double>(static_cast<float>(v)); };
         std::vector<std::array<double, 256>>& q = q_;
@@ -514,6 +518,7 @@ class FullMixer {
         for (int s = 0; s < 256; ++s) Fn[s] = F[s] / fsum;
         fsum_acc_ += fsum;
 
+        tick(2);
         // ---- the inputs of the PAQ mixers (unnormalised is fine for bits; geo normalises)
         const double* all[kMax];
         {
@@ -539,6 +544,7 @@ class FullMixer {
             else std::fill(bits[j], bits[j] + 8, 0.5);
         }
 
+        tick(3);
         // ---- B: geometric mixing of the normalised, floored distributions (and copy's one-hot)
         double Lb[kMax + 1][256];
         const double* L[kMax + 1];
@@ -562,6 +568,7 @@ class FullMixer {
         double bitsB[8];
         path_bits(PB, y, bitsB);
 
+        tick(4);
         // ---- bit by bit along the true byte: every arm predicts the bit, then learns it
         double lp[kArms] = {};
         lp[0] = std::log2(std::max(pf, 1e-12));
@@ -629,6 +636,7 @@ class FullMixer {
         for (int a = 0; a < kArms; ++a) bits_[h][a] -= lp[a];
         ++n_[h];
 
+        tick(5);
         // ---- learning from y: the geometric mixer, then the final layer (OnlineFinal::update)
         geo_->update(y);
         {
@@ -638,8 +646,17 @@ class FullMixer {
             for (int j = 0; j < nfin_; ++j) z2 += (w[j] = std::max(w[j] / z, 1e-7));
             for (int j = 0; j < nfin_; ++j) w[j] /= z2;
         }
+        tick(6);
     }
 
+    /// Seconds spent in each part of step (chain, final layer, bit inputs, geometric, bitwise loop, learning).
+    std::string profile() const {
+        static const char* name[kParts] = {"chain", "final", "bits", "geo", "bitloop", "learn"};
+        std::string o;
+        char b[64];
+        for (int i = 0; i < kParts; ++i) std::snprintf(b, sizeof b, "%s%s %.1f", i ? " " : "", name[i], prof_[i]), o += b;
+        return o;
+    }
     void set_trie_weights(const double w[6]) { std::copy(w, w + 6, tw_); }
     double chain_y() const { return chain_y_; }    // the replica chain's probability of the last true byte
     double snap3_y() const { return snap3_y_; }    // ... after copy
@@ -664,7 +681,15 @@ class FullMixer {
     // The "all" list: 0-4 trie experts, 5 trie mixture, 6 KN, 7-11 InfiniGram caps, 12 class, 13 similar, 14 doc,
     // 15 LSTM, then (with the n-gram) the mixed n-gram and each order, then the chain after InfiniGram/class/similar/
     // copy, the chain, the slow and fast chains, and Fn last. The raw list is everything before the chain (kRaw_).
-    static constexpr int kMax = 48, kRawTM = 5;
+    static constexpr int kMax = 48, kRawTM = 5, kParts = 6;
+    std::chrono::steady_clock::time_point t_last_;
+    double prof_[kParts] = {};
+    // Ends part i - 1 (tick(0) only restarts the clock).
+    void tick(int i) {
+        const auto t = std::chrono::steady_clock::now();
+        if (i > 0) prof_[i - 1] += std::chrono::duration<double>(t - t_last_).count();
+        t_last_ = t;
+    }
     int kAll_ = 24, kRaw_ = 16;
     ChainSpec cs_;
     Params P_;
@@ -796,6 +821,7 @@ inline int replay(const std::string& path, const std::string& params) {
     }
     fm.report(std::cout);
     std::cout << "full_mix_state_bytes " << fm.bytes() << "\n";
+    std::cerr << "full_mix profile_s " << fm.profile() << "\n";
     return 0;
 }
 
