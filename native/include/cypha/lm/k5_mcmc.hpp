@@ -51,12 +51,63 @@
 
 namespace cypha::cyphalm::wkn::mcmc {
 
-// An extra paragraph term (topic or entity models): begin reads the prompt's ids; score gives the term for the
-// paragraph's ids (the prompt is not in para). One per continuation.
+// An extra paragraph term (topic or entity models): begin reads the prompt (K5's ids and tokens); score gives the term
+// for the paragraph (its ids, and its tokens: the same words, the held last token as written). One per continuation.
 struct ParaTerm {
     virtual ~ParaTerm() = default;
-    virtual void begin(const K5& m, const std::vector<std::uint32_t>& prompt) = 0;
-    virtual double score(const K5& m, const std::vector<std::uint32_t>& para) = 0;
+    virtual void begin(const K5& m, const std::vector<std::uint32_t>& ids, const std::vector<std::string>& toks) = 0;
+    virtual double score(const K5& m, const std::vector<std::uint32_t>& ids, const std::vector<std::string>& toks) = 0;
+};
+
+// wip/k5-discourse's LDA (lda.hpp), given the prompt: the sum over the paragraph's content words of
+// log2 (p_topic(w | theta) / p(w)), theta the prompt's topic mixture (lda::LDA::log_ratio(infer(prompt), paragraph)).
+struct LdaTerm : ParaTerm {
+    std::shared_ptr<const lda::LDA> lda;
+    std::vector<double> r;  // per K5 id
+    explicit LdaTerm(std::shared_ptr<const lda::LDA> m) : lda(std::move(m)) {}
+    void begin(const K5& m, const std::vector<std::uint32_t>&, const std::vector<std::string>& toks) override {
+        const auto theta = lda->infer(toks);
+        r.assign(m.vocab().size(), 0.0);
+        for (std::size_t w = 2; w < r.size(); ++w) {
+            const long x = lda->id(m.vocab()[w]);
+            if (x >= 0) r[w] = std::log2(lda->p_topic(theta, static_cast<std::size_t>(x)) / lda->unigram(static_cast<std::size_t>(x)));
+        }
+        th = theta;
+    }
+    double score(const K5&, const std::vector<std::uint32_t>& ids, const std::vector<std::string>& toks) override {
+        double t = 0;
+        for (std::size_t i = 0; i + 1 < ids.size(); ++i) t += r[ids[i]];
+        if (!toks.empty()) {  // the held last token, as written (it may be outside K5's vocabulary)
+            const long x = lda->id(toks.back());
+            if (x >= 0) t += std::log2(lda->p_topic(th, static_cast<std::size_t>(x)) / lda->unigram(static_cast<std::size_t>(x)));
+        }
+        return t;
+    }
+    std::vector<double> th;
+};
+
+// wip/k5-discourse's entity grid (entity_grid.hpp), after the prompt's sentences: full, the change in the grid's log2
+// probability when the paragraph's sentences follow the prompt's; cont, the kept entities' term only
+// (eg::EntityGrid::score(prompt, paragraph, cont)).
+struct GridTerm : ParaTerm {
+    std::shared_ptr<const eg::EntityGrid> g;
+    bool cont = false;
+    eg::EntityGrid::History h0;
+    GridTerm(std::shared_ptr<const eg::EntityGrid> m, bool c) : g(std::move(m)), cont(c) {}
+    void begin(const K5&, const std::vector<std::uint32_t>&, const std::vector<std::string>& toks) override {
+        h0 = {};
+        for (const auto& s : eg::split_sentences(toks)) g->append(h0, g->roles(s));
+    }
+    double score(const K5&, const std::vector<std::uint32_t>&, const std::vector<std::string>& toks) override {
+        eg::EntityGrid::History h = h0;
+        double d = 0;
+        for (const auto& s : eg::split_sentences(toks)) {
+            const eg::SentRoles r = g->roles(s);
+            d += cont ? g->continuation_score(h, r) : g->append_logp(h, r);
+            g->append(h, r);
+        }
+        return d;
+    }
 };
 
 struct Params {
@@ -68,15 +119,16 @@ struct Params {
     int k = 64;               // --k5-mcmc-k: candidates per proposal
     double eps = 0.1;         // --k5-mcmc-eps: share of draws from K5's whole left distribution
     double p_rep = 0.5, p_ins = 0.25, p_del = 0.25;  // --k5-mcmc-moves R,I,D (normalised)
-    std::string topic = "cache";  // --k5-mcmc-topic: cache (the stand-in), or a model of wip/k5-discourse
-    std::string entity;           // --k5-mcmc-entity: a model of wip/k5-discourse
+    std::string topic = "cache";  // --k5-mcmc-topic: cache (the stand-in) or lda (wip/k5-discourse's LDA; --k5-mcmc-lda PATH)
+    std::string entity = "full";  // --k5-mcmc-entity: full or cont (wip/k5-discourse's entity grid; --k5-mcmc-eg PATH)
+    std::string lda_path, eg_path;  // --k5-mcmc-lda PATH, --k5-mcmc-eg PATH: the models (loaded, or trained on K5's text and saved)
     // Factories for the topic and entity terms (set by the tool once their models are loaded); null: the stand-in
     // cache for the topic, nothing for the entity term.
     std::function<std::unique_ptr<ParaTerm>()> topic_term, entity_term;
     std::string describe() const {
         char b[512];
-        std::snprintf(b, sizeof b, "\tmcmc=%d\tmcmc_t=%g-%g\tmcmc_lt=%g(%s)\tmcmc_le=%g%s%s\tmcmc_lr=%g\tmcmc_len=%g\tmcmc_k=%d\tmcmc_eps=%g\tmcmc_moves=%g,%g,%g",
-                      steps, t0, t1, lt, topic.c_str(), le, entity.empty() ? "" : "(", entity.empty() ? "" : (entity + ")").c_str(), lr, sigma, k, eps,
+        std::snprintf(b, sizeof b, "\tmcmc=%d\tmcmc_t=%g-%g\tmcmc_lt=%g(%s)\tmcmc_le=%g(%s)\tmcmc_lr=%g\tmcmc_len=%g\tmcmc_k=%d\tmcmc_eps=%g\tmcmc_moves=%g,%g,%g",
+                      steps, t0, t1, lt, topic.c_str(), le, entity.c_str(), lr, sigma, k, eps,
                       p_rep, p_ins, p_del);
         return b;
     }
@@ -99,8 +151,10 @@ inline bool apply_flag(const std::string& name, const std::string& val, Params& 
     if (name == "--k5-mcmc-len") return num(p.sigma, 0.1, 1e6);
     if (name == "--k5-mcmc-k") return num(x, 1, 4096) && ((p.k = static_cast<int>(x)), true);
     if (name == "--k5-mcmc-eps") return num(p.eps, 1e-6, 1);
-    if (name == "--k5-mcmc-topic") return p.topic = val, true;
-    if (name == "--k5-mcmc-entity") return p.entity = val, true;
+    if (name == "--k5-mcmc-topic") return val == "cache" || val == "lda" ? (p.topic = val, true) : (err = name + ": cache or lda", false);
+    if (name == "--k5-mcmc-entity") return val == "full" || val == "cont" ? (p.entity = val, true) : (err = name + ": full or cont", false);
+    if (name == "--k5-mcmc-lda") return p.lda_path = val, true;
+    if (name == "--k5-mcmc-eg") return p.eg_path = val, true;
     if (name == "--k5-mcmc-moves") {
         double v[3];
         if (std::sscanf(val.c_str(), "%lf,%lf,%lf", &v[0], &v[1], &v[2]) != 3 || v[0] < 0 || v[1] < 0 || v[2] < 0 || v[0] + v[1] + v[2] <= 0 ||
@@ -161,10 +215,11 @@ class Chain {
         beta_ = -tot / n0_;
         // The topic stand-in: the prompt's content words.
         std::vector<std::uint32_t> pids(S_.begin() + 1, S_.begin() + static_cast<std::ptrdiff_t>(P_));
+        const std::vector<std::string> ptoks = tokens(prompt);
         if (pr_.lt > 0) {
             if (pr_.topic_term) {
                 topic_ = pr_.topic_term();
-                topic_->begin(m_, pids);
+                topic_->begin(m_, pids, ptoks);
             } else {
                 double nc = 0;
                 for (const std::uint32_t w : pids)
@@ -174,7 +229,7 @@ class Chain {
         }
         if (pr_.le > 0 && pr_.entity_term) {
             entity_ = pr_.entity_term();
-            entity_->begin(m_, pids);
+            entity_->begin(m_, pids, ptoks);
         }
         other_ = other(S_);
         capv_ = capv(S_, 1, 0);
@@ -410,13 +465,17 @@ class Chain {
         e += beta_ * n - 0.5 * ((n - n0_) / pr_.sigma) * ((n - n0_) / pr_.sigma);
         if (pr_.lt > 0 || (pr_.le > 0 && entity_)) {
             para_.assign(S.begin() + static_cast<std::ptrdiff_t>(P_), S.end());
+            if (topic_ || entity_) {
+                ptok_.resize(para_.size());
+                for (std::size_t i = 0; i < para_.size(); ++i) ptok_[i] = i + 1 == para_.size() ? last_ : m_.vocab()[para_[i]];
+            }
             if (pr_.lt > 0) e += pr_.lt * topic(para_);
-            if (pr_.le > 0 && entity_) e += pr_.le * entity_->score(m_, para_);
+            if (pr_.le > 0 && entity_) e += pr_.le * entity_->score(m_, para_, ptok_);
         }
         return e;
     }
     double topic(const std::vector<std::uint32_t>& x) {
-        if (topic_) return topic_->score(m_, x);
+        if (topic_) return topic_->score(m_, x, ptok_);
         double t = 0;
         uses_.clear();
         for (const std::uint32_t w : x) {
@@ -445,6 +504,7 @@ class Chain {
     K5::State st_;
     std::vector<double> pl_, raw_, tmp_, cL_, cw_;
     std::vector<std::uint32_t> cand_, buf_, para_;
+    std::vector<std::string> ptok_;
     std::vector<std::pair<double, std::uint32_t>> heap_;
     std::unordered_map<std::uint32_t, std::size_t> inC_;
     std::unordered_set<std::uint64_t> seen_;
@@ -592,6 +652,57 @@ inline bool self_test(std::string& err) {
                 err = "chain output: " + out;
                 return false;
             }
+        }
+    }
+    {  // The discourse terms equal wip/k5-discourse's own calls, and the chain tracks its energy with them on.
+        K5 m;
+        m.build(text, 12, kOrder, 8);
+        const auto tok = [](std::string_view line, auto&& emit) { tokenize(line, emit); };
+        auto L = std::make_shared<lda::LDA>();
+        lda::Params lp;
+        lp.K = 4, lp.iters = 30, lp.min_count = 2;
+        L->train_lines(text, tok, lp);
+        auto G = std::make_shared<eg::EntityGrid>();
+        G->train_lines(text, tok, 2);
+        const std::string prompt = "The king of France found Paris. Her brother", para = " lost the river. The king of France saw a small house. It";
+        const auto pt = tokens(prompt), ct = tokens(para);
+        std::vector<std::uint32_t> pid, cid;
+        for (const auto& t : pt) pid.push_back(m.id(t));
+        for (const auto& t : ct) cid.push_back(m.id(t));
+        LdaTerm lt(L);
+        lt.begin(m, pid, pt);
+        const double a1 = lt.score(m, cid, ct), b1 = L->log_ratio(L->infer(pt), ct);
+        for (const bool cont : {false, true}) {
+            GridTerm gt(G, cont);
+            gt.begin(m, pid, pt);
+            const double a2 = gt.score(m, cid, ct), b2 = G->score(pt, ct, cont);
+            if (std::fabs(a2 - b2) > 1e-9) {
+                err = "GridTerm " + std::to_string(a2) + " vs EntityGrid::score " + std::to_string(b2);
+                return false;
+            }
+        }
+        if (std::fabs(a1 - b1) > 1e-9 * (1 + std::fabs(b1))) {
+            err = "LdaTerm " + std::to_string(a1) + " vs log_ratio " + std::to_string(b1);
+            return false;
+        }
+        Params pr;
+        pr.steps = 300, pr.lt = 0.5, pr.le = 0.5, pr.topic = "lda";
+        pr.topic_term = [L] { return std::make_unique<LdaTerm>(L); };
+        pr.entity_term = [G] { return std::make_unique<GridTerm>(G, false); };
+        Options o;
+        o.bytes = 200;
+        const std::string g = m.generate(prompt, 3, o);
+        Chain c(m, pr);
+        if (!c.init(prompt, g)) {
+            err = "chain init (discourse terms): " + g;
+            return false;
+        }
+        std::mt19937_64 rng(5);
+        Stats st;
+        for (int t = 0; t < pr.steps; ++t) c.step(rng, 0.8, st);
+        if (std::fabs(c.energy() - c.energy_full()) > 1e-6 * (1 + std::fabs(c.energy())) || st.acc[0] + st.acc[1] + st.acc[2] == 0) {
+            err = "chain with the discourse terms: tracked " + std::to_string(c.energy()) + " vs " + std::to_string(c.energy_full());
+            return false;
         }
     }
     {  // Flags.

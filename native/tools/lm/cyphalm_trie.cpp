@@ -2111,9 +2111,48 @@ int cmd_sample(const Args& a) {
         }
         cypha::cyphalm::wkn::mcmc::SharedStats mstats;  // K5_MCMC.md
         if (mp.steps > 0) {
-            if (!mp.entity.empty() || (mp.topic != "cache" && mp.lt > 0)) {
-                std::cerr << "--k5-mcmc-topic / --k5-mcmc-entity: only the stand-in cache is built in this version\n";
-                return 2;
+            namespace mc = cypha::cyphalm::wkn::mcmc;
+            std::string ktext;  // K5's text, if a model must be trained
+            const auto read_k5 = [&]() -> const std::string& {
+                if (ktext.empty()) {
+                    std::ifstream in(a.k5, std::ios::binary);
+                    ktext.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+                }
+                return ktext;
+            };
+            const auto tok = [](std::string_view line, auto&& emit) { cypha::cyphalm::wkn::tokenize(line, emit); };
+            if (mp.lt > 0 && mp.topic == "lda") {  // wip/k5-discourse's LDA: 100 topics, 200 sweeps, exact
+                if (mp.lda_path.empty()) {
+                    std::cerr << "--k5-mcmc-topic lda needs --k5-mcmc-lda PATH\n";
+                    return 2;
+                }
+                auto L = std::make_shared<cypha::cyphalm::lda::LDA>();
+                const bool hit = L->load(mp.lda_path);
+                if (!hit) {
+                    L->train_lines(read_k5(), tok, cypha::cyphalm::lda::Params{});
+                    L->save(mp.lda_path);
+                }
+                std::cerr << "k5-mcmc: LDA " << mp.lda_path << (hit ? " (loaded)" : " (trained)") << ", " << L->topics() << " topics, "
+                          << L->vocab_size() << " words\n";
+                std::shared_ptr<const cypha::cyphalm::lda::LDA> Lc = L;
+                mp.topic_term = [Lc] { return std::make_unique<mc::LdaTerm>(Lc); };
+            }
+            if (mp.le > 0) {  // wip/k5-discourse's entity grid
+                if (mp.eg_path.empty()) {
+                    std::cerr << "--k5-mcmc-le needs --k5-mcmc-eg PATH\n";
+                    return 2;
+                }
+                auto G = std::make_shared<cypha::cyphalm::eg::EntityGrid>();
+                const bool hit = G->load(mp.eg_path);
+                if (!hit) {
+                    G->train_lines(read_k5(), tok, 8);
+                    G->save(mp.eg_path);
+                }
+                std::cerr << "k5-mcmc: entity grid " << mp.eg_path << (hit ? " (loaded)" : " (trained)") << ", " << G->docs() << " docs, "
+                          << G->columns() << " columns\n";
+                std::shared_ptr<const cypha::cyphalm::eg::EntityGrid> Gc = G;
+                const bool cont = mp.entity == "cont";
+                mp.entity_term = [Gc, cont] { return std::make_unique<mc::GridTerm>(Gc, cont); };
             }
             cypha::cyphalm::wkn::mcmc::install(base, mp, &mstats);
             std::cerr << "k5: whole-paragraph MCMC" << mp.describe() << "\n";
