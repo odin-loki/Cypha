@@ -55,6 +55,7 @@
 #include <functional>
 #include <iostream>
 #include <iterator>
+#include <memory>
 #include <random>
 #include <string>
 #include <string_view>
@@ -413,7 +414,23 @@ class NgramSet {
 
 // ---------------------------------------------------------------- the model
 
+// §13.24: a byte model that reranks K5's nucleus. begin reads the prompt; score gives log2 of the probability of a
+// word's written bytes (its piece, spacing included) after the text so far, and leaves the state as it was; advance reads
+// the piece that was written. One per continuation (per thread).
+struct ByteScorer {
+    virtual ~ByteScorer() = default;
+    virtual void begin(std::string_view prompt) = 0;
+    virtual double score(std::string_view piece) = 0;
+    virtual void advance(std::string_view piece) = 0;
+};
+
 struct Options {
+    // §13.24: the byte scorer (made once per continuation) and how it reranks the words inside the nucleus: 1 a product
+    // of experts, p_k5^(1 - w) * p_bytes^w; 2 linear, (1 - w) p_k5 + w p_bytes, each normalised over the nucleus. K5
+    // still chooses the candidates and the nucleus (the plausibility gate of §13.16).
+    std::function<std::unique_ptr<ByteScorer>()> scorer;
+    int scorer_mode = 1;
+    double scorer_w = 0.25;
     bool cap = true;           // apply the model's copy cap (K5::load's cap; a model built with cap 0 has none)
     double temperature = 1.0;  // fuzzy_bake.py: 1.0
     double cand_mass = 0.995, nucleus = 0.9;
@@ -568,6 +585,9 @@ class K5 {
         });
         RepeatBan rep(prompt);
         const NgramSet& cs = cap_set();
+        std::unique_ptr<ByteScorer> bs = o.scorer ? o.scorer() : nullptr;  // §13.24
+        if (bs) bs->begin(prompt);
+        std::vector<double> rw;
         const std::size_t V = vocab_.size();
         if (V <= 2) return {};  // no word but <unk> and <s>
         std::vector<double> p(V);
@@ -688,11 +708,29 @@ class K5 {
                 }
                 double zn = 0;
                 for (std::size_t i = 0; i < k; ++i) zn += p[cand[kept[i]]];
+                // §13.24: the byte scorer reranks the words inside the nucleus.
+                rw.resize(k);
+                for (std::size_t i = 0; i < k; ++i) rw[i] = p[cand[kept[i]]] / zn;
+                if (bs && k > 1) {
+                    std::vector<double> lb(k);
+                    double mx = -1e300;
+                    for (std::size_t i = 0; i < k; ++i) mx = std::max(mx, lb[i] = bs->score(pieces[kept[i]]));
+                    double zb = 0, zr = 0;
+                    for (std::size_t i = 0; i < k; ++i) zb += std::exp2(lb[i] - mx);
+                    for (std::size_t i = 0; i < k; ++i) {
+                        const double pb = std::exp2(lb[i] - mx) / zb;
+                        rw[i] = o.scorer_mode == 2 ? (1 - o.scorer_w) * rw[i] + o.scorer_w * pb
+                                                   : std::exp2((1 - o.scorer_w) * std::log2(std::max(rw[i], 1e-300)) +
+                                                               o.scorer_w * std::log2(std::max(pb, 1e-300)));
+                        zr += rw[i];
+                    }
+                    for (double& x : rw) x /= zr;
+                }
                 const double u = static_cast<double>(rng() >> 11) * 0x1.0p-53;
                 std::size_t j = 0;
                 double cdf = 0;
                 for (; j + 1 < k; ++j) {
-                    cdf += p[cand[kept[j]]] / zn;
+                    cdf += rw[j];
                     if (cdf > u) break;
                 }
                 w = cand[kept[j]];
@@ -700,6 +738,7 @@ class K5 {
             }
             out += s;
             rep.add(s);
+            if (bs) bs->advance(s);
             ctx.push_back(w);
             prev = vocab_[w];
             has_prev = true;
@@ -765,7 +804,7 @@ inline double copy32_share(std::string_view ref, const std::vector<std::string>&
 inline int run_sample(const std::string& text_path, int cap, const std::vector<std::string>& prompts,
                       const std::vector<std::string>& conts, const std::vector<std::string>& outs, int per_file,
                       std::size_t bytes, const std::vector<double>& temps,
-                      const std::function<std::string(const std::string&)>& esc) {
+                      const std::function<std::string(const std::string&)>& esc, const Options* base = nullptr) {
     std::string err;
     K5 m;
     if (!m.load(text_path, cap, err)) {
@@ -784,7 +823,7 @@ inline int run_sample(const std::string& text_path, int cap, const std::vector<s
     const auto work = [&]() {
         for (std::size_t j; (j = next++) < np * nt;) {
             const std::size_t id = j / nt, ti = j % nt;
-            Options o;
+            Options o = base ? *base : Options{};
             o.temperature = temps[ti];
             o.bytes = bytes;
             gens[j] = m.generate(prompts[id], kSeed + id + 7919 * ti, o, &gst[j]);

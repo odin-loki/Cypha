@@ -390,6 +390,8 @@ struct Args {
     std::string temps;                            // TEMPS: sample's temperatures, T[,T][,T] (default 0.6,0.8,1.0)
     std::string k5;                               // §13.19: sample --k5 TEXT, K5 (word_kn.hpp) writes every GEN line
     int k5_cap = 12;                              // §13.19: --k5-cap N, at most N consecutive training tokens (0: off)
+    std::string k5_lstm, k5_lstm_mix = "geo";     // §13.24: --k5-lstm FILE (lstm-train's), reranking K5's nucleus
+    double k5_lstm_w = 0.25;                      // §13.24: --k5-lstm-w W, the byte LSTM's weight
 };
 
 std::string env_or(const char* name, const char* fallback) {
@@ -488,6 +490,9 @@ Args parse(int argc, char** argv, int from) {
         else if (s == "--copy-frame") a.copy_frame = true;           // DK2
         else if (s == "--k5") a.k5 = next();                         // §13.19
         else if (s == "--k5-cap") a.k5_cap = std::atoi(next());      // §13.19
+        else if (s == "--k5-lstm") a.k5_lstm = next();               // §13.24
+        else if (s == "--k5-lstm-mix") a.k5_lstm_mix = next();       // §13.24: geo or lin
+        else if (s == "--k5-lstm-w") a.k5_lstm_w = std::atof(next()); // §13.24
         else if (s.rfind("--", 0) == 0) {
             std::cerr << "unknown option " << s << "\n";
             a.ok = false;
@@ -1184,11 +1189,35 @@ int cmd_context8k(const Args& a) {
     // learning online from scratch over the holdout, each byte predicted before it is learned) as the chain's last stage,
     // a lambda per InfiniGram bucket, and one more input of --online-final.
     std::vector<double> plstm;
+    // §13.24 --final-gate lstm: the LSTM's state also picks the final layer's weight set, as the GLN's gates read it: the
+    // signs of 4 fixed random projections of the state that predicts the byte (16) x the previous byte's class (5).
+    std::vector<std::uint8_t> lgate;
+    if (a.final_gate == "lstm" && a.no_lstm) {
+        std::cerr << "--final-gate lstm needs the LSTM (drop --no-lstm)\n";
+        return 2;
+    }
     if (!a.no_lstm) {  // the default in context8k since §13.18's D1
         cypha::online::ByteLSTM L;
         plstm.resize(H);
+        double R[4][cypha::online::ByteLSTM::H];
+        if (a.final_gate == "lstm") {
+            std::mt19937_64 rr(7);
+            std::normal_distribution<double> nd(0.0, 1.0);
+            for (auto& row : R)
+                for (double& x : row) x = nd(rr);
+            lgate.resize(H);
+        }
         double P[256], lb = 0;
         for (std::size_t k = 0; k < H; ++k) {
+            if (!lgate.empty()) {
+                int g = 0;
+                for (int m = 0; m < 4; ++m) {
+                    double d = 0;
+                    for (int q = 0; q < cypha::online::ByteLSTM::H; ++q) d += R[m][q] * L.h()[static_cast<std::size_t>(q)];
+                    if (d > 0) g |= 1 << m;
+                }
+                lgate[k] = static_cast<std::uint8_t>(g);
+            }
             L.dist(P);
             plstm[k] = std::max(P[data[kTrain + k]], 1e-12);
             if (k >= half) lb += -std::log2(plstm[k]);
@@ -1218,6 +1247,10 @@ int cmd_context8k(const Args& a) {
         const int nin = 24 + !pgln.empty() + !plstm.empty() + 2 * !rate_chains.empty();
         cypha::online::OnlineFinal fin(80, nin);
         const bool copy_gate = a.final_gate == "copy";
+        if (a.final_gate != "copy" && a.final_gate != "ig" && a.final_gate != "lstm") {
+            std::cerr << "--final-gate copy|ig|lstm\n";
+            return 2;
+        }
         double fin_bits = 0, chain_bits = 0;
         for (std::size_t k = 0; k < H; ++k) {
             const std::size_t i = kTrain + k;
@@ -1264,8 +1297,9 @@ int cmd_context8k(const Args& a) {
                 const unsigned char pb = i ? data[i - 1] : ' ';
                 // §13.21 --final-gate copy: copy's bucket (8) x the previous byte's class (5) x InfiniGram matched >= 16 (2).
                 const int bc = cypha::online::OnlineFinal::byte_class(pb);
-                const int g = copy_gate ? copy_bucket(cn) * 10 + bc * 2 + (n8k[k] >= 16 ? 1 : 0)
-                                        : std::min(static_cast<int>(bk8k[k]), 15) * 5 + bc;
+                const int g = !lgate.empty() ? lgate[k] * 5 + bc  // §13.24
+                              : copy_gate ? copy_bucket(cn) * 10 + bc * 2 + (n8k[k] >= 16 ? 1 : 0)
+                                          : std::min(static_cast<int>(bk8k[k]), 15) * 5 + bc;
                 double q[28];
                 int nq = 0;
                 for (int j = 0; j < 23; ++j) q[nq++] = std::max(1e-9, static_cast<double>(row[kIn[j]]));
@@ -1558,9 +1592,45 @@ int cmd_sample(const Args& a) {
         std::cerr << "too few holdout paragraphs for " << need << " prompts\n";
         return 1;
     }
-    if (!a.k5.empty())  // §13.19: K5 writes every GEN line (T 1.0 unless --temps); the trie and its experts are not built
+    if (!a.k5.empty()) {  // §13.19: K5 writes every GEN line (T 1.0 unless --temps); the trie and its experts are not built
+        cypha::cyphalm::wkn::Options base;
+        std::unique_ptr<cypha::online::ByteLSTM> kl;
+        if (!a.k5_lstm.empty()) {  // §13.24: the byte LSTM reranks the words inside K5's nucleus
+            kl = cypha::online::ByteLSTM::load_file(a.k5_lstm);
+            if (!kl || (a.k5_lstm_mix != "geo" && a.k5_lstm_mix != "lin")) {
+                std::cerr << "--k5-lstm: cannot read " << a.k5_lstm << " (or --k5-lstm-mix is not geo or lin)\n";
+                return 2;
+            }
+            struct LstmScorer : cypha::cyphalm::wkn::ByteScorer {
+                cypha::online::ByteLSTM L;
+                explicit LstmScorer(const cypha::online::ByteLSTM& m) : L(m) {}
+                void begin(std::string_view prompt) override {
+                    for (const char c : prompt) L.step(static_cast<std::uint8_t>(c), false);
+                }
+                double score(std::string_view piece) override {
+                    const auto st = L.save();
+                    double P[256], lb = 0;
+                    for (const char c : piece) {
+                        L.dist(P);
+                        lb += std::log2(std::max(P[static_cast<std::uint8_t>(c)], 1e-300));
+                        L.step(static_cast<std::uint8_t>(c), false);
+                    }
+                    L.restore(st);
+                    return lb;
+                }
+                void advance(std::string_view piece) override {
+                    for (const char c : piece) L.step(static_cast<std::uint8_t>(c), false);
+                }
+            };
+            const cypha::online::ByteLSTM* km = kl.get();
+            base.scorer = [km] { return std::make_unique<LstmScorer>(*km); };
+            base.scorer_mode = a.k5_lstm_mix == "lin" ? 2 : 1;
+            base.scorer_w = a.k5_lstm_w;
+            std::cerr << "k5: the byte LSTM " << a.k5_lstm << " reranks the nucleus (" << a.k5_lstm_mix << ", w " << a.k5_lstm_w << ")\n";
+        }
         return cypha::cyphalm::wkn::run_sample(a.k5, a.k5_cap, prompts, conts, a.outs, a.prompts, static_cast<std::size_t>(a.bytes),
-                                               a.temps.empty() ? std::vector<double>{1.0} : temps, printable);
+                                               a.temps.empty() ? std::vector<double>{1.0} : temps, printable, &base);
+    }
 
     if (a.model.empty()) {
         Model model;
@@ -7007,6 +7077,49 @@ int cmd_gln_train(const std::vector<std::string>& args) {
     return 0;
 }
 
+// §13.24: lstm-train TEXT OUT [--mb N]. The byte LSTM learns TEXT online (its last N MiB; all of it by default) and is saved
+// to OUT ("LST1") for sample --k5-lstm. Prints the online bits per byte, MiB by MiB.
+int cmd_lstm_train(const std::vector<std::string>& args) {
+    if (args.size() < 2) {
+        std::cerr << "usage: cyphalm_trie lstm-train TEXT OUT [--mb N]\n";
+        return 2;
+    }
+    std::uint64_t mb = 0;
+    for (std::size_t i = 2; i + 1 < args.size(); i += 2) {
+        if (args[i] == "--mb") mb = std::strtoull(args[i + 1].c_str(), nullptr, 10);
+        else {
+            std::cerr << "lstm-train: unknown " << args[i] << "\n";
+            return 2;
+        }
+    }
+    std::ifstream f(args[0], std::ios::binary);
+    std::vector<std::uint8_t> text((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    if (text.empty()) {
+        std::cerr << "lstm-train: cannot read " << args[0] << "\n";
+        return 2;
+    }
+    const std::size_t on = mb ? std::min<std::size_t>(text.size(), static_cast<std::size_t>(mb) << 20) : text.size();
+    const auto t0 = std::chrono::steady_clock::now();
+    cypha::online::ByteLSTM L;
+    double P[256], bits = 0;
+    for (std::size_t k = text.size() - on, j = 0; k < text.size(); ++k, ++j) {
+        L.dist(P);
+        bits += -std::log2(std::max(P[text[k]], 1e-12));
+        L.step(text[k], true);
+        if ((j + 1) % (1u << 20) == 0) {
+            std::cout << "online MiB " << (j + 1) / (1u << 20) << " bpc " << bits / (1u << 20) << " ("
+                      << std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count() << " s)\n" << std::flush;
+            bits = 0;
+        }
+    }
+    if (!L.save_file(args[1])) {
+        std::cerr << "lstm-train: cannot write " << args[1] << "\n";
+        return 1;
+    }
+    std::cout << "saved " << args[1] << "\n";
+    return 0;
+}
+
 int main(int argc, char** argv) {
     std::ios::sync_with_stdio(false);
     if (argc < 2) {
@@ -7017,6 +7130,7 @@ int main(int argc, char** argv) {
     if (cmd == "selftest") return cmd_selftest();
     if (cmd == "simpair") return cmd_simpair(std::vector<std::string>(argv + 2, argv + argc));  // A4e
     if (cmd == "gln-train") return cmd_gln_train(std::vector<std::string>(argv + 2, argv + argc));  // §13.17
+    if (cmd == "lstm-train") return cmd_lstm_train(std::vector<std::string>(argv + 2, argv + argc));  // §13.24
     Args a = parse(argc, argv, 2);
     if (!a.ok) {
         usage();

@@ -1349,3 +1349,31 @@ Even so, each layer-1 weight set sees about half a million bits. The cost is abo
 - `--no-lstm` gives W0's text; `--lstm-mix lin|geo` gives the other mixes.
 - **Predictions:** LS1 non-inferior missed; LS2 non-inferior held; LS3 not non-inferior held.
 - The byte sampler is now CyphaLM's second writer; K5 (§13.19) writes best.
+
+### 13.24 The LSTM wired into everything, K5 included (registered 2026-11-04, before the runs)
+
+**Odin:** "Any way we can get K5 to work with the LSTM? Let's treat the LSTM like we treated the GLN and wire it into everything and reuse it as much as possible and see what we can get."
+
+**Where the LSTM already is:** inside the GLN (its state gates every neuron; its bit probability is an input); in `context8k` as the chain's last stage and a final-layer input (the default, §13.18); in `sample` through the plausibility gate (the default, §13.18).
+
+**New:**
+1. **K5 with the LSTM** (`sample --k5 TEXT --k5-lstm FILE [--k5-lstm-mix geo|lin] [--k5-lstm-w W]`). K5 still picks the candidate words and keeps its nucleus 0.9: the plausibility gate. Inside the nucleus the byte LSTM scores each word by the bytes it would write (spacing included), after the prompt and everything written so far. The two combine either as a product of experts, p_K5^(1 − w) × p_LSTM^w, or linearly, (1 − w) p_K5 + w p_LSTM, each normalised over the nucleus. The LSTM reads the prompt and every written word, learning nothing while it writes.
+   - The LSTM learns K5's clean prose first: `cyphalm_trie lstm-train /root/work/fz/train.txt clean.lstm`, the whole 7 MB online, saved as "LST1".
+2. **The LSTM's state picks the final layer's weight sets** (`context8k --final-gate lstm`), as the GLN's gates read it. The 80 sets are the signs of 4 fixed random projections of the state that predicts the byte (16) × the previous byte's class (5). It replaces the copy × class × long-match context.
+
+**Arms:**
+- Writing, all 250 GEN-A dev prompts, SCRIBE v2:
+  - K5: K5 alone, rerun with this build;
+  - KL1: geo, w 0.25;
+  - KL2: geo, w 0.5;
+  - KL3: lin, w 0.25.
+- Prediction: D5 is `context8k --final-gate lstm`, against D3's 1.6238.
+
+**Rules:**
+- The best KL arm that is non-inferior to K5 (at least K5's dev score minus 0.02) makes the LSTM part of K5 by default. It then gets one test read, and stays if it is at least K5's test 0.305 minus 0.02.
+- `--final-gate lstm` becomes the default if D5 is at least 0.003 below D3.
+
+**Predictions:**
+- KL1 is non-inferior (0.33–0.37): the LSTM only reranks words K5 already allows, and it has learned the same prose.
+- KL2 and KL3 fall below K5.
+- D5 is within ±0.003 of D3.

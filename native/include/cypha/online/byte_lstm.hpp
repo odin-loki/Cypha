@@ -121,6 +121,23 @@ public:
         buf_.clear();
         cache_ = forward(32);  // a fresh read of a space after the stored state
     }
+    // §13.24: the learned LSTM to a file and back ("LST1"), so it can learn a text once (cyphalm_trie lstm-train) and be read
+    // by any run.
+    bool save_file(const std::string& path) const {
+        std::ofstream o(path, std::ios::binary);
+        o.write("LST1", 4);
+        write(o);
+        return static_cast<bool>(o);
+    }
+    static std::unique_ptr<ByteLSTM> load_file(const std::string& path) {
+        std::ifstream i(path, std::ios::binary);
+        char magic[4] = {0, 0, 0, 0};
+        i.read(magic, 4);
+        if (!i || std::memcmp(magic, "LST1", 4) != 0) return nullptr;
+        auto L = std::make_unique<ByteLSTM>();
+        L->read(i);
+        return i ? std::move(L) : nullptr;
+    }
     State save() const { return {h_, c_}; }
     // Restores the recurrent state (for writing: no learning happens between save and restore).
     void restore(const State& s) {
