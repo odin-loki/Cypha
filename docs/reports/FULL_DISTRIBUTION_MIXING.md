@@ -248,3 +248,34 @@ The final layer now has 35 inputs. Its `online_final_bpc` is 1.5793 on this PC, 
   - the replica chain equals the chain;
   - the n-gram's `dist()` equals `code()`.
 - Only these and the first half are read from X1m; its second half is not read before X2.
+
+**Check run results** (M0 and X1m side by side; load about 2):
+
+| | M0 (main) | X1m (merged, `--full-mix`, dump) |
+|---|---:|---:|
+| `online_final_bpc` | 1.5793 (chain 1.6103) | 1.5793 (chain 1.6103) |
+| Wall | 1726 s | 3526 s (the pass 1750 s, with the 28 GB dump) |
+| Peak RSS | 874 MB | 1097 MB |
+
+- 0 lines differ outside the `full_mix` lines.
+- Arm F is 1.5793, the same as `online_final_bpc`.
+- The replica chain, the chain after copy and the n-gram's `dist()` all match exactly (maximum differences 0).
+- The replica's mass is 0.99989.
+
+First half only:
+
+| | F | Fn | Fs | A | As | Rs | B | Bs | ABs |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| X1m, first half | 1.5978 | 1.5975 | 1.5747 | 1.5449 | 1.5396 | 1.5970 | 1.5557 | 1.5408 | 1.5272 |
+
+## X2: registered (before the run)
+
+- **Run:** `context8k --full-mix` on the merged code (4c3954b), the same settings as X1, no new tuning. One run, alone on the PC as far as other sessions allow.
+- **X2 repeats X1m's arithmetic.** The code is deterministic, and the dump changes nothing. So its second half will equal X1m's, which was written but has not been read. X2 is run anyway, for a clean wall time without the dump.
+- **Rule** (X1's, against the new default). `--full-mix`'s ABs line becomes `context8k`'s headline on main's default if all hold:
+  1. X2's `full_mix_bpc` is at least 0.005 below M0's `online_final_bpc` (1.5793);
+  2. every TALLY and GEN line is identical to M0's;
+  3. selftest passes;
+  4. the wall time and peak memory are stated.
+- **Prediction P7.** X2's `full_mix_bpc` is 1.502–1.512 (−0.067 to −0.077 against 1.5793). On the first half the gain is −0.071, as X1's was (−0.071 first half, −0.073 second). The n-gram adds an order-mixing model that the bitwise mixer partly duplicated before, so the gain should not grow.
+- **P8.** As − F and Bs − F are each within 0.01 of X1's (−0.061 and −0.058).
