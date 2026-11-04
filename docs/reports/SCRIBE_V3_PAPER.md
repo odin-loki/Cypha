@@ -128,9 +128,11 @@ Ablation (same accuracy): leaving v2 out fails two ladder pairs (0.940, 0.903); 
 | R4 truncation, Spearman of means | −0.657 | −0.143 | −0.143 |
 | R5 HANNA CH story Kendall (no human stories) | 0.193 | 0.213 | 0.209 (p_BH 0.52 vs v2) |
 | R5 HANNA RE (open / with prompt) | 0.017 | 0.112 / 0.130 | 0.109 / 0.169 |
-| R5 HANNA CH system Kendall | 0.689 | 0.778 | 0.689 |
+| R5 HANNA CH system Kendall | 0.689 | 0.778 | 0.689 (with prompt 0.600) |
+| R5 HANNA CH story Kendall with the prompt | (as open) | 0.222 | 0.233 |
 | R6 MAUVE per pair q1–q3 (te25) | 0.543, 0.538, 0.541 | 0.550, 0.547, 0.559 | 0.547, 0.547, 0.556 |
 | R6 MAUVE system Spearman q1–q3 | 0.762, 0.786, 0.881 | 0.762, 0.786, 0.881 | 0.690, 0.762, 0.833 |
+| R6 MAUVE with the prompt: per pair; system | (as open) | 0.551, 0.548, 0.565; as open | 0.559, 0.558, 0.575; 0.762, 0.786, 0.881 |
 | R7 OpenMEVA Pearson ROC / WP | 0.189 / 0.050 | 0.186 / 0.089 | 0.161 / 0.030 (with prompt WP 0.113) |
 | R8 n-grams, Spearman (6 systems) | 0.829 | 0.771 | 0.829 |
 | R8 human > 5-gram; 5 > 4; 4 > 3 | 0.991; 0.480; 0.505 | 0.979; 0.487; 0.501 | 0.975; 0.489; 0.503 |
@@ -183,7 +185,7 @@ v3.1's own statistics cost 0.96 ms a text on the Wikipedia pack (1.50 ms on WebT
 | Q10 | 0.900, medium below small | hit |
 | Q11 | 7 of 9 each, reordering followed by none; but truncation falls less under v3.1 (−0.143) than under v2 (−0.657) | partly |
 | Q12 | CH 0.209 (v3 0.213 > v2 0.193); system 0.689; RE with prompt 0.169 > open 0.109 > 0.05 | hit |
-| Q13 | per pair 0.547–0.556; q3 system 0.833; below v2 on all 3 | hit |
+| Q13 | open: per pair 0.547–0.556; q3 system 0.833; below v2 on all 3. With the prompt: per pair 0.559–0.575 (q3 just above the range), system equal to v2 | hit (open) |
 | Q14 | ROC 0.161; WP 0.030 | hit |
 | Q15 | human > 5-gram 0.975 held; v3 does not order orders 3–5 better (0.487, 0.501 against 0.480, 0.505); v3's Spearman 0.771 | miss |
 | Q16 | correct > echo 0.952; > shuffled 0.752; > other 0.536 | miss |
