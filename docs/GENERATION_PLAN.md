@@ -1121,3 +1121,19 @@ None of this changes what the sampler writes. That needs the GLN and the online 
 - On the enwik8 holdout, `gln_alone_bpc` is 1.80–1.95: web text is not Wikipedia, but the GLN keeps learning online over the holdout.
 - `online_final_bpc` falls by 0.005–0.015.
 - In writing, `geo` is non-inferior and `gate` is not.
+
+**Result** (Odin's PC, 2026-11-04; from `D:\cypha_llm\gln1g\report.txt`):
+- **Text:** the first 1 GiB of RedPajama's C4 (shards 00000 and 00001).
+- **Training:** `gln-train … --tb 24 --online-mb 32` took 1 h 20 min on one core, with a 1.6 GB peak, and wrote a 403 MB file. Its online bits per byte on the last MiB were 2.004, so the prediction "below 2.0" just missed.
+- **Prediction** on the enwik8 holdout, side by side:
+
+  | | 7 MiB GLN (P0) | 1 GiB GLN (P1) |
+  |---|---:|---:|
+  | GLN alone, bits per byte | 1.9455 | 2.1751 |
+  | `online_final_bpc` | **1.6206** | 1.6403 |
+
+  The 1 GiB GLN is worse. By the rule the 7 MiB GLN stays `context8k`'s; both predictions for this step missed. C4 is web text and the holdout is Wikipedia with its XML; 32 MiB of online learning on C4 moved the LSTM and the neurons toward the web, and the holdout's 1 MiB does not move them back.
+- **Writing** (SCRIBE v2, 250 dev prompts, best temperature): W0 0.174 at T 0.6, the same as §13.16, so the setup reproduces.
+  - `geo` scores 0.111 (0.090 with the 7 MiB GLN): it fails the rule (≥ 0.154). The prediction that `geo` holds up missed.
+  - `gate` scores 0.143 (0.117 with the 7 MiB GLN): it fails, as predicted. At T 1.0 it still beats W0, 0.122 against 0.073.
+- **Reading.** Scale on the wrong kind of text does not help. The GLN gained on writing (both mixes rose by 0.02–0.03) but lost on prediction, because the test is Wikipedia and the training was the web. The next step is the same test at scale on in-domain text: clean Wikipedia prose that does not overlap enwik8 (for example enwik9 beyond its first 100 MB, cleaned by SCRIBE's cleaner), with the online pass on that text too.
