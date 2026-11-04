@@ -22,6 +22,7 @@ The experts, the arms, the rules and the predictions below were written and comm
   - **S**, the experts' statistics: the documents from 65 MB to the end (about 265 MB).
   - No document is in two parts. The experts' statistics never see M or H, so an expert cannot know a held-out document's own names or numbers.
 - **Data size:** the statistics are built three times: from the first 10 MB of S, the first 50 MB, and all of S (265 MB). Sentence bits are reported for each.
+- **Amendment (2026-11-05, before any run of an arm).** A timing test on 1,000 targets of H found that only about 16% of real sentences pass the target filter below: 70% hold a word outside K5's vocabulary, and the repeat ban takes 40% of the rest. M at 60 MB would give only about 55,000 boundaries. So the cut moves: **M is [0, 110) MB, H is [110, 120) MB, and S is [120 MB, the end)** (about 210 MB). The statistics sizes become 10 / 50 / 210 MB. Nothing else changes. Drafting costs about 0.6 CPU seconds a boundary (8 drafts), so M takes 2–3 hours on 6–8 threads.
 
 ## Sentences
 
@@ -34,6 +35,7 @@ The experts, the arms, the rules and the predictions below were written and comm
 - **Boundaries.** In a window, sentence j (j = 0..5 after the prompt) is a target. Its context is the prompt and sentences 0..j−1.
 - **Candidates.** K5 writes N = 8 drafts from that context, with the gate's rule for streams and stops. The real sentence joins them: 9 candidates. Choosing at random costs log₂ 9 = 3.17 bits.
 - **No unknown words in the target.** A target is kept only if every word of it is in K5's vocabulary. K5 never writes `<unk>`, so otherwise "has a rare word" would tell the real sentence apart for free. The context may hold unknown words.
+- **The target passes K5's own bans** (amendment, 2026-11-05, before any run). K5's drafts can never repeat a 12-byte window of the text before them (the repeat ban), and never hold 13 consecutive words of K5's training text (the cap). A real sentence can. So "repeats the context" would mark the real sentence for free, and at writing time no draft can do it. A target is kept only if K5 could have written it: in vocabulary, no banned repeat, within the cap.
 - The order of the boundaries is shuffled once (seed 20261105) before online training.
 - **A second signal (P, for "pseudo"):** the drafts only, without the real sentence. The target is the draft closest to the real sentence (the F1 of their content words, ties to the lower k). This is exactly the choice the writer faces: all its candidates are drafts. Its metric is "draft bits": −log₂ P(target) among 8 (log₂ 8 = 3 bits at random).
 
