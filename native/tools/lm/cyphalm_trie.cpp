@@ -463,6 +463,7 @@ Args parse(int argc, char** argv, int from) {
         else if (s == "--gln-load") a.gln_load = next(), a.gln = true;  // §13.17
         else if (s == "--online-lambdas") a.online_lambdas = true;      // §13.22
         else if (s == "--lstm") a.lstm = true;                          // §13.18
+        else if (s == "--lstm-mix") a.gln_mix = next(), a.lstm = true;  // §13.18: sample mixes the LSTM in this way
         else if (s == "--two-rates") a.two_rates = true;                // §13.21
         else if (s == "--final-gate") a.final_gate = next();            // §13.21
         else if (s == "--gln") a.gln = true;                      // §13.15
@@ -797,13 +798,20 @@ std::unique_ptr<SimilarContext> default_sim(const Args& a, const std::uint8_t* t
 // GEN-C (PLAN B5), defined below with the similar-context expert: the document experts of --doc SPEC (fit_doc and
 // mix_doc_into, in cypha/online/content_mixer.hpp, mix them into the chain).
 std::unique_ptr<DocTopic> make_doc(const std::string& doc, const std::uint8_t* text, std::size_t n, int& rc);
+// §13.15-13.18: the next-byte expert the sampler mixes in last (the GLN or the LSTM): its whole distribution, reading a
+// byte without learning, and keeping and restoring its recurrent state around one continuation.
+struct WriterExpert {
+    std::function<void(double*)> dist;
+    std::function<void(std::uint8_t)> read;
+    std::function<void()> save, restore;
+};
 std::string sample_with_class(const PackedModel& model, const double w[6], std::size_t limit, const ClassContext* cc,
                               const double* lam, const std::string& prompt, int n, std::uint32_t seed,
                               const SimilarContext* sc, const double* lsm, double temperature, const double* lcp,
                               const DocTopic* dt = nullptr, const std::vector<std::vector<double>>* ldoc = nullptr,
                               const ContentPlanStore::Plan* pl = nullptr, const double* lpl = nullptr,
                               const cypha::cyphalm::bkn::ByteKN* kn = nullptr, const double* lkn = nullptr,
-                              bool kn_replace = false, cypha::online::BitwiseGLN* gln = nullptr, double lgln = 0,
+                              bool kn_replace = false, WriterExpert* gln = nullptr, double lgln = 0,
                               int gmode = 0);
 void sample_mix(const PackedModel& model, const double w[6], std::size_t limit, const ClassContext* cc, const double* lam,
                 const std::vector<std::uint8_t>& seq, const SimilarContext* sc, const double* lsm, const double* lcp,
@@ -1611,6 +1619,11 @@ int cmd_sample(const Args& a) {
     cypha::online::g_online_mix = cypha::online::g_online_lambdas_out = a.online_lambdas;
     double lsm[SimilarContext::kBuckets] = {0};
     std::unique_ptr<cypha::online::BitwiseGLN> gln;  // §13.15: --gln
+    std::unique_ptr<cypha::online::ByteLSTM> lstm;   // §13.18: --lstm
+    if (a.gln && a.lstm) {
+        std::cerr << "sample: --gln and --lstm: one mixed-in expert at a time\n";
+        return 2;
+    }
     double lgln = 0;
     std::vector<double> lcl, lcp, lpl;
     std::vector<std::vector<double>> ldoc;
@@ -1677,8 +1690,37 @@ int cmd_sample(const Args& a) {
             fit_lambdas(pg, pt, one, half, 1, &lgln);
             std::cerr << "gln lambda " << lgln << " (" << gln->bytes() / 1e6 << " MB)\n";
         }
+        if (a.lstm) {  // §13.18: the byte LSTM after every expert, learning online over the holdout; one lambda over the chain
+            lstm = std::make_unique<cypha::online::ByteLSTM>();
+            std::vector<double> pg(span);
+            double P[256];
+            for (std::size_t k = 0; k < span; ++k) {
+                lstm->dist(P);
+                pg[k] = std::max(P[data[cfg.train + k]], 1e-12);
+                lstm->step(data[cfg.train + k], true);
+            }
+            const std::vector<int> one(span, 0);
+            fit_lambdas(pg, pt, one, half, 1, &lgln);
+            std::cerr << "lstm lambda " << lgln << "\n";
+        }
     }
-    const bool experts = cc || sc || !lcp.empty() || dt || cps || kn || gln;
+    const bool experts = cc || sc || !lcp.empty() || dt || cps || kn || gln || lstm;
+    // The writer expert's interface over the GLN or the LSTM (state kept around each continuation).
+    WriterExpert wx;
+    cypha::online::BitwiseGLN::State gln_st{};
+    cypha::online::ByteLSTM::State lstm_st{};
+    if (gln) {
+        wx.dist = [&](double* P) { gln->byte_dist(P); };
+        wx.read = [&](std::uint8_t b) { gln->code(b, false); };
+        wx.save = [&] { gln_st = gln->save(); };
+        wx.restore = [&] { gln->restore(gln_st); };
+    } else if (lstm) {
+        wx.dist = [&](double* P) { lstm->dist(P); };
+        wx.read = [&](std::uint8_t b) { lstm->step(b, false); };
+        wx.save = [&] { lstm_st = lstm->save(); };
+        wx.restore = [&] { lstm->restore(lstm_st); };
+    }
+    WriterExpert* wxp = gln || lstm ? &wx : nullptr;
     std::string model_line = std::string("MODEL\ttrie") + (kn ? (kn_rep ? "=bkn" : "+bkn") : "") + (cc ? "+cls" : "") + (sc ? "+sim" : "") + (lcp.empty() ? "" : "+copy") +
                              "\t" + (sc ? (a.sims.empty() ? std::string("default") : a.sims[0]) : std::string("-"));
     if (cc) model_line += "\tcls=" + default_cls_spec(a);
@@ -1689,6 +1731,7 @@ int cmd_sample(const Args& a) {
     if (gate.k > 0) model_line += "\tgate=" + a.gate;  // GEN-B
     if (a.online_lambdas) model_line += "\tonline_lambdas";  // §13.22
     if (gln) model_line += "\tgln=" + std::to_string(lgln) + ":" + a.gln_mix + (a.gln_clean.empty() ? "" : ":clean");  // §13.15-16
+    if (lstm) model_line += "\tlstm=" + std::to_string(lgln) + ":" + a.gln_mix;  // §13.18
     const int gmode = a.gln_mix == "gate" ? 3 : a.gln_mix == "geo" ? 2 : a.gln_mix == "after" ? 1 : 0;
     if (a.gln_mix != "lin" && a.gln_mix != "after" && a.gln_mix != "geo" && a.gln_mix != "gate") {
         std::cerr << "--gln-mix lin|after|geo|gate\n";
@@ -1735,7 +1778,7 @@ int cmd_sample(const Args& a) {
                                                   seed32, sc.get(), lsm, temps[ti], lcp.empty() ? nullptr : lcp.data(),
                                                   dt.get(), dt ? &ldoc : nullptr, plan.facts.empty() ? nullptr : &plan,
                                                   lpl.empty() ? nullptr : lpl.data(), kn.get(), lkn.empty() ? nullptr : lkn.data(),
-                                                  kn_rep, gln.get(), lgln, gmode)
+                                                  kn_rep, wxp, lgln, gmode)
                               : sample_continuation(pm, w, p, cfg.train, a.bytes, seed32, opt);
                 gen_bytes += text.size();
                 out << "GEN\ttrie_T" << temp_label(temps[ti]) << "\t" << printable(text) << "\n";
@@ -2563,13 +2606,13 @@ std::string sample_with_class(const PackedModel& model, const double w[6], std::
                               const double* lcp = nullptr, const DocTopic* dt,
                               const std::vector<std::vector<double>>* ldoc, const ContentPlanStore::Plan* pl,
                               const double* lpl, const cypha::cyphalm::bkn::ByteKN* kn, const double* lkn,
-                              bool kn_replace, cypha::online::BitwiseGLN* gln, double lgln, int gmode) {
+                              bool kn_replace, WriterExpert* gln, double lgln, int gmode) {
     std::vector<std::uint8_t> seq(prompt.begin(), prompt.end());
-    // §13.15: the GLN reads the prompt and every byte written (learning nothing), and comes back to its state after.
-    cypha::online::BitwiseGLN::State gst{};
+    // §13.15: the expert (GLN or LSTM) reads the prompt and every byte written (learning nothing), and comes back to its
+    // state after.
     if (gln) {
-        gst = gln->save();
-        for (const std::uint8_t b : seq) gln->code(b, false);
+        gln->save();
+        for (const std::uint8_t b : seq) gln->read(b);
     }
     std::string gen_folded;  // GEN-E: the generated text, folded, for the plan's "expressed" test
     std::vector<int> active;
@@ -2606,7 +2649,7 @@ std::string sample_with_class(const PackedModel& model, const double w[6], std::
         double temp = temperature;
         if (gln) {  // §13.15: the bitwise GLN, last, its whole byte distribution
             double G[256];
-            gln->byte_dist(G);
+            gln->dist(G);
             if (gmode == 3) {  // §13.16 gate: the chain says what is possible, the GLN reranks inside that set. Candidates
                 // are bytes the chain gives at least 0.1 of its top byte (Li et al. 2023's adaptive plausibility constraint),
                 // so the GLN can never bring in a byte the chain finds implausible; the temperature then applies as usual.
@@ -2632,9 +2675,9 @@ std::string sample_with_class(const PackedModel& model, const double w[6], std::
         seq.push_back(static_cast<std::uint8_t>(pick));
         ContentPlanStore::fold_into(gen_folded, static_cast<unsigned char>(pick));
         if (ds) ds->feed(static_cast<std::uint8_t>(pick));
-        if (gln) gln->code(static_cast<std::uint8_t>(pick), false);
+        if (gln) gln->read(static_cast<std::uint8_t>(pick));
     }
-    if (gln) gln->restore(gst);
+    if (gln) gln->restore();
     return std::string(seq.begin() + static_cast<std::ptrdiff_t>(prompt.size()), seq.end());
 }
 

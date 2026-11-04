@@ -1225,3 +1225,8 @@ None of this changes what the sampler writes. That needs the GLN and the online 
 - `--final-gate copy --two-rates` becomes the default if D2 is at least 0.003 below D0, with wall time within +10%.
 
 **Predictions:** D1 near 1.630; D2 near 1.647; D3 near 1.623.
+
+**The LSTM in writing** (registered before the run). `sample --lstm`: the byte LSTM learns online over the holdout. One lambda is fit over the sampler's chain on the first half. Its whole distribution is mixed in last; while writing it reads the prompt and every byte written, learning nothing. `--lstm-mix gate|geo` uses §13.16's mixing.
+- **Arms:** LS1 `--lstm` (linear), LS2 `--lstm-mix gate`, LS3 `--lstm-mix geo`. All 250 GEN-A dev prompts, SCRIBE v2. Against W0 from §13.22's run (same machine and seeds).
+- **Rule:** the best arm that is non-inferior (best temperature ≥ W0's best − 0.02, copy share within the limit) becomes `sample`'s default way of writing with the LSTM in, as Odin asked for online learning on every part.
+- **Prediction:** the LSTM is weaker than the GLN (2.64 bits per byte alone), so its lambda is small. LS1 and LS2 are non-inferior; LS3 is not.
