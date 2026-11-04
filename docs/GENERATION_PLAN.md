@@ -1168,3 +1168,17 @@ None of this changes what the sampler writes. That needs the GLN and the online 
 **Predictions:**
 - B1 is 1.640–1.650 (B0 near 1.654). The old frozen stack gained 0.007 from the 1 TB trie (1.6906 against 1.6979), and the online chain keeps that.
 - S1 is 0.15–0.20: a bigger trie of web text does not by itself make sentences.
+
+### 13.21 Content-mixer upgrades without the GLN (registered 2026-11-04, before the runs)
+
+**Odin:** "What upgrades did you have for just the content mixer that scored ~1.65?" Then: "Do all that other stuff too."
+
+`bench/fuzzy/mixer_upgrades.py` on the dump, as `cyphalm_trie`'s defaults (the online chain by exponentiated gradient, short copies on, the online final layer):
+- U0: the default, for the same run's reference (the dump gives 1.6538).
+- U1: two learning rates. The chain also runs at a slow step (0.005) and a fast one (0.08). The final layer gets both chains' outputs as two more inputs and picks between them, as PAQ runs mixers at several rates.
+- U2: the same 80 weight sets in the final layer, chosen by copy's bucket (8) × the previous byte's class (5) × whether InfiniGram matched at least 16 bytes (2). Today they are chosen by InfiniGram's bucket × the previous byte's class. More gates are not tried (gate24).
+- U3: U1 and U2 together.
+
+**Rule:** an arm goes to C++ if it beats U0 by at least 0.003 bits per byte with its 95% interval below 0. Then a C++ run decides the default on §13.15's rules.
+
+**Predictions:** U1 is −0.003 to −0.010. U2 is within ±0.003. U3 is about U1.

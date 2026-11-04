@@ -30,7 +30,7 @@ COPY_LO = [0, 3, 4, 6, 8, 12, 16, 32]
 K_IN = [1, 2, 3, 4, 5, 6, 8, 9, 11, 12, 13, 14, 15, 18, 20, 22, 25, 27, 29]  # cyphalm_trie's kIn, before the chain
 
 
-def stage(pe, bk, cur, opt, dead_below=0):
+def stage(pe, bk, cur, opt, dead_below=0, eta=0.02):
     """One chain stage: cur <- lam[b] pe + (1 - lam[b]) cur, lam learning online after each byte."""
     nb = int(bk.max()) + 1
     lam = np.full(nb, 0.05)
@@ -49,8 +49,8 @@ def stage(pe, bk, cur, opt, dead_below=0):
             continue
         if opt == "eg":  # exponentiated gradient on (lam, 1 - lam), step 0.02: the §13.15 fix
             pp = max(p, 1e-300)
-            w[b, 0] *= math.exp(0.02 * min(e / pp, 30.0))
-            w[b, 1] *= math.exp(0.02 * min(prev / pp, 30.0))
+            w[b, 0] *= math.exp(eta * min(e / pp, 30.0))
+            w[b, 1] *= math.exp(eta * min(prev / pp, 30.0))
             w[b] = np.maximum(w[b] / w[b].sum(), 1e-4)
             w[b] /= w[b].sum()
             lam[b] = w[b, 0]
@@ -67,34 +67,40 @@ def stage(pe, bk, cur, opt, dead_below=0):
     return out
 
 
-def chain(c, opt, copy_min, gln=None):
+def chain(c, opt, copy_min, gln=None, eta=0.02):
     cur = c["trie_mix"].copy()
     snaps = []
     for e, b in STAGES:
-        cur = stage(c[e], c[b].astype(int), cur, opt, copy_min if e == "copy_hit" else 0)
+        cur = stage(c[e], c[b].astype(int), cur, opt, copy_min if e == "copy_hit" else 0, eta)
         if e in ("ig8192", "cls", "sim", "copy_hit"):
             snaps.append(cur)
     if gln is not None:
-        cur = stage(gln, c["ig_b"].astype(int), cur, opt)
+        cur = stage(gln, c["ig_b"].astype(int), cur, opt, 0, eta)
     return cur, snaps
 
 
-def final_layer(D, c, snaps, cur, gln=None):
-    """cyphalm_trie --online-final, with GLNB as one more input when given."""
-    cols = [D[:, j] for j in K_IN] + list(snaps) + [cur]
+def prev_class(c):
+    y = c["y"].astype(int)
+    pb = np.concatenate([[32], y[:-1]])
+    return np.where(np.isin(pb, [9, 10, 11, 12, 13, 32]), 0,
+                    np.where(((pb >= 65) & (pb <= 90)) | ((pb >= 97) & (pb <= 122)), 1,
+                             np.where((pb >= 48) & (pb <= 57), 2, np.where(np.isin(pb, list(b"[]{}<>|&=")), 3, 4))))
+
+
+def final_layer(D, c, snaps, cur, gln=None, gate=None, extra=()):
+    """cyphalm_trie --online-final, with GLNB (or another expert) as one more input when given; gate: the weight-set index
+    per byte (default InfiniGram bucket x previous byte class, 80 sets); extra: more columns before the chain."""
+    cols = [D[:, j] for j in K_IN] + list(snaps) + list(extra) + [cur]
     if gln is not None:
         cols.insert(-1, gln)
     Q = np.maximum(np.stack(cols, 1), 1e-9)
     n = Q.shape[1]
-    W = np.full((80, n), 0.01)
+    sets = 80 if gate is None else int(gate.max()) + 1
+    W = np.full((sets, n), 0.01)
     W[:, -1] = 1.0
     W /= W.sum(1, keepdims=True)
-    y = c["y"].astype(int)
-    pb = np.concatenate([[32], y[:-1]])
-    pcls = np.where(np.isin(pb, [9, 10, 11, 12, 13, 32]), 0,
-                    np.where(((pb >= 65) & (pb <= 90)) | ((pb >= 97) & (pb <= 122)), 1,
-                             np.where((pb >= 48) & (pb <= 57), 2, np.where(np.isin(pb, list(b"[]{}<>|&=")), 3, 4))))
-    gate = np.minimum(c["ig_b"].astype(int), 15) * 5 + pcls
+    if gate is None:
+        gate = np.minimum(c["ig_b"].astype(int), 15) * 5 + prev_class(c)
     out = np.empty(len(cur))
     for k in range(len(cur)):
         w = W[gate[k]]
