@@ -1418,3 +1418,15 @@ Even so, each layer-1 weight set sees about half a million bits. The cost is abo
 The flags stay (`--k5-lstm`, `--k5-lstm-mix`, `--final-gate lstm`, `lstm-train`) for a stronger LSTM, such as one trained at scale on Odin's PC.
 
 **The LSTM out of writing** (Odin, 2026-11-04: "Take the LSTM out, let's just go with K5"). `sample` writes without the LSTM again (W0's text); `--lstm` or `--lstm-mix MODE` puts it back. K5 is the writer. The LSTM stays in `context8k`'s prediction, where it gains 0.023 bits per byte.
+
+### 13.25 The record, and the work moved to Odin's PC (2026-11-04)
+
+**Odin:** "Do all of it and make sure you document everything we have tried and the results. Use sub agents." Then: "Do it all on my PC."
+
+- **The record** of everything tried for generation and online learning, 1–4 November, with every result and decision: [reports/GENERATION_ONLINE_RECORD.md](reports/GENERATION_ONLINE_RECORD.md).
+- **Four sessions on Odin's PC**, each registering its rules before its runs and writing its own report:
+  1. K5 upgrades: tuning; online cache and counts; order 6 and word classes; a sentence gate; a content plan. Branch `wip/k5-upgrades`, report [reports/K5_UPGRADES.md](reports/K5_UPGRADES.md).
+  2. K5 on clean Wikipedia from enwik9, past enwik8's bytes, checked for overlap with GEN-A and SCRIBE. Branch `wip/k5-scale`, report [reports/K5_SCALE.md](reports/K5_SCALE.md).
+  3. Online learning in the mixer: an online n-gram expert, document-aware learning, a bigger LSTM. Branch `wip/online-upgrades`, report [reports/ONLINE_LEARNING_UPGRADES.md](reports/ONLINE_LEARNING_UPGRADES.md).
+  4. Whole-distribution mixing with APM/SSE, PAQ-style. Branch `wip/full-mix`, report [reports/FULL_DISTRIBUTION_MIXING.md](reports/FULL_DISTRIBUTION_MIXING.md).
+- The cloud session merges each branch and adds its results here and to the record.
