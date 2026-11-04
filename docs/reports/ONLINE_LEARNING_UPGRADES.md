@@ -225,3 +225,109 @@ On this PC the frozen chain before §13.15 gave 1.6971 (R0). The default went fr
 - **Only `context8k` changed.** `sample`, `qa` and answers do not read the n-gram or the bigger LSTM. Whether they help writing is untested.
 - **One holdout.** Every number is the same 1 MiB of enwik8 (its second half). The n-gram's settings were tuned on the first half of the same holdout, not on other text.
 - **Wall times on a shared PC.** Other sessions loaded the PC throughout (load 16–117), so wall times are noisy. The same-run comparisons (V0 against VB) are the fair ones.
+
+# Optimisation
+
+2026-11-05 · Odin Loch
+
+**Odin:** "See if you can't optimise all those upgrades before going in."
+
+The aim: make the n-gram and the LSTM cheaper with **byte-for-byte identical output**. Branch `wip/opt-online`, from `main` at 20701dd. Only `byte_lstm.hpp` and `online_ngram.hpp` change, plus a selftest check and two CMake lines (`cyphalm_trie` links `Threads::Threads`).
+
+## Where the time went (main, before any change)
+
+No `perf` on this WSL. gprof missed most of the time (it cannot see libm or memory stalls). So the phases were timed with clocks in a scratch copy of the header, over 8 KiB of the holdout, one core, PC quiet.
+
+| LSTM 256/20, main | Seconds per 8 KiB | Share |
+|---|---:|---:|
+| Forward (1,024 gate rows × 272) | 2.65 | 38% |
+| Backward (softmax again, output and gate gradients, input error) | 2.64 | 38% |
+| Adam (once per 20 bytes) | 1.11 | 16% |
+| `dist` (256 output rows × 256) | 0.58 | 8% |
+| **Total** | **7.0** | |
+
+- Each dot product is one long chain of dependent adds, so the forward pass waits on add latency.
+- The backward pass streams the 2.2 MB gate weights and their 2.2 MB gradient once per byte.
+- Adam did not vectorise: its square root needs `-fno-math-errno`, and the vector-of-vectors indexing hides that the arrays don't overlap.
+- The LSTM 64 (the GLN's, and `--lstm-size 64`): 0.77 s per 8 KiB.
+
+| n-gram (orders 1–6, 8, 12; 24 table bits), main | Seconds |
+|---|---:|
+| Pretrain (counts over 6 MiB) | 17.5 |
+| Online over 1 MiB + 64 KiB, with `dist` on every 4th byte | 7.35 |
+
+Each lookup touched three arrays (count of ones, count, check), so three cache misses per order per bit.
+
+## What changed (all exact)
+
+**The LSTM:**
+1. **Dots across rows.** `lstm_rows` puts two rows in one SSE2 register, one lane per row, eight rows at a time. Each row is summed in its own order (j = 0, 1, …). There is no FMA (the default build has no `-march`) and no reassociation, so every row's value is the scalar loop's. It is used for the gates and the output logits, on the row-major weights, with no transposed copy.
+2. **Gradients once per window.** The backward pass keeps each step's errors (`da`, `p`). After the window, each weight's gradient is summed over the steps in the same order as before (last step first) and Adam is applied at once. The gradient arrays are no longer streamed every byte.
+3. **Adam vectorised.** It works on plain arrays with `__restrict` and SSE2 (`_mm_div_pd`, `_mm_sqrt_pd`). IEEE division and square root give the same result in SIMD as in scalar code, and `std::clamp` is written out with the same comparisons. Scalar code is used without SSE2.
+4. **No recomputation.** The softmax `dist` computes is reused by BPTT when it is for the same state (not after `restore`), and tanh(c) is kept from the forward pass.
+5. **Threads.** A small spinning pool (`LstmPool`): 4 threads by default from hidden 128, 1 below (so the GLN's and `sample`'s LSTM 64 run on one), and `CYPHA_LSTM_THREADS` or `set_threads` overrides. The gate rows, the output rows, the update's rows and the `dh` units are split across threads. Each row is computed by one thread in its original order, so the output is the same for any count.
+   - The input error (`dxh`, a sum over all 1,024 rows for each of 272 columns) stays on one thread. A column split and an exact row-order wavefront were both measured slower than one thread on this PC: every thread then reads all of `W`, or waits on the others.
+
+**The n-gram:**
+1. **One 5-byte slot** holds the count of ones, the count and the check (packed). One cache line per lookup instead of three, the same memory (`bytes()` unchanged).
+2. **Prefetch.** All 8 bits' keys of a byte are known before the counts are read (the byte is given), so they are computed and prefetched first. `dist` prefetches 8 partial bytes ahead.
+3. **Pretrain on threads by order.** The orders' tables are independent: each thread fills its own tables in the original order (`CYPHA_NGRAM_THREADS`, 4 by default).
+
+## Exactness checks
+
+- **Scratch harness, old header against new**, a hash of every `dist` output and `code` value:
+  - LSTM 64/20, 128/50, 128/20 and 256/20, on 1, 2, 3, 4 and 8 threads;
+  - `dist` called on every byte, every 3rd or every 7th byte;
+  - the writer's save, step without learning, `dist` and restore, every 997 bytes.
+  - All hashes equal.
+- **The n-gram:** 24, 20 and 22 table bits, check on and off, `dist` every 4th byte, reads without learning. All hashes equal, and `bytes()` is equal.
+- **`gln-train`** (tb 18) and **`lstm-train`** on 400 KB of enwik8 write byte-identical files with main's binary and the new one. `gln-train` also runs faster (48.5 s → 32.9 s), as the GLN holds an LSTM 64.
+- **`cyphalm_trie selftest`** passes. It now also checks an LSTM 128's hash over 400 bytes of learning, on 1 and on 4 threads, against main's value.
+
+## Micro-benchmarks (8 KiB of the holdout; the PC's load varied from 3 to 13, so ±20%)
+
+| LSTM | main | New, 1 thread | New, 4 threads |
+|---|---:|---:|---:|
+| 256/20 | 7.0–7.2 s | 3.7 s | 1.7 s |
+| 128/20 | 2.1 s | — | 0.50 s |
+| 64/20 | 0.77 s | 0.41 s | (1 thread by default) |
+
+| n-gram, 24 table bits | main | New |
+|---|---:|---:|
+| Pretrain | 17.5 s | 2.9 s (6.6 s on 1 thread) |
+| Online 1 MiB + 64 KiB, with `dist` | 7.35 s | 3.16 s |
+
+## A non-exact arm (registered before its run)
+
+The memory is now the main cost: the n-gram's 589 MB cannot shrink without changing the numbers.
+- **O1:** `--ngram-tb 23` (the new binary): about 294 MB less.
+- **Rule:** adopt only if `online_final_bpc` is at most 0.001 above the default's (1.5793) and the saving is at least 200 MB.
+- **Prediction:** +0.003 to +0.004 (24 bits against 22 gave −0.0073), so it fails. A float32 LSTM was not tried: the exact changes already cut the LSTM's time by 4×.
+
+## Full runs (`context8k`, the whole output compared with `cmp`)
+
+R are main's binary, run first as references. T (main) and N (new) were started together, so they ran at the same load. N's LSTM used 4 threads, so the four T and N runs held about 7 cores.
+
+| Run | Binary | Flags | `online_final_bpc` | Wall | Peak RSS | LSTM pass | n-gram (counts + online) | Output |
+|---|---|---|---:|---:|---:|---:|---:|---|
+| R_def | main | (default) | 1.5793 (chain 1.6103) | 32:41 | 853 MB | 942 s | 31.1 s | reference |
+| T_def | main | (default) | 1.5793 | 32:41 | 854 MB | 937 s | 30.1 s | = R_def |
+| **N_def** | new | (default) | **1.5793** | **20:07** | 853 MB | **218 s** | **7.1 s** | **= R_def, byte for byte** |
+| R_64 | main | `--no-ngram --lstm-size 64` | 1.6232 (chain 1.6570) | 18:15 | 261 MB | 98.6 s | — | reference |
+| T_64 | main | `--no-ngram --lstm-size 64` | 1.6232 | 18:10 | 262 MB | 98.8 s | — | = R_64 |
+| **N_64** | new | `--no-ngram --lstm-size 64` | **1.6232** | **16:52** | 261 MB | **50.8 s** | — | **= R_64, byte for byte** |
+| O1 | new | `--ngram-tb 23` | 1.5827 (chain 1.6154) | 20:52 | 573 MB | 213 s | 7.3 s | answers match |
+
+- **The rule holds.** The default output and `--no-ngram --lstm-size 64`'s are byte-identical to main's (every `GEN` and `TALLY` line included). `gln-train` and `lstm-train` write identical files. `selftest` passes.
+- **The default `context8k` takes 38% less time** at the same load (32:41 → 20:07). Its LSTM 256 pass is 4.3× faster (937 s → 218 s on 4 threads) and the n-gram 4.3× faster (30 s → 7 s). Peak RSS is unchanged (853 MB).
+- With the LSTM 64 (one thread), the LSTM pass is 1.9× faster (99 s → 51 s), and the run 7% faster.
+- **The LSTM 256 is no longer the cost.** The default now takes only 3 minutes more than `--no-ngram --lstm-size 64` (20:07 against 16:52), against 14½ minutes before. Most of `context8k`'s time is now the trie, InfiniGram and the other experts, which this work did not touch.
+- **O1 fails its rule.** It saves 294 MB (853 → 573 MB) but is 0.0034 worse (0.001 allowed). The prediction (+0.003 to +0.004) held. The n-gram stays at 24 table bits.
+
+## Risks before merging
+
+- **Threads.** `context8k`'s LSTM now runs 4 threads by default. On a busy PC, set `CYPHA_LSTM_THREADS=1` (and `CYPHA_NGRAM_THREADS=1`): the output is the same, only slower. Idle pool threads spin, then yield, then sleep.
+- **Exactness rests on two build facts:** no FMA contraction (the default build has no `-march`) and no `-ffast-math`. The SSE2 code uses separate multiply and add intrinsics, so it is exact even with `-march=native`. The scalar paths, as before, follow the compiler's flags.
+- **MSVC and ARM.** The SSE2 paths are guarded (`__SSE2__`, `_M_X64`); other targets use the scalar loops, which give the same numbers. `__builtin_prefetch` is used only on GCC and Clang. Only the Linux build was compiled and run here.
+- **The n-gram with `check` off** now takes 5 bytes a slot (it took 4). The default has the check on, and `bytes()` still reports the old formula.
+- **Merge.** The full-mix session edits `full_mixer.hpp` and `cyphalm_trie.cpp` at the same time. This branch changes `cyphalm_trie.cpp` only at the end of `cmd_selftest` (one block) and adds two lines to `CMakeLists.txt`. `OnlineNgram`'s and `ByteLSTMT`'s public interfaces are unchanged (`set_threads` and `threads` are new).
