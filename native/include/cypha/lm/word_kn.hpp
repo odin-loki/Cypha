@@ -645,20 +645,22 @@ struct Options {
     double scorer_w = 0.25;
     bool cap = true;           // apply the model's copy cap (K5::load's cap; a model built with cap 0 has none)
     double temperature = 1.0;  // fuzzy_bake.py: 1.0
-    double cand_mass = 0.995, nucleus = 0.9;  // --k5-cand-mass P, --k5-nucleus P (docs/reports/K5_UPGRADES.md step 1)
+    double cand_mass = 0.995;  // --k5-cand-mass P
+    double nucleus = 0.8;      // --k5-nucleus P: 0.8, adopted by K5_UPGRADES.md step 1 (§13.19's K5: 0.9)
     std::size_t cand_max = 3000;              // --k5-cand-max N
     int max_words = 300;
     std::size_t bytes = 600;
-    // docs/reports/K5_UPGRADES.md. Every default leaves K5 as §13.19 built it.
+    // docs/reports/K5_UPGRADES.md. The defaults are the adopted arms (nucleus 0.8, 256 exchange classes as the backoff
+    // floor, the 8-candidate sentence gate by prompt association); --k5-base k5 restores §13.19's K5 (k5_v1 below).
     std::uint64_t seed_off = 0;                        // --k5-seed N: seeds 20261101 + N + the prompt's index
     double cache_w = 0, cache_w2 = 0, cache_r = 0.99;  // step 2a: --k5-cache W, --k5-cache2 W2, --k5-cache-decay R
     double dyn = 0;                                    // step 2b: --k5-dyn L (the dynamic counts' weight)
     int order = kOrder;                                // step 3: --k5-order N (build)
-    std::size_t classes = 0;                           // step 3: --k5-classes K (build; exchange classes)
+    std::size_t classes = 256;                         // step 3: --k5-classes K (build; exchange classes; 0: none)
     int class_mode = 1;                                // --k5-class-mode backoff (1) | mix (2)
     double class_w = 0.1;                              // --k5-class-w W (mix)
-    int gate_k = 0;                                    // step 4: --k5-gate K[,wf=..][,wp=..][,wm=..][,min=..][,max=..]
-    double gate_wf = 1, gate_wp = 0, gate_wm = 5;
+    int gate_k = 8;                                    // step 4: --k5-gate K[,wf=..][,wp=..][,wm=..][,min=..][,max=..] (1: off)
+    double gate_wf = 0, gate_wp = 1, gate_wm = 5;
     std::size_t gate_min = 24, gate_max = 240;
     // The settings that differ from K5's, for the MODEL line (empty for K5 itself).
     std::string describe() const {
@@ -676,11 +678,22 @@ struct Options {
         if (cache_w > 0 || cache_w2 > 0) add("cache", cache_w), add("cache2", cache_w2), add("cache_decay", cache_r);
         if (dyn > 0) add("dyn", dyn);
         if (order != kOrder) add("order", order);
-        if (classes) add("classes", static_cast<double>(classes)), add(class_mode == 2 ? "class_mix" : "class_backoff", class_mode == 2 ? class_w : 1);
-        if (gate_k > 1) add("gate", gate_k), add("wf", gate_wf), add("wp", gate_wp), add("wm", gate_wm);
+        if (classes != d.classes || class_mode != d.class_mode || class_w != d.class_w)
+            add("classes", static_cast<double>(classes)), add(class_mode == 2 ? "class_mix" : "class_backoff", class_mode == 2 ? class_w : 1);
+        if (gate_k != d.gate_k || gate_wf != d.gate_wf || gate_wp != d.gate_wp || gate_wm != d.gate_wm || gate_min != d.gate_min || gate_max != d.gate_max)
+            add("gate", gate_k > 1 ? gate_k : 0), add("wf", gate_wf), add("wp", gate_wp), add("wm", gate_wm);
         return s;
     }
 };
+
+// §13.19's K5, before K5_UPGRADES.md: nucleus 0.9, no classes, no gate (--k5-base k5).
+inline Options k5_v1() {
+    Options o;
+    o.nucleus = 0.9;
+    o.classes = 0;
+    o.gate_k = 0, o.gate_wf = 1, o.gate_wp = 0;
+    return o;
+}
 
 // Reads one --k5-... flag of K5_UPGRADES.md into o. Returns false and err for a bad value or an unknown name.
 inline bool apply_flag(const std::string& name, const std::string& val, Options& o, std::string& err) {
@@ -694,6 +707,13 @@ inline bool apply_flag(const std::string& name, const std::string& val, Options&
         return true;
     };
     double x = 0;
+    if (name == "--k5-base") {  // reset every K5 setting: k5 (§13.19's K5) or k5up (the defaults); later flags apply on top
+        if (val != "k5" && val != "k5up") return err = name + ": k5 or k5up", false;
+        const auto keep_scorer = o.scorer;
+        o = val == "k5" ? k5_v1() : Options{};
+        o.scorer = keep_scorer;
+        return true;
+    }
     if (name == "--k5-seed") return num(x, 0, 1e15) && ((o.seed_off = static_cast<std::uint64_t>(x)), true);
     if (name == "--k5-nucleus") return num(o.nucleus, 1e-6, 1);
     if (name == "--k5-cand-mass") return num(o.cand_mass, 1e-6, 1);
@@ -1568,7 +1588,7 @@ inline bool self_test(std::string& err) {
     // The cap: after twelve words of the repeated sentence the thirteenth is never written; with --k5-cap 0 it is.
     {
         const std::string pr = "One two three four five six seven eight nine ten eleven twelve";
-        Options o;
+        Options o = k5_v1();
         o.bytes = 120;
         int with = 0, without = 0;
         GenStats st;
@@ -1592,7 +1612,9 @@ inline bool self_test(std::string& err) {
     {
         Options o;
         std::string e;
-        if (!apply_flag("--k5-gate", "4,wf=1,wp=0.5,wm=5", o, e) || o.gate_k != 4 || o.gate_wp != 0.5 || !apply_flag("--k5-cache", "0.1", o, e) ||
+        Options v1;
+        if (!apply_flag("--k5-base", "k5", v1, e) || v1.nucleus != 0.9 || v1.classes != 0 || v1.gate_k != 0 ||
+            !apply_flag("--k5-gate", "4,wf=1,wp=0.5,wm=5", o, e) || o.gate_k != 4 || o.gate_wp != 0.5 || !apply_flag("--k5-cache", "0.1", o, e) ||
             apply_flag("--k5-nucleus", "1.5", o, e) || apply_flag("--k5-bogus", "1", o, e) || !apply_flag("--k5-class-mode", "mix", o, e) ||
             o.class_mode != 2 || Options{}.describe() != "") {
             err = "apply_flag";
@@ -1616,14 +1638,14 @@ inline bool self_test(std::string& err) {
         return true;
     };
     {
-        Options o;
+        Options o = k5_v1();
         o.dyn = 3;
         if (!sums(m, o, "dynamic counts")) return false;
-        o = Options{};
+        o = k5_v1();
         o.cache_w = 0.2, o.cache_w2 = 0.1, o.cache_r = 0.9;
         if (!sums(m, o, "the cache")) return false;
         // The dynamic counts raise a word the prompt put after its context; the shared model is unchanged.
-        Options d;
+        Options d = k5_v1();
         d.dyn = 5;
         const std::string pr = "The cat lost Paris. The cat lost";
         const auto prob = [&](const Options& oo) {
@@ -1632,13 +1654,13 @@ inline bool self_test(std::string& err) {
             m.model_dist(s, oo, q.data(), tmp);
             return q[m.id("Paris")];
         };
-        const double p0 = prob(Options{}), p1 = prob(d), p2 = prob(Options{});
+        const double p0 = prob(k5_v1()), p1 = prob(d), p2 = prob(k5_v1());
         if (!(p1 > p0) || p2 != p0) {
             err = "dynamic counts do not raise the prompt's continuation";
             return false;
         }
         // K5's own path: cont_bits with default options is the plain walk.
-        if (m.cont_bits("The cat", "saw the river.").first != m.cont_bits("The cat", "saw the river.", Options{}).first) {
+        if (m.cont_bits("The cat", "saw the river.").first != m.cont_bits("The cat", "saw the river.", k5_v1()).first) {
             err = "cont_bits";
             return false;
         }
@@ -1646,11 +1668,11 @@ inline bool self_test(std::string& err) {
     for (int ord : {6, 7}) {
         K5 m6;
         m6.build(text, 12, ord);
-        if (m6.kn().order() != ord || m6.kn().entries(ord) == 0 || !sums(m6, Options{}, "order 6/7")) {
+        if (m6.kn().order() != ord || m6.kn().entries(ord) == 0 || !sums(m6, k5_v1(), "order 6/7")) {
             if (err.empty()) err = "order " + std::to_string(ord);
             return false;
         }
-        Options o;
+        Options o = k5_v1();
         o.dyn = 2;
         if (!sums(m6, o, "order 6/7 with dynamic counts")) return false;
     }
@@ -1662,13 +1684,13 @@ inline bool self_test(std::string& err) {
             err = "exchange classes";
             return false;
         }
-        Options o;
+        Options o = k5_v1();
         if (!sums(mc, o, "class backoff")) return false;
         o.class_mode = 2, o.class_w = 0.3;
         if (!sums(mc, o, "class mix")) return false;
     }
     {  // The gate: deterministic, within the budget, no copy run; K 1 is K5 itself.
-        Options o;
+        Options o = k5_v1();
         o.bytes = 200;
         const std::string a0 = m.generate("The cat saw", 9, o);
         Options g1 = o;

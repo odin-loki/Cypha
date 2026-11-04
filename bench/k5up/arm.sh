@@ -11,11 +11,14 @@ VEC=${VEC:-/mnt/d/cypha_llm/scribe/v32}
 OUT=${OUT:-/mnt/d/cypha_llm/k5up}
 SPLIT=${SPLIT:-dev}
 mkdir -p "$OUT"; cd "$OUT"
+if [ -z "${ROWONLY:-}" ]; then
 "$BIN/cyphalm_trie" sample "$E" "$NAME.gen.txt" --prompts-file "$ROOT/bench/eval/gen_prompts_$SPLIT.tsv" --prompts 250 \
     --k5 "$TRAIN" "$@" > "$NAME.eval" 2> "$NAME.log"
 "$BIN/scribe" ladder --pack "enwik:$E:16:48" --ref "enwik:$E:48:56" --test "enwik:$E:56:64" --vectors "$VEC" --profile v2 \
     --seed 20261027 --gen-trie "$NAME.gen.txt" --label "$NAME" > "$NAME.scribe.md" 2> "$NAME.scribe.err"
-row=$(grep -m1 "^| trie samples T=" "$NAME.scribe.md")
+fi
+# One temperature: the pooled row is that temperature's (scribe prints a T= row only for 0.6, 0.8 and 1.0).
+row=$(grep -m1 "^| trie samples (pooled)" "$NAME.scribe.md")
 sc=$(echo "$row" | awk -F'|' '{gsub(/ /,"",$4); print $4}')
 ss=$(echo "$row" | awk -F'|' '{gsub(/^ +| +$/,"",$6); print $6}')
 bpb=$(grep -o "k5_cont_bpb [0-9.]*" "$NAME.eval" | awk '{print $2}')

@@ -121,4 +121,112 @@ GEN-E's fact store (`seeds.tsv`, `facts_f2.tsv`) and its frames (`patterns.tsv`,
 
 ## Results
 
-(Added below as the runs finish.)
+All on GEN-A dev, 250 prompts. SCRIBE v2 is the pooled row (with one temperature it is that temperature's row; its bootstrap interval can differ from the T= row's in the third digit). k5_cont_bpb is K5's word-level bits per byte on the human continuations.
+
+### Step 1: sampler tuning
+
+**The grid** (seed offset 0, candidates cut at 0.995):
+
+| Arm | SCRIBE v2 [95%] | surface S | copy32 | verbatim13 |
+|---|---:|---:|---:|---:|
+| T 0.8, nucleus 0.8 | 0.460 [0.433, 0.487] | 0.964 | 0.1658 | 0 |
+| T 0.8, nucleus 0.9 | 0.416 [0.390, 0.445] | 0.962 | 0.1243 | 0 |
+| T 0.8, nucleus 0.95 | 0.394 [0.368, 0.421] | 0.958 | 0.1070 | 0 |
+| T 0.9, nucleus 0.8 | 0.430 [0.405, 0.459] | 0.960 | 0.0962 | 0 |
+| T 0.9, nucleus 0.9 | 0.395 [0.366, 0.428] | 0.947 | 0.0667 | 0 |
+| T 0.9, nucleus 0.95 | 0.351 [0.324, 0.378] | 0.940 | 0.0549 | 0 |
+| **T 1.0, nucleus 0.8** | **0.395 [0.366, 0.424]** | 0.946 | 0.0481 | 0 |
+| T 1.0, nucleus 0.9 (K5) | 0.353 [0.318, 0.384] | 0.928 | 0.0351 | 0 |
+| T 1.0, nucleus 0.95 | 0.284 [0.253, 0.314] | 0.920 | 0.0289 | 0 |
+| T 1.1, nucleus 0.8 | 0.314 [0.283, 0.345] | 0.920 | 0.0282 | 0 |
+| T 1.1, nucleus 0.9 | 0.224 [0.194, 0.253] | 0.914 | 0.0177 | 0 |
+| T 1.1, nucleus 0.95 | 0.172 [0.144, 0.201] | 0.903 | 0.0146 | 0 |
+
+k5_cont_bpb is 1.549997 in every arm (the sampler does not change the model).
+
+- **SCRIBE rises with copying.** Every step towards a sharper sampler raises SCRIBE, surface S and copy32 together. The cap holds verbatim13 at 0 everywhere, but at T 0.8 / nucleus 0.8 a sixth of the bytes lie in 32-byte spans of the training text (0.166 against K5's 0.035).
+- **The copy bound decides.** The rule allows copy32 to rise by at most 0.02 (to 0.055). Only T 1.0 / nucleus 0.8, T 0.9 / nucleus 0.95 and the softer arms stay inside it. Arms that break a bound cannot be adopted, so the choice is the best arm inside the bounds: **T 1.0, nucleus 0.8** (0.395). This reading of the rule is stated here because the registration did not say it in so many words.
+
+**The candidate cut** (T 1.0, nucleus 0.8):
+
+| Cut | SCRIBE v2 [95%] | surface S | copy32 |
+|---|---:|---:|---:|
+| 0.99 | 0.395 [0.367, 0.426] | 0.946 | 0.0481 |
+| 0.995 (K5's) | 0.395 [0.366, 0.424] | 0.946 | 0.0481 |
+| 0.999 | 0.392 [0.363, 0.423] | 0.946 | 0.0481 |
+| 1.0 (top 3,000 only) | 0.392 [0.363, 0.423] | 0.946 | 0.0481 |
+
+The cut does not matter: 0.995 stays.
+
+**Confirmation** (seed offsets 1000–4000):
+
+| Seed offset | K5 | nucleus 0.8 |
+|---|---:|---:|
+| 1000 | 0.362 | 0.372 |
+| 2000 | 0.337 | 0.396 |
+| 3000 | 0.323 | 0.399 |
+| 4000 | 0.312 | 0.397 |
+| mean | 0.334 | **0.391** |
+| surface S (mean) | 0.928 | 0.942 |
+| copy32 (mean) | 0.0358 | 0.0531 |
+
+- +0.057, 4 of 4 seeds, copy32 +0.017 (inside 0.02), surface S +0.014, verbatim13 0 at every seed. **Adopted: nucleus 0.8.** Spread over the 5 seeds: 0.372–0.399.
+- Predictions: P1.1 hit (a lower nucleus +0.04; T 0.8–0.9 +0.04–0.11, more than predicted). P1.2 hit. P1.3 hit (≤ 0.003). P1.4 hit, and it is the binding constraint: copy32 reaches 0.10–0.17 at T 0.8.
+- Steps 2–4 run with nucleus 0.8.
+
+### Step 2: K5 learns online while it writes
+
+Seed offset 0, nucleus 0.8 (step 1). The baseline is T 1.0 / nucleus 0.8: 0.395 [0.366, 0.424], k5_cont_bpb 1.549997.
+
+| Arm | SCRIBE v2 [95%] | surface S | copy32 | verbatim13 | k5_cont_bpb |
+|---|---:|---:|---:|---:|---:|
+| nucleus 0.8 (baseline) | **0.395** [0.366, 0.424] | 0.946 | 0.0481 | 0 | 1.5500 |
+| C1 cache W 0.05, R 0.99 | 0.359 [0.325, 0.393] | 0.949 | 0.0411 | 0 | 1.5020 |
+| C2 cache W 0.1, R 0.99 | 0.284 [0.248, 0.323] | 0.961 | 0.0362 | 0 | 1.4993 |
+| C3 cache W 0.2, R 0.99 | 0.114 [0.089, 0.140] | 0.959 | 0.0216 | 0 | 1.5073 |
+| C4 cache W 0.1, R 0.95 | 0.261 [0.227, 0.298] | 0.966 | 0.0344 | 0 | 1.5055 |
+| C5 cache W 0.1 + bigram 0.1 | 0.279 [0.242, 0.313] | 0.961 | 0.0286 | 0 | **1.4885** |
+| D1 dynamic counts L 1 | 0.394 [0.367, 0.422] | 0.942 | 0.0511 | 0 | 1.5337 |
+| D2 dynamic counts L 3 | 0.384 [0.356, 0.413] | 0.942 | 0.0532 | 0 | 1.5308 |
+| D3 dynamic counts L 10 | 0.375 [0.345, 0.406] | 0.940 | 0.0504 | 0 | 1.5279 |
+| CD cache 0.05 + dynamic L 1 | 0.358 [0.322, 0.391] | 0.951 | 0.0401 | 0 | 1.4936 |
+
+- **Every online part lowers bits and none raises SCRIBE.** The cache gains up to 0.061 bits per byte (C5), the largest gain in this report. SCRIBE falls as the cache weight rises: 0.359, 0.284, 0.114.
+- **Why the cache hurts.** A unigram cache puts mass on the prompt's words in every slot, whatever the syntax. Its most frequent entries are function words and punctuation, so the text gets ",,", ".." and "Some of the in - group of the other" (C2, prompt 0). Bigram pairs (C5) help bits but not text.
+- **Dynamic counts are nearly neutral.** D1 ties the baseline at seed 0 (0.394). Over the 4 confirmation seeds it loses: 0.382, 0.382, 0.387, 0.370 (mean 0.380) against 0.391; −0.011, 1 of 4 seeds. Not adopted.
+- **Nothing from step 2 is adopted.** The flags stay.
+- Predictions: P2.1 hit (−0.048 to −0.061). P2.2 miss (W 0.05 already −0.036). P2.3 hit (dynamic −0.016 to −0.022, SCRIBE within 0.02). P2.4 hit (copy32 falls with the cache).
+- This is §13.11's finding again: what lowers bits does not raise SCRIBE.
+
+### Step 3: order 6 and 7, and exchange classes
+
+Seed offset 0, nucleus 0.8. The baseline is nucleus 0.8 alone (0.395).
+
+| Arm | SCRIBE v2 [95%] | surface S | copy32 | verbatim13 | k5_cont_bpb |
+|---|---:|---:|---:|---:|---:|
+| nucleus 0.8 (baseline, order 5) | 0.395 [0.366, 0.424] | 0.946 | 0.0481 | 0 | 1.549997 |
+| O6 order 6 | 0.349 [0.323, 0.378] | 0.937 | 0.0527 | 0 | 1.549850 |
+| O7 order 7 | 0.409 [0.380, 0.441] | 0.941 | 0.0521 | 0 | 1.549843 |
+| X1 512 classes, backoff | 0.402 [0.377, 0.429] | 0.943 | 0.0531 | 0 | 1.540610 |
+| **X2 256 classes, backoff** | **0.444 [0.413, 0.477]** | 0.944 | 0.0557 | 0 | 1.532327 |
+| X3 512 classes, mix W 0.1 | 0.378 [0.351, 0.405] | 0.942 | 0.0473 | 0 | 1.526833 |
+
+- **Orders 6 and 7 add nothing.** They gain 0.00015 bits per byte: 7 MB of text has almost no repeated 6-grams. Their SCRIBE (0.349, 0.409) differs from order 5 by draw noise only: once a draw differs, the rest of the text differs. That 0.06 gap between two models with the same bits is a direct look at the noise of one seed.
+- **Classes.** The exchange algorithm runs 6 passes in C++ (33 s for 256 classes, 116 s for 512). The class-bigram log-likelihood rises from −18.68 M to −17.63 M (256) and from −18.36 M to −17.39 M (512).
+- **The class model as K5's floor helps; as a mix it does not.** X2 gains 0.018 bits and the most SCRIBE. The mix (X3) gains more bits (0.023) and loses SCRIBE, as SO1 did (§13.11). Backoff only changes the words K5 has not seen in a context, where the unigram floor gave them by frequency alone. The classes give them by what kind of word fits after the last two words' classes.
+
+**Confirmation of X2** (seed offsets 1000–4000):
+
+| Seed offset | nucleus 0.8 | + 256 classes, backoff |
+|---|---:|---:|
+| 1000 | 0.372 | 0.406 |
+| 2000 | 0.396 | 0.428 |
+| 3000 | 0.399 | 0.422 |
+| 4000 | 0.397 | 0.423 |
+| mean | 0.391 | **0.420** |
+| surface S (mean) | 0.942 | 0.943 |
+| copy32 (mean) | 0.0531 | 0.0518 |
+
+- +0.029, 4 of 4 seeds, copy32 −0.001, surface S +0.002, verbatim13 0. **Adopted: 256 exchange classes as the backoff floor.** Spread over the 5 seeds: 0.406–0.444.
+- Predictions: P3.1 hit (−0.00015 bits; SCRIBE moved by noise, both ways). P3.2 hit on bits (−0.018, −0.009) but missed on SCRIBE: +0.049 at seed 0 and +0.029 over 4 seeds, more than 0.02. P3.3 hit (the mix gains the most bits, −0.023, and loses SCRIBE).
+- Step 4 runs with nucleus 0.8 and the 256 classes.

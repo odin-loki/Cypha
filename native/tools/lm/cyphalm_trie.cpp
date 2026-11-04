@@ -84,6 +84,10 @@
 //        has K5 (word_kn.hpp: word-level Kneser-Ney of order 5, whole words, nucleus 0.9, the repeat ban) write every
 //        GEN line, at T 1.0 unless --temps; the trie and the experts are not built. --k5-cap N (default 12) bans a word
 //        that would make N + 1 consecutive tokens of TEXT (0: off). GEN_EVAL then gives K5's copy32 and verbatim13.
+//        docs/reports/K5_UPGRADES.md: by default K5 now writes with nucleus 0.8, 256 exchange classes as its backoff
+//        floor and an 8-candidate sentence gate by prompt association; --k5-base k5 (first) restores §13.19's K5. Other
+//        --k5-... flags (word_kn.hpp apply_flag): -seed, -nucleus, -cand-mass, -cand-max, -cache, -cache2, -cache-decay,
+//        -dyn, -order, -classes, -class-mode, -class-w, -gate.
 //        chat and sample: --save FILE stores the trained packed trie with its weights and split (RAM_PROFILE M7);
 //        --model FILE serves that file without training (chat then prints no mix_stored: it measures the training form).
 //   bkn <wiki> K[:m:c:d] [more specs] [--bkn-fresh] [--bkn-stack]
