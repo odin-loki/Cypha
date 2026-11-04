@@ -80,6 +80,10 @@
 //        prompt's entity, and the expert follows their realisations (F2's frames, filled). Facts read from the holdout
 //        are dropped, and from --plan-drop LO:HI (raw bytes; the benchmark's source range for --prompts-file). The
 //        files gain PLAN lines (the plan of each prompt; SCRIBE reads GEN lines only). Off by default.
+//        §13.19 (docs/GENERATION_PLAN.md): --k5 TEXT (clean prose, a document per line, e.g. fuzzy_bake.py's train.txt)
+//        has K5 (word_kn.hpp: word-level Kneser-Ney of order 5, whole words, nucleus 0.9, the repeat ban) write every
+//        GEN line, at T 1.0 unless --temps; the trie and the experts are not built. --k5-cap N (default 12) bans a word
+//        that would make N + 1 consecutive tokens of TEXT (0: off). GEN_EVAL then gives K5's copy32 and verbatim13.
 //        chat and sample: --save FILE stores the trained packed trie with its weights and split (RAM_PROFILE M7);
 //        --model FILE serves that file without training (chat then prints no mix_stored: it measures the training form).
 //   bkn <wiki> K[:m:c:d] [more specs] [--bkn-fresh] [--bkn-stack]
@@ -269,6 +273,7 @@
 #include "cypha/lm/packed_trie.hpp"
 #include "cypha/lm/similar_context.hpp"
 #include "cypha/lm/token_model.hpp"  // BKN selftest: the reference Kneser-Ney
+#include "cypha/lm/word_kn.hpp"      // §13.19: sample --k5
 #include "cypha/eval/lci.hpp"
 #include "cypha/eval/scribe.hpp"
 #include "cypha/knowledge/unknown_signals.hpp"
@@ -373,6 +378,8 @@ struct Args {
     bool copy_frame = false;                      // DK2: copy a frame's entity, not its end; the tag may repeat the message
     std::string gate;                             // GEN-B: sample's sentence gate, K[,wf=..][,wp=..][,wm=..][,min=..][,max=..]
     std::string temps;                            // TEMPS: sample's temperatures, T[,T][,T] (default 0.6,0.8,1.0)
+    std::string k5;                               // §13.19: sample --k5 TEXT, K5 (word_kn.hpp) writes every GEN line
+    int k5_cap = 12;                              // §13.19: --k5-cap N, at most N consecutive training tokens (0: off)
 };
 
 std::string env_or(const char* name, const char* fallback) {
@@ -462,6 +469,8 @@ Args parse(int argc, char** argv, int from) {
         else if (s == "--dk-plain") a.dk_plain = std::atof(next());  // DK2
         else if (s == "--fam-ent-at") a.fam_ent_at = next();         // DK2
         else if (s == "--copy-frame") a.copy_frame = true;           // DK2
+        else if (s == "--k5") a.k5 = next();                         // §13.19
+        else if (s == "--k5-cap") a.k5_cap = std::atoi(next());      // §13.19
         else if (s.rfind("--", 0) == 0) {
             std::cerr << "unknown option " << s << "\n";
             a.ok = false;
@@ -1495,6 +1504,9 @@ int cmd_sample(const Args& a) {
         std::cerr << "too few holdout paragraphs for " << need << " prompts\n";
         return 1;
     }
+    if (!a.k5.empty())  // §13.19: K5 writes every GEN line (T 1.0 unless --temps); the trie and its experts are not built
+        return cypha::cyphalm::wkn::run_sample(a.k5, a.k5_cap, prompts, conts, a.outs, a.prompts, static_cast<std::size_t>(a.bytes),
+                                               a.temps.empty() ? std::vector<double>{1.0} : temps, printable);
 
     if (a.model.empty()) {
         Model model;
@@ -5844,6 +5856,10 @@ int cmd_bkn(const Args& a) {
 }
 
 int cmd_selftest() {
+    if (std::string err; !cypha::cyphalm::wkn::self_test(err)) {  // §13.19: K5's tokens, bans, cap and KN
+        std::cerr << "selftest: K5 (word_kn.hpp) " << err << "\n";
+        return 1;
+    }
     if (!self_test()) {
         std::cerr << "selftest: packed_trie self_test failed\n";
         return 1;

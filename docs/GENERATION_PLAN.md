@@ -1137,3 +1137,44 @@ None of this changes what the sampler writes. That needs the GLN and the online 
   - `geo` scores 0.111 (0.090 with the 7 MiB GLN): it fails the rule (≥ 0.154). The prediction that `geo` holds up missed.
   - `gate` scores 0.143 (0.117 with the 7 MiB GLN): it fails, as predicted. At T 1.0 it still beats W0, 0.122 against 0.073.
 - **Reading.** Scale on the wrong kind of text does not help. The GLN gained on writing (both mixes rose by 0.02–0.03) but lost on prediction, because the test is Wikipedia and the training was the web. The next step is the same test at scale on in-domain text: clean Wikipedia prose that does not overlap enwik8 (for example enwik9 beyond its first 100 MB, cleaned by SCRIBE's cleaner), with the online pass on that text too.
+
+### 13.19 K5 in `cyphalm_trie sample` (2026-11-04)
+
+**Odin** (on §13.11's decision 1): "do all that other stuff too." So K5 now runs inside CyphaLM.
+
+**What was built.**
+- `native/include/cypha/lm/word_kn.hpp` (namespace `cypha::cyphalm::wkn`). It ports the arm K5 of `bench/fuzzy/fuzzy_bake.py`:
+  - the tokeniser TOKRE, with Python's `\s`;
+  - the vocabulary: 32,000 entries, tokens seen at least twice;
+  - the estimator KN: interpolated modified Kneser–Ney of order 5, with the same discounts, continuation counts and backoff;
+  - the sampler `generate_one`: the 3,000 most probable words cut at 0.995, the word-level repeat ban, nucleus 0.9 at T 1.0, the `piece()` spacing and the 600-byte stop.
+- The 12-word cap. A word may not complete 13 consecutive tokens of the training text, prompt included. The header keeps a hash set of every 13-token window. If the cap leaves no candidate, the most probable word that it allows is written.
+- Words outside the vocabulary are `<unk>` in the context, as in Python. `<unk>` is never written. The byte model does not spell new words. That is not built: a sample never needs it, and it was not shown to keep SCRIBE.
+- `cyphalm_trie sample … --k5 TEXT [--k5-cap N]`: K5 writes every GEN line (`GEN\ttrie_T1.0\t…`), and the trie and its experts are not built. TEXT is clean prose, a document per line. `GEN_EVAL` prints K5's continuation bits, copy32 and the share of samples with a 13-token training run. The hook is a few lines in `cyphalm_trie.cpp`.
+- The selftest checks the tokeniser, `piece()`, the repeat ban and the cap. It also checks that KN sums to one, and that one probability equals a direct count.
+
+**Checks against Python** (its own `train.txt`, `vocab.json` and `train.npy`):
+- The vocabulary and the id stream are identical (1,356,468 ids), and so are the entries per order.
+- The probabilities agree to about 13 digits.
+- The continuation bits per byte on GEN-A dev are 1.549997, the same as `res_K5.json`.
+- `fuzzy_bake.py`'s own `generate_one`, run in this container, gives Odin's PC numbers exactly: copy32 0.0402, 13-word runs 0.012, SCRIBE 0.344 [0.311, 0.379]. So SCRIBE and its vectors here match the PC's.
+
+**One bug found and fixed: the order of ties.**
+- Many tail words have the same probability, for example those with one left context and no stored context.
+- The 0.9 nucleus splits such a block at 55% of steps (25 dev prompts, Python).
+- numpy leaves ties in no particular order. The first port ordered them by id, which is frequency, so the most frequent words of a tied block got in. Those are words that follow one word only, such as "Angeles" and "Shrugged", or sentence openers such as "Instead" and "Moreover", which only follow a full stop.
+- That port scored 0.286, 0.296, 0.312 and 0.310 on four seeds. Ties are now ordered by a hash salted per step.
+
+**Dev result** (GEN-A dev, 250 prompts, SCRIBE v2, seeds 20261101 + prompt index as in Python):
+
+| | SCRIBE v2 [95%] | surface S | copy32 | samples with a 13-token run |
+|---|---|---|---|---|
+| Python K5 (`res_K5.json`) | 0.344 [0.311, 0.379] | 0.928 | 0.040 | 0.012 |
+| **K5 in `cyphalm_trie` (cap 12)** | **0.353 [0.321, 0.385]** | 0.928 | 0.035 | **0** |
+| the same, `--k5-cap 0` | 0.353 [0.321, 0.386] | 0.928 | 0.035 | 0 |
+
+- **Spread over seeds.** The C++ K5 scores 0.309–0.353 over 8 seeds (mean 0.330). Python scores 0.344, 0.344 and 0.310 over 3 (mean 0.333). They are the same sampler.
+- **The cap.** It fired at 2 of 31,895 words on the dev seeds and changed 2 samples. SCRIBE did not move. Over 8 seeds, 11 of 2,000 uncapped samples hold a 13-token run (0.55%; Python 3 of 750). With the cap, 0 of 2,000 do.
+- **Speed and memory.** Building takes 1 s. The 250 samples take 9 s on 4 threads (about 1.1 ms a word a thread). Python takes about 200 s. The model is 119 MB, and the run peaks at 220 MB.
+
+**Next.** K5 is at its Python level on dev and keeps the cap. The one GEN-A test read against the byte default (BK0, test 0.147 at T 0.6) is the parent's to register and make.
