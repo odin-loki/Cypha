@@ -765,7 +765,7 @@ class Experts {
     // The features of candidate s (its K5 ids) after context c; k5lp and pmi come from the draft (K5's own numbers).
     void features(const Context& c, const Sent& s, const std::vector<std::uint32_t>& ids, double k5lp, double pmi, double* f) const {
         for (int j = 0; j < kNFeat; ++j) f[j] = 0;
-        f[kK5] = k5lp, f[kPmi] = pmi;
+        f[kK5] = std::max(k5lp, -25.0), f[kPmi] = pmi;  // a few real words have almost no K5 mass: clipped at 2^-25
         // class: the class n-gram from the context's last 4 classes.
         {
             std::vector<std::uint32_t> h;

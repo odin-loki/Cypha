@@ -57,6 +57,10 @@ Each expert scores one candidate sentence given the prompt and the paragraph so 
 | **rhythm** | form | log₂ P(length bucket ∣ the previous sentence's length bucket) (ECDF buckets from S); brackets and quotes balanced (a flag); the gate's markup share |
 | **novelty** | no copying, no echo | the longest run of tokens shared with K5's training text (up to 13), and with the context |
 
+Notes fixed before the runs (2026-11-05):
+- **topic** and **grid** are `wip/k5-discourse`'s `lda.hpp` and `entity_grid.hpp`, merged in. topic: LDA's mean log₂ p_topic(w ∣ the context's topics) / p(w) over the candidate's content words. grid: the grid's log₂ probability change when the candidate joins (full), and its continuation score (kept entities only). The grid is counted on S. LDA (100 topics, 200 sweeps, AD-LDA on 2 threads) is trained on the first 10 MB of S for S10 and on the first 50 MB of S for S50 and S210 (LDA on 210 MB would take hours).
+- The k5 feature is clipped at −25 bits per word on average: a few real words get almost no mass from K5.
+
 Experts are added only if the data says so: an expert stays in the mix if removing it costs held-out sentence bits.
 
 **A scoring interface** (for `wip/k5-mcmc`): `score(prompt, paragraph so far, candidate)` returns every expert's numbers and the mixed score of the one-layer ranker (a log-linear energy). The candidate set is not needed for that score.
@@ -98,6 +102,7 @@ Experts are added only if the data says so: an expert stays in the mix if removi
 - **W2:** W1 sampled at T 0.5;
 - **W3:** the chosen mix trained with P (drafts only), argmax;
 - **W4:** W1 with 16 candidates per sentence.
+- **W5** (added 2026-11-05, before any writing run or held-out read): the chosen mix trained with R, but **without the k5 expert** (`run --drop k5`). Why: a smoke test on 2,112 boundaries from inside M (scored on themselves, so not a result) showed K5's own probability alone picks the real sentence 92% of the time, because drafts come from K5's nucleus and real sentences do not. The mix gave k5 a large negative weight. As a writer, that mix would pick K5's least probable draft. W3 (the P signal) is one guard against this; W5 is the other.
 
 Every arm's dev GEN file is saved under `bench/k5_structure/` and pushed, for the four blind Claude raters in the cloud (50 dev prompts).
 

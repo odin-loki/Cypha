@@ -13,6 +13,7 @@
 //   k5_structure run      --train FEAT --test FEAT --stats STATS --out PREFIX [--signal R|P]
 //       Every arm: each expert alone, uniform, M1-M4, L0, the ablations. Sentence bits [95%], top-1. Writes
 //       PREFIX.M1.model ... PREFIX.M4.model (for sample --k5-struct) and PREFIX.tsv (every arm's held-out losses' mean).
+//       --drop EXPERT[,EXPERT]: the mix arms leave those experts out. --max-train N: the first N shuffled items.
 //   k5_structure selftest
 //
 // Author: Odin Loch
@@ -580,7 +581,12 @@ int cmd_run(const std::map<std::string, std::string>& a) {
         std::printf("\n");
     }
     std::vector<ArmResult> arms;
-    const std::vector<char> all(J, 1);
+    std::vector<char> all(J, 1);
+    // --drop EXPERT[,EXPERT]: the mix arms (M1-M4, L0, ablations) leave those experts out.
+    for (const auto& name : split_ws([&] { std::string d = get(a, "--drop"); std::replace(d.begin(), d.end(), ',', ' '); return d; }()))
+        for (const auto& e : st::experts())
+            if (name == e.name)
+                for (const int f : e.feats) all[f] = 0;
     // Each expert alone.
     for (const auto& e : st::experts()) {
         std::vector<char> mask(J, 0);
@@ -662,7 +668,7 @@ int cmd_run(const std::map<std::string, std::string>& a) {
                     for (int j = 0; j < J; ++j) g[j] += (P[i] - (i == it.target)) * it.z[static_cast<std::size_t>(i * J + j)];
             }
             for (int j = 0; j < J; ++j) {  // Adam, step 0.05
-                const double gj = g[j] / static_cast<double>(train.size()) + 1e-3 * w[j];
+                const double gj = all[j] ? g[j] / static_cast<double>(train.size()) + 1e-3 * w[j] : 0.0;
                 mo[j] = 0.9 * mo[j] + 0.1 * gj, ve[j] = 0.999 * ve[j] + 0.001 * gj * gj;
                 const double mh = mo[j] / (1 - std::pow(0.9, itn)), vh = ve[j] / (1 - std::pow(0.999, itn));
                 w[j] -= 0.05 * mh / (std::sqrt(vh) + 1e-8);
