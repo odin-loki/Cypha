@@ -1667,3 +1667,16 @@ The headline arm ABs mixes the two per bit. Settings were tuned by replay on the
   - new minus old about +0.5, with the rule holding (about 60%);
   - raters agreeing at r ≥ 0.6 per text.
 - Items and key: `bench/blind/llm_rating/`, key base64-encoded.
+
+**§13.31 result** (2026-11-04; 4 blind raters, 150 texts, 2 ratings each):
+
+| | Mean (1–10) | Rated 6 or more |
+|---|---:|---:|
+| human | **8.50** | 99% |
+| new K5 (gate) | 2.09 | 0% |
+| old K5 | 1.77 | 0% |
+
+- **The rule holds:** new minus old is +0.32, with 95% interval [0.22, 0.42] over 50 prompts. Both rater pairs are positive (+0.28, +0.36). The gate makes K5 slightly better to a reader.
+- **But both K5s read as about 2 out of 10:** "mostly sentence-shaped, but they don't connect or make sense". No K5 text got 6 or more from any rater. The human text came top in 100 of 100 items. Raters agreed closely (r 0.986 per text).
+- **Predictions:** human about 8 hit (8.5); K5 2–4 hit at the bottom (1.8–2.1); +0.5 and the rule holding hit in direction, smaller than predicted; agreement hit.
+- **What it means:** SCRIBE v2's 0.50 for K5 (human 0.92) overstates how readable it is. To a reader, K5 is still far from prose. Small tuning will not close that gap. It needs a different kind of model (Odin, 2026-11-04: "more math like K5 … but completely different maths").

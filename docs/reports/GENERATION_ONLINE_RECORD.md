@@ -139,7 +139,7 @@ Odin: "Make another two metrics with different maths that complement each other 
 | K5 on clean Wikipedia from enwik9 | Odin's PC | **Done**: test 0.380 → [K5_SCALE.md](K5_SCALE.md) |
 | Upgraded K5 on the 330 MB text (the two together) | Odin's PC | **Done**: 0.479 against 0.500, rule fails; stays on 7 MB (§13.29) |
 | The 1 TB trie under the current default (n-gram, LSTM 256/20) | Odin's PC | Not run |
-| A judge of another kind for the sentence gate (Odin's blind ratings) | Odin | Next |
+| A judge of another kind for the sentence gate | cloud | **Done** (4 blind Claude raters, §13.31): new K5 2.09, old 1.77, human 8.50 of 10; the gate's gain is real (+0.32 [0.22, 0.42]) but both K5s read as sentence-shaped nonsense |
 | Online n-gram expert, document-aware learning, a bigger LSTM | Odin's PC | **Done**: 1.5793 → [ONLINE_LEARNING_UPGRADES.md](ONLINE_LEARNING_UPGRADES.md) |
 | SCRIBE v3 | cloud | **Done**: ladder 5 of 5, attacks 5 of 9 → [SCRIBE_V3.md](SCRIBE_V3.md) |
 | SCRIBE v3.1: catch keyword stuffing and generic paragraphs; fresh read on enwik9 | cloud | **Done**: registered attacks 9 of 9, held-out 2 of 8 → [SCRIBE_V31.md](SCRIBE_V31.md) |
