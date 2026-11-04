@@ -6923,7 +6923,8 @@ void usage() {
 // the APM. Saved to OUT, for context8k and sample --gln-load. Prints the online bits per byte, MiB by MiB.
 int cmd_gln_train(const std::vector<std::string>& args) {
     if (args.size() < 2) {
-        std::cerr << "usage: cyphalm_trie gln-train TEXT OUT [--bytes N] [--tb N] [--online-mb N]\n";
+        std::cerr << "usage: cyphalm_trie gln-train TEXT OUT [--bytes N] [--tb N] [--online-mb N] [--neurons N] [--hs N] [--neurons2 N]\n"
+                     "       [--hs2 N]\n";
         return 2;
     }
     std::uint64_t limit = 0, online_mb = 64;
@@ -6933,6 +6934,10 @@ int cmd_gln_train(const std::vector<std::string>& args) {
         if (args[i] == "--bytes") limit = std::strtoull(args[i + 1].c_str(), nullptr, 10);
         else if (args[i] == "--tb") p.tb = std::atoi(args[i + 1].c_str());
         else if (args[i] == "--online-mb") online_mb = std::strtoull(args[i + 1].c_str(), nullptr, 10);
+        else if (args[i] == "--neurons") p.neurons = std::atoi(args[i + 1].c_str());    // §13.23: the width
+        else if (args[i] == "--hs") p.hs = std::atoi(args[i + 1].c_str());
+        else if (args[i] == "--neurons2") p.neurons2 = std::atoi(args[i + 1].c_str());
+        else if (args[i] == "--hs2") p.hs2 = std::atoi(args[i + 1].c_str());
         else {
             std::cerr << "gln-train: unknown " << args[i] << "\n";
             return 2;
@@ -6951,6 +6956,10 @@ int cmd_gln_train(const std::vector<std::string>& args) {
     f.read(reinterpret_cast<char*>(text.data()), static_cast<std::streamsize>(n));
     const auto t0 = std::chrono::steady_clock::now();
     auto secs = [&] { return std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count(); };
+    if (p.neurons < 1 || p.neurons > 255 || p.neurons2 < 1 || p.neurons2 > 255 || p.hs < 1 || p.hs > 10 || p.hs2 < 1 || p.hs2 > 10) {
+        std::cerr << "gln-train: neurons in [1, 255], half-spaces in [1, 10]\n";
+        return 2;
+    }
     cypha::online::BitwiseGLN g(p);
     g.pretrain(text.data(), text.size());
     std::cerr << "counts over " << n << " bytes at tb " << p.tb << " in " << secs() << " s\n";

@@ -1230,3 +1230,27 @@ None of this changes what the sampler writes. That needs the GLN and the online 
 - **Arms:** LS1 `--lstm` (linear), LS2 `--lstm-mix gate`, LS3 `--lstm-mix geo`. All 250 GEN-A dev prompts, SCRIBE v2. Against W0 from §13.22's run (same machine and seeds).
 - **Rule:** the best arm that is non-inferior (best temperature ≥ W0's best − 0.02, copy share within the limit) becomes `sample`'s default way of writing with the LSTM in, as Odin asked for online learning on every part.
 - **Prediction:** the LSTM is weaker than the GLN (2.64 bits per byte alone), so its lambda is small. LS1 and LS2 are non-inferior; LS3 is not.
+
+### 13.23 A wider GLN at 1 GB (registered 2026-11-04, before the run; Odin's PC)
+
+**Odin:** "Try one more GLN at 1 GB on my PC. Set the width optimally of the GLN. It rises per data. 3 levels is best. I just want to see."
+
+**The width.** The GLN has three levels: layer 1, layer 2, and an output neuron per bit position, then an APM. It was 32 neurons × 16 weight sets per bit position, then 4 × 4. That suits 64 KiB. At 1 GiB of counts and 32 MiB of online learning, each weight set sees far more bytes, so the width rises:
+- layer 1 is 128 neurons × 64 sets (6 half-spaces);
+- layer 2 is 16 neurons × 16 sets (4 half-spaces);
+- the output stays one neuron per bit position.
+
+Even so, each layer-1 weight set sees about half a million bits. The cost is about 1.7× per byte, mostly in the gates. The LSTM is unchanged. `gln-train` takes `--neurons --hs --neurons2 --hs2`. The defaults are unchanged (1.9435 on the holdout), and the file format is now "GLN2".
+
+**The run** (the same 1 GiB of C4 as §13.17, so only the width changes):
+- GW: `gln-train text1g.txt glnw.gln --tb 24 --online-mb 32 --neurons 128 --hs 6 --neurons2 16 --hs2 4`.
+- P2: `context8k --no-gln --gln-load glnw.gln` (the default mixer; against §13.17's P0 1.6206 and P1 1.6403).
+- G3: `sample --gln-load glnw.gln --gln-mix gate`, 250 dev prompts, SCRIBE v2 (against the narrow GLN's 0.143 and W0's 0.174).
+- And §13.11's half-space read, which ran on the PC on 1 November and was never collected, is read from its report.
+
+**No rule** ("I just want to see"). It is reported only; a default would need its own registered run.
+
+**Predictions:**
+- GW's online bits per byte on C4's last MiB are at least 0.03 below the narrow GLN's 2.004.
+- On the enwik8 holdout it is still worse than the 7 MiB GLN, because the domain is wrong.
+- G3 is within 0.02 of 0.143.

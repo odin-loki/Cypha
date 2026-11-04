@@ -8,7 +8,7 @@
 //     and Adam. Its state is part of every neuron's gate, and it predicts each byte from the state that has read every
 //     byte before it.
 //   - Layer 1: N neurons, each a gated geometric mixer whose weights are chosen per bit position by hs half-spaces of
-//     the side vector (LSTM state, inputs, and the extra values: the mixer's feedback). Layer 2: 4 neurons (2
+//     the side vector (LSTM state, inputs, and the extra values: the mixer's feedback). Layer 2: 4 neurons by default (2
 //     half-spaces). A final neuron per bit position, then an APM (33 points per partial byte), averaged with it.
 //   - Every neuron learns online from its own log loss (step 0.002); the APM steps 0.02.
 // extra > 0 adds side values the caller sets before each byte (set_extra): with the content mixer's recent loss and
@@ -38,6 +38,8 @@ public:
     struct Params {
         int neurons = 32;  // layer 1
         int hs = 4;        // half-spaces per layer-1 neuron: 2^hs weight sets per bit position
+        int neurons2 = 4;  // layer 2 (§13.23: wider as the data grows; the third level is the output per bit)
+        int hs2 = 2;       // half-spaces per layer-2 neuron
         int tb = 22;       // hash table bits per order
         bool lstm = true;
         int extra = 0;     // side values the caller sets (the mixer's feedback)
@@ -55,12 +57,12 @@ public:
         std::normal_distribution<double> nd(0.0, 1.0);
         H1_.resize(static_cast<std::size_t>(p.neurons) * p.hs * D_);
         for (auto& x : H1_) x = nd(rng);
-        H2_.resize(static_cast<std::size_t>(4) * 2 * D_);
+        H2_.resize(static_cast<std::size_t>(p.neurons2) * p.hs2 * D_);
         for (auto& x : H2_) x = nd(rng);
         W1_.assign(static_cast<std::size_t>(p.neurons) * (1u << p.hs) * 8 * K_, 0.3);
         for (std::size_t q = K_ - 1; q < W1_.size(); q += K_) W1_[q] = 0.0;  // the bias starts at 0
-        W2_.assign(static_cast<std::size_t>(4) * 4 * 8 * (p.neurons + 1), 1.0 / p.neurons);
-        W3_.assign(8 * 5, 0.25);
+        W2_.assign(static_cast<std::size_t>(p.neurons2) * (1u << p.hs2) * 8 * (p.neurons + 1), 1.0 / p.neurons);
+        W3_.assign(static_cast<std::size_t>(8) * (p.neurons2 + 1), 1.0 / p.neurons2);
         apm_.resize(256 * 33);
         for (int c = 0; c < 256; ++c)
             for (int i = 0; i < 33; ++i) apm_[static_cast<std::size_t>(c) * 33 + i] = gln_squash((i - 16) / 2.0);
@@ -151,7 +153,7 @@ public:
     bool save_file(const std::string& path) const {
         using namespace gln_io;
         std::ofstream o(path, std::ios::binary);
-        o.write("GLN1", 4);
+        o.write("GLN2", 4);  // GLN2: Params holds layer 2's size (§13.23)
         put(o, p_);
         for (int k = 0; k < kOrders; ++k) put_vec(o, n1_[k]), put_vec(o, n_[k]);
         for (const auto* v : {&H1_, &H2_, &W1_, &W2_, &W3_, &apm_}) put_vec(o, *v);
@@ -164,7 +166,7 @@ public:
         std::ifstream i(path, std::ios::binary);
         char magic[4] = {0, 0, 0, 0};
         i.read(magic, 4);
-        if (!i || std::memcmp(magic, "GLN1", 4) != 0) return nullptr;
+        if (!i || std::memcmp(magic, "GLN2", 4) != 0) return nullptr;
         Params p;
         get(i, p);
         if (p.extra != extra) return nullptr;  // the side vector's size is fixed by the stored half-spaces
@@ -194,8 +196,8 @@ private:
         std::size_t keys[kOrders];
         double x[kOrders + 2];
         int g1[256];
-        double p1[256], s1[257], p2[4], s2[5], p3;
-        int g2[4], lo;
+        double p1[256], s1[257], p2[256], s2[257], p3;
+        int g2[256], lo;
         double fr;
     };
 
@@ -231,8 +233,8 @@ private:
         };
         cx.g1.resize(static_cast<std::size_t>(p_.neurons) * p_.hs);
         for (std::size_t q = 0; q < cx.g1.size(); ++q) cx.g1[q] = fixed_dot(&H1_[q * D_]);
-        cx.g2.resize(8);
-        for (std::size_t q = 0; q < 8; ++q) cx.g2[q] = fixed_dot(&H2_[q * D_]);
+        cx.g2.resize(static_cast<std::size_t>(p_.neurons2) * p_.hs2);
+        for (std::size_t q = 0; q < cx.g2.size(); ++q) cx.g2[q] = fixed_dot(&H2_[q * D_]);
         return cx;
     }
 
@@ -267,25 +269,26 @@ private:
             f.p1[n] = 1 / (1 + std::exp(-f.s1[n]));
         }
         f.s1[N] = 1.0;
-        for (int i = 0; i < 4; ++i) {
+        const int N2 = p_.neurons2, M2 = p_.hs2;
+        for (int i = 0; i < N2; ++i) {
             int g = 0;
-            for (int m = 0; m < 2; ++m) {
-                const std::size_t q = static_cast<std::size_t>(i) * 2 + m;
+            for (int m = 0; m < M2; ++m) {
+                const std::size_t q = static_cast<std::size_t>(i) * M2 + m;
                 const double* hp = &H2_[q * D_ + off];
                 double s = cx.g2[q];
                 for (int k = 0; k < K; ++k) s += hp[k] * f.x[k];
                 if (s > 0) g |= 1 << m;
             }
             f.g2[i] = g;
-            const double* w = &W2_[((static_cast<std::size_t>(i) * 4 + g) * 8 + j) * (N + 1)];
+            const double* w = &W2_[((static_cast<std::size_t>(i) * (1u << M2) + g) * 8 + j) * (N + 1)];
             double s = 0;
             for (int k = 0; k <= N; ++k) s += w[k] * f.s1[k];
             f.s2[i] = std::clamp(s, -12.0, 12.0);
             f.p2[i] = 1 / (1 + std::exp(-f.s2[i]));
         }
-        f.s2[4] = 1.0;
+        f.s2[N2] = 1.0;
         double s3 = 0;
-        for (int k = 0; k < 5; ++k) s3 += W3_[static_cast<std::size_t>(j) * 5 + k] * f.s2[k];
+        for (int k = 0; k <= N2; ++k) s3 += W3_[static_cast<std::size_t>(j) * (N2 + 1) + k] * f.s2[k];
         s3 = std::clamp(s3, -12.0, 12.0);
         f.p3 = gln_squash(s3);
         const double pos = (s3 + 8) * 2;
@@ -304,13 +307,14 @@ private:
             const double e = b - f.p1[n];
             for (int k = 0; k < K; ++k) w[k] = std::clamp(w[k] + 0.002 * e * f.x[k], -8.0, 8.0);
         }
-        for (int i = 0; i < 4; ++i) {
-            double* w = &W2_[((static_cast<std::size_t>(i) * 4 + f.g2[i]) * 8 + j) * (N + 1)];
+        const int N2 = p_.neurons2;
+        for (int i = 0; i < N2; ++i) {
+            double* w = &W2_[((static_cast<std::size_t>(i) * (1u << p_.hs2) + f.g2[i]) * 8 + j) * (N + 1)];
             const double e = b - f.p2[i];
             for (int k = 0; k <= N; ++k) w[k] = std::clamp(w[k] + 0.002 * e * f.s1[k], -8.0, 8.0);
         }
-        for (int k = 0; k < 5; ++k) {
-            double& w = W3_[static_cast<std::size_t>(j) * 5 + k];
+        for (int k = 0; k <= N2; ++k) {
+            double& w = W3_[static_cast<std::size_t>(j) * (N2 + 1) + k];
             w = std::clamp(w + 0.002 * (b - f.p3) * f.s2[k], -8.0, 8.0);
         }
         double* a = &apm_[static_cast<std::size_t>(c0) * 33];
