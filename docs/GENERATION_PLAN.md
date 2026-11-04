@@ -1396,3 +1396,23 @@ Even so, each layer-1 weight set sees about half a million bits. The cost is abo
 - **Arms:** KL4 pmi w 0.5; KL5 pmi w 1.0 (250 dev prompts).
 - **Rule:** as above (non-inferior to K5's 0.353, then one test read).
 - **Prediction:** KL4 is non-inferior, and its mean word length and distinct-word share are within 5% of K5's.
+
+**The length-bias fix: result** (250 dev prompts):
+
+| Arm | SCRIBE v2 [95%] | Surface S | copy32 | Mean word length | Distinct words |
+|---|---:|---:|---:|---:|---:|
+| K5 | **0.353** [0.318, 0.384] | 0.928 | 0.035 | 4.31 | 0.171 |
+| KL4: pmi, w 0.5 | 0.221 [0.189, 0.257] | 0.961 | 0.055 | 4.45 | 0.158 |
+| KL5: pmi, w 1.0 | 0.173 [0.152, 0.197] | 0.960 | 0.056 | 4.74 | 0.140 |
+
+- The fix removes the length bias: the mean word is back to 4.45 letters. It raises SCRIBE from 0.149 (KL1) to 0.221. But no arm is non-inferior to K5, so **K5 stays without the LSTM**.
+- The prediction missed: KL4's word length is within 5% of K5's (+3%), but its distinct-word share is 8% lower and its SCRIBE is far lower.
+- With the LSTM, surface S rises above K5's (0.96 against 0.93), and copying rises too (0.055 against 0.035). The LSTM pulls K5 towards smooth phrases it has seen. SCRIBE's other axes fall.
+- K5's output without `--k5-lstm` is unchanged by the hook: the rerun matches §13.19's text line for line (0.353).
+
+**Where the LSTM stays, by the measurements:**
+- In prediction, `context8k`'s chain and final layer: the default (−0.023).
+- In the byte sampler, through the gate: the default, non-inferior.
+- Not in K5: every mix tried lowers SCRIBE. Not as the final layer's gate context either: +0.011 bits per byte.
+
+The flags stay (`--k5-lstm`, `--k5-lstm-mix`, `--final-gate lstm`, `lstm-train`) for a stronger LSTM, such as one trained at scale on Odin's PC.
