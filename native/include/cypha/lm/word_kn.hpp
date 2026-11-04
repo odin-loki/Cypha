@@ -64,6 +64,10 @@
 #include <unordered_map>
 #include <vector>
 
+#include "cypha/lm/entity_grid.hpp"  // K5_DISCOURSE.md
+#include "cypha/lm/lda.hpp"          // K5_DISCOURSE.md
+#include "cypha/lm/mbr.hpp"          // K5_DISCOURSE.md
+
 namespace cypha::cyphalm::wkn {
 
 inline constexpr std::uint32_t kUnk = 0, kBos = 1;
@@ -675,6 +679,22 @@ struct Options {
     // K5_STRUCTURE.md: --k5-struct FILE (cyphalm_trie loads it); null: K5's own gate. desc goes on the MODEL line.
     std::shared_ptr<const StructureWriter> structure;
     std::string structure_desc;
+    // docs/reports/K5_DISCOURSE.md (GENERATION_PLAN §13.32): K5's discourse helpers, all off by default. With any of
+    // mbr_sent_w, eg_w or lda_w set, the gate z-scores each of its terms over the K candidates before weighing them.
+    double mbr_sent_w = 0;      // --k5-mbr-sent W: the gate's MBR term (a candidate's mean chrF to the other candidates)
+    int mbr_doc = 0;            // --k5-mbr-doc N: N whole drafts, the one with the highest mean chrF to the others kept
+    double eg_w = 0;            // --k5-eg W: the gate's entity-grid term
+    int eg_mode = 1;            // --k5-eg-mode full (1: the grid's log-probability change) | cont (2: kept entities only)
+    std::size_t lda_k = 0;      // --k5-lda K: an LDA topic model with K topics (build; 0: none)
+    int lda_iters = 200;        // --k5-lda-iters N: its Gibbs sweeps
+    double lda_beta = 0;        // --k5-lda-beta B: p <- p * (p_topic(w | prompt) / p(w))^B on content words, renormalised
+    double lda_w = 0;           // --k5-lda-w W: the gate's topic term (mean log2 p_topic / p over the candidate's words)
+    std::string meta;           // --k5-meta SPEC: MBR over the pooled drafts of variants, e.g. base:2,gate:2,eg:2,topic:2
+    std::string disc_text;      // --k5-disc-text PATH: the text the grid and LDA learn from (default: K5's own)
+    std::string disc_cache;     // --k5-disc-cache DIR: load the grid and LDA from DIR, or train and save them there
+    unsigned disc_threads = 8;  // --k5-disc-threads N: the grid's counting threads (exact on any number)
+    unsigned lda_threads = 1;   // --k5-lda-threads N: LDA's Gibbs threads (1: exact; more: AD-LDA, which fit worse here)
+    bool zgate() const { return mbr_sent_w != 0 || eg_w != 0 || lda_w != 0; }
     // The settings that differ from K5's, for the MODEL line (empty for K5 itself).
     std::string describe() const {
         std::string s;
@@ -696,6 +716,15 @@ struct Options {
         if (gate_k != d.gate_k || gate_wf != d.gate_wf || gate_wp != d.gate_wp || gate_wm != d.gate_wm || gate_min != d.gate_min || gate_max != d.gate_max)
             add("gate", gate_k > 1 ? gate_k : 0), add("wf", gate_wf), add("wp", gate_wp), add("wm", gate_wm);
         if (structure) s += "\tstruct=" + structure_desc;  // K5_STRUCTURE.md
+        // K5_DISCOURSE.md
+        if (mbr_sent_w != 0) add("mbr_sent", mbr_sent_w);
+        if (mbr_doc > 1) add("mbr_doc", mbr_doc);
+        if (eg_w != 0) add("eg", eg_w), add("eg_mode", eg_mode);
+        if (lda_k > 0) add("lda", static_cast<double>(lda_k)), add("lda_iters", lda_iters), add("lda_beta", lda_beta), add("lda_w", lda_w);
+        if (!meta.empty()) s += "\tmeta=" + meta;
+        if (!disc_text.empty()) s += "\tdisc_text=" + disc_text;
+        if (disc_threads != d.disc_threads) add("disc_threads", disc_threads);
+        if (lda_threads != d.lda_threads) add("lda_threads", lda_threads);
         return s;
     }
 };
@@ -742,6 +771,38 @@ inline bool apply_flag(const std::string& name, const std::string& val, Options&
     if (name == "--k5-class-mode") {
         if (val != "backoff" && val != "mix") return err = name + ": backoff or mix", false;
         o.class_mode = val == "mix" ? 2 : 1;
+        return true;
+    }
+    // K5_DISCOURSE.md
+    if (name == "--k5-mbr-sent") return num(o.mbr_sent_w, -100, 100);
+    if (name == "--k5-mbr-doc") return num(x, 0, 64) && ((o.mbr_doc = static_cast<int>(x)), true);
+    if (name == "--k5-eg") return num(o.eg_w, -100, 100);
+    if (name == "--k5-eg-mode") {
+        if (val != "full" && val != "cont") return err = name + ": full or cont", false;
+        o.eg_mode = val == "cont" ? 2 : 1;
+        return true;
+    }
+    if (name == "--k5-lda") return num(x, 0, 2000) && ((o.lda_k = static_cast<std::size_t>(x)), true);
+    if (name == "--k5-lda-iters") return num(x, 1, 100000) && ((o.lda_iters = static_cast<int>(x)), true);
+    if (name == "--k5-lda-beta") return num(o.lda_beta, 0, 10);
+    if (name == "--k5-lda-w") return num(o.lda_w, -100, 100);
+    if (name == "--k5-disc-text") return val.empty() ? (err = name + ": empty", false) : ((o.disc_text = val), true);
+    if (name == "--k5-disc-cache") return val.empty() ? (err = name + ": empty", false) : ((o.disc_cache = val), true);
+    if (name == "--k5-disc-threads") return num(x, 1, 64) && ((o.disc_threads = static_cast<unsigned>(x)), true);
+    if (name == "--k5-lda-threads") return num(x, 1, 64) && ((o.lda_threads = static_cast<unsigned>(x)), true);
+    if (name == "--k5-meta") {
+        if (val.empty()) return err = name + ": empty", false;
+        for (std::size_t a = 0; a <= val.size();) {
+            std::size_t b = val.find(',', a);
+            if (b == std::string::npos) b = val.size();
+            const std::string f = val.substr(a, b - a);
+            const std::size_t q = f.find(':');
+            const std::string v = f.substr(0, q);
+            if (q == std::string::npos || (v != "base" && v != "gate" && v != "eg" && v != "topic" && v != "all") || std::atoi(f.c_str() + q + 1) < 1)
+                return err = name + ": fields are VARIANT:COUNT, VARIANT one of base, gate, eg, topic, all", false;
+            a = b + 1;
+        }
+        o.meta = val;
         return true;
     }
     if (name == "--k5-gate") {
@@ -851,10 +912,12 @@ struct GenStats {
     std::size_t rep_lifted = 0;      // steps at which the repeat ban left nothing and was lifted
     std::size_t cap_outside = 0;     // steps at which the cap left no candidate (a word from outside them was taken)
     std::size_t gate_sents = 0, gate_cands = 0;  // §K5 upgrades step 4: sentences gated, candidates written
+    std::unordered_map<std::string, std::size_t> pool_chosen;  // K5_DISCOURSE.md: MBR choices per pool variant
     void add(const GenStats& o) {
         steps += o.steps, rep_banned += o.rep_banned, cap_steps += o.cap_steps, cap_banned += o.cap_banned;
         cap_mass_steps += o.cap_mass_steps, rep_lifted += o.rep_lifted, cap_outside += o.cap_outside;
         gate_sents += o.gate_sents, gate_cands += o.gate_cands;
+        for (const auto& [k, v] : o.pool_chosen) pool_chosen[k] += v;
     }
 };
 
@@ -874,8 +937,63 @@ class K5 {
             err = path + " holds no tokens seen twice";
             return false;
         }
+        if (bo) build_discourse(text, *bo);
         return true;
     }
+
+    // K5_DISCOURSE.md: the entity grid (when o asks for it) and the LDA topic model (o.lda_k > 0), trained on the same
+    // text, one document per line, K5's tokens.
+    void build_discourse(std::string_view k5_text, const Options& o) {
+        const bool want_eg = o.eg_w != 0 || o.meta.find("eg") != std::string::npos;
+        if (!want_eg && o.lda_k == 0) return;
+        const auto t0 = std::chrono::steady_clock::now();
+        // The helpers' text: --k5-disc-text PATH (e.g. 330 MB of clean enwik9), else K5's own.
+        std::string own;
+        std::string_view text = k5_text;
+        std::string tag = "k5text";
+        if (!o.disc_text.empty()) {
+            tag = o.disc_text.substr(o.disc_text.find_last_of('/') + 1);
+            std::ifstream in(o.disc_text, std::ios::binary);
+            own.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+            text = own;
+        }
+        const auto tok = [](std::string_view line, auto&& emit) { tokenize(line, emit); };
+        const auto cache = [&](const std::string& name) { return o.disc_cache.empty() ? std::string{} : o.disc_cache + "/" + name; };
+        if (want_eg) {
+            const std::string cp = cache("eg_" + tag + ".bin");
+            const bool hit = !cp.empty() && eg_.load(cp);
+            if (!hit) {
+                eg_.train_lines(text, tok, o.disc_threads);
+                if (!cp.empty()) eg_.save(cp);
+            }
+            std::fprintf(stderr, "k5: entity grid on %s (%zu bytes%s): %zu docs, %zu sentences, %zu entity columns; P(S|--) %.4f P(-|SS) %.4f "
+                         "P(S|-S) %.4f (%.1f s)\n", tag.c_str(), text.size(), hit ? ", cached" : "", eg_.docs(), eg_.sentences(), eg_.columns(),
+                         std::exp2(eg_.logp(eg::kAbsent, eg::kAbsent, eg::kS)), std::exp2(eg_.logp(eg::kS, eg::kS, eg::kAbsent)),
+                         std::exp2(eg_.logp(eg::kAbsent, eg::kS, eg::kS)), std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count());
+        }
+        if (o.lda_k > 0) {
+            const auto t1 = std::chrono::steady_clock::now();
+            lda::Params lp;
+            lp.K = o.lda_k;
+            lp.iters = o.lda_iters;
+            lp.threads = o.lda_threads;
+            const std::string cp = cache("lda_" + tag + "_K" + std::to_string(lp.K) + "_it" + std::to_string(lp.iters) + "_t" + std::to_string(lp.threads) + ".bin");
+            const bool hit = !cp.empty() && lda_.load(cp);
+            if (!hit) {
+                lda_.train_lines(text, tok, lp);
+                if (!cp.empty()) lda_.save(cp);
+            }
+            k2l_.assign(vocab_.size(), -1);
+            for (std::size_t w = 2; w < vocab_.size(); ++w) k2l_[w] = lda_.id(vocab_[w]);
+            std::fprintf(stderr, "k5: LDA on %s (%zu bytes%s): %zu topics, %zu docs, %zu content words, %zu tokens, %d sweeps, %u threads; log P(w|z)",
+                         tag.c_str(), text.size(), hit ? ", cached" : "", lda_.topics(), lda_.corpus_docs(), lda_.vocab_size(), lda_.corpus_tokens(),
+                         lp.iters, lp.threads);
+            for (const double x : lda_.loglik()) std::fprintf(stderr, " %.0f", x);
+            std::fprintf(stderr, " (%.1f s)\n", std::chrono::duration<double>(std::chrono::steady_clock::now() - t1).count());
+        }
+    }
+    const eg::EntityGrid& entity_grid() const { return eg_; }
+    const lda::LDA& topic_model() const { return lda_; }
 
     // vmax: the vocabulary's size cap (K5_SCALE: --k5-vmax), at most 65,536 (ids are 16 bits).
     void build(std::string_view text, int cap, int order = kOrder, std::size_t classes = 0, std::size_t vmax = kVmax) {
@@ -979,6 +1097,7 @@ class K5 {
         Overlay ov;
         WordCache cache;
         int step = 0;
+        std::shared_ptr<const std::vector<double>> topic_mult;  // K5_DISCOURSE.md: --k5-lda-beta's factor per word
     };
     State start(std::string_view prompt, const Options& o) const {
         State s;
@@ -998,7 +1117,28 @@ class K5 {
             s.cache.init(vocab_.size(), o.cache_r);
             for (const std::uint32_t w : s.ctx) s.cache.push(w);
         }
+        if (o.lda_beta > 0 && lda_.trained()) {  // K5_DISCOURSE.md: the prompt's topic mixture rescales content words
+            const auto lr = topic_lr(prompt);
+            auto m = std::make_shared<std::vector<double>>(vocab_.size(), 1.0);
+            for (std::size_t w = 0; w < lr.size(); ++w)
+                if (lr[w] != 0) (*m)[w] = std::exp2(o.lda_beta * lr[w]);
+            s.topic_mult = std::move(m);
+        }
         return s;
+    }
+    // K5_DISCOURSE.md: for every K5 word, log2 (p_topic(w | prompt) / p(w)) clipped to [-4, 4] for content words, 0
+    // for the others.
+    std::vector<double> topic_lr(std::string_view prompt) const {
+        std::vector<double> lr(vocab_.size(), 0.0);
+        if (!lda_.trained()) return lr;
+        const auto theta = lda_.infer(wkn::tokens(prompt));
+        const auto q = lda_.word_dist(theta);
+        for (std::size_t w = 0; w < vocab_.size(); ++w)
+            if (k2l_[w] >= 0) {
+                const auto x = static_cast<std::size_t>(k2l_[w]);
+                lr[w] = std::clamp(std::log2(q[x] / lda_.unigram(x)), -4.0, 4.0);
+            }
+        return lr;
     }
     // The state reads word w (the online parts learn it).
     static void learn(State& s, std::uint32_t w, const Options& o) {
@@ -1019,6 +1159,12 @@ class K5 {
         if (cm_.on() && o.class_mode == 2)
             for (std::size_t w = 0; w < V; ++w) p[w] = (1 - o.class_w) * p[w] + o.class_w * tmp[w];
         if (o.cache_w > 0 || o.cache_w2 > 0) s.cache.apply(p, V, o.cache_w, o.cache_w2);
+        if (s.topic_mult) {  // K5_DISCOURSE.md: topic rescaling, renormalised
+            const double* m = s.topic_mult->data();
+            double z = 0;
+            for (std::size_t w = 0; w < V; ++w) p[w] *= m[w], z += p[w];
+            for (std::size_t w = 0; w < V; ++w) p[w] /= z;
+        }
     }
 
     // fuzzy_bake.py cont_bits: bits of the continuation's tokens under KN (no zeroing; an unknown word gets <unk>'s
@@ -1080,6 +1226,7 @@ class K5 {
     // fuzzy_bake.py generate_one: the continuation of prompt, seeded with seed. With o.gate_k > 1, the sentence gate.
     std::string generate(std::string_view prompt, std::uint64_t seed, const Options& o, GenStats* st = nullptr) const {
         if (o.structure) return o.structure->generate(*this, prompt, seed, o, st);  // K5_STRUCTURE.md
+        if (o.mbr_doc > 1 || !o.meta.empty()) return generate_pool(prompt, seed, o, st);  // K5_DISCOURSE.md
         GenStats g;
         const std::size_t V = vocab_.size();
         if (V <= 2) return {};  // no word but <unk> and <s>
@@ -1095,6 +1242,8 @@ class K5 {
                 step_word(s, rng, salt, o, g, bs.get(), sc, nullptr);
                 if (s.out.size() >= o.bytes) break;
             }
+        } else if (o.zgate()) {
+            gate_z(prompt, seed, o, s, sc, g);  // K5_DISCOURSE.md
         } else {
             // The sentence gate: K candidates from the same state, each with its own stream; the best by CyphaLM's
             // own score is kept.
@@ -1180,6 +1329,44 @@ class K5 {
     }
     // K5_STRUCTURE.md: the training text's ids (documents start with <s>).
     const std::vector<std::uint32_t>& train_ids() const { return ids_; }
+    // K5_DISCOURSE.md: the drafts of --k5-mbr-doc N (N drafts of o) or --k5-meta SPEC (the pooled drafts of variants of
+    // o), and the MBR choice among them (the highest mean chrF to the other drafts). Draft i draws from its own seed.
+    std::vector<std::pair<std::string, Options>> pool_variants(const Options& o) const {
+        std::vector<std::pair<std::string, Options>> v;
+        Options b = o;
+        b.mbr_doc = 0, b.meta.clear();
+        if (o.meta.empty()) {
+            for (int i = 0; i < o.mbr_doc; ++i) v.emplace_back("draft", b);
+            return v;
+        }
+        for (std::size_t a = 0; a <= o.meta.size();) {
+            std::size_t e = o.meta.find(',', a);
+            if (e == std::string::npos) e = o.meta.size();
+            const std::string f = o.meta.substr(a, e - a);
+            const std::size_t q = f.find(':');
+            const std::string name = f.substr(0, q);
+            const int n = std::atoi(f.c_str() + q + 1);
+            Options x = b;
+            if (name == "base") x.gate_k = 1, x.lda_beta = 0, x.eg_w = 0, x.lda_w = 0, x.mbr_sent_w = 0;
+            else if (name == "gate") x.lda_beta = 0, x.eg_w = 0, x.lda_w = 0, x.mbr_sent_w = 0;
+            else if (name == "eg") x.lda_beta = 0, x.lda_w = 0, x.mbr_sent_w = 0;
+            else if (name == "topic") x.eg_w = 0, x.mbr_sent_w = 0;
+            for (int i = 0; i < n; ++i) v.emplace_back(name, x);
+            a = e + 1;
+        }
+        return v;
+    }
+    std::string generate_pool(std::string_view prompt, std::uint64_t seed, const Options& o, GenStats* st, std::size_t* chosen = nullptr) const {
+        const auto vs = pool_variants(o);
+        std::vector<std::string> drafts(vs.size());
+        std::vector<GenStats> gs(vs.size());
+        for (std::size_t i = 0; i < vs.size(); ++i)
+            drafts[i] = generate(prompt, mix64(seed ^ mix64(0xD0C5000000ull + i)), vs[i].second, &gs[i]);
+        const std::size_t b = mbr::select(drafts);
+        if (st) st->add(gs[b]), ++st->pool_chosen[vs[b].first];
+        if (chosen) *chosen = b;
+        return drafts[b];
+    }
 
  private:
     struct Scratch {
@@ -1188,6 +1375,78 @@ class K5 {
         std::vector<std::string> pieces;
         std::vector<char> rb, cb;
     };
+    // K5_DISCOURSE.md: the sentence gate with z-scored terms. K candidates per sentence from the same state and the same
+    // streams as the default gate; each term is z-scored over the K candidates, then
+    //   score = wf z(fluency) + wp z(pmi) + mbr_sent_w z(mbr) + eg_w z(entity grid) + lda_w z(topic) - wm markup.
+    void gate_z(std::string_view prompt, std::uint64_t seed, const Options& o, State& s, Scratch& sc, GenStats& g) const {
+        const std::vector<double> assoc = o.gate_wp != 0 ? prompt_assoc(s.ctx) : std::vector<double>{};
+        const std::vector<double> tlr = o.lda_w != 0 && lda_.trained() ? topic_lr(prompt) : std::vector<double>{};
+        const bool use_eg = o.eg_w != 0 && eg_.trained();
+        eg::EntityGrid::History hist;
+        if (use_eg)
+            for (const auto& sent : eg::split_sentences(wkn::tokens(prompt))) eg_.append(hist, eg_.roles(sent));
+        const auto K = static_cast<std::size_t>(o.gate_k);
+        std::vector<State> cand(K);
+        std::vector<GenStats> gk(K);
+        std::vector<std::string> text(K);
+        std::vector<eg::SentRoles> roles(K);
+        std::vector<double> tf(K), tp(K), tm(K), te(K), tt(K), mk(K);
+        const auto z = [](std::vector<double>& x) {
+            double m = 0, v = 0;
+            for (const double a : x) m += a;
+            m /= static_cast<double>(x.size());
+            for (const double a : x) v += (a - m) * (a - m);
+            const double sd = std::sqrt(v / static_cast<double>(x.size()));
+            for (double& a : x) a = sd > 1e-12 ? (a - m) / sd : 0.0;
+        };
+        for (std::uint64_t sent = 0; s.step < o.max_words && s.out.size() < o.bytes; ++sent) {
+            for (std::size_t k = 0; k < K; ++k) {
+                State& c = cand[k];
+                c = s;
+                gk[k] = GenStats{};
+                const std::uint64_t cs = mix64(seed ^ mix64(0x6A7E000000ull + sent * 256 + static_cast<std::uint64_t>(k)));
+                std::mt19937_64 rng(cs);
+                const std::size_t b0 = c.out.size();
+                double slp = 0, spmi = 0, stop = 0;
+                std::size_t nw = 0;
+                std::vector<std::string> toks;
+                while (c.step < o.max_words && c.out.size() < o.bytes) {
+                    const std::uint64_t salt = mix64(cs ^ mix64(static_cast<std::uint64_t>(c.step) + 0x5EED));
+                    double lp = 0;
+                    const std::uint32_t w = step_word(c, rng, salt, o, gk[k], nullptr, sc, &lp);
+                    slp += lp, spmi += assoc.empty() ? 0.0 : assoc[w], stop += tlr.empty() ? 0.0 : tlr[w], ++nw;
+                    const std::string& t = vocab_[w];
+                    if (use_eg) toks.push_back(t);
+                    const std::size_t nb = c.out.size() - b0;
+                    if (nb >= o.gate_max) break;
+                    if (nb >= o.gate_min && (t == "." || t == "!" || t == "?" || t == "\n")) break;
+                }
+                std::size_t m = 0;
+                for (std::size_t i = b0; i < c.out.size(); ++i) m += std::string_view("[]{}|=<>&*#").find(c.out[i]) != std::string_view::npos;
+                const double nb = static_cast<double>(std::max<std::size_t>(c.out.size() - b0, 1)), n = static_cast<double>(std::max<std::size_t>(nw, 1));
+                tf[k] = slp / n, tp[k] = spmi / n, tt[k] = stop / n, mk[k] = static_cast<double>(m) / nb;
+                text[k] = c.out.substr(b0);
+                if (use_eg) {
+                    roles[k] = eg_.roles(toks);
+                    te[k] = o.eg_mode == 2 ? eg_.continuation_score(hist, roles[k]) : eg_.append_logp(hist, roles[k]);
+                }
+                ++g.gate_cands;
+            }
+            if (o.mbr_sent_w != 0) tm = mbr::utilities(text);
+            z(tf), z(tp), z(tm), z(te), z(tt);
+            std::size_t best = 0;
+            double bscore = 0;
+            for (std::size_t k = 0; k < K; ++k) {
+                const double score = o.gate_wf * tf[k] + o.gate_wp * tp[k] + o.mbr_sent_w * tm[k] + o.eg_w * te[k] + o.lda_w * tt[k] - o.gate_wm * mk[k];
+                if (k == 0 || score > bscore) bscore = score, best = k;
+            }
+            if (use_eg) eg_.append(hist, roles[best]);
+            s = std::move(cand[best]);
+            g.add(gk[best]);
+            ++g.gate_sents;
+        }
+    }
+
     // One step of generate_one on s: draws a word, writes its piece and learns it. lp (if not null): log2 of the
     // word's probability under the model before temperature, <unk> and <s> removed (the gate's fluency).
     std::uint32_t step_word(State& s, std::mt19937_64& rng, std::uint64_t salt, const Options& o, GenStats& g, ByteScorer* bs,
@@ -1366,6 +1625,9 @@ class K5 {
     std::unordered_map<std::string, std::uint32_t> tid_;
     WordKN kn_;
     ClassModel cm_;
+    eg::EntityGrid eg_;        // K5_DISCOURSE.md
+    lda::LDA lda_;             // K5_DISCOURSE.md
+    std::vector<long> k2l_;    // K5 id -> LDA content-word id (-1: none)
     NgramSet run13_, capset_;
     std::vector<std::uint32_t> ids_, pos_off_, pos_;
     std::vector<double> cnt_;
@@ -1373,6 +1635,19 @@ class K5 {
     std::size_t docs_ = 0, tokens_ = 0, unk_ = 0;
     double secs_ = 0;
 };
+
+// ---------------------------------------------------------------- K5_DISCOURSE.md: the helpers' stable scoring calls
+
+// log2 score of candidate (text) given context (prompt + paragraph so far, text) under the LDA topic model: the sum
+// over the candidate's content words of log2 (p_topic(w | context's topics) / p(w)). See lda.hpp.
+inline double lda_score(const lda::LDA& m, std::string_view context, std::string_view candidate) {
+    return m.score(tokens(context), tokens(candidate));
+}
+// log2 score of candidate given context under the entity grid: the change in the grid's log2 probability when the
+// candidate's sentences follow the context's (cont: kept entities only). See entity_grid.hpp.
+inline double eg_score(const eg::EntityGrid& g, std::string_view context, std::string_view candidate, bool cont = false) {
+    return g.score(tokens(context), tokens(candidate), cont);
+}
 
 // ---------------------------------------------------------------- cyphalm_trie sample --k5
 
@@ -1480,6 +1755,11 @@ inline int run_sample(const std::string& text_path, int cap, const std::vector<s
                  "(%zu inside the draw's nucleus), left none at %zu\n", all.steps, all.rep_banned, all.rep_lifted, all.cap_banned,
                  all.cap_steps, all.cap_mass_steps, all.cap_outside);
     if (all.gate_sents) std::fprintf(stderr, "k5: the gate kept %zu sentences of %zu candidates\n", all.gate_sents, all.gate_cands);
+    if (!all.pool_chosen.empty()) {  // K5_DISCOURSE.md
+        std::fprintf(stderr, "k5: MBR kept drafts of");
+        for (const auto& [k, v] : all.pool_chosen) std::fprintf(stderr, " %s %zu", k.c_str(), v);
+        std::fprintf(stderr, "\n");
+    }
     if (!conts.empty()) {
         double b = 0, n = 0;
         for (std::size_t k = 0; k < np && k < conts.size(); ++k) {
@@ -1760,6 +2040,45 @@ inline bool self_test(std::string& err) {
         for (const double x : as) mx = std::max(mx, x);
         if (!(mx > 0)) {
             err = "prompt association";
+            return false;
+        }
+    }
+    {  // K5_DISCOURSE.md: the helpers' own tests, then their hooks.
+        if (!mbr::self_test(err) || !eg::self_test(err) || !lda::self_test(err)) return false;
+        Options o = k5_v1();
+        o.bytes = 200;
+        o.gate_k = 4, o.gate_wf = 0, o.gate_wp = 1, o.gate_wm = 0;
+        Options oz = o;
+        oz.eg_w = 1e-12;  // no grid built: the term is 0, so the z-scored gate must choose as the default gate
+        if (!oz.zgate() || m.generate("The old man found Paris", 9, o) != m.generate("The old man found Paris", 9, oz)) {
+            err = "discourse: the z-scored gate differs from the gate with a null term";
+            return false;
+        }
+        Options e = k5_v1();
+        if (!apply_flag("--k5-lda", "3", e, err) || !apply_flag("--k5-lda-iters", "20", e, err) || !apply_flag("--k5-lda-beta", "0.5", e, err) ||
+            !apply_flag("--k5-eg", "1", e, err) || !apply_flag("--k5-eg-mode", "cont", e, err) || !apply_flag("--k5-mbr-sent", "1", e, err) ||
+            !apply_flag("--k5-mbr-doc", "3", e, err) || !apply_flag("--k5-meta", "base:1,gate:1,eg:1,topic:1", e, err) ||
+            apply_flag("--k5-meta", "foo:1", e, err) || apply_flag("--k5-eg-mode", "x", e, err) || e.eg_mode != 2 || e.lda_k != 3) {
+            err = "discourse flags: " + err;
+            return false;
+        }
+        K5 md;
+        md.build(text, 12);
+        md.build_discourse(text, e);
+        if (!md.entity_grid().trained() || !md.topic_model().trained()) return err = "discourse: models not built", false;
+        if (!sums(md, e, "topic rescaling")) return false;
+        e.gate_k = 4, e.lda_w = 1, e.bytes = 200;
+        Options e1 = e;
+        e1.mbr_doc = 0, e1.meta.clear();
+        const std::string g1 = md.generate("The old man found Paris", 9, e1), g2 = md.generate("The old man found Paris", 9, e1);
+        GenStats st;
+        const std::string p1 = md.generate("The old man found Paris", 9, e, &st), p2 = md.generate("The old man found Paris", 9, e);
+        Options e3 = e;
+        e3.meta.clear();
+        const std::string d1 = md.generate("The cat saw", 5, e3);
+        if (g1 != g2 || g1.empty() || g1.size() > e.bytes || md.has_run13(g1) || p1 != p2 || p1.empty() || st.pool_chosen.size() != 1 ||
+            d1.empty() || d1.size() > e.bytes) {
+            err = "discourse: generation (" + g1 + " | " + p1 + ")";
             return false;
         }
     }

@@ -2,6 +2,8 @@
 //
 //   k5_structure stats    --k5 TRAIN --text FILE --from MB --to MB --out STATS
 //       The experts' statistics from the documents of FILE (one per line) that start in [from, to) MB.
+//   k5_structure discourse --text FILE --from MB --to MB --out STATS [--lda-mb 50] [--threads 4]
+//       wip/k5-discourse's LDA (100 topics, on at most the first --lda-mb MB) and entity grid, as STATS.lda, STATS.grid.
 //   k5_structure drafts   --k5 TRAIN --text FILE --from MB --to MB --out DRAFTS [--n 8] [--max B] [--threads 8]
 //       Boundaries (a 1-sentence prompt, then up to 6 sentences) and, at each, the real next sentence and N K5 drafts.
 //       Targets must be in K5's vocabulary and pass K5's repeat ban and copy cap. Lines: B, then C (context sentences),
@@ -121,6 +123,31 @@ int cmd_stats(const std::map<std::string, std::string>& a) {
         return 1;
     }
     std::fprintf(stderr, "stats: wrote %s (%.0f MB est.) in %.1f s, peak RSS %ld MB\n", get(a, "--out").c_str(), s.bytes() / 1e6, secs_since(t0), peak_rss_mb());
+    return 0;
+}
+
+// ---------------------------------------------------------------- discourse (wip/k5-discourse's models)
+
+int cmd_discourse(const std::map<std::string, std::string>& a) {
+    const auto t0 = std::chrono::steady_clock::now();
+    const double from = std::atof(get(a, "--from", "0").c_str()), to = std::atof(get(a, "--to", "1e9").c_str());
+    const unsigned th = static_cast<unsigned>(std::atoi(get(a, "--threads", "4").c_str()));
+    const std::string out = get(a, "--out");
+    const std::string text = read_docs(get(a, "--text"), from, to);
+    const auto tok = [](std::string_view line, auto&& emit) { wkn::tokenize(line, emit); };
+    cypha::cyphalm::eg::EntityGrid g;
+    g.train_lines(text, tok, th);
+    g.save(out + ".grid");
+    std::fprintf(stderr, "discourse: grid on %zu docs, %zu sentences (%.0f s)\n", g.docs(), g.sentences(), secs_since(t0));
+    const double lda_mb = std::atof(get(a, "--lda-mb", "50").c_str());
+    const std::string lt = read_docs(get(a, "--text"), from, std::min(to, from + lda_mb));
+    cypha::cyphalm::lda::LDA l;
+    cypha::cyphalm::lda::Params p;
+    p.threads = th;
+    l.train_lines(lt, tok, p);
+    l.save(out + ".lda");
+    std::fprintf(stderr, "discourse: LDA %zu topics on %.1f MB, %zu content words, %zu tokens, %d sweeps, %u threads; total %.0f s, peak RSS %ld MB\n",
+                 l.topics(), lt.size() / 1e6, l.vocab_size(), l.corpus_tokens(), p.iters, th, secs_since(t0), peak_rss_mb());
     return 0;
 }
 
@@ -302,7 +329,12 @@ int cmd_features(const std::map<std::string, std::string>& a) {
     }
     st::TrainRuns tr;
     tr.build(m.train_ids());
-    const st::Experts ex(s, m, tr);
+    cypha::cyphalm::lda::LDA topics;
+    cypha::cyphalm::eg::EntityGrid grid;
+    if (std::ifstream(get(a, "--stats") + ".lda")) topics.load(get(a, "--stats") + ".lda");
+    if (std::ifstream(get(a, "--stats") + ".grid")) grid.load(get(a, "--stats") + ".grid");
+    std::fprintf(stderr, "features: topics %s, grid %s\n", topics.trained() ? "on" : "off", grid.trained() ? "on" : "off");
+    const st::Experts ex(s, m, tr, &topics, &grid);
     std::ifstream in(get(a, "--in"));
     std::ofstream out(get(a, "--out"), std::ios::binary);
     std::string line;
@@ -800,6 +832,23 @@ int cmd_selftest() {
         double f[st::kNFeat];
         ex.features(c, cand, ids, -3, 0.5, f);
         check(f[st::kPronAgree] > 0 && f[st::kPronOrphan] == 0 && f[st::kNYears] > 0 && f[st::kMatchTrain] >= 6 && f[st::kBalanced] == 1, "features");
+        check(f[st::kTopic] == 0 && f[st::kGridFull] == 0, "no topic or grid without their models");
+        {  // with wip/k5-discourse's models
+            const auto tok = [](std::string_view line, auto&& emit) { wkn::tokenize(line, emit); };
+            cypha::cyphalm::eg::EntityGrid g;
+            g.train_lines(text, tok, 1);
+            cypha::cyphalm::lda::LDA l;
+            cypha::cyphalm::lda::Params lp;
+            lp.K = 4, lp.iters = 20, lp.min_count = 1;
+            l.train_lines(text, tok, lp);
+            const st::Experts ex2(s, m, tr, &l, &g);
+            st::Context c2 = c;
+            ex2.prepare(c2);
+            double f2[st::kNFeat];
+            ex2.features(c2, cand, ids, -3, 0.5, f2);
+            check(!c2.theta.empty() && std::isfinite(f2[st::kTopic]) && f2[st::kGridFull] < 0 && std::isfinite(f2[st::kGridCont]), "topic and grid features");
+            for (int j = 0; j < st::kGridFull; ++j) check(j == st::kTopic || f2[j] == f[j], "other features unchanged by topic and grid");
+        }
         // Scorer and Writer run.
         std::string err;
         auto md = std::make_shared<st::Model>();
@@ -842,6 +891,7 @@ int main(int argc, char** argv) {
     const auto a = parse(argc, argv, 2);
     if (c == "stats") return cmd_stats(a);
     if (c == "drafts") return cmd_drafts(a);
+    if (c == "discourse") return cmd_discourse(a);
     if (c == "features") return cmd_features(a);
     if (c == "run") return cmd_run(a);
     if (c == "selftest") return cmd_selftest();

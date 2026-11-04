@@ -54,6 +54,13 @@ class Model {
     Stats st;
     MetaMixer mx;
     std::string stats_path;
+    lda::LDA topics;       // STATS.lda, if it exists (wip/k5-discourse)
+    eg::EntityGrid grid;   // STATS.grid, if it exists
+    // The discourse experts beside a statistics file.
+    void load_discourse() {
+        if (std::ifstream(stats_path + ".lda")) topics.load(stats_path + ".lda");
+        if (std::ifstream(stats_path + ".grid")) grid.load(stats_path + ".grid");
+    }
     bool load(const std::string& path, std::string& err) {
         std::ifstream in(path);
         std::string tag;
@@ -61,7 +68,9 @@ class Model {
         if (!in || !(in >> tag >> ver) || tag != "K5STRUCT" || ver != 1) return err = "cannot read the structure model " + path, false;
         if (!(in >> tag >> stats_path) || tag != "stats") return err = path + ": no stats line", false;
         if (!mx.read(in, kNFeat)) return err = path + ": bad mixer", false;
-        return st.load(stats_path, err);
+        if (!st.load(stats_path, err)) return false;
+        load_discourse();
+        return true;
     }
     // K5's training runs, built once from the K5 the writer is given.
     const TrainRuns& runs(const wkn::K5& m) const {
@@ -85,7 +94,7 @@ class Writer final : public wkn::StructureWriter {
     std::string generate(const wkn::K5& m, std::string_view prompt, std::uint64_t seed, const wkn::Options& o, wkn::GenStats* st) const override {
         wkn::GenStats g;
         if (m.vocab().size() <= 2) return {};
-        const Experts ex(md_->st, m, md_->runs(m));
+        const Experts ex(md_->st, m, md_->runs(m), &md_->topics, &md_->grid);
         wkn::K5::State s = m.start(prompt, o);
         const std::vector<double> assoc = m.prompt_assoc(s.ctx);
         Context c;
@@ -174,7 +183,7 @@ class Scorer {
             ctx_text += " ";
             ctx_text += p;
         }
-        const Experts ex(md_->st, m_, md_->runs(m_));
+        const Experts ex(md_->st, m_, md_->runs(m_), &md_->topics, &md_->grid);
         ex.prepare(c);
         Sent z;
         z.tok = wkn::tokens(candidate);

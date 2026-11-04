@@ -17,9 +17,14 @@
 ///   open        log2 P(opening type | two previous types)
 ///   len         log2 P(length bucket | previous bucket)  balanced  brackets and quotes balanced  markup  the gate's share
 ///   match_train longest run shared with K5's training text (tokens, at most 13)   match_ctx  longest run shared with context
+///   topic       LDA (wip/k5-discourse lda.hpp): mean log2 p_topic(w | the context's topics) / p(w) over content words
+///   grid_full   the entity grid (entity_grid.hpp): the change in the grid's log2 probability when the candidate joins
+///   grid_cont   ... its continuation score (kept entities only)
 ///
 /// Author: Odin Loch
 
+#include "cypha/lm/entity_grid.hpp"  // wip/k5-discourse
+#include "cypha/lm/lda.hpp"          // wip/k5-discourse
 #include "cypha/lm/word_kn.hpp"
 
 #include <algorithm>
@@ -42,11 +47,12 @@ namespace wkn = cypha::cyphalm::wkn;
 
 enum Feat : int {
     kK5, kPmi, kClass, kEntOld, kEntNew, kEntPmi, kSlotFit, kPronAgree, kPronOrphan, kYearFit, kNYears, kOpen, kLen,
-    kBalanced, kMarkup, kMatchTrain, kMatchCtx, kNFeat
+    kBalanced, kMarkup, kMatchTrain, kMatchCtx, kTopic, kGridFull, kGridCont, kNFeat
 };
 inline const char* feat_name(int j) {
     static const char* n[kNFeat] = {"k5", "pmi", "class", "ent_old", "ent_new", "ent_pmi", "slot_fit", "pron_agree", "pron_orphan",
-                                    "year_fit", "n_years", "open", "len", "balanced", "markup", "match_train", "match_ctx"};
+                                    "year_fit", "n_years", "open", "len", "balanced", "markup", "match_train", "match_ctx",
+                                    "topic", "grid_full", "grid_cont"};
     return n[j];
 }
 // The experts and their features (for "each expert alone" and the ablations).
@@ -65,6 +71,8 @@ inline const std::vector<ExpertDef>& experts() {
         {"transitions", {kOpen}},
         {"rhythm", {kLen, kBalanced, kMarkup}},
         {"novelty", {kMatchTrain, kMatchCtx}},
+        {"topic", {kTopic}},
+        {"grid", {kGridFull, kGridCont}},
     };
     return e;
 }
@@ -696,13 +704,16 @@ struct Context {
     std::vector<std::uint32_t> ids, classes;  // every context token's K5 id and class
     std::unordered_set<std::string> name_toks;
     std::string p1 = "<s>", p2 = "<s>";
+    std::vector<double> theta;     // LDA's topic mixture of the context
+    eg::EntityGrid::History grid;  // the entity grid of the context's sentences
     std::size_t index() const { return sents.size() - n_prompt; }  // the candidate's index in the paragraph
     int prompt_bucket() const { return prompt_chars <= 130 ? 0 : prompt_chars <= 200 ? 1 : 2; }
 };
 
 class Experts {
  public:
-    Experts(const Stats& st, const wkn::K5& m, const TrainRuns& tr) : st_(st), m_(m), tr_(tr) {}
+    Experts(const Stats& st, const wkn::K5& m, const TrainRuns& tr, const lda::LDA* topics = nullptr, const eg::EntityGrid* grid = nullptr)
+        : st_(st), m_(m), tr_(tr), lda_(topics && topics->trained() ? topics : nullptr), eg_(grid && grid->trained() ? grid : nullptr) {}
 
     void prepare(Context& c) const {
         c.names.clear(), c.name_str.clear(), c.name_st.clear(), c.name_toks.clear(), c.ids.clear(), c.classes.clear();
@@ -722,6 +733,14 @@ class Experts {
                 c.ids.push_back(id), c.classes.push_back(st_.cls(id));
             }
         }
+        if (lda_) {
+            std::vector<std::string> all;
+            for (const auto& s : c.sents) all.insert(all.end(), s.tok.begin(), s.tok.end());
+            c.theta = lda_->infer(all);
+        }
+        c.grid = eg::EntityGrid::History{};
+        if (eg_)
+            for (const auto& s : c.sents) eg_->append(c.grid, eg_->roles(s.tok));
         int best = 0;
         c.main = nullptr;
         for (const auto& nm : order) {
@@ -876,6 +895,16 @@ class Experts {
             }
             f[kMatchCtx] = best;
         }
+        // topic and grid (wip/k5-discourse)
+        if (lda_ && !c.theta.empty()) {
+            const std::size_t n = lda_->content_count(s.tok);
+            f[kTopic] = n ? lda_->log_ratio(c.theta, s.tok) / static_cast<double>(n) : 0;
+        }
+        if (eg_) {
+            const auto r = eg_->roles(s.tok);
+            f[kGridFull] = eg_->append_logp(c.grid, r);
+            f[kGridCont] = eg_->continuation_score(c.grid, r);
+        }
     }
 
     const Stats& stats() const { return st_; }
@@ -885,6 +914,8 @@ class Experts {
     const Stats& st_;
     const wkn::K5& m_;
     const TrainRuns& tr_;
+    const lda::LDA* lda_;
+    const eg::EntityGrid* eg_;
 };
 
 }  // namespace cypha::cyphalm::structure
