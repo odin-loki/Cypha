@@ -1,0 +1,6654 @@
+{
+ "fresh3_attacks": {
+  "human": {
+   "n": 200,
+   "scribe_v2": 0.8995064899999999,
+   "scribe_v3": 0.8876190850000001,
+   "scribe_v31": 0.845110645,
+   "surprise": 0.915930735,
+   "match": 0.847419918636725,
+   "surprise31": 0.8720128105,
+   "match31": 0.7958098000000001,
+   "min3": 0.7952417986367251
+  },
+  "copy_pack": {
+   "n": 200,
+   "scribe_v2": 0.10522975599500001,
+   "scribe_v2_win": 1.0,
+   "scribe_v3": 0.050019985945,
+   "scribe_v3_win": 1.0,
+   "scribe_v31": 6.05991165e-09,
+   "scribe_v31_win": 1.0,
+   "surprise": 0.044830230454999995,
+   "surprise_win": 1.0,
+   "match": 2.4329549500000003e-23,
+   "match_win": 1.0,
+   "surprise31": 0.0142341857085,
+   "surprise31_win": 1.0,
+   "match31": 4.62190925e-22,
+   "match31_win": 1.0,
+   "min3": 2.4329549500000003e-23,
+   "min3_win": 1.0
+  },
+  "echo_repeat": {
+   "n": 200,
+   "scribe_v2": 1.1261116920351038e-14,
+   "scribe_v2_win": 1.0,
+   "scribe_v3": 0.0016545278795000002,
+   "scribe_v3_win": 1.0,
+   "scribe_v31": 3.8887254990399995e-28,
+   "scribe_v31_win": 1.0,
+   "surprise": 0.0049635831125,
+   "surprise_win": 1.0,
+   "match": 6.347106073e-67,
+   "match_win": 1.0,
+   "surprise31": 0.0140495382278,
+   "surprise31_win": 1.0,
+   "match31": 4.3222478077500005e-66,
+   "match31_win": 1.0,
+   "min3": 6.347106073e-67,
+   "min3_win": 1.0
+  },
+  "echo_copy": {
+   "n": 200,
+   "scribe_v2": 0.8834307925,
+   "scribe_v2_win": 0.515,
+   "scribe_v3": 0.598877305,
+   "scribe_v3_win": 0.985,
+   "scribe_v31": 2.0500241565404565e-05,
+   "scribe_v31_win": 1.0,
+   "surprise": 0.9132009199999999,
+   "surprise_win": 0.5425,
+   "match": 1.730050226280859e-13,
+   "match_win": 1.0,
+   "surprise31": 0.8370386525000001,
+   "surprise31_win": 0.5225,
+   "match31": 7.613021994344591e-13,
+   "match31_win": 1.0,
+   "min3": 1.730050226280859e-13,
+   "min3_win": 1.0
+  },
+  "stuff_human": {
+   "n": 200,
+   "scribe_v2": 0.40757885699999996,
+   "scribe_v2_win": 0.8475,
+   "scribe_v3": 0.532370151,
+   "scribe_v3_win": 0.895,
+   "scribe_v31": 0.2538611951,
+   "scribe_v31_win": 0.98,
+   "surprise": 0.5918700865,
+   "surprise_win": 0.8675,
+   "match": 0.597661485,
+   "match_win": 0.745,
+   "surprise31": 0.14031767021,
+   "surprise31_win": 0.98,
+   "match31": 0.453040385,
+   "match31_win": 0.83,
+   "min3": 0.327841269,
+   "min3_win": 0.905
+  },
+  "stuff_generic": {
+   "n": 200,
+   "scribe_v2": 0.9685491450000001,
+   "scribe_v2_win": 0.315,
+   "scribe_v3": 0.8770504200000001,
+   "scribe_v3_win": 0.535,
+   "scribe_v31": 0.37691455250000006,
+   "scribe_v31_win": 0.975,
+   "surprise": 0.80177199,
+   "surprise_win": 0.78,
+   "match": 0.8608301850000001,
+   "match_win": 0.4375,
+   "surprise31": 0.09353284015,
+   "surprise31_win": 0.995,
+   "match31": 0.6653633145,
+   "match31_win": 0.655,
+   "min3": 0.7280692449999999,
+   "min3_win": 0.595
+  },
+  "loop": {
+   "n": 200,
+   "scribe_v2": 6.745116821937751e-14,
+   "scribe_v2_win": 1.0,
+   "scribe_v3": 0.007114518405000001,
+   "scribe_v3_win": 1.0,
+   "scribe_v31": 2.340559833215e-06,
+   "scribe_v31_win": 1.0,
+   "surprise": 0.01879773275,
+   "surprise_win": 1.0,
+   "match": 0.0025458176575000003,
+   "match_win": 0.995,
+   "surprise31": 0.13093935635499998,
+   "surprise31_win": 0.995,
+   "match31": 0.0032836039625000002,
+   "match31_win": 1.0,
+   "min3": 6.745116821937751e-14,
+   "min3_win": 1.0
+  },
+  "generic": {
+   "n": 200,
+   "scribe_v2": 0.834804,
+   "scribe_v2_win": 0.76,
+   "scribe_v3": 0.6541289750000001,
+   "scribe_v3_win": 0.95,
+   "scribe_v31": 0.46240691999999994,
+   "scribe_v31_win": 0.975,
+   "surprise": 0.6529360000000001,
+   "surprise_win": 0.975,
+   "match": 0.47464628500000006,
+   "match_win": 0.97,
+   "surprise31": 0.3184521149999999,
+   "surprise31_win": 0.98,
+   "match31": 0.37513747000000003,
+   "match31_win": 0.955,
+   "min3": 0.47464628500000006,
+   "min3_win": 0.94
+  },
+  "shuffle_docs": {
+   "n": 200,
+   "scribe_v2": 0.35660798702999996,
+   "scribe_v2_win": 0.98,
+   "scribe_v3": 0.516648925,
+   "scribe_v3_win": 0.985,
+   "scribe_v31": 0.43004069450000004,
+   "scribe_v31_win": 0.97,
+   "surprise": 0.6684142349999999,
+   "surprise_win": 0.965,
+   "match": 0.524924685,
+   "match_win": 0.97,
+   "surprise31": 0.5828815225,
+   "surprise31_win": 0.965,
+   "match31": 0.40373481,
+   "match31_win": 0.945,
+   "min3": 0.34543492703,
+   "min3_win": 0.965
+  },
+  "cooc_pack": {
+   "n": 200,
+   "scribe_v2": 0.12998008704224698,
+   "scribe_v2_win": 0.995,
+   "scribe_v3": 0.079498643435,
+   "scribe_v3_win": 1.0,
+   "scribe_v31": 1.1860060116955002e-05,
+   "scribe_v31_win": 1.0,
+   "surprise": 0.10851587602999999,
+   "surprise_win": 0.995,
+   "match": 2.0662014865958717e-12,
+   "match_win": 1.0,
+   "surprise31": 0.059198544581,
+   "surprise31_win": 0.995,
+   "match31": 8.77291864471479e-12,
+   "match31_win": 1.0,
+   "min3": 1.126449840195872e-12,
+   "min3_win": 1.0
+  },
+  "reorder": {
+   "n": 200,
+   "scribe_v2": 0.89140969,
+   "scribe_v2_win": 0.525,
+   "scribe_v3": 0.8846320299999999,
+   "scribe_v3_win": 0.5175,
+   "scribe_v31": 0.8413911949999999,
+   "scribe_v31_win": 0.5175,
+   "surprise": 0.915139595,
+   "surprise_win": 0.5025,
+   "match": 0.8473467136199452,
+   "match_win": 0.5,
+   "surprise31": 0.8706650395000001,
+   "surprise31_win": 0.5075,
+   "match31": 0.7971795995,
+   "match31_win": 0.4975,
+   "min3": 0.787996813619945,
+   "min3_win": 0.535
+  },
+  "cooc_out": {
+   "n": 200,
+   "scribe_v2": 0.8863975405500001,
+   "scribe_v2_win": 0.4525,
+   "scribe_v3": 0.8324766382,
+   "scribe_v3_win": 0.6275,
+   "scribe_v31": 0.7920130106591631,
+   "scribe_v31_win": 0.605,
+   "surprise": 0.82283596725,
+   "surprise_win": 0.6975,
+   "match": 0.788196387655275,
+   "match_win": 0.5475,
+   "surprise31": 0.7933686452000001,
+   "surprise31_win": 0.6475,
+   "match31": 0.7509440484346149,
+   "match31_win": 0.545,
+   "min3": 0.7202529938865502,
+   "min3_win": 0.6325
+  },
+  "offprompt": {
+   "n": 200,
+   "scribe_v2": 0.8995064899999999,
+   "scribe_v2_win": 0.4925,
+   "scribe_v3": 0.8457575299999999,
+   "scribe_v3_win": 0.68,
+   "scribe_v31": 0.700327435,
+   "scribe_v31_win": 0.835,
+   "surprise": 0.915930735,
+   "surprise_win": 0.5,
+   "match": 0.72183542,
+   "match_win": 0.745,
+   "surprise31": 0.7295950524999999,
+   "surprise31_win": 0.835,
+   "match31": 0.5370064355,
+   "match31_win": 0.88,
+   "min3": 0.703401875,
+   "min3_win": 0.7075
+  },
+  "ho_stuff7_rare": {
+   "n": 200,
+   "scribe_v2": 0.8026154914999999,
+   "scribe_v2_win": 0.545,
+   "scribe_v3": 0.85508493,
+   "scribe_v3_win": 0.4775,
+   "scribe_v31": 0.704245617,
+   "scribe_v31_win": 0.6625,
+   "surprise": 0.86674005,
+   "surprise_win": 0.525,
+   "match": 0.895899195,
+   "match_win": 0.2975,
+   "surprise31": 0.59983552355,
+   "surprise31_win": 0.7575,
+   "match31": 0.844593984,
+   "match31_win": 0.35,
+   "min3": 0.7307263715000001,
+   "min3_win": 0.4975
+  },
+  "ho_stuff3_freq": {
+   "n": 200,
+   "scribe_v2": 0.09259316275,
+   "scribe_v2_win": 0.9825,
+   "scribe_v3": 0.35170868999999993,
+   "scribe_v3_win": 0.98,
+   "scribe_v31": 0.1253534895,
+   "scribe_v31_win": 1.0,
+   "surprise": 0.42526708,
+   "surprise_win": 0.9625,
+   "match": 0.53726585,
+   "match_win": 0.78,
+   "surprise31": 0.059848965399999995,
+   "surprise31_win": 1.0,
+   "match31": 0.526836172,
+   "match31_win": 0.755,
+   "min3": 0.08168879275,
+   "min3_win": 0.985
+  },
+  "ho_stuff_rand": {
+   "n": 200,
+   "scribe_v2": 0.6187659965000001,
+   "scribe_v2_win": 0.715,
+   "scribe_v3": 0.7106022249999999,
+   "scribe_v3_win": 0.705,
+   "scribe_v31": 0.45355246900000007,
+   "scribe_v31_win": 0.915,
+   "surprise": 0.7370592404999999,
+   "surprise_win": 0.6675,
+   "match": 0.77598141,
+   "match_win": 0.5025,
+   "surprise31": 0.30509677865,
+   "surprise31_win": 0.9375,
+   "match31": 0.6729122104999999,
+   "match31_win": 0.605,
+   "min3": 0.5200690020000001,
+   "min3_win": 0.735
+  },
+  "ho_generic2": {
+   "n": 200,
+   "scribe_v2": 0.83820125,
+   "scribe_v2_win": 0.6625,
+   "scribe_v3": 0.63564954,
+   "scribe_v3_win": 0.89,
+   "scribe_v31": 0.45342624,
+   "scribe_v31_win": 0.925,
+   "surprise": 0.49195700000000003,
+   "surprise_win": 0.925,
+   "match": 0.576790235,
+   "match_win": 0.91,
+   "surprise31": 0.27195076,
+   "surprise31_win": 0.985,
+   "match31": 0.442419135,
+   "match31_win": 0.92,
+   "min3": 0.447286515,
+   "min3_win": 0.89
+  },
+  "ho_template": {
+   "n": 200,
+   "scribe_v2": 0.999816045,
+   "scribe_v2_win": 0.265,
+   "scribe_v3": 0.9185785,
+   "scribe_v3_win": 0.495,
+   "scribe_v31": 0.8457702450000001,
+   "scribe_v31_win": 0.51,
+   "surprise": 0.7774762850000001,
+   "surprise_win": 0.805,
+   "match": 0.978443185,
+   "match_win": 0.21,
+   "surprise31": 0.658261325,
+   "surprise31_win": 0.79,
+   "match31": 0.9734063949999999,
+   "match31_win": 0.1825,
+   "min3": 0.7745370199999999,
+   "min3_win": 0.54
+  },
+  "ho_echo_scatter": {
+   "n": 200,
+   "scribe_v2": 0.3744991973962712,
+   "scribe_v2_win": 0.805,
+   "scribe_v3": 0.374569867,
+   "scribe_v3_win": 0.995,
+   "scribe_v31": 0.0003963797238373105,
+   "scribe_v31_win": 1.0,
+   "surprise": 0.7492103465,
+   "surprise_win": 0.7075,
+   "match": 5.151814556421747e-16,
+   "match_win": 1.0,
+   "surprise31": 0.7170666255,
+   "surprise31_win": 0.6725,
+   "match31": 0.0002797295142360933,
+   "match31_win": 1.0,
+   "min3": 5.151814556421747e-16,
+   "min3_win": 1.0
+  },
+  "ho_title_swap": {
+   "n": 200,
+   "scribe_v2": 0.89961398,
+   "scribe_v2_win": 0.49,
+   "scribe_v3": 0.8672076799999999,
+   "scribe_v3_win": 0.545,
+   "scribe_v31": 0.7880995550000001,
+   "scribe_v31_win": 0.63,
+   "surprise": 0.9220421799999999,
+   "surprise_win": 0.4825,
+   "match": 0.7799669750000001,
+   "match_win": 0.6475,
+   "surprise31": 0.8381077290000001,
+   "surprise31_win": 0.57,
+   "match31": 0.673394345,
+   "match31_win": 0.6925,
+   "min3": 0.74558167,
+   "min3_win": 0.5775
+  },
+  "ho_list_related": {
+   "n": 200,
+   "scribe_v2": 0.633040075,
+   "scribe_v2_win": 0.79,
+   "scribe_v3": 0.68411282,
+   "scribe_v3_win": 0.86,
+   "scribe_v31": 0.6653169115190001,
+   "scribe_v31_win": 0.79,
+   "surprise": 0.7292339699999999,
+   "surprise_win": 0.8675,
+   "match": 0.69006444,
+   "match_win": 0.78,
+   "surprise31": 0.7498426100000001,
+   "surprise31_win": 0.82,
+   "match31": 0.66102341,
+   "match31_win": 0.725,
+   "min3": 0.55143738,
+   "min3_win": 0.81
+  }
+ },
+ "fresh3_ablation": {
+  "ladder": {
+   "v3.1": [
+    0.965936,
+    1.0,
+    0.99126,
+    1.0,
+    1.0
+   ],
+   "no v2": [
+    0.939752,
+    0.999996,
+    0.902792,
+    1.0,
+    1.0
+   ],
+   "no SURPRISE 3.1": [
+    0.973368,
+    1.0,
+    0.994348,
+    1.0,
+    1.0
+   ],
+   "no MATCH 3.1": [
+    0.965872,
+    1.0,
+    0.992604,
+    0.999976,
+    1.0
+   ],
+   "plain mean": [
+    0.972208,
+    0.999988,
+    0.860476,
+    1.0,
+    1.0
+   ],
+   "minimum": [
+    0.959086,
+    1.0,
+    0.997632,
+    1.0,
+    1.0
+   ]
+  },
+  "attacks": {
+   "copy_pack": {
+    "v3.1": 1.0,
+    "no v2": 1.0,
+    "no SURPRISE 3.1": 1.0,
+    "no MATCH 3.1": 0.99995,
+    "plain mean": 0.99995,
+    "minimum": 1.0
+   },
+   "echo_repeat": {
+    "v3.1": 1.0,
+    "no v2": 1.0,
+    "no SURPRISE 3.1": 1.0,
+    "no MATCH 3.1": 1.0,
+    "plain mean": 1.0,
+    "minimum": 1.0
+   },
+   "echo_copy": {
+    "v3.1": 1.0,
+    "no v2": 1.0,
+    "no SURPRISE 3.1": 1.0,
+    "no MATCH 3.1": 0.5457875,
+    "plain mean": 0.9417,
+    "minimum": 1.0
+   },
+   "stuff_human": {
+    "v3.1": 0.9749,
+    "no v2": 0.975425,
+    "no SURPRISE 3.1": 0.8955625,
+    "no MATCH 3.1": 0.9757,
+    "plain mean": 0.9678,
+    "minimum": 0.97885
+   },
+   "stuff_generic": {
+    "v3.1": 0.9755,
+    "no v2": 0.982825,
+    "no SURPRISE 3.1": 0.5864625,
+    "no MATCH 3.1": 0.9854,
+    "plain mean": 0.9355,
+    "minimum": 0.98725
+   },
+   "loop": {
+    "v3.1": 1.0,
+    "no v2": 0.99895,
+    "no SURPRISE 3.1": 1.0,
+    "no MATCH 3.1": 1.0,
+    "plain mean": 0.999475,
+    "minimum": 1.0
+   },
+   "generic": {
+    "v3.1": 0.969975,
+    "no v2": 0.977125,
+    "no SURPRISE 3.1": 0.92595,
+    "no MATCH 3.1": 0.969975,
+    "plain mean": 0.971825,
+    "minimum": 0.963125
+   },
+   "shuffle_docs": {
+    "v3.1": 0.9704,
+    "no v2": 0.95815,
+    "no SURPRISE 3.1": 0.973875,
+    "no MATCH 3.1": 0.972925,
+    "plain mean": 0.9803,
+    "minimum": 0.956225
+   },
+   "cooc_pack": {
+    "v3.1": 1.0,
+    "no v2": 1.0,
+    "no SURPRISE 3.1": 1.0,
+    "no MATCH 3.1": 0.9993,
+    "plain mean": 0.999425,
+    "minimum": 1.0
+   },
+   "reorder": {
+    "v3.1": 0.5091,
+    "no v2": 0.5020625,
+    "no SURPRISE 3.1": 0.507175,
+    "no MATCH 3.1": 0.50915,
+    "plain mean": 0.50695,
+    "minimum": 0.5112
+   },
+   "cooc_out": {
+    "v3.1": 0.5689,
+    "no v2": 0.598525,
+    "no SURPRISE 3.1": 0.5166,
+    "no MATCH 3.1": 0.57875,
+    "plain mean": 0.5682,
+    "minimum": 0.560675
+   },
+   "offprompt": {
+    "v3.1": 0.820625,
+    "no v2": 0.869425,
+    "no SURPRISE 3.1": 0.801925,
+    "no MATCH 3.1": 0.7253,
+    "plain mean": 0.815325,
+    "minimum": 0.8329125
+   },
+   "ho_stuff7_rare": {
+    "v3.1": 0.6433625,
+    "no v2": 0.637975,
+    "no SURPRISE 3.1": 0.4763875,
+    "no MATCH 3.1": 0.7065375,
+    "plain mean": 0.6260875,
+    "minimum": 0.6790875
+   },
+   "ho_stuff3_freq": {
+    "v3.1": 0.9952,
+    "no v2": 0.987675,
+    "no SURPRISE 3.1": 0.983,
+    "no MATCH 3.1": 0.999475,
+    "plain mean": 0.9926,
+    "minimum": 0.993175
+   },
+   "ho_stuff_rand": {
+    "v3.1": 0.878275,
+    "no v2": 0.8818375,
+    "no SURPRISE 3.1": 0.7127125,
+    "no MATCH 3.1": 0.904475,
+    "plain mean": 0.861725,
+    "minimum": 0.8992
+   },
+   "ho_generic2": {
+    "v3.1": 0.953025,
+    "no v2": 0.972125,
+    "no SURPRISE 3.1": 0.8799,
+    "no MATCH 3.1": 0.9521,
+    "plain mean": 0.9518,
+    "minimum": 0.9483
+   },
+   "ho_template": {
+    "v3.1": 0.529125,
+    "no v2": 0.591075,
+    "no SURPRISE 3.1": 0.14305,
+    "no MATCH 3.1": 0.67185,
+    "plain mean": 0.494975,
+    "minimum": 0.615775
+   },
+   "ho_echo_scatter": {
+    "v3.1": 1.0,
+    "no v2": 0.9999,
+    "no SURPRISE 3.1": 1.0,
+    "no MATCH 3.1": 0.8368375,
+    "plain mean": 0.9748,
+    "minimum": 0.999975
+   },
+   "ho_title_swap": {
+    "v3.1": 0.64985,
+    "no v2": 0.6700125,
+    "no SURPRISE 3.1": 0.664125,
+    "no MATCH 3.1": 0.5692375,
+    "plain mean": 0.6469375,
+    "minimum": 0.670975
+   },
+   "ho_list_related": {
+    "v3.1": 0.826625,
+    "no v2": 0.777275,
+    "no SURPRISE 3.1": 0.8086125,
+    "no MATCH 3.1": 0.850375,
+    "plain mean": 0.832975,
+    "minimum": 0.789575
+   }
+  }
+ },
+ "gpt2_human_vs": {
+  "xl-1542M": {
+   "scribe_v2": 0.638545,
+   "scribe_v3": 0.664977,
+   "scribe_v31": 0.663581,
+   "surprise": 0.6318385,
+   "match": 0.646401,
+   "surprise31": 0.637819,
+   "match31": 0.648247,
+   "min3": 0.651201
+  },
+  "large-762M": {
+   "scribe_v2": 0.648027,
+   "scribe_v3": 0.690173,
+   "scribe_v31": 0.685666,
+   "surprise": 0.674242,
+   "match": 0.6682095,
+   "surprise31": 0.673545,
+   "match31": 0.6704145,
+   "min3": 0.6770265
+  },
+  "medium-345M": {
+   "scribe_v2": 0.7470505,
+   "scribe_v3": 0.7849305,
+   "scribe_v31": 0.7813615,
+   "surprise": 0.748146,
+   "match": 0.76876,
+   "surprise31": 0.755919,
+   "match31": 0.7700845,
+   "min3": 0.7650215
+  },
+  "small-117M": {
+   "scribe_v2": 0.7334785,
+   "scribe_v3": 0.783984,
+   "scribe_v31": 0.7790285,
+   "surprise": 0.7332725,
+   "match": 0.761276,
+   "surprise31": 0.7360165,
+   "match31": 0.7619405,
+   "min3": 0.7626005
+  },
+  "xl-1542M-k40": {
+   "scribe_v2": 0.376272,
+   "scribe_v3": 0.5385645,
+   "scribe_v31": 0.5110395,
+   "surprise": 0.6398865,
+   "match": 0.5015615,
+   "surprise31": 0.583765,
+   "match31": 0.5026915,
+   "min3": 0.5557945
+  },
+  "large-762M-k40": {
+   "scribe_v2": 0.383552,
+   "scribe_v3": 0.578854,
+   "scribe_v31": 0.5667285,
+   "surprise": 0.674825,
+   "match": 0.5351085,
+   "surprise31": 0.637319,
+   "match31": 0.536009,
+   "min3": 0.597355
+  },
+  "medium-345M-k40": {
+   "scribe_v2": 0.391439,
+   "scribe_v3": 0.597034,
+   "scribe_v31": 0.566722,
+   "surprise": 0.691488,
+   "match": 0.555947,
+   "surprise31": 0.6373,
+   "match31": 0.5565465,
+   "min3": 0.615433
+  },
+  "small-117M-k40": {
+   "scribe_v2": 0.3587895,
+   "scribe_v3": 0.673663,
+   "scribe_v31": 0.6475555,
+   "surprise": 0.7750915,
+   "match": 0.5929165,
+   "surprise31": 0.71955,
+   "match31": 0.592028,
+   "min3": 0.707219
+  }
+ },
+ "attacks_v2set": {
+  "human": {
+   "n": 250,
+   "scribe_v2": 0.90584673096,
+   "scribe_v3": 0.8733790200000001,
+   "scribe_v31": 0.8314411597999999,
+   "surprise": 0.8996976285999999,
+   "match": 0.81459258510712,
+   "surprise31": 0.86368040526,
+   "match31": 0.776056454838,
+   "min3": 0.76733665206712
+  },
+  "copy_pack": {
+   "n": 250,
+   "scribe_v2": 0.10276916002839999,
+   "scribe_v2_win": 0.992,
+   "scribe_v3": 0.04837189284,
+   "scribe_v3_win": 1.0,
+   "scribe_v31": 5.743615712e-09,
+   "scribe_v31_win": 1.0,
+   "surprise": 0.042346578216,
+   "surprise_win": 0.996,
+   "match": 2.4166740799999997e-23,
+   "match_win": 1.0,
+   "surprise31": 0.010797086910799999,
+   "surprise31_win": 0.996,
+   "match31": 4.6449830800000005e-22,
+   "match31_win": 1.0,
+   "min3": 2.4166740799999997e-23,
+   "min3_win": 1.0
+  },
+  "offprompt": {
+   "n": 250,
+   "scribe_v2": 0.90584673096,
+   "scribe_v2_win": 0.484,
+   "scribe_v3": 0.8336115960000001,
+   "scribe_v3_win": 0.636,
+   "scribe_v31": 0.68818039364,
+   "scribe_v31_win": 0.808,
+   "surprise": 0.8946862292000001,
+   "surprise_win": 0.502,
+   "match": 0.7003018709364001,
+   "match_win": 0.74,
+   "surprise31": 0.7198594313840001,
+   "surprise31_win": 0.816,
+   "match31": 0.5277609938816,
+   "match31_win": 0.868,
+   "min3": 0.6777770458964001,
+   "min3_win": 0.69
+  },
+  "echo": {
+   "n": 250,
+   "scribe_v2": 2.0499905099595683e-14,
+   "scribe_v2_win": 1.0,
+   "scribe_v3": 0.0019562865552000003,
+   "scribe_v3_win": 1.0,
+   "scribe_v31": 6.211778677032408e-28,
+   "scribe_v31_win": 1.0,
+   "surprise": 0.0058688572992,
+   "surprise_win": 1.0,
+   "match": 6.997011716584234e-67,
+   "match_win": 1.0,
+   "surprise31": 0.018267013803487997,
+   "surprise31_win": 0.996,
+   "match31": 4.814142074617026e-66,
+   "match31_win": 1.0,
+   "min3": 6.997011716584234e-67,
+   "min3_win": 1.0
+  },
+  "stuffing": {
+   "n": 250,
+   "scribe_v2": 0.01504445048444,
+   "scribe_v2_win": 1.0,
+   "scribe_v3": 0.10250981672000001,
+   "scribe_v3_win": 0.992,
+   "scribe_v31": 0.0197164038404,
+   "scribe_v31_win": 0.992,
+   "surprise": 0.21673730360000001,
+   "surprise_win": 0.988,
+   "match": 0.0757477293,
+   "match_win": 0.968,
+   "surprise31": 0.03708361200604,
+   "surprise31_win": 0.988,
+   "match31": 0.054059823198000005,
+   "match31_win": 0.984,
+   "min3": 0.01238277831244,
+   "min3_win": 0.968
+  },
+  "generic": {
+   "n": 250,
+   "scribe_v2": 0.834804,
+   "scribe_v2_win": 0.792,
+   "scribe_v3": 0.6560560600000002,
+   "scribe_v3_win": 0.92,
+   "scribe_v31": 0.464074164,
+   "scribe_v31_win": 0.964,
+   "surprise": 0.6529360000000001,
+   "surprise_win": 0.948,
+   "match": 0.480427652,
+   "match_win": 0.948,
+   "surprise31": 0.318723412,
+   "surprise31_win": 0.98,
+   "match31": 0.37866879999999997,
+   "match31_win": 0.94,
+   "min3": 0.480427652,
+   "min3_win": 0.916
+  },
+  "generic_topic": {
+   "n": 250,
+   "scribe_v2": 0.9109756520000001,
+   "scribe_v2_win": 0.704,
+   "scribe_v3": 0.952700672,
+   "scribe_v3_win": 0.32,
+   "scribe_v31": 0.946525896,
+   "scribe_v31_win": 0.288,
+   "surprise": 0.979178136,
+   "surprise_win": 0.348,
+   "match": 0.967948336,
+   "match_win": 0.202,
+   "surprise31": 0.965123164,
+   "surprise31_win": 0.282,
+   "match31": 0.969149088,
+   "match31_win": 0.174,
+   "min3": 0.89625248,
+   "min3_win": 0.336
+  },
+  "numbers": {
+   "n": 250,
+   "scribe_v2": 0.9059604555999999,
+   "scribe_v2_win": 0.498,
+   "scribe_v3": 0.872028716,
+   "scribe_v3_win": 0.494,
+   "scribe_v31": 0.8300117163999999,
+   "scribe_v31_win": 0.516,
+   "surprise": 0.8986758091999999,
+   "surprise_win": 0.492,
+   "match": 0.81144985835112,
+   "match_win": 0.502,
+   "surprise31": 0.862464186932,
+   "surprise31_win": 0.508,
+   "match31": 0.771984550326,
+   "match31_win": 0.512,
+   "min3": 0.76550711475112,
+   "min3_win": 0.496
+  },
+  "negation": {
+   "n": 250,
+   "scribe_v2": 0.9077081499999999,
+   "scribe_v2_win": 0.466,
+   "scribe_v3": 0.8815444359999999,
+   "scribe_v3_win": 0.42,
+   "scribe_v31": 0.8424512624,
+   "scribe_v31_win": 0.45,
+   "surprise": 0.9062777492,
+   "surprise_win": 0.534,
+   "match": 0.8306473987397199,
+   "match_win": 0.456,
+   "surprise31": 0.87025336216,
+   "surprise31_win": 0.588,
+   "match31": 0.79055904592,
+   "match31_win": 0.464,
+   "min3": 0.77940926473972,
+   "min3_win": 0.486
+  },
+  "fwloop": {
+   "n": 250,
+   "scribe_v2": 3.906218196e-05,
+   "scribe_v2_win": 1.0,
+   "scribe_v3": 0.0302945388,
+   "scribe_v3_win": 1.0,
+   "scribe_v31": 0.00258941904,
+   "scribe_v31_win": 1.0,
+   "surprise": 0.01181708392,
+   "surprise_win": 0.996,
+   "match": 0.0790274752,
+   "match_win": 0.968,
+   "surprise31": 0.006911486119999999,
+   "surprise31_win": 0.996,
+   "match31": 0.07021272640000001,
+   "match31_win": 0.984,
+   "min3": 3.906218196e-05,
+   "min3_win": 0.992
+  }
+ },
+ "stability": {
+  "base": {
+   "pairs": {
+    "held-out human > sentences shuffled across docs": {
+     "v2": "0.975",
+     "SURPRISE": "0.950",
+     "MATCH": "0.940",
+     "v3": "0.981",
+     "min3": "0.964",
+     "SURPRISE 3.1": "0.935",
+     "MATCH 3.1": "0.940",
+     "v3.1": "0.965",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "sentences shuffled across docs > words shuffled within sentences": {
+     "v2": "0.999",
+     "SURPRISE": "1.000",
+     "MATCH": "0.979",
+     "v3": "1.000",
+     "min3": "0.992",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "0.978",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "words shuffled within sentences > random lexicon words": {
+     "v2": "0.998",
+     "SURPRISE": "0.961",
+     "MATCH": "0.950",
+     "v3": "0.975",
+     "min3": "0.998",
+     "SURPRISE 3.1": "0.962",
+     "MATCH 3.1": "0.865",
+     "v3.1": "0.996",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "random lexicon words > random letters": {
+     "v2": "0.998",
+     "SURPRISE": "1.000",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "0.998",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "1.000",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "random letters > one phrase repeated": {
+     "v2": "1.000",
+     "SURPRISE": "1.000",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "1.000",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "1.000",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    }
+   },
+   "means": {
+    "held-out human": {
+     "v2": "0.916 [0.901, 0.931]",
+     "v3": "0.906 [0.896, 0.916]",
+     "v3.1": "0.902 [0.888, 0.914]",
+     "SURPRISE 3.1": "0.914 [0.900, 0.927]",
+     "MATCH 3.1": "0.905 [0.892, 0.918]"
+    },
+    "sentences shuffled across docs": {
+     "v2": "0.354 [0.342, 0.365]",
+     "v3": "0.560 [0.554, 0.565]",
+     "v3.1": "0.548 [0.540, 0.556]",
+     "SURPRISE 3.1": "0.738 [0.733, 0.742]",
+     "MATCH 3.1": "0.674 [0.665, 0.682]"
+    },
+    "words shuffled within sentences": {
+     "v2": "0.003 [0.003, 0.003]",
+     "v3": "0.189 [0.187, 0.191]",
+     "v3.1": "0.034 [0.034, 0.035]",
+     "SURPRISE 3.1": "0.036 [0.036, 0.037]",
+     "MATCH 3.1": "0.341 [0.334, 0.348]"
+    },
+    "random lexicon words": {
+     "v2": "0.001 [0.001, 0.001]",
+     "v3": "0.136 [0.135, 0.137]",
+     "v3.1": "0.018 [0.018, 0.019]",
+     "SURPRISE 3.1": "0.029 [0.029, 0.029]",
+     "MATCH 3.1": "0.259 [0.255, 0.263]"
+    },
+    "random letters": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.041 [0.041, 0.042]",
+     "v3.1": "0.001 [0.001, 0.002]",
+     "SURPRISE 3.1": "0.013 [0.013, 0.014]",
+     "MATCH 3.1": "0.011 [0.011, 0.011]"
+    },
+    "one phrase repeated": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.000 [0.000, 0.000]",
+     "v3.1": "0.000 [0.000, 0.000]",
+     "SURPRISE 3.1": "0.000 [0.000, 0.000]",
+     "MATCH 3.1": "0.000 [0.000, 0.000]"
+    },
+    "held-out human, short (60-260 B)": {
+     "v2": "0.954 [0.944, 0.965]",
+     "v3": "0.949 [0.941, 0.956]",
+     "v3.1": "0.941 [0.929, 0.951]",
+     "SURPRISE 3.1": "0.941 [0.928, 0.954]",
+     "MATCH 3.1": "0.951 [0.940, 0.961]"
+    }
+   }
+  },
+  "pack128": {
+   "pairs": {
+    "held-out human > sentences shuffled across docs": {
+     "v2": "0.983",
+     "SURPRISE": "0.934",
+     "MATCH": "0.922",
+     "v3": "0.980",
+     "min3": "0.957",
+     "SURPRISE 3.1": "0.919",
+     "MATCH 3.1": "0.914",
+     "v3.1": "0.957",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "sentences shuffled across docs > words shuffled within sentences": {
+     "v2": "0.997",
+     "SURPRISE": "0.998",
+     "MATCH": "0.980",
+     "v3": "0.999",
+     "min3": "0.993",
+     "SURPRISE 3.1": "0.998",
+     "MATCH 3.1": "0.980",
+     "v3.1": "0.996",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "words shuffled within sentences > random lexicon words": {
+     "v2": "0.999",
+     "SURPRISE": "0.946",
+     "MATCH": "0.951",
+     "v3": "0.970",
+     "min3": "0.999",
+     "SURPRISE 3.1": "0.949",
+     "MATCH 3.1": "0.831",
+     "v3.1": "0.995",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "random lexicon words > random letters": {
+     "v2": "0.998",
+     "SURPRISE": "1.000",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "0.998",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "1.000",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "random letters > one phrase repeated": {
+     "v2": "1.000",
+     "SURPRISE": "1.000",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "1.000",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "1.000",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    }
+   },
+   "means": {
+    "held-out human": {
+     "v2": "0.919 [0.905, 0.933]",
+     "v3": "0.902 [0.891, 0.911]",
+     "v3.1": "0.892 [0.876, 0.905]",
+     "SURPRISE 3.1": "0.909 [0.895, 0.923]",
+     "MATCH 3.1": "0.889 [0.873, 0.904]"
+    },
+    "sentences shuffled across docs": {
+     "v2": "0.335 [0.325, 0.346]",
+     "v3": "0.555 [0.550, 0.561]",
+     "v3.1": "0.540 [0.532, 0.548]",
+     "SURPRISE 3.1": "0.737 [0.730, 0.742]",
+     "MATCH 3.1": "0.678 [0.670, 0.685]"
+    },
+    "words shuffled within sentences": {
+     "v2": "0.003 [0.003, 0.003]",
+     "v3": "0.188 [0.186, 0.190]",
+     "v3.1": "0.034 [0.033, 0.034]",
+     "SURPRISE 3.1": "0.036 [0.036, 0.036]",
+     "MATCH 3.1": "0.329 [0.322, 0.336]"
+    },
+    "random lexicon words": {
+     "v2": "0.001 [0.001, 0.001]",
+     "v3": "0.138 [0.137, 0.139]",
+     "v3.1": "0.017 [0.017, 0.018]",
+     "SURPRISE 3.1": "0.029 [0.029, 0.029]",
+     "MATCH 3.1": "0.245 [0.241, 0.250]"
+    },
+    "random letters": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.043 [0.043, 0.044]",
+     "v3.1": "0.002 [0.001, 0.002]",
+     "SURPRISE 3.1": "0.012 [0.011, 0.012]",
+     "MATCH 3.1": "0.011 [0.011, 0.011]"
+    },
+    "one phrase repeated": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.000 [0.000, 0.000]",
+     "v3.1": "0.000 [0.000, 0.000]",
+     "SURPRISE 3.1": "0.000 [0.000, 0.000]",
+     "MATCH 3.1": "0.000 [0.000, 0.000]"
+    },
+    "held-out human, short (60-260 B)": {
+     "v2": "0.948 [0.936, 0.959]",
+     "v3": "0.947 [0.939, 0.955]",
+     "v3.1": "0.940 [0.928, 0.950]",
+     "SURPRISE 3.1": "0.949 [0.938, 0.960]",
+     "MATCH 3.1": "0.950 [0.937, 0.961]"
+    }
+   }
+  },
+  "pack16": {
+   "pairs": {
+    "held-out human > sentences shuffled across docs": {
+     "v2": "0.972",
+     "SURPRISE": "0.938",
+     "MATCH": "0.925",
+     "v3": "0.976",
+     "min3": "0.953",
+     "SURPRISE 3.1": "0.922",
+     "MATCH 3.1": "0.925",
+     "v3.1": "0.956",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "sentences shuffled across docs > words shuffled within sentences": {
+     "v2": "1.000",
+     "SURPRISE": "1.000",
+     "MATCH": "0.953",
+     "v3": "1.000",
+     "min3": "0.998",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "0.955",
+     "v3.1": "0.998",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "words shuffled within sentences > random lexicon words": {
+     "v2": "0.994",
+     "SURPRISE": "0.968",
+     "MATCH": "0.941",
+     "v3": "0.973",
+     "min3": "0.994",
+     "SURPRISE 3.1": "0.965",
+     "MATCH 3.1": "0.876",
+     "v3.1": "0.990",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "random lexicon words > random letters": {
+     "v2": "0.996",
+     "SURPRISE": "1.000",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "0.996",
+     "SURPRISE 3.1": "0.998",
+     "MATCH 3.1": "1.000",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "random letters > one phrase repeated": {
+     "v2": "1.000",
+     "SURPRISE": "1.000",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "1.000",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "1.000",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    }
+   },
+   "means": {
+    "held-out human": {
+     "v2": "0.915 [0.900, 0.930]",
+     "v3": "0.903 [0.892, 0.913]",
+     "v3.1": "0.896 [0.883, 0.909]",
+     "SURPRISE 3.1": "0.910 [0.898, 0.924]",
+     "MATCH 3.1": "0.898 [0.884, 0.912]"
+    },
+    "sentences shuffled across docs": {
+     "v2": "0.381 [0.369, 0.391]",
+     "v3": "0.570 [0.565, 0.576]",
+     "v3.1": "0.567 [0.560, 0.573]",
+     "SURPRISE 3.1": "0.737 [0.732, 0.742]",
+     "MATCH 3.1": "0.680 [0.673, 0.686]"
+    },
+    "words shuffled within sentences": {
+     "v2": "0.003 [0.003, 0.003]",
+     "v3": "0.196 [0.193, 0.200]",
+     "v3.1": "0.035 [0.035, 0.036]",
+     "SURPRISE 3.1": "0.037 [0.036, 0.037]",
+     "MATCH 3.1": "0.368 [0.357, 0.379]"
+    },
+    "random lexicon words": {
+     "v2": "0.001 [0.001, 0.001]",
+     "v3": "0.134 [0.133, 0.136]",
+     "v3.1": "0.019 [0.019, 0.019]",
+     "SURPRISE 3.1": "0.029 [0.028, 0.029]",
+     "MATCH 3.1": "0.266 [0.262, 0.271]"
+    },
+    "random letters": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.040 [0.040, 0.040]",
+     "v3.1": "0.002 [0.001, 0.002]",
+     "SURPRISE 3.1": "0.014 [0.014, 0.014]",
+     "MATCH 3.1": "0.011 [0.011, 0.011]"
+    },
+    "one phrase repeated": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.000 [0.000, 0.000]",
+     "v3.1": "0.000 [0.000, 0.000]",
+     "SURPRISE 3.1": "0.000 [0.000, 0.000]",
+     "MATCH 3.1": "0.000 [0.000, 0.000]"
+    },
+    "held-out human, short (60-260 B)": {
+     "v2": "0.953 [0.942, 0.963]",
+     "v3": "0.953 [0.947, 0.960]",
+     "v3.1": "0.949 [0.939, 0.957]",
+     "SURPRISE 3.1": "0.954 [0.943, 0.964]",
+     "MATCH 3.1": "0.957 [0.947, 0.966]"
+    }
+   }
+  },
+  "pack32": {
+   "pairs": {
+    "held-out human > sentences shuffled across docs": {
+     "v2": "0.971",
+     "SURPRISE": "0.940",
+     "MATCH": "0.918",
+     "v3": "0.976",
+     "min3": "0.944",
+     "SURPRISE 3.1": "0.912",
+     "MATCH 3.1": "0.917",
+     "v3.1": "0.951",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "sentences shuffled across docs > words shuffled within sentences": {
+     "v2": "0.996",
+     "SURPRISE": "1.000",
+     "MATCH": "0.979",
+     "v3": "1.000",
+     "min3": "0.988",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "0.978",
+     "v3.1": "0.998",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "words shuffled within sentences > random lexicon words": {
+     "v2": "0.996",
+     "SURPRISE": "0.954",
+     "MATCH": "0.952",
+     "v3": "0.972",
+     "min3": "0.996",
+     "SURPRISE 3.1": "0.958",
+     "MATCH 3.1": "0.880",
+     "v3.1": "0.992",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "random lexicon words > random letters": {
+     "v2": "1.000",
+     "SURPRISE": "0.998",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "1.000",
+     "SURPRISE 3.1": "0.998",
+     "MATCH 3.1": "1.000",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "random letters > one phrase repeated": {
+     "v2": "1.000",
+     "SURPRISE": "1.000",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "1.000",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "1.000",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    }
+   },
+   "means": {
+    "held-out human": {
+     "v2": "0.912 [0.896, 0.927]",
+     "v3": "0.897 [0.887, 0.907]",
+     "v3.1": "0.887 [0.873, 0.901]",
+     "SURPRISE 3.1": "0.905 [0.890, 0.919]",
+     "MATCH 3.1": "0.890 [0.874, 0.905]"
+    },
+    "sentences shuffled across docs": {
+     "v2": "0.355 [0.343, 0.366]",
+     "v3": "0.561 [0.555, 0.567]",
+     "v3.1": "0.549 [0.540, 0.557]",
+     "SURPRISE 3.1": "0.740 [0.735, 0.744]",
+     "MATCH 3.1": "0.676 [0.668, 0.683]"
+    },
+    "words shuffled within sentences": {
+     "v2": "0.003 [0.003, 0.003]",
+     "v3": "0.187 [0.185, 0.189]",
+     "v3.1": "0.034 [0.033, 0.034]",
+     "SURPRISE 3.1": "0.036 [0.035, 0.036]",
+     "MATCH 3.1": "0.345 [0.338, 0.352]"
+    },
+    "random lexicon words": {
+     "v2": "0.001 [0.001, 0.001]",
+     "v3": "0.135 [0.133, 0.136]",
+     "v3.1": "0.017 [0.017, 0.018]",
+     "SURPRISE 3.1": "0.028 [0.028, 0.029]",
+     "MATCH 3.1": "0.257 [0.254, 0.261]"
+    },
+    "random letters": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.044 [0.044, 0.045]",
+     "v3.1": "0.001 [0.001, 0.002]",
+     "SURPRISE 3.1": "0.015 [0.015, 0.015]",
+     "MATCH 3.1": "0.011 [0.011, 0.011]"
+    },
+    "one phrase repeated": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.000 [0.000, 0.000]",
+     "v3.1": "0.000 [0.000, 0.000]",
+     "SURPRISE 3.1": "0.000 [0.000, 0.000]",
+     "MATCH 3.1": "0.000 [0.000, 0.000]"
+    },
+    "held-out human, short (60-260 B)": {
+     "v2": "0.951 [0.939, 0.962]",
+     "v3": "0.950 [0.943, 0.957]",
+     "v3.1": "0.945 [0.934, 0.954]",
+     "SURPRISE 3.1": "0.953 [0.942, 0.963]",
+     "MATCH 3.1": "0.952 [0.941, 0.963]"
+    }
+   }
+  },
+  "pack64": {
+   "pairs": {
+    "held-out human > sentences shuffled across docs": {
+     "v2": "0.981",
+     "SURPRISE": "0.942",
+     "MATCH": "0.921",
+     "v3": "0.978",
+     "min3": "0.952",
+     "SURPRISE 3.1": "0.923",
+     "MATCH 3.1": "0.918",
+     "v3.1": "0.958",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "sentences shuffled across docs > words shuffled within sentences": {
+     "v2": "0.997",
+     "SURPRISE": "1.000",
+     "MATCH": "0.983",
+     "v3": "1.000",
+     "min3": "0.993",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "0.983",
+     "v3.1": "0.996",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "words shuffled within sentences > random lexicon words": {
+     "v2": "0.999",
+     "SURPRISE": "0.946",
+     "MATCH": "0.946",
+     "v3": "0.967",
+     "min3": "0.999",
+     "SURPRISE 3.1": "0.951",
+     "MATCH 3.1": "0.873",
+     "v3.1": "0.994",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "random lexicon words > random letters": {
+     "v2": "0.999",
+     "SURPRISE": "1.000",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "0.999",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "1.000",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "random letters > one phrase repeated": {
+     "v2": "1.000",
+     "SURPRISE": "1.000",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "1.000",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "1.000",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    }
+   },
+   "means": {
+    "held-out human": {
+     "v2": "0.917 [0.902, 0.931]",
+     "v3": "0.900 [0.889, 0.910]",
+     "v3.1": "0.890 [0.875, 0.903]",
+     "SURPRISE 3.1": "0.912 [0.897, 0.925]",
+     "MATCH 3.1": "0.887 [0.870, 0.904]"
+    },
+    "sentences shuffled across docs": {
+     "v2": "0.331 [0.319, 0.342]",
+     "v3": "0.554 [0.549, 0.559]",
+     "v3.1": "0.538 [0.530, 0.545]",
+     "SURPRISE 3.1": "0.737 [0.731, 0.743]",
+     "MATCH 3.1": "0.679 [0.672, 0.684]"
+    },
+    "words shuffled within sentences": {
+     "v2": "0.003 [0.003, 0.003]",
+     "v3": "0.186 [0.184, 0.188]",
+     "v3.1": "0.033 [0.033, 0.034]",
+     "SURPRISE 3.1": "0.036 [0.035, 0.036]",
+     "MATCH 3.1": "0.340 [0.333, 0.347]"
+    },
+    "random lexicon words": {
+     "v2": "0.001 [0.001, 0.001]",
+     "v3": "0.137 [0.136, 0.138]",
+     "v3.1": "0.017 [0.017, 0.017]",
+     "SURPRISE 3.1": "0.029 [0.028, 0.029]",
+     "MATCH 3.1": "0.255 [0.252, 0.259]"
+    },
+    "random letters": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.043 [0.042, 0.043]",
+     "v3.1": "0.001 [0.001, 0.002]",
+     "SURPRISE 3.1": "0.013 [0.013, 0.014]",
+     "MATCH 3.1": "0.011 [0.011, 0.011]"
+    },
+    "one phrase repeated": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.000 [0.000, 0.000]",
+     "v3.1": "0.000 [0.000, 0.000]",
+     "SURPRISE 3.1": "0.000 [0.000, 0.000]",
+     "MATCH 3.1": "0.000 [0.000, 0.000]"
+    },
+    "held-out human, short (60-260 B)": {
+     "v2": "0.951 [0.940, 0.961]",
+     "v3": "0.949 [0.942, 0.956]",
+     "v3.1": "0.944 [0.933, 0.954]",
+     "SURPRISE 3.1": "0.954 [0.944, 0.964]",
+     "MATCH 3.1": "0.949 [0.937, 0.961]"
+    }
+   }
+  },
+  "pack8": {
+   "pairs": {
+    "held-out human > sentences shuffled across docs": {
+     "v2": "0.976",
+     "SURPRISE": "0.943",
+     "MATCH": "0.923",
+     "v3": "0.980",
+     "min3": "0.958",
+     "SURPRISE 3.1": "0.927",
+     "MATCH 3.1": "0.920",
+     "v3.1": "0.961",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "sentences shuffled across docs > words shuffled within sentences": {
+     "v2": "0.998",
+     "SURPRISE": "1.000",
+     "MATCH": "0.901",
+     "v3": "0.999",
+     "min3": "0.998",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "0.902",
+     "v3.1": "0.998",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "words shuffled within sentences > random lexicon words": {
+     "v2": "0.993",
+     "SURPRISE": "0.979",
+     "MATCH": "0.917",
+     "v3": "0.962",
+     "min3": "0.993",
+     "SURPRISE 3.1": "0.972",
+     "MATCH 3.1": "0.868",
+     "v3.1": "0.991",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "random lexicon words > random letters": {
+     "v2": "0.996",
+     "SURPRISE": "1.000",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "0.996",
+     "SURPRISE 3.1": "0.998",
+     "MATCH 3.1": "1.000",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "random letters > one phrase repeated": {
+     "v2": "1.000",
+     "SURPRISE": "1.000",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "1.000",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "1.000",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    }
+   },
+   "means": {
+    "held-out human": {
+     "v2": "0.918 [0.904, 0.930]",
+     "v3": "0.902 [0.892, 0.912]",
+     "v3.1": "0.899 [0.886, 0.910]",
+     "SURPRISE 3.1": "0.909 [0.895, 0.922]",
+     "MATCH 3.1": "0.897 [0.883, 0.910]"
+    },
+    "sentences shuffled across docs": {
+     "v2": "0.400 [0.388, 0.414]",
+     "v3": "0.576 [0.570, 0.581]",
+     "v3.1": "0.576 [0.569, 0.584]",
+     "SURPRISE 3.1": "0.733 [0.727, 0.738]",
+     "MATCH 3.1": "0.681 [0.675, 0.687]"
+    },
+    "words shuffled within sentences": {
+     "v2": "0.004 [0.004, 0.004]",
+     "v3": "0.211 [0.206, 0.217]",
+     "v3.1": "0.039 [0.038, 0.039]",
+     "SURPRISE 3.1": "0.038 [0.037, 0.038]",
+     "MATCH 3.1": "0.408 [0.392, 0.425]"
+    },
+    "random lexicon words": {
+     "v2": "0.001 [0.001, 0.001]",
+     "v3": "0.135 [0.133, 0.137]",
+     "v3.1": "0.021 [0.021, 0.022]",
+     "SURPRISE 3.1": "0.029 [0.029, 0.029]",
+     "MATCH 3.1": "0.281 [0.275, 0.287]"
+    },
+    "random letters": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.040 [0.039, 0.040]",
+     "v3.1": "0.002 [0.002, 0.002]",
+     "SURPRISE 3.1": "0.014 [0.013, 0.014]",
+     "MATCH 3.1": "0.011 [0.011, 0.011]"
+    },
+    "one phrase repeated": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.000 [0.000, 0.000]",
+     "v3.1": "0.000 [0.000, 0.000]",
+     "SURPRISE 3.1": "0.000 [0.000, 0.000]",
+     "MATCH 3.1": "0.000 [0.000, 0.000]"
+    },
+    "held-out human, short (60-260 B)": {
+     "v2": "0.951 [0.941, 0.962]",
+     "v3": "0.952 [0.945, 0.959]",
+     "v3.1": "0.947 [0.937, 0.956]",
+     "SURPRISE 3.1": "0.950 [0.938, 0.961]",
+     "MATCH 3.1": "0.957 [0.947, 0.967]"
+    }
+   }
+  },
+  "ref1000_11": {
+   "pairs": {
+    "held-out human > sentences shuffled across docs": {
+     "v2": "0.973",
+     "SURPRISE": "0.948",
+     "MATCH": "0.937",
+     "v3": "0.981",
+     "min3": "0.963",
+     "SURPRISE 3.1": "0.929",
+     "MATCH 3.1": "0.936",
+     "v3.1": "0.963",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "sentences shuffled across docs > words shuffled within sentences": {
+     "v2": "1.000",
+     "SURPRISE": "1.000",
+     "MATCH": "0.981",
+     "v3": "1.000",
+     "min3": "0.999",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "0.980",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "words shuffled within sentences > random lexicon words": {
+     "v2": "0.996",
+     "SURPRISE": "0.961",
+     "MATCH": "0.950",
+     "v3": "0.975",
+     "min3": "0.996",
+     "SURPRISE 3.1": "0.962",
+     "MATCH 3.1": "0.838",
+     "v3.1": "0.993",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "random lexicon words > random letters": {
+     "v2": "0.998",
+     "SURPRISE": "1.000",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "0.998",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "1.000",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "random letters > one phrase repeated": {
+     "v2": "1.000",
+     "SURPRISE": "1.000",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "1.000",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "1.000",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    }
+   },
+   "means": {
+    "held-out human": {
+     "v2": "0.922 [0.907, 0.936]",
+     "v3": "0.912 [0.902, 0.922]",
+     "v3.1": "0.907 [0.894, 0.919]",
+     "SURPRISE 3.1": "0.917 [0.902, 0.929]",
+     "MATCH 3.1": "0.911 [0.898, 0.924]"
+    },
+    "sentences shuffled across docs": {
+     "v2": "0.377 [0.365, 0.389]",
+     "v3": "0.575 [0.569, 0.580]",
+     "v3.1": "0.567 [0.559, 0.574]",
+     "SURPRISE 3.1": "0.743 [0.739, 0.748]",
+     "MATCH 3.1": "0.688 [0.679, 0.695]"
+    },
+    "words shuffled within sentences": {
+     "v2": "0.004 [0.004, 0.004]",
+     "v3": "0.191 [0.189, 0.193]",
+     "v3.1": "0.036 [0.035, 0.036]",
+     "SURPRISE 3.1": "0.037 [0.036, 0.037]",
+     "MATCH 3.1": "0.339 [0.332, 0.347]"
+    },
+    "random lexicon words": {
+     "v2": "0.001 [0.001, 0.001]",
+     "v3": "0.139 [0.137, 0.140]",
+     "v3.1": "0.019 [0.019, 0.020]",
+     "SURPRISE 3.1": "0.029 [0.029, 0.029]",
+     "MATCH 3.1": "0.260 [0.256, 0.264]"
+    },
+    "random letters": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.039 [0.038, 0.039]",
+     "v3.1": "0.001 [0.001, 0.002]",
+     "SURPRISE 3.1": "0.012 [0.012, 0.012]",
+     "MATCH 3.1": "0.011 [0.011, 0.011]"
+    },
+    "one phrase repeated": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.000 [0.000, 0.000]",
+     "v3.1": "0.000 [0.000, 0.000]",
+     "SURPRISE 3.1": "0.000 [0.000, 0.000]",
+     "MATCH 3.1": "0.000 [0.000, 0.000]"
+    },
+    "held-out human, short (60-260 B)": {
+     "v2": "0.959 [0.949, 0.968]",
+     "v3": "0.951 [0.942, 0.958]",
+     "v3.1": "0.945 [0.933, 0.955]",
+     "SURPRISE 3.1": "0.948 [0.935, 0.960]",
+     "MATCH 3.1": "0.949 [0.938, 0.961]"
+    }
+   }
+  },
+  "ref1000_12": {
+   "pairs": {
+    "held-out human > sentences shuffled across docs": {
+     "v2": "0.977",
+     "SURPRISE": "0.946",
+     "MATCH": "0.931",
+     "v3": "0.981",
+     "min3": "0.964",
+     "SURPRISE 3.1": "0.929",
+     "MATCH 3.1": "0.930",
+     "v3.1": "0.967",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "sentences shuffled across docs > words shuffled within sentences": {
+     "v2": "1.000",
+     "SURPRISE": "1.000",
+     "MATCH": "0.977",
+     "v3": "1.000",
+     "min3": "0.990",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "0.976",
+     "v3.1": "0.999",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "words shuffled within sentences > random lexicon words": {
+     "v2": "0.998",
+     "SURPRISE": "0.963",
+     "MATCH": "0.950",
+     "v3": "0.973",
+     "min3": "0.998",
+     "SURPRISE 3.1": "0.961",
+     "MATCH 3.1": "0.862",
+     "v3.1": "0.995",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "random lexicon words > random letters": {
+     "v2": "0.998",
+     "SURPRISE": "1.000",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "0.998",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "1.000",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "random letters > one phrase repeated": {
+     "v2": "1.000",
+     "SURPRISE": "1.000",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "1.000",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "1.000",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    }
+   },
+   "means": {
+    "held-out human": {
+     "v2": "0.919 [0.904, 0.933]",
+     "v3": "0.904 [0.893, 0.913]",
+     "v3.1": "0.901 [0.887, 0.913]",
+     "SURPRISE 3.1": "0.910 [0.897, 0.924]",
+     "MATCH 3.1": "0.900 [0.886, 0.913]"
+    },
+    "sentences shuffled across docs": {
+     "v2": "0.341 [0.329, 0.353]",
+     "v3": "0.552 [0.546, 0.558]",
+     "v3.1": "0.538 [0.529, 0.545]",
+     "SURPRISE 3.1": "0.737 [0.732, 0.741]",
+     "MATCH 3.1": "0.666 [0.657, 0.675]"
+    },
+    "words shuffled within sentences": {
+     "v2": "0.003 [0.003, 0.004]",
+     "v3": "0.188 [0.186, 0.190]",
+     "v3.1": "0.034 [0.034, 0.035]",
+     "SURPRISE 3.1": "0.036 [0.036, 0.036]",
+     "MATCH 3.1": "0.338 [0.331, 0.345]"
+    },
+    "random lexicon words": {
+     "v2": "0.001 [0.001, 0.001]",
+     "v3": "0.135 [0.134, 0.137]",
+     "v3.1": "0.018 [0.018, 0.018]",
+     "SURPRISE 3.1": "0.029 [0.028, 0.029]",
+     "MATCH 3.1": "0.256 [0.253, 0.260]"
+    },
+    "random letters": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.039 [0.039, 0.039]",
+     "v3.1": "0.001 [0.001, 0.001]",
+     "SURPRISE 3.1": "0.012 [0.012, 0.012]",
+     "MATCH 3.1": "0.011 [0.011, 0.011]"
+    },
+    "one phrase repeated": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.000 [0.000, 0.000]",
+     "v3.1": "0.000 [0.000, 0.000]",
+     "SURPRISE 3.1": "0.000 [0.000, 0.000]",
+     "MATCH 3.1": "0.000 [0.000, 0.000]"
+    },
+    "held-out human, short (60-260 B)": {
+     "v2": "0.958 [0.949, 0.967]",
+     "v3": "0.953 [0.946, 0.960]",
+     "v3.1": "0.947 [0.937, 0.957]",
+     "SURPRISE 3.1": "0.950 [0.938, 0.961]",
+     "MATCH 3.1": "0.953 [0.942, 0.963]"
+    }
+   }
+  },
+  "ref1000_13": {
+   "pairs": {
+    "held-out human > sentences shuffled across docs": {
+     "v2": "0.973",
+     "SURPRISE": "0.947",
+     "MATCH": "0.940",
+     "v3": "0.980",
+     "min3": "0.963",
+     "SURPRISE 3.1": "0.929",
+     "MATCH 3.1": "0.940",
+     "v3.1": "0.964",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "sentences shuffled across docs > words shuffled within sentences": {
+     "v2": "1.000",
+     "SURPRISE": "1.000",
+     "MATCH": "0.976",
+     "v3": "1.000",
+     "min3": "0.997",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "0.975",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "words shuffled within sentences > random lexicon words": {
+     "v2": "0.997",
+     "SURPRISE": "0.952",
+     "MATCH": "0.950",
+     "v3": "0.974",
+     "min3": "0.997",
+     "SURPRISE 3.1": "0.955",
+     "MATCH 3.1": "0.864",
+     "v3.1": "0.993",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "random lexicon words > random letters": {
+     "v2": "0.998",
+     "SURPRISE": "1.000",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "0.998",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "1.000",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "random letters > one phrase repeated": {
+     "v2": "1.000",
+     "SURPRISE": "1.000",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "1.000",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "1.000",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    }
+   },
+   "means": {
+    "held-out human": {
+     "v2": "0.920 [0.905, 0.934]",
+     "v3": "0.909 [0.899, 0.919]",
+     "v3.1": "0.905 [0.892, 0.918]",
+     "SURPRISE 3.1": "0.914 [0.900, 0.927]",
+     "MATCH 3.1": "0.910 [0.897, 0.923]"
+    },
+    "sentences shuffled across docs": {
+     "v2": "0.363 [0.351, 0.375]",
+     "v3": "0.564 [0.558, 0.570]",
+     "v3.1": "0.554 [0.546, 0.562]",
+     "SURPRISE 3.1": "0.747 [0.743, 0.751]",
+     "MATCH 3.1": "0.667 [0.659, 0.675]"
+    },
+    "words shuffled within sentences": {
+     "v2": "0.004 [0.004, 0.004]",
+     "v3": "0.191 [0.188, 0.193]",
+     "v3.1": "0.035 [0.035, 0.036]",
+     "SURPRISE 3.1": "0.036 [0.036, 0.037]",
+     "MATCH 3.1": "0.343 [0.335, 0.351]"
+    },
+    "random lexicon words": {
+     "v2": "0.001 [0.001, 0.001]",
+     "v3": "0.136 [0.134, 0.137]",
+     "v3.1": "0.019 [0.019, 0.019]",
+     "SURPRISE 3.1": "0.029 [0.029, 0.029]",
+     "MATCH 3.1": "0.255 [0.251, 0.259]"
+    },
+    "random letters": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.040 [0.039, 0.040]",
+     "v3.1": "0.002 [0.001, 0.002]",
+     "SURPRISE 3.1": "0.013 [0.013, 0.014]",
+     "MATCH 3.1": "0.010 [0.010, 0.010]"
+    },
+    "one phrase repeated": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.000 [0.000, 0.000]",
+     "v3.1": "0.000 [0.000, 0.000]",
+     "SURPRISE 3.1": "0.000 [0.000, 0.000]",
+     "MATCH 3.1": "0.000 [0.000, 0.000]"
+    },
+    "held-out human, short (60-260 B)": {
+     "v2": "0.952 [0.941, 0.963]",
+     "v3": "0.948 [0.939, 0.956]",
+     "v3.1": "0.937 [0.924, 0.949]",
+     "SURPRISE 3.1": "0.941 [0.927, 0.954]",
+     "MATCH 3.1": "0.949 [0.938, 0.960]"
+    }
+   }
+  },
+  "ref100_11": {
+   "pairs": {
+    "held-out human > sentences shuffled across docs": {
+     "v2": "0.966",
+     "SURPRISE": "0.926",
+     "MATCH": "0.909",
+     "v3": "0.973",
+     "min3": "0.953",
+     "SURPRISE 3.1": "0.891",
+     "MATCH 3.1": "0.908",
+     "v3.1": "0.950",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "sentences shuffled across docs > words shuffled within sentences": {
+     "v2": "0.990",
+     "SURPRISE": "0.999",
+     "MATCH": "0.904",
+     "v3": "0.993",
+     "min3": "0.990",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "0.913",
+     "v3.1": "0.990",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "words shuffled within sentences > random lexicon words": {
+     "v2": "0.999",
+     "SURPRISE": "0.944",
+     "MATCH": "0.945",
+     "v3": "0.969",
+     "min3": "0.999",
+     "SURPRISE 3.1": "0.952",
+     "MATCH 3.1": "0.816",
+     "v3.1": "0.983",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "random lexicon words > random letters": {
+     "v2": "0.998",
+     "SURPRISE": "0.995",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "0.998",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "0.998",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "random letters > one phrase repeated": {
+     "v2": "1.000",
+     "SURPRISE": "1.000",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "1.000",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "1.000",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    }
+   },
+   "means": {
+    "held-out human": {
+     "v2": "0.902 [0.882, 0.919]",
+     "v3": "0.882 [0.869, 0.894]",
+     "v3.1": "0.870 [0.854, 0.886]",
+     "SURPRISE 3.1": "0.883 [0.866, 0.898]",
+     "MATCH 3.1": "0.866 [0.850, 0.883]"
+    },
+    "sentences shuffled across docs": {
+     "v2": "0.320 [0.308, 0.332]",
+     "v3": "0.503 [0.496, 0.509]",
+     "v3.1": "0.493 [0.484, 0.501]",
+     "SURPRISE 3.1": "0.679 [0.670, 0.687]",
+     "MATCH 3.1": "0.596 [0.587, 0.604]"
+    },
+    "words shuffled within sentences": {
+     "v2": "0.003 [0.003, 0.003]",
+     "v3": "0.196 [0.192, 0.201]",
+     "v3.1": "0.031 [0.031, 0.032]",
+     "SURPRISE 3.1": "0.036 [0.035, 0.036]",
+     "MATCH 3.1": "0.345 [0.331, 0.359]"
+    },
+    "random lexicon words": {
+     "v2": "0.001 [0.001, 0.001]",
+     "v3": "0.117 [0.115, 0.119]",
+     "v3.1": "0.015 [0.015, 0.016]",
+     "SURPRISE 3.1": "0.027 [0.027, 0.027]",
+     "MATCH 3.1": "0.216 [0.211, 0.222]"
+    },
+    "random letters": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.032 [0.031, 0.032]",
+     "v3.1": "0.001 [0.001, 0.001]",
+     "SURPRISE 3.1": "0.011 [0.010, 0.011]",
+     "MATCH 3.1": "0.007 [0.007, 0.007]"
+    },
+    "one phrase repeated": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.000 [0.000, 0.000]",
+     "v3.1": "0.000 [0.000, 0.000]",
+     "SURPRISE 3.1": "0.000 [0.000, 0.000]",
+     "MATCH 3.1": "0.000 [0.000, 0.000]"
+    },
+    "held-out human, short (60-260 B)": {
+     "v2": "0.947 [0.935, 0.959]",
+     "v3": "0.937 [0.927, 0.946]",
+     "v3.1": "0.929 [0.915, 0.941]",
+     "SURPRISE 3.1": "0.949 [0.936, 0.961]",
+     "MATCH 3.1": "0.923 [0.906, 0.937]"
+    }
+   }
+  },
+  "ref100_12": {
+   "pairs": {
+    "held-out human > sentences shuffled across docs": {
+     "v2": "0.971",
+     "SURPRISE": "0.897",
+     "MATCH": "0.907",
+     "v3": "0.966",
+     "min3": "0.944",
+     "SURPRISE 3.1": "0.846",
+     "MATCH 3.1": "0.907",
+     "v3.1": "0.944",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "FAIL"
+     }
+    },
+    "sentences shuffled across docs > words shuffled within sentences": {
+     "v2": "1.000",
+     "SURPRISE": "1.000",
+     "MATCH": "0.959",
+     "v3": "0.998",
+     "min3": "0.990",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "0.960",
+     "v3.1": "0.996",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "words shuffled within sentences > random lexicon words": {
+     "v2": "0.999",
+     "SURPRISE": "0.920",
+     "MATCH": "0.951",
+     "v3": "0.973",
+     "min3": "0.999",
+     "SURPRISE 3.1": "0.946",
+     "MATCH 3.1": "0.901",
+     "v3.1": "0.997",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "random lexicon words > random letters": {
+     "v2": "1.000",
+     "SURPRISE": "0.784",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "1.000",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "1.000",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "random letters > one phrase repeated": {
+     "v2": "1.000",
+     "SURPRISE": "1.000",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "1.000",
+     "SURPRISE 3.1": "0.999",
+     "MATCH 3.1": "1.000",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    }
+   },
+   "means": {
+    "held-out human": {
+     "v2": "0.881 [0.862, 0.899]",
+     "v3": "0.863 [0.851, 0.876]",
+     "v3.1": "0.842 [0.824, 0.858]",
+     "SURPRISE 3.1": "0.847 [0.826, 0.866]",
+     "MATCH 3.1": "0.859 [0.840, 0.876]"
+    },
+    "sentences shuffled across docs": {
+     "v2": "0.230 [0.219, 0.242]",
+     "v3": "0.481 [0.475, 0.488]",
+     "v3.1": "0.438 [0.429, 0.447]",
+     "SURPRISE 3.1": "0.691 [0.681, 0.701]",
+     "MATCH 3.1": "0.601 [0.591, 0.610]"
+    },
+    "words shuffled within sentences": {
+     "v2": "0.002 [0.002, 0.002]",
+     "v3": "0.176 [0.173, 0.178]",
+     "v3.1": "0.030 [0.030, 0.030]",
+     "SURPRISE 3.1": "0.034 [0.034, 0.034]",
+     "MATCH 3.1": "0.337 [0.331, 0.344]"
+    },
+    "random lexicon words": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.113 [0.111, 0.114]",
+     "v3.1": "0.013 [0.013, 0.014]",
+     "SURPRISE 3.1": "0.027 [0.027, 0.027]",
+     "MATCH 3.1": "0.236 [0.233, 0.239]"
+    },
+    "random letters": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.042 [0.041, 0.042]",
+     "v3.1": "0.001 [0.001, 0.001]",
+     "SURPRISE 3.1": "0.011 [0.010, 0.011]",
+     "MATCH 3.1": "0.008 [0.008, 0.008]"
+    },
+    "one phrase repeated": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.000 [0.000, 0.000]",
+     "v3.1": "0.000 [0.000, 0.000]",
+     "SURPRISE 3.1": "0.000 [0.000, 0.000]",
+     "MATCH 3.1": "0.000 [0.000, 0.000]"
+    },
+    "held-out human, short (60-260 B)": {
+     "v2": "0.921 [0.904, 0.937]",
+     "v3": "0.903 [0.889, 0.916]",
+     "v3.1": "0.881 [0.861, 0.898]",
+     "SURPRISE 3.1": "0.884 [0.865, 0.902]",
+     "MATCH 3.1": "0.905 [0.885, 0.924]"
+    }
+   }
+  },
+  "ref100_13": {
+   "pairs": {
+    "held-out human > sentences shuffled across docs": {
+     "v2": "0.963",
+     "SURPRISE": "0.890",
+     "MATCH": "0.893",
+     "v3": "0.974",
+     "min3": "0.940",
+     "SURPRISE 3.1": "0.836",
+     "MATCH 3.1": "0.892",
+     "v3.1": "0.939",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "FAIL"
+     }
+    },
+    "sentences shuffled across docs > words shuffled within sentences": {
+     "v2": "0.990",
+     "SURPRISE": "1.000",
+     "MATCH": "0.968",
+     "v3": "0.996",
+     "min3": "0.988",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "0.966",
+     "v3.1": "0.990",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "words shuffled within sentences > random lexicon words": {
+     "v2": "0.991",
+     "SURPRISE": "0.900",
+     "MATCH": "0.939",
+     "v3": "0.954",
+     "min3": "0.991",
+     "SURPRISE 3.1": "0.889",
+     "MATCH 3.1": "0.881",
+     "v3.1": "0.966",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "random lexicon words > random letters": {
+     "v2": "1.000",
+     "SURPRISE": "1.000",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "1.000",
+     "SURPRISE 3.1": "0.998",
+     "MATCH 3.1": "0.998",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "random letters > one phrase repeated": {
+     "v2": "1.000",
+     "SURPRISE": "1.000",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "1.000",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "1.000",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    }
+   },
+   "means": {
+    "held-out human": {
+     "v2": "0.890 [0.872, 0.908]",
+     "v3": "0.876 [0.862, 0.888]",
+     "v3.1": "0.850 [0.833, 0.866]",
+     "SURPRISE 3.1": "0.849 [0.828, 0.867]",
+     "MATCH 3.1": "0.870 [0.852, 0.888]"
+    },
+    "sentences shuffled across docs": {
+     "v2": "0.278 [0.265, 0.290]",
+     "v3": "0.512 [0.505, 0.519]",
+     "v3.1": "0.479 [0.470, 0.488]",
+     "SURPRISE 3.1": "0.708 [0.698, 0.717]",
+     "MATCH 3.1": "0.625 [0.614, 0.635]"
+    },
+    "words shuffled within sentences": {
+     "v2": "0.003 [0.003, 0.003]",
+     "v3": "0.179 [0.177, 0.181]",
+     "v3.1": "0.033 [0.032, 0.033]",
+     "SURPRISE 3.1": "0.033 [0.032, 0.034]",
+     "MATCH 3.1": "0.339 [0.332, 0.347]"
+    },
+    "random lexicon words": {
+     "v2": "0.001 [0.001, 0.001]",
+     "v3": "0.125 [0.124, 0.127]",
+     "v3.1": "0.016 [0.016, 0.016]",
+     "SURPRISE 3.1": "0.028 [0.028, 0.028]",
+     "MATCH 3.1": "0.246 [0.242, 0.250]"
+    },
+    "random letters": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.030 [0.030, 0.030]",
+     "v3.1": "0.001 [0.001, 0.001]",
+     "SURPRISE 3.1": "0.007 [0.007, 0.007]",
+     "MATCH 3.1": "0.009 [0.009, 0.009]"
+    },
+    "one phrase repeated": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.000 [0.000, 0.000]",
+     "v3.1": "0.000 [0.000, 0.000]",
+     "SURPRISE 3.1": "0.000 [0.000, 0.000]",
+     "MATCH 3.1": "0.000 [0.000, 0.000]"
+    },
+    "held-out human, short (60-260 B)": {
+     "v2": "0.920 [0.901, 0.936]",
+     "v3": "0.901 [0.886, 0.914]",
+     "v3.1": "0.884 [0.865, 0.901]",
+     "SURPRISE 3.1": "0.900 [0.883, 0.917]",
+     "MATCH 3.1": "0.882 [0.861, 0.900]"
+    }
+   }
+  },
+  "ref200_11": {
+   "pairs": {
+    "held-out human > sentences shuffled across docs": {
+     "v2": "0.972",
+     "SURPRISE": "0.930",
+     "MATCH": "0.928",
+     "v3": "0.976",
+     "min3": "0.959",
+     "SURPRISE 3.1": "0.916",
+     "MATCH 3.1": "0.927",
+     "v3.1": "0.957",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "sentences shuffled across docs > words shuffled within sentences": {
+     "v2": "0.999",
+     "SURPRISE": "1.000",
+     "MATCH": "0.968",
+     "v3": "0.999",
+     "min3": "0.999",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "0.969",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "words shuffled within sentences > random lexicon words": {
+     "v2": "0.998",
+     "SURPRISE": "0.946",
+     "MATCH": "0.947",
+     "v3": "0.972",
+     "min3": "0.998",
+     "SURPRISE 3.1": "0.958",
+     "MATCH 3.1": "0.827",
+     "v3.1": "0.990",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "random lexicon words > random letters": {
+     "v2": "0.998",
+     "SURPRISE": "1.000",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "0.998",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "1.000",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "random letters > one phrase repeated": {
+     "v2": "1.000",
+     "SURPRISE": "1.000",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "1.000",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "1.000",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    }
+   },
+   "means": {
+    "held-out human": {
+     "v2": "0.916 [0.900, 0.931]",
+     "v3": "0.902 [0.892, 0.913]",
+     "v3.1": "0.895 [0.881, 0.909]",
+     "SURPRISE 3.1": "0.907 [0.892, 0.922]",
+     "MATCH 3.1": "0.899 [0.885, 0.913]"
+    },
+    "sentences shuffled across docs": {
+     "v2": "0.351 [0.339, 0.364]",
+     "v3": "0.562 [0.557, 0.568]",
+     "v3.1": "0.550 [0.542, 0.557]",
+     "SURPRISE 3.1": "0.734 [0.729, 0.739]",
+     "MATCH 3.1": "0.687 [0.679, 0.694]"
+    },
+    "words shuffled within sentences": {
+     "v2": "0.003 [0.003, 0.003]",
+     "v3": "0.188 [0.186, 0.191]",
+     "v3.1": "0.034 [0.033, 0.034]",
+     "SURPRISE 3.1": "0.036 [0.036, 0.036]",
+     "MATCH 3.1": "0.337 [0.328, 0.347]"
+    },
+    "random lexicon words": {
+     "v2": "0.001 [0.001, 0.001]",
+     "v3": "0.133 [0.132, 0.134]",
+     "v3.1": "0.018 [0.018, 0.018]",
+     "SURPRISE 3.1": "0.028 [0.028, 0.029]",
+     "MATCH 3.1": "0.255 [0.252, 0.260]"
+    },
+    "random letters": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.036 [0.036, 0.036]",
+     "v3.1": "0.001 [0.001, 0.001]",
+     "SURPRISE 3.1": "0.011 [0.011, 0.011]",
+     "MATCH 3.1": "0.010 [0.010, 0.010]"
+    },
+    "one phrase repeated": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.000 [0.000, 0.000]",
+     "v3.1": "0.000 [0.000, 0.000]",
+     "SURPRISE 3.1": "0.000 [0.000, 0.000]",
+     "MATCH 3.1": "0.000 [0.000, 0.000]"
+    },
+    "held-out human, short (60-260 B)": {
+     "v2": "0.964 [0.954, 0.973]",
+     "v3": "0.951 [0.943, 0.958]",
+     "v3.1": "0.948 [0.937, 0.958]",
+     "SURPRISE 3.1": "0.957 [0.946, 0.967]",
+     "MATCH 3.1": "0.944 [0.931, 0.956]"
+    }
+   }
+  },
+  "ref200_12": {
+   "pairs": {
+    "held-out human > sentences shuffled across docs": {
+     "v2": "0.968",
+     "SURPRISE": "0.928",
+     "MATCH": "0.906",
+     "v3": "0.975",
+     "min3": "0.950",
+     "SURPRISE 3.1": "0.883",
+     "MATCH 3.1": "0.906",
+     "v3.1": "0.955",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "sentences shuffled across docs > words shuffled within sentences": {
+     "v2": "0.990",
+     "SURPRISE": "1.000",
+     "MATCH": "0.967",
+     "v3": "0.997",
+     "min3": "0.990",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "0.968",
+     "v3.1": "0.988",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "words shuffled within sentences > random lexicon words": {
+     "v2": "0.997",
+     "SURPRISE": "0.959",
+     "MATCH": "0.951",
+     "v3": "0.974",
+     "min3": "0.997",
+     "SURPRISE 3.1": "0.964",
+     "MATCH 3.1": "0.896",
+     "v3.1": "0.997",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "random lexicon words > random letters": {
+     "v2": "1.000",
+     "SURPRISE": "1.000",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "1.000",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "1.000",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "random letters > one phrase repeated": {
+     "v2": "1.000",
+     "SURPRISE": "1.000",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "1.000",
+     "SURPRISE 3.1": "0.999",
+     "MATCH 3.1": "1.000",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    }
+   },
+   "means": {
+    "held-out human": {
+     "v2": "0.911 [0.895, 0.926]",
+     "v3": "0.888 [0.876, 0.900]",
+     "v3.1": "0.877 [0.861, 0.891]",
+     "SURPRISE 3.1": "0.879 [0.861, 0.895]",
+     "MATCH 3.1": "0.875 [0.859, 0.890]"
+    },
+    "sentences shuffled across docs": {
+     "v2": "0.345 [0.332, 0.356]",
+     "v3": "0.539 [0.532, 0.545]",
+     "v3.1": "0.527 [0.518, 0.536]",
+     "SURPRISE 3.1": "0.715 [0.708, 0.722]",
+     "MATCH 3.1": "0.641 [0.630, 0.650]"
+    },
+    "words shuffled within sentences": {
+     "v2": "0.003 [0.003, 0.003]",
+     "v3": "0.183 [0.181, 0.185]",
+     "v3.1": "0.033 [0.033, 0.034]",
+     "SURPRISE 3.1": "0.035 [0.035, 0.035]",
+     "MATCH 3.1": "0.341 [0.334, 0.347]"
+    },
+    "random lexicon words": {
+     "v2": "0.001 [0.001, 0.001]",
+     "v3": "0.129 [0.128, 0.130]",
+     "v3.1": "0.017 [0.017, 0.018]",
+     "SURPRISE 3.1": "0.028 [0.028, 0.028]",
+     "MATCH 3.1": "0.252 [0.249, 0.255]"
+    },
+    "random letters": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.035 [0.034, 0.035]",
+     "v3.1": "0.001 [0.001, 0.001]",
+     "SURPRISE 3.1": "0.010 [0.009, 0.010]",
+     "MATCH 3.1": "0.009 [0.009, 0.009]"
+    },
+    "one phrase repeated": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.000 [0.000, 0.000]",
+     "v3.1": "0.000 [0.000, 0.000]",
+     "SURPRISE 3.1": "0.000 [0.000, 0.000]",
+     "MATCH 3.1": "0.000 [0.000, 0.000]"
+    },
+    "held-out human, short (60-260 B)": {
+     "v2": "0.940 [0.926, 0.953]",
+     "v3": "0.938 [0.928, 0.946]",
+     "v3.1": "0.922 [0.906, 0.935]",
+     "SURPRISE 3.1": "0.931 [0.917, 0.944]",
+     "MATCH 3.1": "0.934 [0.920, 0.948]"
+    }
+   }
+  },
+  "ref200_13": {
+   "pairs": {
+    "held-out human > sentences shuffled across docs": {
+     "v2": "0.965",
+     "SURPRISE": "0.918",
+     "MATCH": "0.921",
+     "v3": "0.972",
+     "min3": "0.950",
+     "SURPRISE 3.1": "0.875",
+     "MATCH 3.1": "0.921",
+     "v3.1": "0.949",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "FAIL"
+     }
+    },
+    "sentences shuffled across docs > words shuffled within sentences": {
+     "v2": "0.999",
+     "SURPRISE": "1.000",
+     "MATCH": "0.971",
+     "v3": "1.000",
+     "min3": "0.990",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "0.971",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "words shuffled within sentences > random lexicon words": {
+     "v2": "0.994",
+     "SURPRISE": "0.933",
+     "MATCH": "0.946",
+     "v3": "0.968",
+     "min3": "0.994",
+     "SURPRISE 3.1": "0.934",
+     "MATCH 3.1": "0.886",
+     "v3.1": "0.989",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "random lexicon words > random letters": {
+     "v2": "1.000",
+     "SURPRISE": "1.000",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "1.000",
+     "SURPRISE 3.1": "0.999",
+     "MATCH 3.1": "1.000",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "random letters > one phrase repeated": {
+     "v2": "1.000",
+     "SURPRISE": "1.000",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "1.000",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "1.000",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    }
+   },
+   "means": {
+    "held-out human": {
+     "v2": "0.906 [0.888, 0.923]",
+     "v3": "0.898 [0.887, 0.909]",
+     "v3.1": "0.883 [0.868, 0.898]",
+     "SURPRISE 3.1": "0.887 [0.870, 0.902]",
+     "MATCH 3.1": "0.900 [0.885, 0.914]"
+    },
+    "sentences shuffled across docs": {
+     "v2": "0.333 [0.321, 0.346]",
+     "v3": "0.552 [0.546, 0.558]",
+     "v3.1": "0.532 [0.524, 0.540]",
+     "SURPRISE 3.1": "0.741 [0.734, 0.746]",
+     "MATCH 3.1": "0.664 [0.655, 0.671]"
+    },
+    "words shuffled within sentences": {
+     "v2": "0.003 [0.003, 0.003]",
+     "v3": "0.186 [0.184, 0.189]",
+     "v3.1": "0.033 [0.033, 0.034]",
+     "SURPRISE 3.1": "0.035 [0.034, 0.035]",
+     "MATCH 3.1": "0.351 [0.343, 0.360]"
+    },
+    "random lexicon words": {
+     "v2": "0.001 [0.001, 0.001]",
+     "v3": "0.131 [0.130, 0.133]",
+     "v3.1": "0.018 [0.017, 0.018]",
+     "SURPRISE 3.1": "0.029 [0.028, 0.029]",
+     "MATCH 3.1": "0.258 [0.255, 0.261]"
+    },
+    "random letters": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.036 [0.035, 0.036]",
+     "v3.1": "0.001 [0.001, 0.001]",
+     "SURPRISE 3.1": "0.011 [0.011, 0.012]",
+     "MATCH 3.1": "0.010 [0.010, 0.010]"
+    },
+    "one phrase repeated": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.000 [0.000, 0.000]",
+     "v3.1": "0.000 [0.000, 0.000]",
+     "SURPRISE 3.1": "0.000 [0.000, 0.000]",
+     "MATCH 3.1": "0.000 [0.000, 0.000]"
+    },
+    "held-out human, short (60-260 B)": {
+     "v2": "0.956 [0.944, 0.966]",
+     "v3": "0.938 [0.928, 0.947]",
+     "v3.1": "0.924 [0.909, 0.936]",
+     "SURPRISE 3.1": "0.923 [0.907, 0.939]",
+     "MATCH 3.1": "0.933 [0.919, 0.946]"
+    }
+   }
+  },
+  "ref500_11": {
+   "pairs": {
+    "held-out human > sentences shuffled across docs": {
+     "v2": "0.973",
+     "SURPRISE": "0.940",
+     "MATCH": "0.939",
+     "v3": "0.980",
+     "min3": "0.963",
+     "SURPRISE 3.1": "0.923",
+     "MATCH 3.1": "0.937",
+     "v3.1": "0.964",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "sentences shuffled across docs > words shuffled within sentences": {
+     "v2": "1.000",
+     "SURPRISE": "1.000",
+     "MATCH": "0.975",
+     "v3": "0.999",
+     "min3": "0.992",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "0.974",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "words shuffled within sentences > random lexicon words": {
+     "v2": "0.995",
+     "SURPRISE": "0.961",
+     "MATCH": "0.951",
+     "v3": "0.974",
+     "min3": "0.995",
+     "SURPRISE 3.1": "0.960",
+     "MATCH 3.1": "0.841",
+     "v3.1": "0.992",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "random lexicon words > random letters": {
+     "v2": "1.000",
+     "SURPRISE": "1.000",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "1.000",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "1.000",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "random letters > one phrase repeated": {
+     "v2": "1.000",
+     "SURPRISE": "1.000",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "1.000",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "1.000",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    }
+   },
+   "means": {
+    "held-out human": {
+     "v2": "0.919 [0.904, 0.933]",
+     "v3": "0.911 [0.901, 0.921]",
+     "v3.1": "0.905 [0.891, 0.918]",
+     "SURPRISE 3.1": "0.912 [0.898, 0.926]",
+     "MATCH 3.1": "0.913 [0.900, 0.925]"
+    },
+    "sentences shuffled across docs": {
+     "v2": "0.368 [0.357, 0.380]",
+     "v3": "0.574 [0.568, 0.580]",
+     "v3.1": "0.562 [0.554, 0.570]",
+     "SURPRISE 3.1": "0.742 [0.736, 0.747]",
+     "MATCH 3.1": "0.693 [0.684, 0.701]"
+    },
+    "words shuffled within sentences": {
+     "v2": "0.003 [0.003, 0.003]",
+     "v3": "0.191 [0.188, 0.193]",
+     "v3.1": "0.034 [0.033, 0.034]",
+     "SURPRISE 3.1": "0.036 [0.036, 0.036]",
+     "MATCH 3.1": "0.343 [0.335, 0.352]"
+    },
+    "random lexicon words": {
+     "v2": "0.001 [0.001, 0.001]",
+     "v3": "0.139 [0.138, 0.140]",
+     "v3.1": "0.019 [0.018, 0.019]",
+     "SURPRISE 3.1": "0.029 [0.029, 0.029]",
+     "MATCH 3.1": "0.262 [0.258, 0.266]"
+    },
+    "random letters": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.038 [0.038, 0.039]",
+     "v3.1": "0.001 [0.001, 0.001]",
+     "SURPRISE 3.1": "0.011 [0.011, 0.011]",
+     "MATCH 3.1": "0.011 [0.011, 0.011]"
+    },
+    "one phrase repeated": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.000 [0.000, 0.000]",
+     "v3.1": "0.000 [0.000, 0.000]",
+     "SURPRISE 3.1": "0.000 [0.000, 0.000]",
+     "MATCH 3.1": "0.000 [0.000, 0.000]"
+    },
+    "held-out human, short (60-260 B)": {
+     "v2": "0.965 [0.958, 0.973]",
+     "v3": "0.954 [0.946, 0.960]",
+     "v3.1": "0.950 [0.939, 0.959]",
+     "SURPRISE 3.1": "0.949 [0.937, 0.960]",
+     "MATCH 3.1": "0.952 [0.941, 0.963]"
+    }
+   }
+  },
+  "ref500_12": {
+   "pairs": {
+    "held-out human > sentences shuffled across docs": {
+     "v2": "0.972",
+     "SURPRISE": "0.938",
+     "MATCH": "0.924",
+     "v3": "0.978",
+     "min3": "0.961",
+     "SURPRISE 3.1": "0.918",
+     "MATCH 3.1": "0.924",
+     "v3.1": "0.964",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "sentences shuffled across docs > words shuffled within sentences": {
+     "v2": "1.000",
+     "SURPRISE": "1.000",
+     "MATCH": "0.973",
+     "v3": "0.999",
+     "min3": "0.990",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "0.972",
+     "v3.1": "0.992",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "words shuffled within sentences > random lexicon words": {
+     "v2": "0.997",
+     "SURPRISE": "0.961",
+     "MATCH": "0.950",
+     "v3": "0.974",
+     "min3": "0.997",
+     "SURPRISE 3.1": "0.962",
+     "MATCH 3.1": "0.875",
+     "v3.1": "0.996",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "random lexicon words > random letters": {
+     "v2": "0.998",
+     "SURPRISE": "1.000",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "0.998",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "1.000",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "random letters > one phrase repeated": {
+     "v2": "1.000",
+     "SURPRISE": "1.000",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "1.000",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "1.000",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    }
+   },
+   "means": {
+    "held-out human": {
+     "v2": "0.916 [0.901, 0.931]",
+     "v3": "0.899 [0.887, 0.909]",
+     "v3.1": "0.894 [0.880, 0.907]",
+     "SURPRISE 3.1": "0.902 [0.888, 0.916]",
+     "MATCH 3.1": "0.894 [0.880, 0.908]"
+    },
+    "sentences shuffled across docs": {
+     "v2": "0.342 [0.330, 0.354]",
+     "v3": "0.547 [0.541, 0.553]",
+     "v3.1": "0.532 [0.524, 0.541]",
+     "SURPRISE 3.1": "0.733 [0.728, 0.737]",
+     "MATCH 3.1": "0.654 [0.644, 0.662]"
+    },
+    "words shuffled within sentences": {
+     "v2": "0.003 [0.003, 0.003]",
+     "v3": "0.187 [0.185, 0.189]",
+     "v3.1": "0.034 [0.034, 0.034]",
+     "SURPRISE 3.1": "0.036 [0.036, 0.036]",
+     "MATCH 3.1": "0.339 [0.332, 0.345]"
+    },
+    "random lexicon words": {
+     "v2": "0.001 [0.001, 0.001]",
+     "v3": "0.133 [0.132, 0.134]",
+     "v3.1": "0.018 [0.017, 0.018]",
+     "SURPRISE 3.1": "0.028 [0.028, 0.029]",
+     "MATCH 3.1": "0.253 [0.250, 0.256]"
+    },
+    "random letters": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.039 [0.038, 0.039]",
+     "v3.1": "0.001 [0.001, 0.001]",
+     "SURPRISE 3.1": "0.012 [0.012, 0.013]",
+     "MATCH 3.1": "0.010 [0.010, 0.010]"
+    },
+    "one phrase repeated": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.000 [0.000, 0.000]",
+     "v3.1": "0.000 [0.000, 0.000]",
+     "SURPRISE 3.1": "0.000 [0.000, 0.000]",
+     "MATCH 3.1": "0.000 [0.000, 0.000]"
+    },
+    "held-out human, short (60-260 B)": {
+     "v2": "0.953 [0.943, 0.964]",
+     "v3": "0.948 [0.939, 0.956]",
+     "v3.1": "0.938 [0.925, 0.949]",
+     "SURPRISE 3.1": "0.942 [0.929, 0.955]",
+     "MATCH 3.1": "0.946 [0.933, 0.957]"
+    }
+   }
+  },
+  "ref500_13": {
+   "pairs": {
+    "held-out human > sentences shuffled across docs": {
+     "v2": "0.972",
+     "SURPRISE": "0.948",
+     "MATCH": "0.920",
+     "v3": "0.975",
+     "min3": "0.958",
+     "SURPRISE 3.1": "0.921",
+     "MATCH 3.1": "0.919",
+     "v3.1": "0.960",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "sentences shuffled across docs > words shuffled within sentences": {
+     "v2": "0.998",
+     "SURPRISE": "1.000",
+     "MATCH": "0.978",
+     "v3": "1.000",
+     "min3": "0.990",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "0.977",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "words shuffled within sentences > random lexicon words": {
+     "v2": "0.995",
+     "SURPRISE": "0.953",
+     "MATCH": "0.948",
+     "v3": "0.972",
+     "min3": "0.995",
+     "SURPRISE 3.1": "0.951",
+     "MATCH 3.1": "0.863",
+     "v3.1": "0.991",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "random lexicon words > random letters": {
+     "v2": "0.998",
+     "SURPRISE": "1.000",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "0.998",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "1.000",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "random letters > one phrase repeated": {
+     "v2": "1.000",
+     "SURPRISE": "1.000",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "1.000",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "1.000",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    }
+   },
+   "means": {
+    "held-out human": {
+     "v2": "0.914 [0.898, 0.929]",
+     "v3": "0.904 [0.893, 0.914]",
+     "v3.1": "0.897 [0.883, 0.911]",
+     "SURPRISE 3.1": "0.912 [0.898, 0.926]",
+     "MATCH 3.1": "0.899 [0.884, 0.913]"
+    },
+    "sentences shuffled across docs": {
+     "v2": "0.349 [0.337, 0.361]",
+     "v3": "0.557 [0.551, 0.563]",
+     "v3.1": "0.544 [0.535, 0.552]",
+     "SURPRISE 3.1": "0.746 [0.742, 0.750]",
+     "MATCH 3.1": "0.663 [0.654, 0.671]"
+    },
+    "words shuffled within sentences": {
+     "v2": "0.004 [0.003, 0.004]",
+     "v3": "0.189 [0.187, 0.191]",
+     "v3.1": "0.035 [0.034, 0.035]",
+     "SURPRISE 3.1": "0.036 [0.036, 0.036]",
+     "MATCH 3.1": "0.340 [0.333, 0.347]"
+    },
+    "random lexicon words": {
+     "v2": "0.001 [0.001, 0.001]",
+     "v3": "0.135 [0.134, 0.137]",
+     "v3.1": "0.019 [0.018, 0.019]",
+     "SURPRISE 3.1": "0.029 [0.029, 0.029]",
+     "MATCH 3.1": "0.254 [0.251, 0.258]"
+    },
+    "random letters": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.039 [0.039, 0.040]",
+     "v3.1": "0.001 [0.001, 0.001]",
+     "SURPRISE 3.1": "0.014 [0.013, 0.014]",
+     "MATCH 3.1": "0.010 [0.010, 0.010]"
+    },
+    "one phrase repeated": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.000 [0.000, 0.000]",
+     "v3.1": "0.000 [0.000, 0.000]",
+     "SURPRISE 3.1": "0.000 [0.000, 0.000]",
+     "MATCH 3.1": "0.000 [0.000, 0.000]"
+    },
+    "held-out human, short (60-260 B)": {
+     "v2": "0.948 [0.936, 0.960]",
+     "v3": "0.945 [0.935, 0.953]",
+     "v3.1": "0.934 [0.921, 0.946]",
+     "SURPRISE 3.1": "0.942 [0.928, 0.955]",
+     "MATCH 3.1": "0.945 [0.933, 0.956]"
+    }
+   }
+  },
+  "ref50_11": {
+   "pairs": {
+    "held-out human > sentences shuffled across docs": {
+     "v2": "0.885",
+     "SURPRISE": "0.866",
+     "MATCH": "0.884",
+     "v3": "0.928",
+     "min3": "0.864",
+     "SURPRISE 3.1": "0.863",
+     "MATCH 3.1": "0.882",
+     "v3.1": "0.882",
+     "pass": {
+      "v2": "FAIL",
+      "v3": "FAIL",
+      "v3.1": "FAIL"
+     }
+    },
+    "sentences shuffled across docs > words shuffled within sentences": {
+     "v2": "0.996",
+     "SURPRISE": "0.997",
+     "MATCH": "0.945",
+     "v3": "0.997",
+     "min3": "0.996",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "0.952",
+     "v3.1": "0.996",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "words shuffled within sentences > random lexicon words": {
+     "v2": "0.978",
+     "SURPRISE": "0.923",
+     "MATCH": "0.935",
+     "v3": "0.969",
+     "min3": "0.978",
+     "SURPRISE 3.1": "0.938",
+     "MATCH 3.1": "0.814",
+     "v3.1": "0.969",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "random lexicon words > random letters": {
+     "v2": "1.000",
+     "SURPRISE": "0.999",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "1.000",
+     "SURPRISE 3.1": "0.998",
+     "MATCH 3.1": "0.998",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "random letters > one phrase repeated": {
+     "v2": "1.000",
+     "SURPRISE": "1.000",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "1.000",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "1.000",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    }
+   },
+   "means": {
+    "held-out human": {
+     "v2": "0.814 [0.787, 0.839]",
+     "v3": "0.828 [0.811, 0.844]",
+     "v3.1": "0.803 [0.781, 0.823]",
+     "SURPRISE 3.1": "0.866 [0.847, 0.883]",
+     "MATCH 3.1": "0.830 [0.812, 0.849]"
+    },
+    "sentences shuffled across docs": {
+     "v2": "0.336 [0.325, 0.348]",
+     "v3": "0.500 [0.494, 0.506]",
+     "v3.1": "0.495 [0.486, 0.504]",
+     "SURPRISE 3.1": "0.682 [0.673, 0.690]",
+     "MATCH 3.1": "0.576 [0.566, 0.585]"
+    },
+    "words shuffled within sentences": {
+     "v2": "0.002 [0.002, 0.002]",
+     "v3": "0.176 [0.172, 0.179]",
+     "v3.1": "0.028 [0.028, 0.029]",
+     "SURPRISE 3.1": "0.034 [0.034, 0.034]",
+     "MATCH 3.1": "0.306 [0.295, 0.317]"
+    },
+    "random lexicon words": {
+     "v2": "0.001 [0.001, 0.001]",
+     "v3": "0.102 [0.101, 0.104]",
+     "v3.1": "0.014 [0.014, 0.014]",
+     "SURPRISE 3.1": "0.027 [0.026, 0.027]",
+     "MATCH 3.1": "0.192 [0.187, 0.197]"
+    },
+    "random letters": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.019 [0.019, 0.019]",
+     "v3.1": "0.000 [0.000, 0.000]",
+     "SURPRISE 3.1": "0.008 [0.008, 0.008]",
+     "MATCH 3.1": "0.004 [0.004, 0.004]"
+    },
+    "one phrase repeated": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.000 [0.000, 0.000]",
+     "v3.1": "0.000 [0.000, 0.000]",
+     "SURPRISE 3.1": "0.000 [0.000, 0.000]",
+     "MATCH 3.1": "0.000 [0.000, 0.000]"
+    },
+    "held-out human, short (60-260 B)": {
+     "v2": "0.930 [0.916, 0.943]",
+     "v3": "0.940 [0.929, 0.949]",
+     "v3.1": "0.912 [0.896, 0.927]",
+     "SURPRISE 3.1": "0.938 [0.920, 0.953]",
+     "MATCH 3.1": "0.918 [0.900, 0.936]"
+    }
+   }
+  },
+  "ref50_12": {
+   "pairs": {
+    "held-out human > sentences shuffled across docs": {
+     "v2": "0.941",
+     "SURPRISE": "0.838",
+     "MATCH": "0.853",
+     "v3": "0.947",
+     "min3": "0.918",
+     "SURPRISE 3.1": "0.781",
+     "MATCH 3.1": "0.853",
+     "v3.1": "0.920",
+     "pass": {
+      "v2": "FAIL",
+      "v3": "FAIL",
+      "v3.1": "FAIL"
+     }
+    },
+    "sentences shuffled across docs > words shuffled within sentences": {
+     "v2": "0.986",
+     "SURPRISE": "1.000",
+     "MATCH": "0.924",
+     "v3": "0.996",
+     "min3": "0.986",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "0.926",
+     "v3.1": "0.986",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "words shuffled within sentences > random lexicon words": {
+     "v2": "0.999",
+     "SURPRISE": "0.882",
+     "MATCH": "0.948",
+     "v3": "0.964",
+     "min3": "0.999",
+     "SURPRISE 3.1": "0.916",
+     "MATCH 3.1": "0.904",
+     "v3.1": "0.990",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "random lexicon words > random letters": {
+     "v2": "1.000",
+     "SURPRISE": "0.753",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "1.000",
+     "SURPRISE 3.1": "0.999",
+     "MATCH 3.1": "1.000",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "random letters > one phrase repeated": {
+     "v2": "1.000",
+     "SURPRISE": "1.000",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "1.000",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "1.000",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    }
+   },
+   "means": {
+    "held-out human": {
+     "v2": "0.853 [0.829, 0.874]",
+     "v3": "0.836 [0.821, 0.851]",
+     "v3.1": "0.807 [0.787, 0.826]",
+     "SURPRISE 3.1": "0.819 [0.797, 0.840]",
+     "MATCH 3.1": "0.827 [0.805, 0.846]"
+    },
+    "sentences shuffled across docs": {
+     "v2": "0.199 [0.186, 0.212]",
+     "v3": "0.484 [0.477, 0.491]",
+     "v3.1": "0.412 [0.401, 0.422]",
+     "SURPRISE 3.1": "0.720 [0.708, 0.732]",
+     "MATCH 3.1": "0.590 [0.579, 0.601]"
+    },
+    "words shuffled within sentences": {
+     "v2": "0.003 [0.003, 0.003]",
+     "v3": "0.174 [0.171, 0.177]",
+     "v3.1": "0.031 [0.030, 0.031]",
+     "SURPRISE 3.1": "0.033 [0.033, 0.034]",
+     "MATCH 3.1": "0.344 [0.335, 0.353]"
+    },
+    "random lexicon words": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.107 [0.105, 0.108]",
+     "v3.1": "0.013 [0.013, 0.014]",
+     "SURPRISE 3.1": "0.029 [0.028, 0.029]",
+     "MATCH 3.1": "0.235 [0.232, 0.238]"
+    },
+    "random letters": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.031 [0.031, 0.031]",
+     "v3.1": "0.001 [0.001, 0.001]",
+     "SURPRISE 3.1": "0.008 [0.008, 0.009]",
+     "MATCH 3.1": "0.006 [0.006, 0.006]"
+    },
+    "one phrase repeated": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.000 [0.000, 0.000]",
+     "v3.1": "0.000 [0.000, 0.000]",
+     "SURPRISE 3.1": "0.000 [0.000, 0.000]",
+     "MATCH 3.1": "0.000 [0.000, 0.000]"
+    },
+    "held-out human, short (60-260 B)": {
+     "v2": "0.881 [0.859, 0.904]",
+     "v3": "0.867 [0.850, 0.883]",
+     "v3.1": "0.820 [0.796, 0.842]",
+     "SURPRISE 3.1": "0.825 [0.799, 0.849]",
+     "MATCH 3.1": "0.866 [0.844, 0.888]"
+    }
+   }
+  },
+  "ref50_13": {
+   "pairs": {
+    "held-out human > sentences shuffled across docs": {
+     "v2": "0.923",
+     "SURPRISE": "0.866",
+     "MATCH": "0.876",
+     "v3": "0.951",
+     "min3": "0.894",
+     "SURPRISE 3.1": "0.800",
+     "MATCH 3.1": "0.869",
+     "v3.1": "0.876",
+     "pass": {
+      "v2": "FAIL",
+      "v3": "PASS",
+      "v3.1": "FAIL"
+     }
+    },
+    "sentences shuffled across docs > words shuffled within sentences": {
+     "v2": "0.981",
+     "SURPRISE": "0.996",
+     "MATCH": "0.945",
+     "v3": "0.994",
+     "min3": "0.981",
+     "SURPRISE 3.1": "0.999",
+     "MATCH 3.1": "0.943",
+     "v3.1": "0.987",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "words shuffled within sentences > random lexicon words": {
+     "v2": "0.989",
+     "SURPRISE": "0.886",
+     "MATCH": "0.940",
+     "v3": "0.951",
+     "min3": "0.989",
+     "SURPRISE 3.1": "0.851",
+     "MATCH 3.1": "0.766",
+     "v3.1": "0.934",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "FAIL"
+     }
+    },
+    "random lexicon words > random letters": {
+     "v2": "1.000",
+     "SURPRISE": "0.998",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "1.000",
+     "SURPRISE 3.1": "0.996",
+     "MATCH 3.1": "0.998",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "random letters > one phrase repeated": {
+     "v2": "1.000",
+     "SURPRISE": "1.000",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "1.000",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "1.000",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    }
+   },
+   "means": {
+    "held-out human": {
+     "v2": "0.836 [0.812, 0.860]",
+     "v3": "0.842 [0.826, 0.857]",
+     "v3.1": "0.797 [0.775, 0.817]",
+     "SURPRISE 3.1": "0.813 [0.787, 0.835]",
+     "MATCH 3.1": "0.843 [0.825, 0.863]"
+    },
+    "sentences shuffled across docs": {
+     "v2": "0.271 [0.259, 0.283]",
+     "v3": "0.497 [0.489, 0.504]",
+     "v3.1": "0.461 [0.450, 0.470]",
+     "SURPRISE 3.1": "0.682 [0.669, 0.693]",
+     "MATCH 3.1": "0.606 [0.594, 0.617]"
+    },
+    "words shuffled within sentences": {
+     "v2": "0.002 [0.002, 0.002]",
+     "v3": "0.176 [0.173, 0.178]",
+     "v3.1": "0.027 [0.026, 0.027]",
+     "SURPRISE 3.1": "0.032 [0.031, 0.032]",
+     "MATCH 3.1": "0.295 [0.285, 0.306]"
+    },
+    "random lexicon words": {
+     "v2": "0.001 [0.001, 0.001]",
+     "v3": "0.119 [0.118, 0.121]",
+     "v3.1": "0.014 [0.014, 0.014]",
+     "SURPRISE 3.1": "0.027 [0.027, 0.027]",
+     "MATCH 3.1": "0.212 [0.206, 0.218]"
+    },
+    "random letters": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.027 [0.027, 0.027]",
+     "v3.1": "0.001 [0.000, 0.001]",
+     "SURPRISE 3.1": "0.005 [0.005, 0.005]",
+     "MATCH 3.1": "0.007 [0.007, 0.007]"
+    },
+    "one phrase repeated": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.000 [0.000, 0.000]",
+     "v3.1": "0.000 [0.000, 0.000]",
+     "SURPRISE 3.1": "0.000 [0.000, 0.000]",
+     "MATCH 3.1": "0.000 [0.000, 0.000]"
+    },
+    "held-out human, short (60-260 B)": {
+     "v2": "0.910 [0.891, 0.928]",
+     "v3": "0.885 [0.869, 0.900]",
+     "v3.1": "0.866 [0.846, 0.884]",
+     "SURPRISE 3.1": "0.883 [0.863, 0.902]",
+     "MATCH 3.1": "0.866 [0.846, 0.885]"
+    }
+   }
+  },
+  "seed1": {
+   "pairs": {
+    "held-out human > sentences shuffled across docs": {
+     "v2": "0.976",
+     "SURPRISE": "0.955",
+     "MATCH": "0.952",
+     "v3": "0.981",
+     "min3": "0.967",
+     "SURPRISE 3.1": "0.934",
+     "MATCH 3.1": "0.948",
+     "v3.1": "0.971",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "sentences shuffled across docs > words shuffled within sentences": {
+     "v2": "1.000",
+     "SURPRISE": "1.000",
+     "MATCH": "0.981",
+     "v3": "1.000",
+     "min3": "0.998",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "0.979",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "words shuffled within sentences > random lexicon words": {
+     "v2": "0.998",
+     "SURPRISE": "0.972",
+     "MATCH": "0.958",
+     "v3": "0.988",
+     "min3": "0.998",
+     "SURPRISE 3.1": "0.973",
+     "MATCH 3.1": "0.863",
+     "v3.1": "0.996",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "random lexicon words > random letters": {
+     "v2": "0.998",
+     "SURPRISE": "1.000",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "0.998",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "1.000",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "random letters > one phrase repeated": {
+     "v2": "1.000",
+     "SURPRISE": "1.000",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "1.000",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "1.000",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    }
+   },
+   "means": {
+    "held-out human": {
+     "v2": "0.926 [0.912, 0.938]",
+     "v3": "0.915 [0.906, 0.924]",
+     "v3.1": "0.909 [0.897, 0.921]",
+     "SURPRISE 3.1": "0.920 [0.906, 0.932]",
+     "MATCH 3.1": "0.910 [0.898, 0.923]"
+    },
+    "sentences shuffled across docs": {
+     "v2": "0.351 [0.339, 0.364]",
+     "v3": "0.561 [0.556, 0.567]",
+     "v3.1": "0.552 [0.545, 0.559]",
+     "SURPRISE 3.1": "0.738 [0.734, 0.742]",
+     "MATCH 3.1": "0.682 [0.676, 0.687]"
+    },
+    "words shuffled within sentences": {
+     "v2": "0.003 [0.003, 0.003]",
+     "v3": "0.191 [0.189, 0.193]",
+     "v3.1": "0.034 [0.034, 0.035]",
+     "SURPRISE 3.1": "0.037 [0.036, 0.037]",
+     "MATCH 3.1": "0.345 [0.337, 0.353]"
+    },
+    "random lexicon words": {
+     "v2": "0.001 [0.001, 0.001]",
+     "v3": "0.135 [0.134, 0.136]",
+     "v3.1": "0.018 [0.018, 0.018]",
+     "SURPRISE 3.1": "0.029 [0.028, 0.029]",
+     "MATCH 3.1": "0.261 [0.258, 0.264]"
+    },
+    "random letters": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.041 [0.041, 0.041]",
+     "v3.1": "0.002 [0.001, 0.002]",
+     "SURPRISE 3.1": "0.013 [0.013, 0.014]",
+     "MATCH 3.1": "0.011 [0.011, 0.011]"
+    },
+    "one phrase repeated": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.000 [0.000, 0.000]",
+     "v3.1": "0.000 [0.000, 0.000]",
+     "SURPRISE 3.1": "0.000 [0.000, 0.000]",
+     "MATCH 3.1": "0.000 [0.000, 0.000]"
+    },
+    "held-out human, short (60-260 B)": {
+     "v2": "0.954 [0.943, 0.964]",
+     "v3": "0.953 [0.946, 0.961]",
+     "v3.1": "0.945 [0.934, 0.956]",
+     "SURPRISE 3.1": "0.947 [0.935, 0.958]",
+     "MATCH 3.1": "0.957 [0.946, 0.968]"
+    }
+   }
+  },
+  "seed2": {
+   "pairs": {
+    "held-out human > sentences shuffled across docs": {
+     "v2": "0.990",
+     "SURPRISE": "0.959",
+     "MATCH": "0.963",
+     "v3": "0.989",
+     "min3": "0.982",
+     "SURPRISE 3.1": "0.933",
+     "MATCH 3.1": "0.957",
+     "v3.1": "0.983",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "sentences shuffled across docs > words shuffled within sentences": {
+     "v2": "1.000",
+     "SURPRISE": "1.000",
+     "MATCH": "0.981",
+     "v3": "1.000",
+     "min3": "1.000",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "0.980",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "words shuffled within sentences > random lexicon words": {
+     "v2": "0.997",
+     "SURPRISE": "0.967",
+     "MATCH": "0.957",
+     "v3": "0.984",
+     "min3": "0.997",
+     "SURPRISE 3.1": "0.967",
+     "MATCH 3.1": "0.858",
+     "v3.1": "0.994",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "random lexicon words > random letters": {
+     "v2": "0.996",
+     "SURPRISE": "0.999",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "0.996",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "1.000",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "random letters > one phrase repeated": {
+     "v2": "1.000",
+     "SURPRISE": "1.000",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "1.000",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "1.000",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    }
+   },
+   "means": {
+    "held-out human": {
+     "v2": "0.931 [0.918, 0.942]",
+     "v3": "0.916 [0.906, 0.925]",
+     "v3.1": "0.914 [0.903, 0.923]",
+     "SURPRISE 3.1": "0.916 [0.905, 0.928]",
+     "MATCH 3.1": "0.913 [0.901, 0.924]"
+    },
+    "sentences shuffled across docs": {
+     "v2": "0.341 [0.330, 0.353]",
+     "v3": "0.555 [0.550, 0.560]",
+     "v3.1": "0.546 [0.539, 0.552]",
+     "SURPRISE 3.1": "0.734 [0.729, 0.739]",
+     "MATCH 3.1": "0.677 [0.672, 0.681]"
+    },
+    "words shuffled within sentences": {
+     "v2": "0.003 [0.003, 0.003]",
+     "v3": "0.190 [0.188, 0.193]",
+     "v3.1": "0.034 [0.034, 0.035]",
+     "SURPRISE 3.1": "0.036 [0.036, 0.037]",
+     "MATCH 3.1": "0.342 [0.334, 0.350]"
+    },
+    "random lexicon words": {
+     "v2": "0.001 [0.001, 0.001]",
+     "v3": "0.135 [0.134, 0.136]",
+     "v3.1": "0.018 [0.018, 0.019]",
+     "SURPRISE 3.1": "0.029 [0.028, 0.029]",
+     "MATCH 3.1": "0.260 [0.256, 0.263]"
+    },
+    "random letters": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.042 [0.041, 0.042]",
+     "v3.1": "0.002 [0.001, 0.002]",
+     "SURPRISE 3.1": "0.014 [0.013, 0.014]",
+     "MATCH 3.1": "0.011 [0.011, 0.011]"
+    },
+    "one phrase repeated": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.000 [0.000, 0.000]",
+     "v3.1": "0.000 [0.000, 0.000]",
+     "SURPRISE 3.1": "0.000 [0.000, 0.000]",
+     "MATCH 3.1": "0.000 [0.000, 0.000]"
+    },
+    "held-out human, short (60-260 B)": {
+     "v2": "0.949 [0.937, 0.959]",
+     "v3": "0.950 [0.943, 0.958]",
+     "v3.1": "0.944 [0.934, 0.953]",
+     "SURPRISE 3.1": "0.944 [0.932, 0.956]",
+     "MATCH 3.1": "0.958 [0.947, 0.967]"
+    }
+   }
+  },
+  "seed3": {
+   "pairs": {
+    "held-out human > sentences shuffled across docs": {
+     "v2": "0.970",
+     "SURPRISE": "0.940",
+     "MATCH": "0.943",
+     "v3": "0.969",
+     "min3": "0.958",
+     "SURPRISE 3.1": "0.931",
+     "MATCH 3.1": "0.940",
+     "v3.1": "0.956",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "sentences shuffled across docs > words shuffled within sentences": {
+     "v2": "0.996",
+     "SURPRISE": "1.000",
+     "MATCH": "0.971",
+     "v3": "1.000",
+     "min3": "0.987",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "0.971",
+     "v3.1": "0.998",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "words shuffled within sentences > random lexicon words": {
+     "v2": "0.995",
+     "SURPRISE": "0.953",
+     "MATCH": "0.947",
+     "v3": "0.973",
+     "min3": "0.995",
+     "SURPRISE 3.1": "0.957",
+     "MATCH 3.1": "0.836",
+     "v3.1": "0.991",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "random lexicon words > random letters": {
+     "v2": "0.994",
+     "SURPRISE": "1.000",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "0.994",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "1.000",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "random letters > one phrase repeated": {
+     "v2": "1.000",
+     "SURPRISE": "1.000",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "1.000",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "1.000",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    }
+   },
+   "means": {
+    "held-out human": {
+     "v2": "0.908 [0.891, 0.923]",
+     "v3": "0.905 [0.893, 0.917]",
+     "v3.1": "0.898 [0.884, 0.913]",
+     "SURPRISE 3.1": "0.917 [0.903, 0.931]",
+     "MATCH 3.1": "0.901 [0.887, 0.916]"
+    },
+    "sentences shuffled across docs": {
+     "v2": "0.343 [0.333, 0.354]",
+     "v3": "0.556 [0.551, 0.561]",
+     "v3.1": "0.543 [0.534, 0.551]",
+     "SURPRISE 3.1": "0.737 [0.733, 0.742]",
+     "MATCH 3.1": "0.673 [0.665, 0.681]"
+    },
+    "words shuffled within sentences": {
+     "v2": "0.003 [0.003, 0.004]",
+     "v3": "0.191 [0.188, 0.194]",
+     "v3.1": "0.034 [0.034, 0.035]",
+     "SURPRISE 3.1": "0.036 [0.036, 0.037]",
+     "MATCH 3.1": "0.343 [0.334, 0.352]"
+    },
+    "random lexicon words": {
+     "v2": "0.001 [0.001, 0.001]",
+     "v3": "0.136 [0.135, 0.137]",
+     "v3.1": "0.018 [0.018, 0.018]",
+     "SURPRISE 3.1": "0.029 [0.028, 0.029]",
+     "MATCH 3.1": "0.263 [0.259, 0.266]"
+    },
+    "random letters": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.042 [0.041, 0.042]",
+     "v3.1": "0.002 [0.002, 0.002]",
+     "SURPRISE 3.1": "0.014 [0.013, 0.014]",
+     "MATCH 3.1": "0.011 [0.011, 0.011]"
+    },
+    "one phrase repeated": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.000 [0.000, 0.000]",
+     "v3.1": "0.000 [0.000, 0.000]",
+     "SURPRISE 3.1": "0.000 [0.000, 0.000]",
+     "MATCH 3.1": "0.000 [0.000, 0.000]"
+    },
+    "held-out human, short (60-260 B)": {
+     "v2": "0.950 [0.939, 0.961]",
+     "v3": "0.950 [0.942, 0.957]",
+     "v3.1": "0.942 [0.931, 0.953]",
+     "SURPRISE 3.1": "0.949 [0.937, 0.961]",
+     "MATCH 3.1": "0.948 [0.936, 0.961]"
+    }
+   }
+  },
+  "seed4": {
+   "pairs": {
+    "held-out human > sentences shuffled across docs": {
+     "v2": "0.979",
+     "SURPRISE": "0.955",
+     "MATCH": "0.952",
+     "v3": "0.986",
+     "min3": "0.971",
+     "SURPRISE 3.1": "0.941",
+     "MATCH 3.1": "0.952",
+     "v3.1": "0.977",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "sentences shuffled across docs > words shuffled within sentences": {
+     "v2": "0.994",
+     "SURPRISE": "1.000",
+     "MATCH": "0.980",
+     "v3": "1.000",
+     "min3": "0.994",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "0.981",
+     "v3.1": "0.998",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "words shuffled within sentences > random lexicon words": {
+     "v2": "0.999",
+     "SURPRISE": "0.968",
+     "MATCH": "0.960",
+     "v3": "0.982",
+     "min3": "0.999",
+     "SURPRISE 3.1": "0.971",
+     "MATCH 3.1": "0.877",
+     "v3.1": "0.994",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "random lexicon words > random letters": {
+     "v2": "1.000",
+     "SURPRISE": "0.998",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "1.000",
+     "SURPRISE 3.1": "0.998",
+     "MATCH 3.1": "1.000",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "random letters > one phrase repeated": {
+     "v2": "1.000",
+     "SURPRISE": "1.000",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "1.000",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "1.000",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    }
+   },
+   "means": {
+    "held-out human": {
+     "v2": "0.919 [0.906, 0.932]",
+     "v3": "0.913 [0.904, 0.922]",
+     "v3.1": "0.912 [0.901, 0.922]",
+     "SURPRISE 3.1": "0.921 [0.910, 0.932]",
+     "MATCH 3.1": "0.916 [0.905, 0.927]"
+    },
+    "sentences shuffled across docs": {
+     "v2": "0.351 [0.339, 0.363]",
+     "v3": "0.562 [0.556, 0.567]",
+     "v3.1": "0.550 [0.542, 0.558]",
+     "SURPRISE 3.1": "0.735 [0.729, 0.740]",
+     "MATCH 3.1": "0.685 [0.680, 0.690]"
+    },
+    "words shuffled within sentences": {
+     "v2": "0.003 [0.003, 0.004]",
+     "v3": "0.191 [0.188, 0.193]",
+     "v3.1": "0.035 [0.034, 0.035]",
+     "SURPRISE 3.1": "0.037 [0.036, 0.037]",
+     "MATCH 3.1": "0.346 [0.337, 0.355]"
+    },
+    "random lexicon words": {
+     "v2": "0.001 [0.001, 0.001]",
+     "v3": "0.135 [0.134, 0.136]",
+     "v3.1": "0.018 [0.018, 0.018]",
+     "SURPRISE 3.1": "0.028 [0.028, 0.029]",
+     "MATCH 3.1": "0.259 [0.255, 0.262]"
+    },
+    "random letters": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.041 [0.041, 0.042]",
+     "v3.1": "0.002 [0.001, 0.002]",
+     "SURPRISE 3.1": "0.014 [0.013, 0.014]",
+     "MATCH 3.1": "0.011 [0.011, 0.011]"
+    },
+    "one phrase repeated": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.000 [0.000, 0.000]",
+     "v3.1": "0.000 [0.000, 0.000]",
+     "SURPRISE 3.1": "0.000 [0.000, 0.000]",
+     "MATCH 3.1": "0.000 [0.000, 0.000]"
+    },
+    "held-out human, short (60-260 B)": {
+     "v2": "0.946 [0.934, 0.957]",
+     "v3": "0.947 [0.937, 0.955]",
+     "v3.1": "0.938 [0.926, 0.949]",
+     "SURPRISE 3.1": "0.945 [0.932, 0.956]",
+     "MATCH 3.1": "0.950 [0.938, 0.961]"
+    }
+   }
+  },
+  "seed5": {
+   "pairs": {
+    "held-out human > sentences shuffled across docs": {
+     "v2": "0.969",
+     "SURPRISE": "0.938",
+     "MATCH": "0.931",
+     "v3": "0.967",
+     "min3": "0.953",
+     "SURPRISE 3.1": "0.923",
+     "MATCH 3.1": "0.929",
+     "v3.1": "0.958",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "sentences shuffled across docs > words shuffled within sentences": {
+     "v2": "0.997",
+     "SURPRISE": "0.998",
+     "MATCH": "0.968",
+     "v3": "1.000",
+     "min3": "0.983",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "0.968",
+     "v3.1": "0.994",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "words shuffled within sentences > random lexicon words": {
+     "v2": "0.998",
+     "SURPRISE": "0.961",
+     "MATCH": "0.947",
+     "v3": "0.975",
+     "min3": "0.998",
+     "SURPRISE 3.1": "0.963",
+     "MATCH 3.1": "0.836",
+     "v3.1": "0.993",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "random lexicon words > random letters": {
+     "v2": "0.997",
+     "SURPRISE": "0.996",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "0.997",
+     "SURPRISE 3.1": "0.996",
+     "MATCH 3.1": "1.000",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    },
+    "random letters > one phrase repeated": {
+     "v2": "1.000",
+     "SURPRISE": "1.000",
+     "MATCH": "1.000",
+     "v3": "1.000",
+     "min3": "1.000",
+     "SURPRISE 3.1": "1.000",
+     "MATCH 3.1": "1.000",
+     "v3.1": "1.000",
+     "pass": {
+      "v2": "PASS",
+      "v3": "PASS",
+      "v3.1": "PASS"
+     }
+    }
+   },
+   "means": {
+    "held-out human": {
+     "v2": "0.910 [0.893, 0.925]",
+     "v3": "0.899 [0.886, 0.911]",
+     "v3.1": "0.893 [0.878, 0.907]",
+     "SURPRISE 3.1": "0.908 [0.891, 0.923]",
+     "MATCH 3.1": "0.895 [0.879, 0.910]"
+    },
+    "sentences shuffled across docs": {
+     "v2": "0.348 [0.337, 0.360]",
+     "v3": "0.556 [0.550, 0.562]",
+     "v3.1": "0.541 [0.532, 0.550]",
+     "SURPRISE 3.1": "0.736 [0.728, 0.743]",
+     "MATCH 3.1": "0.669 [0.658, 0.678]"
+    },
+    "words shuffled within sentences": {
+     "v2": "0.003 [0.003, 0.003]",
+     "v3": "0.188 [0.186, 0.190]",
+     "v3.1": "0.034 [0.034, 0.035]",
+     "SURPRISE 3.1": "0.036 [0.036, 0.037]",
+     "MATCH 3.1": "0.336 [0.329, 0.343]"
+    },
+    "random lexicon words": {
+     "v2": "0.001 [0.001, 0.001]",
+     "v3": "0.135 [0.134, 0.136]",
+     "v3.1": "0.018 [0.018, 0.018]",
+     "SURPRISE 3.1": "0.028 [0.028, 0.029]",
+     "MATCH 3.1": "0.261 [0.258, 0.264]"
+    },
+    "random letters": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.042 [0.041, 0.042]",
+     "v3.1": "0.002 [0.001, 0.002]",
+     "SURPRISE 3.1": "0.013 [0.013, 0.014]",
+     "MATCH 3.1": "0.011 [0.011, 0.011]"
+    },
+    "one phrase repeated": {
+     "v2": "0.000 [0.000, 0.000]",
+     "v3": "0.000 [0.000, 0.000]",
+     "v3.1": "0.000 [0.000, 0.000]",
+     "SURPRISE 3.1": "0.000 [0.000, 0.000]",
+     "MATCH 3.1": "0.000 [0.000, 0.000]"
+    },
+    "held-out human, short (60-260 B)": {
+     "v2": "0.950 [0.939, 0.960]",
+     "v3": "0.956 [0.949, 0.963]",
+     "v3.1": "0.946 [0.936, 0.955]",
+     "SURPRISE 3.1": "0.948 [0.936, 0.959]",
+     "MATCH 3.1": "0.962 [0.953, 0.970]"
+    }
+   }
+  }
+ },
+ "pack_cost": {
+  "ppmi128": "MEMTIME wall_s=66.32 user_s=63.94 sys_s=1.80 maxrss_mb=630.1 rc=0",
+  "ppmi16": "MEMTIME wall_s=27.81 user_s=26.93 sys_s=0.74 maxrss_mb=411.7 rc=0",
+  "ppmi32": "MEMTIME wall_s=34.36 user_s=33.20 sys_s=0.88 maxrss_mb=468.9 rc=0",
+  "ppmi64": "MEMTIME wall_s=45.92 user_s=44.23 sys_s=1.27 maxrss_mb=510.3 rc=0",
+  "ppmi8": "MEMTIME wall_s=22.21 user_s=21.42 sys_s=0.61 maxrss_mb=368.5 rc=0"
+ },
+ "k5": {
+  "C1_s20261101": {
+   "held-out human": {
+    "n": "500",
+    "v2": "0.923 [0.909, 0.935]",
+    "SURPRISE": "0.921 [0.910, 0.931]",
+    "MATCH": "0.922 [0.910, 0.933]",
+    "v3": "0.922 [0.911, 0.931]",
+    "min3": "0.859 [0.844, 0.873]",
+    "SURPRISE 3.1": "0.930 [0.918, 0.941]",
+    "MATCH 3.1": "0.924 [0.911, 0.934]",
+    "v3.1": "0.919 [0.908, 0.930]",
+    "disagree": "2%"
+   },
+   "trie samples (pooled)": {
+    "n": "247",
+    "v2": "0.479 [0.449, 0.506]",
+    "SURPRISE": "0.589 [0.568, 0.611]",
+    "MATCH": "0.571 [0.555, 0.588]",
+    "v3": "0.546 [0.529, 0.562]",
+    "min3": "0.401 [0.382, 0.420]",
+    "SURPRISE 3.1": "0.467 [0.437, 0.495]",
+    "MATCH 3.1": "0.459 [0.444, 0.473]",
+    "v3.1": "0.442 [0.425, 0.461]",
+    "disagree": "4%"
+   },
+   "sentences shuffled across docs": {
+    "n": "500",
+    "v2": "0.344 [0.332, 0.355]",
+    "SURPRISE": "0.665 [0.661, 0.669]",
+    "MATCH": "0.661 [0.656, 0.666]",
+    "v3": "0.557 [0.552, 0.562]",
+    "min3": "0.339 [0.329, 0.350]",
+    "SURPRISE 3.1": "0.736 [0.730, 0.740]",
+    "MATCH 3.1": "0.677 [0.671, 0.682]",
+    "v3.1": "0.546 [0.540, 0.553]",
+    "disagree": "3%"
+   },
+   "words shuffled within sentences": {
+    "n": "500",
+    "v2": "0.003 [0.003, 0.003]",
+    "SURPRISE": "0.226 [0.224, 0.229]",
+    "MATCH": "0.341 [0.337, 0.345]",
+    "v3": "0.190 [0.188, 0.192]",
+    "min3": "0.003 [0.003, 0.003]",
+    "SURPRISE 3.1": "0.037 [0.036, 0.037]",
+    "MATCH 3.1": "0.345 [0.339, 0.351]",
+    "v3.1": "0.035 [0.034, 0.035]",
+    "disagree": "1%"
+   },
+   "random lexicon words": {
+    "n": "500",
+    "v2": "0.001 [0.001, 0.001]",
+    "SURPRISE": "0.157 [0.155, 0.159]",
+    "MATCH": "0.249 [0.247, 0.251]",
+    "v3": "0.136 [0.135, 0.137]",
+    "min3": "0.001 [0.001, 0.001]",
+    "SURPRISE 3.1": "0.029 [0.028, 0.029]",
+    "MATCH 3.1": "0.262 [0.259, 0.265]",
+    "v3.1": "0.018 [0.018, 0.019]",
+    "disagree": "0%"
+   },
+   "random letters": {
+    "n": "500",
+    "v2": "0.000 [0.000, 0.000]",
+    "SURPRISE": "0.065 [0.064, 0.066]",
+    "MATCH": "0.059 [0.058, 0.059]",
+    "v3": "0.041 [0.041, 0.042]",
+    "min3": "0.000 [0.000, 0.000]",
+    "SURPRISE 3.1": "0.013 [0.013, 0.014]",
+    "MATCH 3.1": "0.011 [0.011, 0.011]",
+    "v3.1": "0.001 [0.001, 0.002]",
+    "disagree": "0%"
+   },
+   "one phrase repeated": {
+    "n": "500",
+    "v2": "0.000 [0.000, 0.000]",
+    "SURPRISE": "0.000 [0.000, 0.000]",
+    "MATCH": "0.000 [0.000, 0.000]",
+    "v3": "0.000 [0.000, 0.000]",
+    "min3": "0.000 [0.000, 0.000]",
+    "SURPRISE 3.1": "0.000 [0.000, 0.000]",
+    "MATCH 3.1": "0.000 [0.000, 0.000]",
+    "v3.1": "0.000 [0.000, 0.000]",
+    "disagree": "0%"
+   },
+   "trie samples T=1.0": {
+    "n": "247",
+    "v2": "0.479 [0.450, 0.508]",
+    "SURPRISE": "0.589 [0.568, 0.610]",
+    "MATCH": "0.571 [0.556, 0.586]",
+    "v3": "0.546 [0.530, 0.563]",
+    "min3": "0.401 [0.382, 0.421]",
+    "SURPRISE 3.1": "0.467 [0.440, 0.495]",
+    "MATCH 3.1": "0.459 [0.445, 0.472]",
+    "v3.1": "0.442 [0.424, 0.459]",
+    "disagree": "4%"
+   },
+   "held-out human, short (60-260 B)": {
+    "n": "500",
+    "v2": "0.935 [0.921, 0.948]",
+    "SURPRISE": "0.943 [0.931, 0.953]",
+    "MATCH": "0.947 [0.935, 0.958]",
+    "v3": "0.942 [0.932, 0.950]",
+    "min3": "0.879 [0.864, 0.896]",
+    "SURPRISE 3.1": "0.940 [0.926, 0.953]",
+    "MATCH 3.1": "0.946 [0.934, 0.958]",
+    "v3.1": "0.931 [0.918, 0.942]",
+    "disagree": "4%"
+   }
+  },
+  "C1_s20262101": {
+   "held-out human": {
+    "n": "500",
+    "v2": "0.923 [0.909, 0.935]",
+    "SURPRISE": "0.921 [0.910, 0.931]",
+    "MATCH": "0.922 [0.910, 0.933]",
+    "v3": "0.922 [0.911, 0.931]",
+    "min3": "0.859 [0.844, 0.873]",
+    "SURPRISE 3.1": "0.930 [0.918, 0.941]",
+    "MATCH 3.1": "0.924 [0.911, 0.934]",
+    "v3.1": "0.919 [0.908, 0.930]",
+    "disagree": "2%"
+   },
+   "trie samples (pooled)": {
+    "n": "247",
+    "v2": "0.462 [0.438, 0.487]",
+    "SURPRISE": "0.587 [0.565, 0.608]",
+    "MATCH": "0.558 [0.543, 0.575]",
+    "v3": "0.536 [0.521, 0.551]",
+    "min3": "0.398 [0.380, 0.418]",
+    "SURPRISE 3.1": "0.476 [0.448, 0.504]",
+    "MATCH 3.1": "0.449 [0.435, 0.462]",
+    "v3.1": "0.438 [0.422, 0.455]",
+    "disagree": "2%"
+   },
+   "sentences shuffled across docs": {
+    "n": "500",
+    "v2": "0.344 [0.332, 0.355]",
+    "SURPRISE": "0.665 [0.661, 0.669]",
+    "MATCH": "0.661 [0.656, 0.666]",
+    "v3": "0.557 [0.552, 0.562]",
+    "min3": "0.339 [0.329, 0.350]",
+    "SURPRISE 3.1": "0.736 [0.730, 0.740]",
+    "MATCH 3.1": "0.677 [0.671, 0.682]",
+    "v3.1": "0.546 [0.540, 0.553]",
+    "disagree": "3%"
+   },
+   "words shuffled within sentences": {
+    "n": "500",
+    "v2": "0.003 [0.003, 0.003]",
+    "SURPRISE": "0.226 [0.224, 0.229]",
+    "MATCH": "0.341 [0.337, 0.345]",
+    "v3": "0.190 [0.188, 0.192]",
+    "min3": "0.003 [0.003, 0.003]",
+    "SURPRISE 3.1": "0.037 [0.036, 0.037]",
+    "MATCH 3.1": "0.345 [0.339, 0.351]",
+    "v3.1": "0.035 [0.034, 0.035]",
+    "disagree": "1%"
+   },
+   "random lexicon words": {
+    "n": "500",
+    "v2": "0.001 [0.001, 0.001]",
+    "SURPRISE": "0.157 [0.155, 0.159]",
+    "MATCH": "0.249 [0.247, 0.251]",
+    "v3": "0.136 [0.135, 0.137]",
+    "min3": "0.001 [0.001, 0.001]",
+    "SURPRISE 3.1": "0.029 [0.028, 0.029]",
+    "MATCH 3.1": "0.262 [0.259, 0.265]",
+    "v3.1": "0.018 [0.018, 0.019]",
+    "disagree": "0%"
+   },
+   "random letters": {
+    "n": "500",
+    "v2": "0.000 [0.000, 0.000]",
+    "SURPRISE": "0.065 [0.064, 0.066]",
+    "MATCH": "0.059 [0.058, 0.059]",
+    "v3": "0.041 [0.041, 0.042]",
+    "min3": "0.000 [0.000, 0.000]",
+    "SURPRISE 3.1": "0.013 [0.013, 0.014]",
+    "MATCH 3.1": "0.011 [0.011, 0.011]",
+    "v3.1": "0.001 [0.001, 0.002]",
+    "disagree": "0%"
+   },
+   "one phrase repeated": {
+    "n": "500",
+    "v2": "0.000 [0.000, 0.000]",
+    "SURPRISE": "0.000 [0.000, 0.000]",
+    "MATCH": "0.000 [0.000, 0.000]",
+    "v3": "0.000 [0.000, 0.000]",
+    "min3": "0.000 [0.000, 0.000]",
+    "SURPRISE 3.1": "0.000 [0.000, 0.000]",
+    "MATCH 3.1": "0.000 [0.000, 0.000]",
+    "v3.1": "0.000 [0.000, 0.000]",
+    "disagree": "0%"
+   },
+   "trie samples T=1.0": {
+    "n": "247",
+    "v2": "0.462 [0.438, 0.488]",
+    "SURPRISE": "0.587 [0.566, 0.607]",
+    "MATCH": "0.558 [0.542, 0.573]",
+    "v3": "0.536 [0.519, 0.552]",
+    "min3": "0.398 [0.379, 0.416]",
+    "SURPRISE 3.1": "0.476 [0.448, 0.505]",
+    "MATCH 3.1": "0.449 [0.435, 0.463]",
+    "v3.1": "0.438 [0.421, 0.454]",
+    "disagree": "2%"
+   },
+   "held-out human, short (60-260 B)": {
+    "n": "500",
+    "v2": "0.935 [0.921, 0.948]",
+    "SURPRISE": "0.943 [0.931, 0.953]",
+    "MATCH": "0.947 [0.935, 0.958]",
+    "v3": "0.942 [0.932, 0.950]",
+    "min3": "0.879 [0.864, 0.896]",
+    "SURPRISE 3.1": "0.940 [0.926, 0.953]",
+    "MATCH 3.1": "0.946 [0.934, 0.958]",
+    "v3.1": "0.931 [0.918, 0.942]",
+    "disagree": "4%"
+   }
+  },
+  "C1_s20263101": {
+   "held-out human": {
+    "n": "500",
+    "v2": "0.923 [0.909, 0.935]",
+    "SURPRISE": "0.921 [0.910, 0.931]",
+    "MATCH": "0.922 [0.910, 0.933]",
+    "v3": "0.922 [0.911, 0.931]",
+    "min3": "0.859 [0.844, 0.873]",
+    "SURPRISE 3.1": "0.930 [0.918, 0.941]",
+    "MATCH 3.1": "0.924 [0.911, 0.934]",
+    "v3.1": "0.919 [0.908, 0.930]",
+    "disagree": "2%"
+   },
+   "trie samples (pooled)": {
+    "n": "246",
+    "v2": "0.502 [0.475, 0.531]",
+    "SURPRISE": "0.606 [0.586, 0.627]",
+    "MATCH": "0.562 [0.545, 0.579]",
+    "v3": "0.557 [0.541, 0.575]",
+    "min3": "0.419 [0.400, 0.438]",
+    "SURPRISE 3.1": "0.497 [0.471, 0.523]",
+    "MATCH 3.1": "0.450 [0.436, 0.465]",
+    "v3.1": "0.460 [0.442, 0.476]",
+    "disagree": "5%"
+   },
+   "sentences shuffled across docs": {
+    "n": "500",
+    "v2": "0.344 [0.332, 0.355]",
+    "SURPRISE": "0.665 [0.661, 0.669]",
+    "MATCH": "0.661 [0.656, 0.666]",
+    "v3": "0.557 [0.552, 0.562]",
+    "min3": "0.339 [0.329, 0.350]",
+    "SURPRISE 3.1": "0.736 [0.730, 0.740]",
+    "MATCH 3.1": "0.677 [0.671, 0.682]",
+    "v3.1": "0.546 [0.540, 0.553]",
+    "disagree": "3%"
+   },
+   "words shuffled within sentences": {
+    "n": "500",
+    "v2": "0.003 [0.003, 0.003]",
+    "SURPRISE": "0.226 [0.224, 0.229]",
+    "MATCH": "0.341 [0.337, 0.345]",
+    "v3": "0.190 [0.188, 0.192]",
+    "min3": "0.003 [0.003, 0.003]",
+    "SURPRISE 3.1": "0.037 [0.036, 0.037]",
+    "MATCH 3.1": "0.345 [0.339, 0.351]",
+    "v3.1": "0.035 [0.034, 0.035]",
+    "disagree": "1%"
+   },
+   "random lexicon words": {
+    "n": "500",
+    "v2": "0.001 [0.001, 0.001]",
+    "SURPRISE": "0.157 [0.155, 0.159]",
+    "MATCH": "0.249 [0.247, 0.251]",
+    "v3": "0.136 [0.135, 0.137]",
+    "min3": "0.001 [0.001, 0.001]",
+    "SURPRISE 3.1": "0.029 [0.028, 0.029]",
+    "MATCH 3.1": "0.262 [0.259, 0.265]",
+    "v3.1": "0.018 [0.018, 0.019]",
+    "disagree": "0%"
+   },
+   "random letters": {
+    "n": "500",
+    "v2": "0.000 [0.000, 0.000]",
+    "SURPRISE": "0.065 [0.064, 0.066]",
+    "MATCH": "0.059 [0.058, 0.059]",
+    "v3": "0.041 [0.041, 0.042]",
+    "min3": "0.000 [0.000, 0.000]",
+    "SURPRISE 3.1": "0.013 [0.013, 0.014]",
+    "MATCH 3.1": "0.011 [0.011, 0.011]",
+    "v3.1": "0.001 [0.001, 0.002]",
+    "disagree": "0%"
+   },
+   "one phrase repeated": {
+    "n": "500",
+    "v2": "0.000 [0.000, 0.000]",
+    "SURPRISE": "0.000 [0.000, 0.000]",
+    "MATCH": "0.000 [0.000, 0.000]",
+    "v3": "0.000 [0.000, 0.000]",
+    "min3": "0.000 [0.000, 0.000]",
+    "SURPRISE 3.1": "0.000 [0.000, 0.000]",
+    "MATCH 3.1": "0.000 [0.000, 0.000]",
+    "v3.1": "0.000 [0.000, 0.000]",
+    "disagree": "0%"
+   },
+   "trie samples T=1.0": {
+    "n": "246",
+    "v2": "0.502 [0.474, 0.527]",
+    "SURPRISE": "0.606 [0.586, 0.626]",
+    "MATCH": "0.562 [0.546, 0.579]",
+    "v3": "0.557 [0.542, 0.574]",
+    "min3": "0.419 [0.400, 0.438]",
+    "SURPRISE 3.1": "0.497 [0.472, 0.523]",
+    "MATCH 3.1": "0.450 [0.436, 0.464]",
+    "v3.1": "0.460 [0.442, 0.477]",
+    "disagree": "5%"
+   },
+   "held-out human, short (60-260 B)": {
+    "n": "500",
+    "v2": "0.935 [0.921, 0.948]",
+    "SURPRISE": "0.943 [0.931, 0.953]",
+    "MATCH": "0.947 [0.935, 0.958]",
+    "v3": "0.942 [0.932, 0.950]",
+    "min3": "0.879 [0.864, 0.896]",
+    "SURPRISE 3.1": "0.940 [0.926, 0.953]",
+    "MATCH 3.1": "0.946 [0.934, 0.958]",
+    "v3.1": "0.931 [0.918, 0.942]",
+    "disagree": "4%"
+   }
+  },
+  "C1_s20264101": {
+   "held-out human": {
+    "n": "500",
+    "v2": "0.923 [0.909, 0.935]",
+    "SURPRISE": "0.921 [0.910, 0.931]",
+    "MATCH": "0.922 [0.910, 0.933]",
+    "v3": "0.922 [0.911, 0.931]",
+    "min3": "0.859 [0.844, 0.873]",
+    "SURPRISE 3.1": "0.930 [0.918, 0.941]",
+    "MATCH 3.1": "0.924 [0.911, 0.934]",
+    "v3.1": "0.919 [0.908, 0.930]",
+    "disagree": "2%"
+   },
+   "trie samples (pooled)": {
+    "n": "249",
+    "v2": "0.473 [0.449, 0.499]",
+    "SURPRISE": "0.602 [0.580, 0.624]",
+    "MATCH": "0.569 [0.552, 0.585]",
+    "v3": "0.548 [0.533, 0.563]",
+    "min3": "0.407 [0.388, 0.425]",
+    "SURPRISE 3.1": "0.493 [0.466, 0.521]",
+    "MATCH 3.1": "0.456 [0.441, 0.470]",
+    "v3.1": "0.450 [0.435, 0.467]",
+    "disagree": "6%"
+   },
+   "sentences shuffled across docs": {
+    "n": "500",
+    "v2": "0.344 [0.332, 0.355]",
+    "SURPRISE": "0.665 [0.661, 0.669]",
+    "MATCH": "0.661 [0.656, 0.666]",
+    "v3": "0.557 [0.552, 0.562]",
+    "min3": "0.339 [0.329, 0.350]",
+    "SURPRISE 3.1": "0.736 [0.730, 0.740]",
+    "MATCH 3.1": "0.677 [0.671, 0.682]",
+    "v3.1": "0.546 [0.540, 0.553]",
+    "disagree": "3%"
+   },
+   "words shuffled within sentences": {
+    "n": "500",
+    "v2": "0.003 [0.003, 0.003]",
+    "SURPRISE": "0.226 [0.224, 0.229]",
+    "MATCH": "0.341 [0.337, 0.345]",
+    "v3": "0.190 [0.188, 0.192]",
+    "min3": "0.003 [0.003, 0.003]",
+    "SURPRISE 3.1": "0.037 [0.036, 0.037]",
+    "MATCH 3.1": "0.345 [0.339, 0.351]",
+    "v3.1": "0.035 [0.034, 0.035]",
+    "disagree": "1%"
+   },
+   "random lexicon words": {
+    "n": "500",
+    "v2": "0.001 [0.001, 0.001]",
+    "SURPRISE": "0.157 [0.155, 0.159]",
+    "MATCH": "0.249 [0.247, 0.251]",
+    "v3": "0.136 [0.135, 0.137]",
+    "min3": "0.001 [0.001, 0.001]",
+    "SURPRISE 3.1": "0.029 [0.028, 0.029]",
+    "MATCH 3.1": "0.262 [0.259, 0.265]",
+    "v3.1": "0.018 [0.018, 0.019]",
+    "disagree": "0%"
+   },
+   "random letters": {
+    "n": "500",
+    "v2": "0.000 [0.000, 0.000]",
+    "SURPRISE": "0.065 [0.064, 0.066]",
+    "MATCH": "0.059 [0.058, 0.059]",
+    "v3": "0.041 [0.041, 0.042]",
+    "min3": "0.000 [0.000, 0.000]",
+    "SURPRISE 3.1": "0.013 [0.013, 0.014]",
+    "MATCH 3.1": "0.011 [0.011, 0.011]",
+    "v3.1": "0.001 [0.001, 0.002]",
+    "disagree": "0%"
+   },
+   "one phrase repeated": {
+    "n": "500",
+    "v2": "0.000 [0.000, 0.000]",
+    "SURPRISE": "0.000 [0.000, 0.000]",
+    "MATCH": "0.000 [0.000, 0.000]",
+    "v3": "0.000 [0.000, 0.000]",
+    "min3": "0.000 [0.000, 0.000]",
+    "SURPRISE 3.1": "0.000 [0.000, 0.000]",
+    "MATCH 3.1": "0.000 [0.000, 0.000]",
+    "v3.1": "0.000 [0.000, 0.000]",
+    "disagree": "0%"
+   },
+   "trie samples T=1.0": {
+    "n": "249",
+    "v2": "0.473 [0.449, 0.496]",
+    "SURPRISE": "0.602 [0.582, 0.624]",
+    "MATCH": "0.569 [0.551, 0.585]",
+    "v3": "0.548 [0.532, 0.563]",
+    "min3": "0.407 [0.389, 0.424]",
+    "SURPRISE 3.1": "0.493 [0.466, 0.519]",
+    "MATCH 3.1": "0.456 [0.440, 0.469]",
+    "v3.1": "0.450 [0.434, 0.466]",
+    "disagree": "6%"
+   },
+   "held-out human, short (60-260 B)": {
+    "n": "500",
+    "v2": "0.935 [0.921, 0.948]",
+    "SURPRISE": "0.943 [0.931, 0.953]",
+    "MATCH": "0.947 [0.935, 0.958]",
+    "v3": "0.942 [0.932, 0.950]",
+    "min3": "0.879 [0.864, 0.896]",
+    "SURPRISE 3.1": "0.940 [0.926, 0.953]",
+    "MATCH 3.1": "0.946 [0.934, 0.958]",
+    "v3.1": "0.931 [0.918, 0.942]",
+    "disagree": "4%"
+   }
+  },
+  "E8_s20261101": {
+   "held-out human": {
+    "n": "500",
+    "v2": "0.923 [0.909, 0.935]",
+    "SURPRISE": "0.921 [0.910, 0.931]",
+    "MATCH": "0.922 [0.910, 0.933]",
+    "v3": "0.922 [0.911, 0.931]",
+    "min3": "0.859 [0.844, 0.873]",
+    "SURPRISE 3.1": "0.930 [0.918, 0.941]",
+    "MATCH 3.1": "0.924 [0.911, 0.934]",
+    "v3.1": "0.919 [0.908, 0.930]",
+    "disagree": "2%"
+   },
+   "trie samples (pooled)": {
+    "n": "242",
+    "v2": "0.353 [0.323, 0.386]",
+    "SURPRISE": "0.718 [0.699, 0.736]",
+    "MATCH": "0.592 [0.579, 0.607]",
+    "v3": "0.554 [0.537, 0.573]",
+    "min3": "0.327 [0.300, 0.355]",
+    "SURPRISE 3.1": "0.644 [0.629, 0.658]",
+    "MATCH 3.1": "0.456 [0.444, 0.469]",
+    "v3.1": "0.435 [0.415, 0.455]",
+    "disagree": "26%"
+   },
+   "sentences shuffled across docs": {
+    "n": "500",
+    "v2": "0.344 [0.332, 0.355]",
+    "SURPRISE": "0.665 [0.661, 0.669]",
+    "MATCH": "0.661 [0.656, 0.666]",
+    "v3": "0.557 [0.552, 0.562]",
+    "min3": "0.339 [0.329, 0.350]",
+    "SURPRISE 3.1": "0.736 [0.730, 0.740]",
+    "MATCH 3.1": "0.677 [0.671, 0.682]",
+    "v3.1": "0.546 [0.540, 0.553]",
+    "disagree": "3%"
+   },
+   "words shuffled within sentences": {
+    "n": "500",
+    "v2": "0.003 [0.003, 0.003]",
+    "SURPRISE": "0.226 [0.224, 0.229]",
+    "MATCH": "0.341 [0.337, 0.345]",
+    "v3": "0.190 [0.188, 0.192]",
+    "min3": "0.003 [0.003, 0.003]",
+    "SURPRISE 3.1": "0.037 [0.036, 0.037]",
+    "MATCH 3.1": "0.345 [0.339, 0.351]",
+    "v3.1": "0.035 [0.034, 0.035]",
+    "disagree": "1%"
+   },
+   "random lexicon words": {
+    "n": "500",
+    "v2": "0.001 [0.001, 0.001]",
+    "SURPRISE": "0.157 [0.155, 0.159]",
+    "MATCH": "0.249 [0.247, 0.251]",
+    "v3": "0.136 [0.135, 0.137]",
+    "min3": "0.001 [0.001, 0.001]",
+    "SURPRISE 3.1": "0.029 [0.028, 0.029]",
+    "MATCH 3.1": "0.262 [0.259, 0.265]",
+    "v3.1": "0.018 [0.018, 0.019]",
+    "disagree": "0%"
+   },
+   "random letters": {
+    "n": "500",
+    "v2": "0.000 [0.000, 0.000]",
+    "SURPRISE": "0.065 [0.064, 0.066]",
+    "MATCH": "0.059 [0.058, 0.059]",
+    "v3": "0.041 [0.041, 0.042]",
+    "min3": "0.000 [0.000, 0.000]",
+    "SURPRISE 3.1": "0.013 [0.013, 0.014]",
+    "MATCH 3.1": "0.011 [0.011, 0.011]",
+    "v3.1": "0.001 [0.001, 0.002]",
+    "disagree": "0%"
+   },
+   "one phrase repeated": {
+    "n": "500",
+    "v2": "0.000 [0.000, 0.000]",
+    "SURPRISE": "0.000 [0.000, 0.000]",
+    "MATCH": "0.000 [0.000, 0.000]",
+    "v3": "0.000 [0.000, 0.000]",
+    "min3": "0.000 [0.000, 0.000]",
+    "SURPRISE 3.1": "0.000 [0.000, 0.000]",
+    "MATCH 3.1": "0.000 [0.000, 0.000]",
+    "v3.1": "0.000 [0.000, 0.000]",
+    "disagree": "0%"
+   },
+   "trie samples T=1.0": {
+    "n": "242",
+    "v2": "0.353 [0.319, 0.384]",
+    "SURPRISE": "0.718 [0.699, 0.737]",
+    "MATCH": "0.592 [0.578, 0.607]",
+    "v3": "0.554 [0.536, 0.572]",
+    "min3": "0.327 [0.299, 0.356]",
+    "SURPRISE 3.1": "0.644 [0.629, 0.658]",
+    "MATCH 3.1": "0.456 [0.444, 0.469]",
+    "v3.1": "0.435 [0.415, 0.457]",
+    "disagree": "26%"
+   },
+   "held-out human, short (60-260 B)": {
+    "n": "500",
+    "v2": "0.935 [0.921, 0.948]",
+    "SURPRISE": "0.943 [0.931, 0.953]",
+    "MATCH": "0.947 [0.935, 0.958]",
+    "v3": "0.942 [0.932, 0.950]",
+    "min3": "0.879 [0.864, 0.896]",
+    "SURPRISE 3.1": "0.940 [0.926, 0.953]",
+    "MATCH 3.1": "0.946 [0.934, 0.958]",
+    "v3.1": "0.931 [0.918, 0.942]",
+    "disagree": "4%"
+   }
+  },
+  "E8_s20262101": {
+   "held-out human": {
+    "n": "500",
+    "v2": "0.923 [0.909, 0.935]",
+    "SURPRISE": "0.921 [0.910, 0.931]",
+    "MATCH": "0.922 [0.910, 0.933]",
+    "v3": "0.922 [0.911, 0.931]",
+    "min3": "0.859 [0.844, 0.873]",
+    "SURPRISE 3.1": "0.930 [0.918, 0.941]",
+    "MATCH 3.1": "0.924 [0.911, 0.934]",
+    "v3.1": "0.919 [0.908, 0.930]",
+    "disagree": "2%"
+   },
+   "trie samples (pooled)": {
+    "n": "238",
+    "v2": "0.362 [0.329, 0.398]",
+    "SURPRISE": "0.705 [0.688, 0.722]",
+    "MATCH": "0.574 [0.560, 0.589]",
+    "v3": "0.547 [0.530, 0.566]",
+    "min3": "0.335 [0.308, 0.365]",
+    "SURPRISE 3.1": "0.633 [0.618, 0.647]",
+    "MATCH 3.1": "0.441 [0.429, 0.453]",
+    "v3.1": "0.434 [0.412, 0.453]",
+    "disagree": "28%"
+   },
+   "sentences shuffled across docs": {
+    "n": "500",
+    "v2": "0.344 [0.332, 0.355]",
+    "SURPRISE": "0.665 [0.661, 0.669]",
+    "MATCH": "0.661 [0.656, 0.666]",
+    "v3": "0.557 [0.552, 0.562]",
+    "min3": "0.339 [0.329, 0.350]",
+    "SURPRISE 3.1": "0.736 [0.730, 0.740]",
+    "MATCH 3.1": "0.677 [0.671, 0.682]",
+    "v3.1": "0.546 [0.540, 0.553]",
+    "disagree": "3%"
+   },
+   "words shuffled within sentences": {
+    "n": "500",
+    "v2": "0.003 [0.003, 0.003]",
+    "SURPRISE": "0.226 [0.224, 0.229]",
+    "MATCH": "0.341 [0.337, 0.345]",
+    "v3": "0.190 [0.188, 0.192]",
+    "min3": "0.003 [0.003, 0.003]",
+    "SURPRISE 3.1": "0.037 [0.036, 0.037]",
+    "MATCH 3.1": "0.345 [0.339, 0.351]",
+    "v3.1": "0.035 [0.034, 0.035]",
+    "disagree": "1%"
+   },
+   "random lexicon words": {
+    "n": "500",
+    "v2": "0.001 [0.001, 0.001]",
+    "SURPRISE": "0.157 [0.155, 0.159]",
+    "MATCH": "0.249 [0.247, 0.251]",
+    "v3": "0.136 [0.135, 0.137]",
+    "min3": "0.001 [0.001, 0.001]",
+    "SURPRISE 3.1": "0.029 [0.028, 0.029]",
+    "MATCH 3.1": "0.262 [0.259, 0.265]",
+    "v3.1": "0.018 [0.018, 0.019]",
+    "disagree": "0%"
+   },
+   "random letters": {
+    "n": "500",
+    "v2": "0.000 [0.000, 0.000]",
+    "SURPRISE": "0.065 [0.064, 0.066]",
+    "MATCH": "0.059 [0.058, 0.059]",
+    "v3": "0.041 [0.041, 0.042]",
+    "min3": "0.000 [0.000, 0.000]",
+    "SURPRISE 3.1": "0.013 [0.013, 0.014]",
+    "MATCH 3.1": "0.011 [0.011, 0.011]",
+    "v3.1": "0.001 [0.001, 0.002]",
+    "disagree": "0%"
+   },
+   "one phrase repeated": {
+    "n": "500",
+    "v2": "0.000 [0.000, 0.000]",
+    "SURPRISE": "0.000 [0.000, 0.000]",
+    "MATCH": "0.000 [0.000, 0.000]",
+    "v3": "0.000 [0.000, 0.000]",
+    "min3": "0.000 [0.000, 0.000]",
+    "SURPRISE 3.1": "0.000 [0.000, 0.000]",
+    "MATCH 3.1": "0.000 [0.000, 0.000]",
+    "v3.1": "0.000 [0.000, 0.000]",
+    "disagree": "0%"
+   },
+   "trie samples T=1.0": {
+    "n": "238",
+    "v2": "0.362 [0.329, 0.397]",
+    "SURPRISE": "0.705 [0.687, 0.722]",
+    "MATCH": "0.574 [0.559, 0.588]",
+    "v3": "0.547 [0.530, 0.566]",
+    "min3": "0.335 [0.308, 0.366]",
+    "SURPRISE 3.1": "0.633 [0.619, 0.648]",
+    "MATCH 3.1": "0.441 [0.429, 0.453]",
+    "v3.1": "0.434 [0.413, 0.453]",
+    "disagree": "28%"
+   },
+   "held-out human, short (60-260 B)": {
+    "n": "500",
+    "v2": "0.935 [0.921, 0.948]",
+    "SURPRISE": "0.943 [0.931, 0.953]",
+    "MATCH": "0.947 [0.935, 0.958]",
+    "v3": "0.942 [0.932, 0.950]",
+    "min3": "0.879 [0.864, 0.896]",
+    "SURPRISE 3.1": "0.940 [0.926, 0.953]",
+    "MATCH 3.1": "0.946 [0.934, 0.958]",
+    "v3.1": "0.931 [0.918, 0.942]",
+    "disagree": "4%"
+   }
+  },
+  "E8_s20263101": {
+   "held-out human": {
+    "n": "500",
+    "v2": "0.923 [0.909, 0.935]",
+    "SURPRISE": "0.921 [0.910, 0.931]",
+    "MATCH": "0.922 [0.910, 0.933]",
+    "v3": "0.922 [0.911, 0.931]",
+    "min3": "0.859 [0.844, 0.873]",
+    "SURPRISE 3.1": "0.930 [0.918, 0.941]",
+    "MATCH 3.1": "0.924 [0.911, 0.934]",
+    "v3.1": "0.919 [0.908, 0.930]",
+    "disagree": "2%"
+   },
+   "trie samples (pooled)": {
+    "n": "241",
+    "v2": "0.337 [0.307, 0.368]",
+    "SURPRISE": "0.697 [0.679, 0.716]",
+    "MATCH": "0.571 [0.556, 0.587]",
+    "v3": "0.535 [0.518, 0.552]",
+    "min3": "0.319 [0.292, 0.343]",
+    "SURPRISE 3.1": "0.636 [0.622, 0.649]",
+    "MATCH 3.1": "0.436 [0.424, 0.447]",
+    "v3.1": "0.424 [0.403, 0.444]",
+    "disagree": "25%"
+   },
+   "sentences shuffled across docs": {
+    "n": "500",
+    "v2": "0.344 [0.332, 0.355]",
+    "SURPRISE": "0.665 [0.661, 0.669]",
+    "MATCH": "0.661 [0.656, 0.666]",
+    "v3": "0.557 [0.552, 0.562]",
+    "min3": "0.339 [0.329, 0.350]",
+    "SURPRISE 3.1": "0.736 [0.730, 0.740]",
+    "MATCH 3.1": "0.677 [0.671, 0.682]",
+    "v3.1": "0.546 [0.540, 0.553]",
+    "disagree": "3%"
+   },
+   "words shuffled within sentences": {
+    "n": "500",
+    "v2": "0.003 [0.003, 0.003]",
+    "SURPRISE": "0.226 [0.224, 0.229]",
+    "MATCH": "0.341 [0.337, 0.345]",
+    "v3": "0.190 [0.188, 0.192]",
+    "min3": "0.003 [0.003, 0.003]",
+    "SURPRISE 3.1": "0.037 [0.036, 0.037]",
+    "MATCH 3.1": "0.345 [0.339, 0.351]",
+    "v3.1": "0.035 [0.034, 0.035]",
+    "disagree": "1%"
+   },
+   "random lexicon words": {
+    "n": "500",
+    "v2": "0.001 [0.001, 0.001]",
+    "SURPRISE": "0.157 [0.155, 0.159]",
+    "MATCH": "0.249 [0.247, 0.251]",
+    "v3": "0.136 [0.135, 0.137]",
+    "min3": "0.001 [0.001, 0.001]",
+    "SURPRISE 3.1": "0.029 [0.028, 0.029]",
+    "MATCH 3.1": "0.262 [0.259, 0.265]",
+    "v3.1": "0.018 [0.018, 0.019]",
+    "disagree": "0%"
+   },
+   "random letters": {
+    "n": "500",
+    "v2": "0.000 [0.000, 0.000]",
+    "SURPRISE": "0.065 [0.064, 0.066]",
+    "MATCH": "0.059 [0.058, 0.059]",
+    "v3": "0.041 [0.041, 0.042]",
+    "min3": "0.000 [0.000, 0.000]",
+    "SURPRISE 3.1": "0.013 [0.013, 0.014]",
+    "MATCH 3.1": "0.011 [0.011, 0.011]",
+    "v3.1": "0.001 [0.001, 0.002]",
+    "disagree": "0%"
+   },
+   "one phrase repeated": {
+    "n": "500",
+    "v2": "0.000 [0.000, 0.000]",
+    "SURPRISE": "0.000 [0.000, 0.000]",
+    "MATCH": "0.000 [0.000, 0.000]",
+    "v3": "0.000 [0.000, 0.000]",
+    "min3": "0.000 [0.000, 0.000]",
+    "SURPRISE 3.1": "0.000 [0.000, 0.000]",
+    "MATCH 3.1": "0.000 [0.000, 0.000]",
+    "v3.1": "0.000 [0.000, 0.000]",
+    "disagree": "0%"
+   },
+   "trie samples T=1.0": {
+    "n": "241",
+    "v2": "0.337 [0.306, 0.369]",
+    "SURPRISE": "0.697 [0.678, 0.716]",
+    "MATCH": "0.571 [0.556, 0.586]",
+    "v3": "0.535 [0.518, 0.553]",
+    "min3": "0.319 [0.292, 0.346]",
+    "SURPRISE 3.1": "0.636 [0.622, 0.649]",
+    "MATCH 3.1": "0.436 [0.424, 0.447]",
+    "v3.1": "0.424 [0.406, 0.443]",
+    "disagree": "25%"
+   },
+   "held-out human, short (60-260 B)": {
+    "n": "500",
+    "v2": "0.935 [0.921, 0.948]",
+    "SURPRISE": "0.943 [0.931, 0.953]",
+    "MATCH": "0.947 [0.935, 0.958]",
+    "v3": "0.942 [0.932, 0.950]",
+    "min3": "0.879 [0.864, 0.896]",
+    "SURPRISE 3.1": "0.940 [0.926, 0.953]",
+    "MATCH 3.1": "0.946 [0.934, 0.958]",
+    "v3.1": "0.931 [0.918, 0.942]",
+    "disagree": "4%"
+   }
+  },
+  "E8_s20264101": {
+   "held-out human": {
+    "n": "500",
+    "v2": "0.923 [0.909, 0.935]",
+    "SURPRISE": "0.921 [0.910, 0.931]",
+    "MATCH": "0.922 [0.910, 0.933]",
+    "v3": "0.922 [0.911, 0.931]",
+    "min3": "0.859 [0.844, 0.873]",
+    "SURPRISE 3.1": "0.930 [0.918, 0.941]",
+    "MATCH 3.1": "0.924 [0.911, 0.934]",
+    "v3.1": "0.919 [0.908, 0.930]",
+    "disagree": "2%"
+   },
+   "trie samples (pooled)": {
+    "n": "232",
+    "v2": "0.323 [0.291, 0.354]",
+    "SURPRISE": "0.714 [0.697, 0.733]",
+    "MATCH": "0.587 [0.571, 0.602]",
+    "v3": "0.541 [0.525, 0.557]",
+    "min3": "0.300 [0.275, 0.328]",
+    "SURPRISE 3.1": "0.639 [0.625, 0.653]",
+    "MATCH 3.1": "0.452 [0.439, 0.464]",
+    "v3.1": "0.423 [0.405, 0.442]",
+    "disagree": "33%"
+   },
+   "sentences shuffled across docs": {
+    "n": "500",
+    "v2": "0.344 [0.332, 0.355]",
+    "SURPRISE": "0.665 [0.661, 0.669]",
+    "MATCH": "0.661 [0.656, 0.666]",
+    "v3": "0.557 [0.552, 0.562]",
+    "min3": "0.339 [0.329, 0.350]",
+    "SURPRISE 3.1": "0.736 [0.730, 0.740]",
+    "MATCH 3.1": "0.677 [0.671, 0.682]",
+    "v3.1": "0.546 [0.540, 0.553]",
+    "disagree": "3%"
+   },
+   "words shuffled within sentences": {
+    "n": "500",
+    "v2": "0.003 [0.003, 0.003]",
+    "SURPRISE": "0.226 [0.224, 0.229]",
+    "MATCH": "0.341 [0.337, 0.345]",
+    "v3": "0.190 [0.188, 0.192]",
+    "min3": "0.003 [0.003, 0.003]",
+    "SURPRISE 3.1": "0.037 [0.036, 0.037]",
+    "MATCH 3.1": "0.345 [0.339, 0.351]",
+    "v3.1": "0.035 [0.034, 0.035]",
+    "disagree": "1%"
+   },
+   "random lexicon words": {
+    "n": "500",
+    "v2": "0.001 [0.001, 0.001]",
+    "SURPRISE": "0.157 [0.155, 0.159]",
+    "MATCH": "0.249 [0.247, 0.251]",
+    "v3": "0.136 [0.135, 0.137]",
+    "min3": "0.001 [0.001, 0.001]",
+    "SURPRISE 3.1": "0.029 [0.028, 0.029]",
+    "MATCH 3.1": "0.262 [0.259, 0.265]",
+    "v3.1": "0.018 [0.018, 0.019]",
+    "disagree": "0%"
+   },
+   "random letters": {
+    "n": "500",
+    "v2": "0.000 [0.000, 0.000]",
+    "SURPRISE": "0.065 [0.064, 0.066]",
+    "MATCH": "0.059 [0.058, 0.059]",
+    "v3": "0.041 [0.041, 0.042]",
+    "min3": "0.000 [0.000, 0.000]",
+    "SURPRISE 3.1": "0.013 [0.013, 0.014]",
+    "MATCH 3.1": "0.011 [0.011, 0.011]",
+    "v3.1": "0.001 [0.001, 0.002]",
+    "disagree": "0%"
+   },
+   "one phrase repeated": {
+    "n": "500",
+    "v2": "0.000 [0.000, 0.000]",
+    "SURPRISE": "0.000 [0.000, 0.000]",
+    "MATCH": "0.000 [0.000, 0.000]",
+    "v3": "0.000 [0.000, 0.000]",
+    "min3": "0.000 [0.000, 0.000]",
+    "SURPRISE 3.1": "0.000 [0.000, 0.000]",
+    "MATCH 3.1": "0.000 [0.000, 0.000]",
+    "v3.1": "0.000 [0.000, 0.000]",
+    "disagree": "0%"
+   },
+   "trie samples T=1.0": {
+    "n": "232",
+    "v2": "0.323 [0.293, 0.354]",
+    "SURPRISE": "0.714 [0.695, 0.733]",
+    "MATCH": "0.587 [0.572, 0.603]",
+    "v3": "0.541 [0.526, 0.558]",
+    "min3": "0.300 [0.274, 0.326]",
+    "SURPRISE 3.1": "0.639 [0.624, 0.654]",
+    "MATCH 3.1": "0.452 [0.440, 0.464]",
+    "v3.1": "0.423 [0.405, 0.442]",
+    "disagree": "33%"
+   },
+   "held-out human, short (60-260 B)": {
+    "n": "500",
+    "v2": "0.935 [0.921, 0.948]",
+    "SURPRISE": "0.943 [0.931, 0.953]",
+    "MATCH": "0.947 [0.935, 0.958]",
+    "v3": "0.942 [0.932, 0.950]",
+    "min3": "0.879 [0.864, 0.896]",
+    "SURPRISE 3.1": "0.940 [0.926, 0.953]",
+    "MATCH 3.1": "0.946 [0.934, 0.958]",
+    "v3.1": "0.931 [0.918, 0.942]",
+    "disagree": "4%"
+   }
+  },
+  "N100_s20261101": {
+   "held-out human": {
+    "n": "500",
+    "v2": "0.923 [0.909, 0.935]",
+    "SURPRISE": "0.921 [0.910, 0.931]",
+    "MATCH": "0.922 [0.910, 0.933]",
+    "v3": "0.922 [0.911, 0.931]",
+    "min3": "0.859 [0.844, 0.873]",
+    "SURPRISE 3.1": "0.930 [0.918, 0.941]",
+    "MATCH 3.1": "0.924 [0.911, 0.934]",
+    "v3.1": "0.919 [0.908, 0.930]",
+    "disagree": "2%"
+   },
+   "trie samples (pooled)": {
+    "n": "232",
+    "v2": "0.363 [0.339, 0.389]",
+    "SURPRISE": "0.673 [0.653, 0.693]",
+    "MATCH": "0.563 [0.549, 0.581]",
+    "v3": "0.533 [0.516, 0.550]",
+    "min3": "0.343 [0.321, 0.366]",
+    "SURPRISE 3.1": "0.589 [0.570, 0.608]",
+    "MATCH 3.1": "0.432 [0.419, 0.446]",
+    "v3.1": "0.435 [0.419, 0.452]",
+    "disagree": "13%"
+   },
+   "sentences shuffled across docs": {
+    "n": "500",
+    "v2": "0.344 [0.332, 0.355]",
+    "SURPRISE": "0.665 [0.661, 0.669]",
+    "MATCH": "0.661 [0.656, 0.666]",
+    "v3": "0.557 [0.552, 0.562]",
+    "min3": "0.339 [0.329, 0.350]",
+    "SURPRISE 3.1": "0.736 [0.730, 0.740]",
+    "MATCH 3.1": "0.677 [0.671, 0.682]",
+    "v3.1": "0.546 [0.540, 0.553]",
+    "disagree": "3%"
+   },
+   "words shuffled within sentences": {
+    "n": "500",
+    "v2": "0.003 [0.003, 0.003]",
+    "SURPRISE": "0.226 [0.224, 0.229]",
+    "MATCH": "0.341 [0.337, 0.345]",
+    "v3": "0.190 [0.188, 0.192]",
+    "min3": "0.003 [0.003, 0.003]",
+    "SURPRISE 3.1": "0.037 [0.036, 0.037]",
+    "MATCH 3.1": "0.345 [0.339, 0.351]",
+    "v3.1": "0.035 [0.034, 0.035]",
+    "disagree": "1%"
+   },
+   "random lexicon words": {
+    "n": "500",
+    "v2": "0.001 [0.001, 0.001]",
+    "SURPRISE": "0.157 [0.155, 0.159]",
+    "MATCH": "0.249 [0.247, 0.251]",
+    "v3": "0.136 [0.135, 0.137]",
+    "min3": "0.001 [0.001, 0.001]",
+    "SURPRISE 3.1": "0.029 [0.028, 0.029]",
+    "MATCH 3.1": "0.262 [0.259, 0.265]",
+    "v3.1": "0.018 [0.018, 0.019]",
+    "disagree": "0%"
+   },
+   "random letters": {
+    "n": "500",
+    "v2": "0.000 [0.000, 0.000]",
+    "SURPRISE": "0.065 [0.064, 0.066]",
+    "MATCH": "0.059 [0.058, 0.059]",
+    "v3": "0.041 [0.041, 0.042]",
+    "min3": "0.000 [0.000, 0.000]",
+    "SURPRISE 3.1": "0.013 [0.013, 0.014]",
+    "MATCH 3.1": "0.011 [0.011, 0.011]",
+    "v3.1": "0.001 [0.001, 0.002]",
+    "disagree": "0%"
+   },
+   "one phrase repeated": {
+    "n": "500",
+    "v2": "0.000 [0.000, 0.000]",
+    "SURPRISE": "0.000 [0.000, 0.000]",
+    "MATCH": "0.000 [0.000, 0.000]",
+    "v3": "0.000 [0.000, 0.000]",
+    "min3": "0.000 [0.000, 0.000]",
+    "SURPRISE 3.1": "0.000 [0.000, 0.000]",
+    "MATCH 3.1": "0.000 [0.000, 0.000]",
+    "v3.1": "0.000 [0.000, 0.000]",
+    "disagree": "0%"
+   },
+   "trie samples T=1.0": {
+    "n": "232",
+    "v2": "0.363 [0.339, 0.393]",
+    "SURPRISE": "0.673 [0.654, 0.694]",
+    "MATCH": "0.563 [0.548, 0.580]",
+    "v3": "0.533 [0.517, 0.551]",
+    "min3": "0.343 [0.323, 0.365]",
+    "SURPRISE 3.1": "0.589 [0.568, 0.607]",
+    "MATCH 3.1": "0.432 [0.420, 0.445]",
+    "v3.1": "0.435 [0.419, 0.451]",
+    "disagree": "13%"
+   },
+   "held-out human, short (60-260 B)": {
+    "n": "500",
+    "v2": "0.935 [0.921, 0.948]",
+    "SURPRISE": "0.943 [0.931, 0.953]",
+    "MATCH": "0.947 [0.935, 0.958]",
+    "v3": "0.942 [0.932, 0.950]",
+    "min3": "0.879 [0.864, 0.896]",
+    "SURPRISE 3.1": "0.940 [0.926, 0.953]",
+    "MATCH 3.1": "0.946 [0.934, 0.958]",
+    "v3.1": "0.931 [0.918, 0.942]",
+    "disagree": "4%"
+   }
+  },
+  "N300_s20261101": {
+   "held-out human": {
+    "n": "500",
+    "v2": "0.923 [0.909, 0.935]",
+    "SURPRISE": "0.921 [0.910, 0.931]",
+    "MATCH": "0.922 [0.910, 0.933]",
+    "v3": "0.922 [0.911, 0.931]",
+    "min3": "0.859 [0.844, 0.873]",
+    "SURPRISE 3.1": "0.930 [0.918, 0.941]",
+    "MATCH 3.1": "0.924 [0.911, 0.934]",
+    "v3.1": "0.919 [0.908, 0.930]",
+    "disagree": "2%"
+   },
+   "trie samples (pooled)": {
+    "n": "242",
+    "v2": "0.382 [0.354, 0.411]",
+    "SURPRISE": "0.675 [0.656, 0.696]",
+    "MATCH": "0.566 [0.552, 0.581]",
+    "v3": "0.541 [0.524, 0.559]",
+    "min3": "0.356 [0.333, 0.380]",
+    "SURPRISE 3.1": "0.591 [0.575, 0.610]",
+    "MATCH 3.1": "0.434 [0.423, 0.446]",
+    "v3.1": "0.443 [0.428, 0.458]",
+    "disagree": "10%"
+   },
+   "sentences shuffled across docs": {
+    "n": "500",
+    "v2": "0.344 [0.332, 0.355]",
+    "SURPRISE": "0.665 [0.661, 0.669]",
+    "MATCH": "0.661 [0.656, 0.666]",
+    "v3": "0.557 [0.552, 0.562]",
+    "min3": "0.339 [0.329, 0.350]",
+    "SURPRISE 3.1": "0.736 [0.730, 0.740]",
+    "MATCH 3.1": "0.677 [0.671, 0.682]",
+    "v3.1": "0.546 [0.540, 0.553]",
+    "disagree": "3%"
+   },
+   "words shuffled within sentences": {
+    "n": "500",
+    "v2": "0.003 [0.003, 0.003]",
+    "SURPRISE": "0.226 [0.224, 0.229]",
+    "MATCH": "0.341 [0.337, 0.345]",
+    "v3": "0.190 [0.188, 0.192]",
+    "min3": "0.003 [0.003, 0.003]",
+    "SURPRISE 3.1": "0.037 [0.036, 0.037]",
+    "MATCH 3.1": "0.345 [0.339, 0.351]",
+    "v3.1": "0.035 [0.034, 0.035]",
+    "disagree": "1%"
+   },
+   "random lexicon words": {
+    "n": "500",
+    "v2": "0.001 [0.001, 0.001]",
+    "SURPRISE": "0.157 [0.155, 0.159]",
+    "MATCH": "0.249 [0.247, 0.251]",
+    "v3": "0.136 [0.135, 0.137]",
+    "min3": "0.001 [0.001, 0.001]",
+    "SURPRISE 3.1": "0.029 [0.028, 0.029]",
+    "MATCH 3.1": "0.262 [0.259, 0.265]",
+    "v3.1": "0.018 [0.018, 0.019]",
+    "disagree": "0%"
+   },
+   "random letters": {
+    "n": "500",
+    "v2": "0.000 [0.000, 0.000]",
+    "SURPRISE": "0.065 [0.064, 0.066]",
+    "MATCH": "0.059 [0.058, 0.059]",
+    "v3": "0.041 [0.041, 0.042]",
+    "min3": "0.000 [0.000, 0.000]",
+    "SURPRISE 3.1": "0.013 [0.013, 0.014]",
+    "MATCH 3.1": "0.011 [0.011, 0.011]",
+    "v3.1": "0.001 [0.001, 0.002]",
+    "disagree": "0%"
+   },
+   "one phrase repeated": {
+    "n": "500",
+    "v2": "0.000 [0.000, 0.000]",
+    "SURPRISE": "0.000 [0.000, 0.000]",
+    "MATCH": "0.000 [0.000, 0.000]",
+    "v3": "0.000 [0.000, 0.000]",
+    "min3": "0.000 [0.000, 0.000]",
+    "SURPRISE 3.1": "0.000 [0.000, 0.000]",
+    "MATCH 3.1": "0.000 [0.000, 0.000]",
+    "v3.1": "0.000 [0.000, 0.000]",
+    "disagree": "0%"
+   },
+   "trie samples T=1.0": {
+    "n": "242",
+    "v2": "0.382 [0.352, 0.407]",
+    "SURPRISE": "0.675 [0.656, 0.694]",
+    "MATCH": "0.566 [0.554, 0.580]",
+    "v3": "0.541 [0.525, 0.558]",
+    "min3": "0.356 [0.334, 0.380]",
+    "SURPRISE 3.1": "0.591 [0.573, 0.607]",
+    "MATCH 3.1": "0.434 [0.423, 0.447]",
+    "v3.1": "0.443 [0.427, 0.460]",
+    "disagree": "10%"
+   },
+   "held-out human, short (60-260 B)": {
+    "n": "500",
+    "v2": "0.935 [0.921, 0.948]",
+    "SURPRISE": "0.943 [0.931, 0.953]",
+    "MATCH": "0.947 [0.935, 0.958]",
+    "v3": "0.942 [0.932, 0.950]",
+    "min3": "0.879 [0.864, 0.896]",
+    "SURPRISE 3.1": "0.940 [0.926, 0.953]",
+    "MATCH 3.1": "0.946 [0.934, 0.958]",
+    "v3.1": "0.931 [0.918, 0.942]",
+    "disagree": "4%"
+   }
+  },
+  "N30_s20261101": {
+   "held-out human": {
+    "n": "500",
+    "v2": "0.923 [0.909, 0.935]",
+    "SURPRISE": "0.921 [0.910, 0.931]",
+    "MATCH": "0.922 [0.910, 0.933]",
+    "v3": "0.922 [0.911, 0.931]",
+    "min3": "0.859 [0.844, 0.873]",
+    "SURPRISE 3.1": "0.930 [0.918, 0.941]",
+    "MATCH 3.1": "0.924 [0.911, 0.934]",
+    "v3.1": "0.919 [0.908, 0.930]",
+    "disagree": "2%"
+   },
+   "trie samples (pooled)": {
+    "n": "238",
+    "v2": "0.375 [0.345, 0.403]",
+    "SURPRISE": "0.685 [0.662, 0.706]",
+    "MATCH": "0.575 [0.558, 0.593]",
+    "v3": "0.545 [0.527, 0.562]",
+    "min3": "0.349 [0.326, 0.373]",
+    "SURPRISE 3.1": "0.612 [0.593, 0.630]",
+    "MATCH 3.1": "0.444 [0.430, 0.460]",
+    "v3.1": "0.447 [0.428, 0.464]",
+    "disagree": "15%"
+   },
+   "sentences shuffled across docs": {
+    "n": "500",
+    "v2": "0.344 [0.332, 0.355]",
+    "SURPRISE": "0.665 [0.661, 0.669]",
+    "MATCH": "0.661 [0.656, 0.666]",
+    "v3": "0.557 [0.552, 0.562]",
+    "min3": "0.339 [0.329, 0.350]",
+    "SURPRISE 3.1": "0.736 [0.730, 0.740]",
+    "MATCH 3.1": "0.677 [0.671, 0.682]",
+    "v3.1": "0.546 [0.540, 0.553]",
+    "disagree": "3%"
+   },
+   "words shuffled within sentences": {
+    "n": "500",
+    "v2": "0.003 [0.003, 0.003]",
+    "SURPRISE": "0.226 [0.224, 0.229]",
+    "MATCH": "0.341 [0.337, 0.345]",
+    "v3": "0.190 [0.188, 0.192]",
+    "min3": "0.003 [0.003, 0.003]",
+    "SURPRISE 3.1": "0.037 [0.036, 0.037]",
+    "MATCH 3.1": "0.345 [0.339, 0.351]",
+    "v3.1": "0.035 [0.034, 0.035]",
+    "disagree": "1%"
+   },
+   "random lexicon words": {
+    "n": "500",
+    "v2": "0.001 [0.001, 0.001]",
+    "SURPRISE": "0.157 [0.155, 0.159]",
+    "MATCH": "0.249 [0.247, 0.251]",
+    "v3": "0.136 [0.135, 0.137]",
+    "min3": "0.001 [0.001, 0.001]",
+    "SURPRISE 3.1": "0.029 [0.028, 0.029]",
+    "MATCH 3.1": "0.262 [0.259, 0.265]",
+    "v3.1": "0.018 [0.018, 0.019]",
+    "disagree": "0%"
+   },
+   "random letters": {
+    "n": "500",
+    "v2": "0.000 [0.000, 0.000]",
+    "SURPRISE": "0.065 [0.064, 0.066]",
+    "MATCH": "0.059 [0.058, 0.059]",
+    "v3": "0.041 [0.041, 0.042]",
+    "min3": "0.000 [0.000, 0.000]",
+    "SURPRISE 3.1": "0.013 [0.013, 0.014]",
+    "MATCH 3.1": "0.011 [0.011, 0.011]",
+    "v3.1": "0.001 [0.001, 0.002]",
+    "disagree": "0%"
+   },
+   "one phrase repeated": {
+    "n": "500",
+    "v2": "0.000 [0.000, 0.000]",
+    "SURPRISE": "0.000 [0.000, 0.000]",
+    "MATCH": "0.000 [0.000, 0.000]",
+    "v3": "0.000 [0.000, 0.000]",
+    "min3": "0.000 [0.000, 0.000]",
+    "SURPRISE 3.1": "0.000 [0.000, 0.000]",
+    "MATCH 3.1": "0.000 [0.000, 0.000]",
+    "v3.1": "0.000 [0.000, 0.000]",
+    "disagree": "0%"
+   },
+   "trie samples T=1.0": {
+    "n": "238",
+    "v2": "0.375 [0.346, 0.406]",
+    "SURPRISE": "0.685 [0.663, 0.706]",
+    "MATCH": "0.575 [0.557, 0.593]",
+    "v3": "0.545 [0.525, 0.562]",
+    "min3": "0.349 [0.324, 0.375]",
+    "SURPRISE 3.1": "0.612 [0.595, 0.631]",
+    "MATCH 3.1": "0.444 [0.430, 0.458]",
+    "v3.1": "0.447 [0.429, 0.465]",
+    "disagree": "15%"
+   },
+   "held-out human, short (60-260 B)": {
+    "n": "500",
+    "v2": "0.935 [0.921, 0.948]",
+    "SURPRISE": "0.943 [0.931, 0.953]",
+    "MATCH": "0.947 [0.935, 0.958]",
+    "v3": "0.942 [0.932, 0.950]",
+    "min3": "0.879 [0.864, 0.896]",
+    "SURPRISE 3.1": "0.940 [0.926, 0.953]",
+    "MATCH 3.1": "0.946 [0.934, 0.958]",
+    "v3.1": "0.931 [0.918, 0.942]",
+    "disagree": "4%"
+   }
+  },
+  "N7_s20261101": {
+   "held-out human": {
+    "n": "500",
+    "v2": "0.923 [0.909, 0.935]",
+    "SURPRISE": "0.921 [0.910, 0.931]",
+    "MATCH": "0.922 [0.910, 0.933]",
+    "v3": "0.922 [0.911, 0.931]",
+    "min3": "0.859 [0.844, 0.873]",
+    "SURPRISE 3.1": "0.930 [0.918, 0.941]",
+    "MATCH 3.1": "0.924 [0.911, 0.934]",
+    "v3.1": "0.919 [0.908, 0.930]",
+    "disagree": "2%"
+   },
+   "trie samples (pooled)": {
+    "n": "241",
+    "v2": "0.350 [0.319, 0.382]",
+    "SURPRISE": "0.698 [0.682, 0.715]",
+    "MATCH": "0.577 [0.564, 0.589]",
+    "v3": "0.542 [0.527, 0.557]",
+    "min3": "0.321 [0.297, 0.345]",
+    "SURPRISE 3.1": "0.632 [0.619, 0.645]",
+    "MATCH 3.1": "0.442 [0.431, 0.452]",
+    "v3.1": "0.431 [0.412, 0.448]",
+    "disagree": "28%"
+   },
+   "sentences shuffled across docs": {
+    "n": "500",
+    "v2": "0.344 [0.332, 0.355]",
+    "SURPRISE": "0.665 [0.661, 0.669]",
+    "MATCH": "0.661 [0.656, 0.666]",
+    "v3": "0.557 [0.552, 0.562]",
+    "min3": "0.339 [0.329, 0.350]",
+    "SURPRISE 3.1": "0.736 [0.730, 0.740]",
+    "MATCH 3.1": "0.677 [0.671, 0.682]",
+    "v3.1": "0.546 [0.540, 0.553]",
+    "disagree": "3%"
+   },
+   "words shuffled within sentences": {
+    "n": "500",
+    "v2": "0.003 [0.003, 0.003]",
+    "SURPRISE": "0.226 [0.224, 0.229]",
+    "MATCH": "0.341 [0.337, 0.345]",
+    "v3": "0.190 [0.188, 0.192]",
+    "min3": "0.003 [0.003, 0.003]",
+    "SURPRISE 3.1": "0.037 [0.036, 0.037]",
+    "MATCH 3.1": "0.345 [0.339, 0.351]",
+    "v3.1": "0.035 [0.034, 0.035]",
+    "disagree": "1%"
+   },
+   "random lexicon words": {
+    "n": "500",
+    "v2": "0.001 [0.001, 0.001]",
+    "SURPRISE": "0.157 [0.155, 0.159]",
+    "MATCH": "0.249 [0.247, 0.251]",
+    "v3": "0.136 [0.135, 0.137]",
+    "min3": "0.001 [0.001, 0.001]",
+    "SURPRISE 3.1": "0.029 [0.028, 0.029]",
+    "MATCH 3.1": "0.262 [0.259, 0.265]",
+    "v3.1": "0.018 [0.018, 0.019]",
+    "disagree": "0%"
+   },
+   "random letters": {
+    "n": "500",
+    "v2": "0.000 [0.000, 0.000]",
+    "SURPRISE": "0.065 [0.064, 0.066]",
+    "MATCH": "0.059 [0.058, 0.059]",
+    "v3": "0.041 [0.041, 0.042]",
+    "min3": "0.000 [0.000, 0.000]",
+    "SURPRISE 3.1": "0.013 [0.013, 0.014]",
+    "MATCH 3.1": "0.011 [0.011, 0.011]",
+    "v3.1": "0.001 [0.001, 0.002]",
+    "disagree": "0%"
+   },
+   "one phrase repeated": {
+    "n": "500",
+    "v2": "0.000 [0.000, 0.000]",
+    "SURPRISE": "0.000 [0.000, 0.000]",
+    "MATCH": "0.000 [0.000, 0.000]",
+    "v3": "0.000 [0.000, 0.000]",
+    "min3": "0.000 [0.000, 0.000]",
+    "SURPRISE 3.1": "0.000 [0.000, 0.000]",
+    "MATCH 3.1": "0.000 [0.000, 0.000]",
+    "v3.1": "0.000 [0.000, 0.000]",
+    "disagree": "0%"
+   },
+   "trie samples T=1.0": {
+    "n": "241",
+    "v2": "0.350 [0.318, 0.382]",
+    "SURPRISE": "0.698 [0.682, 0.716]",
+    "MATCH": "0.577 [0.566, 0.590]",
+    "v3": "0.542 [0.526, 0.558]",
+    "min3": "0.321 [0.297, 0.344]",
+    "SURPRISE 3.1": "0.632 [0.619, 0.645]",
+    "MATCH 3.1": "0.442 [0.431, 0.452]",
+    "v3.1": "0.431 [0.413, 0.448]",
+    "disagree": "28%"
+   },
+   "held-out human, short (60-260 B)": {
+    "n": "500",
+    "v2": "0.935 [0.921, 0.948]",
+    "SURPRISE": "0.943 [0.931, 0.953]",
+    "MATCH": "0.947 [0.935, 0.958]",
+    "v3": "0.942 [0.932, 0.950]",
+    "min3": "0.879 [0.864, 0.896]",
+    "SURPRISE 3.1": "0.940 [0.926, 0.953]",
+    "MATCH 3.1": "0.946 [0.934, 0.958]",
+    "v3.1": "0.931 [0.918, 0.942]",
+    "disagree": "4%"
+   }
+  },
+  "NALL_s20261101": {
+   "held-out human": {
+    "n": "500",
+    "v2": "0.923 [0.909, 0.935]",
+    "SURPRISE": "0.921 [0.910, 0.931]",
+    "MATCH": "0.922 [0.910, 0.933]",
+    "v3": "0.922 [0.911, 0.931]",
+    "min3": "0.859 [0.844, 0.873]",
+    "SURPRISE 3.1": "0.930 [0.918, 0.941]",
+    "MATCH 3.1": "0.924 [0.911, 0.934]",
+    "v3.1": "0.919 [0.908, 0.930]",
+    "disagree": "2%"
+   },
+   "trie samples (pooled)": {
+    "n": "245",
+    "v2": "0.412 [0.388, 0.437]",
+    "SURPRISE": "0.688 [0.667, 0.708]",
+    "MATCH": "0.573 [0.558, 0.588]",
+    "v3": "0.558 [0.541, 0.575]",
+    "min3": "0.387 [0.363, 0.407]",
+    "SURPRISE 3.1": "0.596 [0.575, 0.614]",
+    "MATCH 3.1": "0.436 [0.425, 0.448]",
+    "v3.1": "0.461 [0.445, 0.477]",
+    "disagree": "7%"
+   },
+   "sentences shuffled across docs": {
+    "n": "500",
+    "v2": "0.344 [0.332, 0.355]",
+    "SURPRISE": "0.665 [0.661, 0.669]",
+    "MATCH": "0.661 [0.656, 0.666]",
+    "v3": "0.557 [0.552, 0.562]",
+    "min3": "0.339 [0.329, 0.350]",
+    "SURPRISE 3.1": "0.736 [0.730, 0.740]",
+    "MATCH 3.1": "0.677 [0.671, 0.682]",
+    "v3.1": "0.546 [0.540, 0.553]",
+    "disagree": "3%"
+   },
+   "words shuffled within sentences": {
+    "n": "500",
+    "v2": "0.003 [0.003, 0.003]",
+    "SURPRISE": "0.226 [0.224, 0.229]",
+    "MATCH": "0.341 [0.337, 0.345]",
+    "v3": "0.190 [0.188, 0.192]",
+    "min3": "0.003 [0.003, 0.003]",
+    "SURPRISE 3.1": "0.037 [0.036, 0.037]",
+    "MATCH 3.1": "0.345 [0.339, 0.351]",
+    "v3.1": "0.035 [0.034, 0.035]",
+    "disagree": "1%"
+   },
+   "random lexicon words": {
+    "n": "500",
+    "v2": "0.001 [0.001, 0.001]",
+    "SURPRISE": "0.157 [0.155, 0.159]",
+    "MATCH": "0.249 [0.247, 0.251]",
+    "v3": "0.136 [0.135, 0.137]",
+    "min3": "0.001 [0.001, 0.001]",
+    "SURPRISE 3.1": "0.029 [0.028, 0.029]",
+    "MATCH 3.1": "0.262 [0.259, 0.265]",
+    "v3.1": "0.018 [0.018, 0.019]",
+    "disagree": "0%"
+   },
+   "random letters": {
+    "n": "500",
+    "v2": "0.000 [0.000, 0.000]",
+    "SURPRISE": "0.065 [0.064, 0.066]",
+    "MATCH": "0.059 [0.058, 0.059]",
+    "v3": "0.041 [0.041, 0.042]",
+    "min3": "0.000 [0.000, 0.000]",
+    "SURPRISE 3.1": "0.013 [0.013, 0.014]",
+    "MATCH 3.1": "0.011 [0.011, 0.011]",
+    "v3.1": "0.001 [0.001, 0.002]",
+    "disagree": "0%"
+   },
+   "one phrase repeated": {
+    "n": "500",
+    "v2": "0.000 [0.000, 0.000]",
+    "SURPRISE": "0.000 [0.000, 0.000]",
+    "MATCH": "0.000 [0.000, 0.000]",
+    "v3": "0.000 [0.000, 0.000]",
+    "min3": "0.000 [0.000, 0.000]",
+    "SURPRISE 3.1": "0.000 [0.000, 0.000]",
+    "MATCH 3.1": "0.000 [0.000, 0.000]",
+    "v3.1": "0.000 [0.000, 0.000]",
+    "disagree": "0%"
+   },
+   "trie samples T=1.0": {
+    "n": "245",
+    "v2": "0.412 [0.388, 0.441]",
+    "SURPRISE": "0.688 [0.666, 0.709]",
+    "MATCH": "0.573 [0.558, 0.588]",
+    "v3": "0.558 [0.541, 0.575]",
+    "min3": "0.387 [0.366, 0.410]",
+    "SURPRISE 3.1": "0.596 [0.576, 0.614]",
+    "MATCH 3.1": "0.436 [0.424, 0.447]",
+    "v3.1": "0.461 [0.445, 0.476]",
+    "disagree": "7%"
+   },
+   "held-out human, short (60-260 B)": {
+    "n": "500",
+    "v2": "0.935 [0.921, 0.948]",
+    "SURPRISE": "0.943 [0.931, 0.953]",
+    "MATCH": "0.947 [0.935, 0.958]",
+    "v3": "0.942 [0.932, 0.950]",
+    "min3": "0.879 [0.864, 0.896]",
+    "SURPRISE 3.1": "0.940 [0.926, 0.953]",
+    "MATCH 3.1": "0.946 [0.934, 0.958]",
+    "v3.1": "0.931 [0.918, 0.942]",
+    "disagree": "4%"
+   }
+  },
+  "NALL_s20262101": {
+   "held-out human": {
+    "n": "500",
+    "v2": "0.923 [0.909, 0.935]",
+    "SURPRISE": "0.921 [0.910, 0.931]",
+    "MATCH": "0.922 [0.910, 0.933]",
+    "v3": "0.922 [0.911, 0.931]",
+    "min3": "0.859 [0.844, 0.873]",
+    "SURPRISE 3.1": "0.930 [0.918, 0.941]",
+    "MATCH 3.1": "0.924 [0.911, 0.934]",
+    "v3.1": "0.919 [0.908, 0.930]",
+    "disagree": "2%"
+   },
+   "trie samples (pooled)": {
+    "n": "242",
+    "v2": "0.389 [0.361, 0.416]",
+    "SURPRISE": "0.674 [0.653, 0.693]",
+    "MATCH": "0.574 [0.559, 0.589]",
+    "v3": "0.545 [0.529, 0.563]",
+    "min3": "0.366 [0.343, 0.389]",
+    "SURPRISE 3.1": "0.588 [0.571, 0.607]",
+    "MATCH 3.1": "0.442 [0.429, 0.454]",
+    "v3.1": "0.449 [0.432, 0.467]",
+    "disagree": "9%"
+   },
+   "sentences shuffled across docs": {
+    "n": "500",
+    "v2": "0.344 [0.332, 0.355]",
+    "SURPRISE": "0.665 [0.661, 0.669]",
+    "MATCH": "0.661 [0.656, 0.666]",
+    "v3": "0.557 [0.552, 0.562]",
+    "min3": "0.339 [0.329, 0.350]",
+    "SURPRISE 3.1": "0.736 [0.730, 0.740]",
+    "MATCH 3.1": "0.677 [0.671, 0.682]",
+    "v3.1": "0.546 [0.540, 0.553]",
+    "disagree": "3%"
+   },
+   "words shuffled within sentences": {
+    "n": "500",
+    "v2": "0.003 [0.003, 0.003]",
+    "SURPRISE": "0.226 [0.224, 0.229]",
+    "MATCH": "0.341 [0.337, 0.345]",
+    "v3": "0.190 [0.188, 0.192]",
+    "min3": "0.003 [0.003, 0.003]",
+    "SURPRISE 3.1": "0.037 [0.036, 0.037]",
+    "MATCH 3.1": "0.345 [0.339, 0.351]",
+    "v3.1": "0.035 [0.034, 0.035]",
+    "disagree": "1%"
+   },
+   "random lexicon words": {
+    "n": "500",
+    "v2": "0.001 [0.001, 0.001]",
+    "SURPRISE": "0.157 [0.155, 0.159]",
+    "MATCH": "0.249 [0.247, 0.251]",
+    "v3": "0.136 [0.135, 0.137]",
+    "min3": "0.001 [0.001, 0.001]",
+    "SURPRISE 3.1": "0.029 [0.028, 0.029]",
+    "MATCH 3.1": "0.262 [0.259, 0.265]",
+    "v3.1": "0.018 [0.018, 0.019]",
+    "disagree": "0%"
+   },
+   "random letters": {
+    "n": "500",
+    "v2": "0.000 [0.000, 0.000]",
+    "SURPRISE": "0.065 [0.064, 0.066]",
+    "MATCH": "0.059 [0.058, 0.059]",
+    "v3": "0.041 [0.041, 0.042]",
+    "min3": "0.000 [0.000, 0.000]",
+    "SURPRISE 3.1": "0.013 [0.013, 0.014]",
+    "MATCH 3.1": "0.011 [0.011, 0.011]",
+    "v3.1": "0.001 [0.001, 0.002]",
+    "disagree": "0%"
+   },
+   "one phrase repeated": {
+    "n": "500",
+    "v2": "0.000 [0.000, 0.000]",
+    "SURPRISE": "0.000 [0.000, 0.000]",
+    "MATCH": "0.000 [0.000, 0.000]",
+    "v3": "0.000 [0.000, 0.000]",
+    "min3": "0.000 [0.000, 0.000]",
+    "SURPRISE 3.1": "0.000 [0.000, 0.000]",
+    "MATCH 3.1": "0.000 [0.000, 0.000]",
+    "v3.1": "0.000 [0.000, 0.000]",
+    "disagree": "0%"
+   },
+   "trie samples T=1.0": {
+    "n": "242",
+    "v2": "0.389 [0.361, 0.416]",
+    "SURPRISE": "0.674 [0.654, 0.695]",
+    "MATCH": "0.574 [0.558, 0.589]",
+    "v3": "0.545 [0.528, 0.563]",
+    "min3": "0.366 [0.343, 0.387]",
+    "SURPRISE 3.1": "0.588 [0.571, 0.605]",
+    "MATCH 3.1": "0.442 [0.429, 0.454]",
+    "v3.1": "0.449 [0.432, 0.465]",
+    "disagree": "9%"
+   },
+   "held-out human, short (60-260 B)": {
+    "n": "500",
+    "v2": "0.935 [0.921, 0.948]",
+    "SURPRISE": "0.943 [0.931, 0.953]",
+    "MATCH": "0.947 [0.935, 0.958]",
+    "v3": "0.942 [0.932, 0.950]",
+    "min3": "0.879 [0.864, 0.896]",
+    "SURPRISE 3.1": "0.940 [0.926, 0.953]",
+    "MATCH 3.1": "0.946 [0.934, 0.958]",
+    "v3.1": "0.931 [0.918, 0.942]",
+    "disagree": "4%"
+   }
+  },
+  "NALL_s20263101": {
+   "held-out human": {
+    "n": "500",
+    "v2": "0.923 [0.909, 0.935]",
+    "SURPRISE": "0.921 [0.910, 0.931]",
+    "MATCH": "0.922 [0.910, 0.933]",
+    "v3": "0.922 [0.911, 0.931]",
+    "min3": "0.859 [0.844, 0.873]",
+    "SURPRISE 3.1": "0.930 [0.918, 0.941]",
+    "MATCH 3.1": "0.924 [0.911, 0.934]",
+    "v3.1": "0.919 [0.908, 0.930]",
+    "disagree": "2%"
+   },
+   "trie samples (pooled)": {
+    "n": "236",
+    "v2": "0.378 [0.352, 0.406]",
+    "SURPRISE": "0.671 [0.652, 0.688]",
+    "MATCH": "0.562 [0.549, 0.576]",
+    "v3": "0.537 [0.520, 0.553]",
+    "min3": "0.355 [0.334, 0.377]",
+    "SURPRISE 3.1": "0.590 [0.574, 0.606]",
+    "MATCH 3.1": "0.436 [0.422, 0.450]",
+    "v3.1": "0.445 [0.430, 0.461]",
+    "disagree": "8%"
+   },
+   "sentences shuffled across docs": {
+    "n": "500",
+    "v2": "0.344 [0.332, 0.355]",
+    "SURPRISE": "0.665 [0.661, 0.669]",
+    "MATCH": "0.661 [0.656, 0.666]",
+    "v3": "0.557 [0.552, 0.562]",
+    "min3": "0.339 [0.329, 0.350]",
+    "SURPRISE 3.1": "0.736 [0.730, 0.740]",
+    "MATCH 3.1": "0.677 [0.671, 0.682]",
+    "v3.1": "0.546 [0.540, 0.553]",
+    "disagree": "3%"
+   },
+   "words shuffled within sentences": {
+    "n": "500",
+    "v2": "0.003 [0.003, 0.003]",
+    "SURPRISE": "0.226 [0.224, 0.229]",
+    "MATCH": "0.341 [0.337, 0.345]",
+    "v3": "0.190 [0.188, 0.192]",
+    "min3": "0.003 [0.003, 0.003]",
+    "SURPRISE 3.1": "0.037 [0.036, 0.037]",
+    "MATCH 3.1": "0.345 [0.339, 0.351]",
+    "v3.1": "0.035 [0.034, 0.035]",
+    "disagree": "1%"
+   },
+   "random lexicon words": {
+    "n": "500",
+    "v2": "0.001 [0.001, 0.001]",
+    "SURPRISE": "0.157 [0.155, 0.159]",
+    "MATCH": "0.249 [0.247, 0.251]",
+    "v3": "0.136 [0.135, 0.137]",
+    "min3": "0.001 [0.001, 0.001]",
+    "SURPRISE 3.1": "0.029 [0.028, 0.029]",
+    "MATCH 3.1": "0.262 [0.259, 0.265]",
+    "v3.1": "0.018 [0.018, 0.019]",
+    "disagree": "0%"
+   },
+   "random letters": {
+    "n": "500",
+    "v2": "0.000 [0.000, 0.000]",
+    "SURPRISE": "0.065 [0.064, 0.066]",
+    "MATCH": "0.059 [0.058, 0.059]",
+    "v3": "0.041 [0.041, 0.042]",
+    "min3": "0.000 [0.000, 0.000]",
+    "SURPRISE 3.1": "0.013 [0.013, 0.014]",
+    "MATCH 3.1": "0.011 [0.011, 0.011]",
+    "v3.1": "0.001 [0.001, 0.002]",
+    "disagree": "0%"
+   },
+   "one phrase repeated": {
+    "n": "500",
+    "v2": "0.000 [0.000, 0.000]",
+    "SURPRISE": "0.000 [0.000, 0.000]",
+    "MATCH": "0.000 [0.000, 0.000]",
+    "v3": "0.000 [0.000, 0.000]",
+    "min3": "0.000 [0.000, 0.000]",
+    "SURPRISE 3.1": "0.000 [0.000, 0.000]",
+    "MATCH 3.1": "0.000 [0.000, 0.000]",
+    "v3.1": "0.000 [0.000, 0.000]",
+    "disagree": "0%"
+   },
+   "trie samples T=1.0": {
+    "n": "236",
+    "v2": "0.378 [0.351, 0.404]",
+    "SURPRISE": "0.671 [0.653, 0.689]",
+    "MATCH": "0.562 [0.547, 0.578]",
+    "v3": "0.537 [0.521, 0.554]",
+    "min3": "0.355 [0.334, 0.375]",
+    "SURPRISE 3.1": "0.590 [0.574, 0.604]",
+    "MATCH 3.1": "0.436 [0.423, 0.449]",
+    "v3.1": "0.445 [0.430, 0.460]",
+    "disagree": "8%"
+   },
+   "held-out human, short (60-260 B)": {
+    "n": "500",
+    "v2": "0.935 [0.921, 0.948]",
+    "SURPRISE": "0.943 [0.931, 0.953]",
+    "MATCH": "0.947 [0.935, 0.958]",
+    "v3": "0.942 [0.932, 0.950]",
+    "min3": "0.879 [0.864, 0.896]",
+    "SURPRISE 3.1": "0.940 [0.926, 0.953]",
+    "MATCH 3.1": "0.946 [0.934, 0.958]",
+    "v3.1": "0.931 [0.918, 0.942]",
+    "disagree": "4%"
+   }
+  },
+  "NALL_s20264101": {
+   "held-out human": {
+    "n": "500",
+    "v2": "0.923 [0.909, 0.935]",
+    "SURPRISE": "0.921 [0.910, 0.931]",
+    "MATCH": "0.922 [0.910, 0.933]",
+    "v3": "0.922 [0.911, 0.931]",
+    "min3": "0.859 [0.844, 0.873]",
+    "SURPRISE 3.1": "0.930 [0.918, 0.941]",
+    "MATCH 3.1": "0.924 [0.911, 0.934]",
+    "v3.1": "0.919 [0.908, 0.930]",
+    "disagree": "2%"
+   },
+   "trie samples (pooled)": {
+    "n": "242",
+    "v2": "0.381 [0.354, 0.409]",
+    "SURPRISE": "0.668 [0.649, 0.689]",
+    "MATCH": "0.566 [0.553, 0.581]",
+    "v3": "0.539 [0.523, 0.555]",
+    "min3": "0.350 [0.330, 0.370]",
+    "SURPRISE 3.1": "0.576 [0.556, 0.595]",
+    "MATCH 3.1": "0.437 [0.424, 0.448]",
+    "v3.1": "0.440 [0.425, 0.456]",
+    "disagree": "9%"
+   },
+   "sentences shuffled across docs": {
+    "n": "500",
+    "v2": "0.344 [0.332, 0.355]",
+    "SURPRISE": "0.665 [0.661, 0.669]",
+    "MATCH": "0.661 [0.656, 0.666]",
+    "v3": "0.557 [0.552, 0.562]",
+    "min3": "0.339 [0.329, 0.350]",
+    "SURPRISE 3.1": "0.736 [0.730, 0.740]",
+    "MATCH 3.1": "0.677 [0.671, 0.682]",
+    "v3.1": "0.546 [0.540, 0.553]",
+    "disagree": "3%"
+   },
+   "words shuffled within sentences": {
+    "n": "500",
+    "v2": "0.003 [0.003, 0.003]",
+    "SURPRISE": "0.226 [0.224, 0.229]",
+    "MATCH": "0.341 [0.337, 0.345]",
+    "v3": "0.190 [0.188, 0.192]",
+    "min3": "0.003 [0.003, 0.003]",
+    "SURPRISE 3.1": "0.037 [0.036, 0.037]",
+    "MATCH 3.1": "0.345 [0.339, 0.351]",
+    "v3.1": "0.035 [0.034, 0.035]",
+    "disagree": "1%"
+   },
+   "random lexicon words": {
+    "n": "500",
+    "v2": "0.001 [0.001, 0.001]",
+    "SURPRISE": "0.157 [0.155, 0.159]",
+    "MATCH": "0.249 [0.247, 0.251]",
+    "v3": "0.136 [0.135, 0.137]",
+    "min3": "0.001 [0.001, 0.001]",
+    "SURPRISE 3.1": "0.029 [0.028, 0.029]",
+    "MATCH 3.1": "0.262 [0.259, 0.265]",
+    "v3.1": "0.018 [0.018, 0.019]",
+    "disagree": "0%"
+   },
+   "random letters": {
+    "n": "500",
+    "v2": "0.000 [0.000, 0.000]",
+    "SURPRISE": "0.065 [0.064, 0.066]",
+    "MATCH": "0.059 [0.058, 0.059]",
+    "v3": "0.041 [0.041, 0.042]",
+    "min3": "0.000 [0.000, 0.000]",
+    "SURPRISE 3.1": "0.013 [0.013, 0.014]",
+    "MATCH 3.1": "0.011 [0.011, 0.011]",
+    "v3.1": "0.001 [0.001, 0.002]",
+    "disagree": "0%"
+   },
+   "one phrase repeated": {
+    "n": "500",
+    "v2": "0.000 [0.000, 0.000]",
+    "SURPRISE": "0.000 [0.000, 0.000]",
+    "MATCH": "0.000 [0.000, 0.000]",
+    "v3": "0.000 [0.000, 0.000]",
+    "min3": "0.000 [0.000, 0.000]",
+    "SURPRISE 3.1": "0.000 [0.000, 0.000]",
+    "MATCH 3.1": "0.000 [0.000, 0.000]",
+    "v3.1": "0.000 [0.000, 0.000]",
+    "disagree": "0%"
+   },
+   "trie samples T=1.0": {
+    "n": "242",
+    "v2": "0.381 [0.354, 0.410]",
+    "SURPRISE": "0.668 [0.648, 0.688]",
+    "MATCH": "0.566 [0.552, 0.581]",
+    "v3": "0.539 [0.522, 0.555]",
+    "min3": "0.350 [0.329, 0.372]",
+    "SURPRISE 3.1": "0.576 [0.555, 0.594]",
+    "MATCH 3.1": "0.437 [0.424, 0.448]",
+    "v3.1": "0.440 [0.425, 0.455]",
+    "disagree": "9%"
+   },
+   "held-out human, short (60-260 B)": {
+    "n": "500",
+    "v2": "0.935 [0.921, 0.948]",
+    "SURPRISE": "0.943 [0.931, 0.953]",
+    "MATCH": "0.947 [0.935, 0.958]",
+    "v3": "0.942 [0.932, 0.950]",
+    "min3": "0.879 [0.864, 0.896]",
+    "SURPRISE 3.1": "0.940 [0.926, 0.953]",
+    "MATCH 3.1": "0.946 [0.934, 0.958]",
+    "v3.1": "0.931 [0.918, 0.942]",
+    "disagree": "4%"
+   }
+  },
+  "U8_s20261101": {
+   "held-out human": {
+    "n": "500",
+    "v2": "0.923 [0.909, 0.935]",
+    "SURPRISE": "0.921 [0.910, 0.931]",
+    "MATCH": "0.922 [0.910, 0.933]",
+    "v3": "0.922 [0.911, 0.931]",
+    "min3": "0.859 [0.844, 0.873]",
+    "SURPRISE 3.1": "0.930 [0.918, 0.941]",
+    "MATCH 3.1": "0.924 [0.911, 0.934]",
+    "v3.1": "0.919 [0.908, 0.930]",
+    "disagree": "2%"
+   },
+   "trie samples (pooled)": {
+    "n": "244",
+    "v2": "0.498 [0.471, 0.527]",
+    "SURPRISE": "0.612 [0.591, 0.634]",
+    "MATCH": "0.583 [0.566, 0.599]",
+    "v3": "0.565 [0.549, 0.580]",
+    "min3": "0.419 [0.398, 0.442]",
+    "SURPRISE 3.1": "0.554 [0.527, 0.578]",
+    "MATCH 3.1": "0.464 [0.451, 0.478]",
+    "v3.1": "0.483 [0.466, 0.501]",
+    "disagree": "7%"
+   },
+   "sentences shuffled across docs": {
+    "n": "500",
+    "v2": "0.344 [0.332, 0.355]",
+    "SURPRISE": "0.665 [0.661, 0.669]",
+    "MATCH": "0.661 [0.656, 0.666]",
+    "v3": "0.557 [0.552, 0.562]",
+    "min3": "0.339 [0.329, 0.350]",
+    "SURPRISE 3.1": "0.736 [0.730, 0.740]",
+    "MATCH 3.1": "0.677 [0.671, 0.682]",
+    "v3.1": "0.546 [0.540, 0.553]",
+    "disagree": "3%"
+   },
+   "words shuffled within sentences": {
+    "n": "500",
+    "v2": "0.003 [0.003, 0.003]",
+    "SURPRISE": "0.226 [0.224, 0.229]",
+    "MATCH": "0.341 [0.337, 0.345]",
+    "v3": "0.190 [0.188, 0.192]",
+    "min3": "0.003 [0.003, 0.003]",
+    "SURPRISE 3.1": "0.037 [0.036, 0.037]",
+    "MATCH 3.1": "0.345 [0.339, 0.351]",
+    "v3.1": "0.035 [0.034, 0.035]",
+    "disagree": "1%"
+   },
+   "random lexicon words": {
+    "n": "500",
+    "v2": "0.001 [0.001, 0.001]",
+    "SURPRISE": "0.157 [0.155, 0.159]",
+    "MATCH": "0.249 [0.247, 0.251]",
+    "v3": "0.136 [0.135, 0.137]",
+    "min3": "0.001 [0.001, 0.001]",
+    "SURPRISE 3.1": "0.029 [0.028, 0.029]",
+    "MATCH 3.1": "0.262 [0.259, 0.265]",
+    "v3.1": "0.018 [0.018, 0.019]",
+    "disagree": "0%"
+   },
+   "random letters": {
+    "n": "500",
+    "v2": "0.000 [0.000, 0.000]",
+    "SURPRISE": "0.065 [0.064, 0.066]",
+    "MATCH": "0.059 [0.058, 0.059]",
+    "v3": "0.041 [0.041, 0.042]",
+    "min3": "0.000 [0.000, 0.000]",
+    "SURPRISE 3.1": "0.013 [0.013, 0.014]",
+    "MATCH 3.1": "0.011 [0.011, 0.011]",
+    "v3.1": "0.001 [0.001, 0.002]",
+    "disagree": "0%"
+   },
+   "one phrase repeated": {
+    "n": "500",
+    "v2": "0.000 [0.000, 0.000]",
+    "SURPRISE": "0.000 [0.000, 0.000]",
+    "MATCH": "0.000 [0.000, 0.000]",
+    "v3": "0.000 [0.000, 0.000]",
+    "min3": "0.000 [0.000, 0.000]",
+    "SURPRISE 3.1": "0.000 [0.000, 0.000]",
+    "MATCH 3.1": "0.000 [0.000, 0.000]",
+    "v3.1": "0.000 [0.000, 0.000]",
+    "disagree": "0%"
+   },
+   "trie samples T=1.0": {
+    "n": "244",
+    "v2": "0.498 [0.470, 0.527]",
+    "SURPRISE": "0.612 [0.589, 0.637]",
+    "MATCH": "0.583 [0.567, 0.599]",
+    "v3": "0.565 [0.548, 0.582]",
+    "min3": "0.419 [0.398, 0.440]",
+    "SURPRISE 3.1": "0.554 [0.528, 0.578]",
+    "MATCH 3.1": "0.464 [0.451, 0.478]",
+    "v3.1": "0.483 [0.466, 0.501]",
+    "disagree": "7%"
+   },
+   "held-out human, short (60-260 B)": {
+    "n": "500",
+    "v2": "0.935 [0.921, 0.948]",
+    "SURPRISE": "0.943 [0.931, 0.953]",
+    "MATCH": "0.947 [0.935, 0.958]",
+    "v3": "0.942 [0.932, 0.950]",
+    "min3": "0.879 [0.864, 0.896]",
+    "SURPRISE 3.1": "0.940 [0.926, 0.953]",
+    "MATCH 3.1": "0.946 [0.934, 0.958]",
+    "v3.1": "0.931 [0.918, 0.942]",
+    "disagree": "4%"
+   }
+  },
+  "U8_s20262101": {
+   "held-out human": {
+    "n": "500",
+    "v2": "0.923 [0.909, 0.935]",
+    "SURPRISE": "0.921 [0.910, 0.931]",
+    "MATCH": "0.922 [0.910, 0.933]",
+    "v3": "0.922 [0.911, 0.931]",
+    "min3": "0.859 [0.844, 0.873]",
+    "SURPRISE 3.1": "0.930 [0.918, 0.941]",
+    "MATCH 3.1": "0.924 [0.911, 0.934]",
+    "v3.1": "0.919 [0.908, 0.930]",
+    "disagree": "2%"
+   },
+   "trie samples (pooled)": {
+    "n": "246",
+    "v2": "0.496 [0.470, 0.523]",
+    "SURPRISE": "0.590 [0.566, 0.614]",
+    "MATCH": "0.575 [0.558, 0.593]",
+    "v3": "0.554 [0.537, 0.571]",
+    "min3": "0.407 [0.386, 0.427]",
+    "SURPRISE 3.1": "0.529 [0.500, 0.555]",
+    "MATCH 3.1": "0.460 [0.444, 0.475]",
+    "v3.1": "0.470 [0.451, 0.488]",
+    "disagree": "9%"
+   },
+   "sentences shuffled across docs": {
+    "n": "500",
+    "v2": "0.344 [0.332, 0.355]",
+    "SURPRISE": "0.665 [0.661, 0.669]",
+    "MATCH": "0.661 [0.656, 0.666]",
+    "v3": "0.557 [0.552, 0.562]",
+    "min3": "0.339 [0.329, 0.350]",
+    "SURPRISE 3.1": "0.736 [0.730, 0.740]",
+    "MATCH 3.1": "0.677 [0.671, 0.682]",
+    "v3.1": "0.546 [0.540, 0.553]",
+    "disagree": "3%"
+   },
+   "words shuffled within sentences": {
+    "n": "500",
+    "v2": "0.003 [0.003, 0.003]",
+    "SURPRISE": "0.226 [0.224, 0.229]",
+    "MATCH": "0.341 [0.337, 0.345]",
+    "v3": "0.190 [0.188, 0.192]",
+    "min3": "0.003 [0.003, 0.003]",
+    "SURPRISE 3.1": "0.037 [0.036, 0.037]",
+    "MATCH 3.1": "0.345 [0.339, 0.351]",
+    "v3.1": "0.035 [0.034, 0.035]",
+    "disagree": "1%"
+   },
+   "random lexicon words": {
+    "n": "500",
+    "v2": "0.001 [0.001, 0.001]",
+    "SURPRISE": "0.157 [0.155, 0.159]",
+    "MATCH": "0.249 [0.247, 0.251]",
+    "v3": "0.136 [0.135, 0.137]",
+    "min3": "0.001 [0.001, 0.001]",
+    "SURPRISE 3.1": "0.029 [0.028, 0.029]",
+    "MATCH 3.1": "0.262 [0.259, 0.265]",
+    "v3.1": "0.018 [0.018, 0.019]",
+    "disagree": "0%"
+   },
+   "random letters": {
+    "n": "500",
+    "v2": "0.000 [0.000, 0.000]",
+    "SURPRISE": "0.065 [0.064, 0.066]",
+    "MATCH": "0.059 [0.058, 0.059]",
+    "v3": "0.041 [0.041, 0.042]",
+    "min3": "0.000 [0.000, 0.000]",
+    "SURPRISE 3.1": "0.013 [0.013, 0.014]",
+    "MATCH 3.1": "0.011 [0.011, 0.011]",
+    "v3.1": "0.001 [0.001, 0.002]",
+    "disagree": "0%"
+   },
+   "one phrase repeated": {
+    "n": "500",
+    "v2": "0.000 [0.000, 0.000]",
+    "SURPRISE": "0.000 [0.000, 0.000]",
+    "MATCH": "0.000 [0.000, 0.000]",
+    "v3": "0.000 [0.000, 0.000]",
+    "min3": "0.000 [0.000, 0.000]",
+    "SURPRISE 3.1": "0.000 [0.000, 0.000]",
+    "MATCH 3.1": "0.000 [0.000, 0.000]",
+    "v3.1": "0.000 [0.000, 0.000]",
+    "disagree": "0%"
+   },
+   "trie samples T=1.0": {
+    "n": "246",
+    "v2": "0.496 [0.469, 0.522]",
+    "SURPRISE": "0.590 [0.565, 0.615]",
+    "MATCH": "0.575 [0.555, 0.593]",
+    "v3": "0.554 [0.536, 0.571]",
+    "min3": "0.407 [0.387, 0.429]",
+    "SURPRISE 3.1": "0.529 [0.502, 0.558]",
+    "MATCH 3.1": "0.460 [0.444, 0.478]",
+    "v3.1": "0.470 [0.451, 0.488]",
+    "disagree": "9%"
+   },
+   "held-out human, short (60-260 B)": {
+    "n": "500",
+    "v2": "0.935 [0.921, 0.948]",
+    "SURPRISE": "0.943 [0.931, 0.953]",
+    "MATCH": "0.947 [0.935, 0.958]",
+    "v3": "0.942 [0.932, 0.950]",
+    "min3": "0.879 [0.864, 0.896]",
+    "SURPRISE 3.1": "0.940 [0.926, 0.953]",
+    "MATCH 3.1": "0.946 [0.934, 0.958]",
+    "v3.1": "0.931 [0.918, 0.942]",
+    "disagree": "4%"
+   }
+  },
+  "U8_s20263101": {
+   "held-out human": {
+    "n": "500",
+    "v2": "0.923 [0.909, 0.935]",
+    "SURPRISE": "0.921 [0.910, 0.931]",
+    "MATCH": "0.922 [0.910, 0.933]",
+    "v3": "0.922 [0.911, 0.931]",
+    "min3": "0.859 [0.844, 0.873]",
+    "SURPRISE 3.1": "0.930 [0.918, 0.941]",
+    "MATCH 3.1": "0.924 [0.911, 0.934]",
+    "v3.1": "0.919 [0.908, 0.930]",
+    "disagree": "2%"
+   },
+   "trie samples (pooled)": {
+    "n": "249",
+    "v2": "0.501 [0.469, 0.531]",
+    "SURPRISE": "0.582 [0.560, 0.605]",
+    "MATCH": "0.578 [0.561, 0.594]",
+    "v3": "0.554 [0.537, 0.573]",
+    "min3": "0.413 [0.392, 0.434]",
+    "SURPRISE 3.1": "0.527 [0.501, 0.553]",
+    "MATCH 3.1": "0.460 [0.446, 0.474]",
+    "v3.1": "0.474 [0.457, 0.491]",
+    "disagree": "8%"
+   },
+   "sentences shuffled across docs": {
+    "n": "500",
+    "v2": "0.344 [0.332, 0.355]",
+    "SURPRISE": "0.665 [0.661, 0.669]",
+    "MATCH": "0.661 [0.656, 0.666]",
+    "v3": "0.557 [0.552, 0.562]",
+    "min3": "0.339 [0.329, 0.350]",
+    "SURPRISE 3.1": "0.736 [0.730, 0.740]",
+    "MATCH 3.1": "0.677 [0.671, 0.682]",
+    "v3.1": "0.546 [0.540, 0.553]",
+    "disagree": "3%"
+   },
+   "words shuffled within sentences": {
+    "n": "500",
+    "v2": "0.003 [0.003, 0.003]",
+    "SURPRISE": "0.226 [0.224, 0.229]",
+    "MATCH": "0.341 [0.337, 0.345]",
+    "v3": "0.190 [0.188, 0.192]",
+    "min3": "0.003 [0.003, 0.003]",
+    "SURPRISE 3.1": "0.037 [0.036, 0.037]",
+    "MATCH 3.1": "0.345 [0.339, 0.351]",
+    "v3.1": "0.035 [0.034, 0.035]",
+    "disagree": "1%"
+   },
+   "random lexicon words": {
+    "n": "500",
+    "v2": "0.001 [0.001, 0.001]",
+    "SURPRISE": "0.157 [0.155, 0.159]",
+    "MATCH": "0.249 [0.247, 0.251]",
+    "v3": "0.136 [0.135, 0.137]",
+    "min3": "0.001 [0.001, 0.001]",
+    "SURPRISE 3.1": "0.029 [0.028, 0.029]",
+    "MATCH 3.1": "0.262 [0.259, 0.265]",
+    "v3.1": "0.018 [0.018, 0.019]",
+    "disagree": "0%"
+   },
+   "random letters": {
+    "n": "500",
+    "v2": "0.000 [0.000, 0.000]",
+    "SURPRISE": "0.065 [0.064, 0.066]",
+    "MATCH": "0.059 [0.058, 0.059]",
+    "v3": "0.041 [0.041, 0.042]",
+    "min3": "0.000 [0.000, 0.000]",
+    "SURPRISE 3.1": "0.013 [0.013, 0.014]",
+    "MATCH 3.1": "0.011 [0.011, 0.011]",
+    "v3.1": "0.001 [0.001, 0.002]",
+    "disagree": "0%"
+   },
+   "one phrase repeated": {
+    "n": "500",
+    "v2": "0.000 [0.000, 0.000]",
+    "SURPRISE": "0.000 [0.000, 0.000]",
+    "MATCH": "0.000 [0.000, 0.000]",
+    "v3": "0.000 [0.000, 0.000]",
+    "min3": "0.000 [0.000, 0.000]",
+    "SURPRISE 3.1": "0.000 [0.000, 0.000]",
+    "MATCH 3.1": "0.000 [0.000, 0.000]",
+    "v3.1": "0.000 [0.000, 0.000]",
+    "disagree": "0%"
+   },
+   "trie samples T=1.0": {
+    "n": "249",
+    "v2": "0.501 [0.474, 0.530]",
+    "SURPRISE": "0.582 [0.559, 0.606]",
+    "MATCH": "0.578 [0.561, 0.595]",
+    "v3": "0.554 [0.537, 0.572]",
+    "min3": "0.413 [0.393, 0.434]",
+    "SURPRISE 3.1": "0.527 [0.501, 0.552]",
+    "MATCH 3.1": "0.460 [0.446, 0.474]",
+    "v3.1": "0.474 [0.456, 0.490]",
+    "disagree": "8%"
+   },
+   "held-out human, short (60-260 B)": {
+    "n": "500",
+    "v2": "0.935 [0.921, 0.948]",
+    "SURPRISE": "0.943 [0.931, 0.953]",
+    "MATCH": "0.947 [0.935, 0.958]",
+    "v3": "0.942 [0.932, 0.950]",
+    "min3": "0.879 [0.864, 0.896]",
+    "SURPRISE 3.1": "0.940 [0.926, 0.953]",
+    "MATCH 3.1": "0.946 [0.934, 0.958]",
+    "v3.1": "0.931 [0.918, 0.942]",
+    "disagree": "4%"
+   }
+  },
+  "U8_s20264101": {
+   "held-out human": {
+    "n": "500",
+    "v2": "0.923 [0.909, 0.935]",
+    "SURPRISE": "0.921 [0.910, 0.931]",
+    "MATCH": "0.922 [0.910, 0.933]",
+    "v3": "0.922 [0.911, 0.931]",
+    "min3": "0.859 [0.844, 0.873]",
+    "SURPRISE 3.1": "0.930 [0.918, 0.941]",
+    "MATCH 3.1": "0.924 [0.911, 0.934]",
+    "v3.1": "0.919 [0.908, 0.930]",
+    "disagree": "2%"
+   },
+   "trie samples (pooled)": {
+    "n": "247",
+    "v2": "0.505 [0.477, 0.534]",
+    "SURPRISE": "0.595 [0.572, 0.619]",
+    "MATCH": "0.575 [0.558, 0.591]",
+    "v3": "0.559 [0.543, 0.576]",
+    "min3": "0.414 [0.395, 0.434]",
+    "SURPRISE 3.1": "0.532 [0.506, 0.558]",
+    "MATCH 3.1": "0.459 [0.444, 0.475]",
+    "v3.1": "0.476 [0.459, 0.492]",
+    "disagree": "9%"
+   },
+   "sentences shuffled across docs": {
+    "n": "500",
+    "v2": "0.344 [0.332, 0.355]",
+    "SURPRISE": "0.665 [0.661, 0.669]",
+    "MATCH": "0.661 [0.656, 0.666]",
+    "v3": "0.557 [0.552, 0.562]",
+    "min3": "0.339 [0.329, 0.350]",
+    "SURPRISE 3.1": "0.736 [0.730, 0.740]",
+    "MATCH 3.1": "0.677 [0.671, 0.682]",
+    "v3.1": "0.546 [0.540, 0.553]",
+    "disagree": "3%"
+   },
+   "words shuffled within sentences": {
+    "n": "500",
+    "v2": "0.003 [0.003, 0.003]",
+    "SURPRISE": "0.226 [0.224, 0.229]",
+    "MATCH": "0.341 [0.337, 0.345]",
+    "v3": "0.190 [0.188, 0.192]",
+    "min3": "0.003 [0.003, 0.003]",
+    "SURPRISE 3.1": "0.037 [0.036, 0.037]",
+    "MATCH 3.1": "0.345 [0.339, 0.351]",
+    "v3.1": "0.035 [0.034, 0.035]",
+    "disagree": "1%"
+   },
+   "random lexicon words": {
+    "n": "500",
+    "v2": "0.001 [0.001, 0.001]",
+    "SURPRISE": "0.157 [0.155, 0.159]",
+    "MATCH": "0.249 [0.247, 0.251]",
+    "v3": "0.136 [0.135, 0.137]",
+    "min3": "0.001 [0.001, 0.001]",
+    "SURPRISE 3.1": "0.029 [0.028, 0.029]",
+    "MATCH 3.1": "0.262 [0.259, 0.265]",
+    "v3.1": "0.018 [0.018, 0.019]",
+    "disagree": "0%"
+   },
+   "random letters": {
+    "n": "500",
+    "v2": "0.000 [0.000, 0.000]",
+    "SURPRISE": "0.065 [0.064, 0.066]",
+    "MATCH": "0.059 [0.058, 0.059]",
+    "v3": "0.041 [0.041, 0.042]",
+    "min3": "0.000 [0.000, 0.000]",
+    "SURPRISE 3.1": "0.013 [0.013, 0.014]",
+    "MATCH 3.1": "0.011 [0.011, 0.011]",
+    "v3.1": "0.001 [0.001, 0.002]",
+    "disagree": "0%"
+   },
+   "one phrase repeated": {
+    "n": "500",
+    "v2": "0.000 [0.000, 0.000]",
+    "SURPRISE": "0.000 [0.000, 0.000]",
+    "MATCH": "0.000 [0.000, 0.000]",
+    "v3": "0.000 [0.000, 0.000]",
+    "min3": "0.000 [0.000, 0.000]",
+    "SURPRISE 3.1": "0.000 [0.000, 0.000]",
+    "MATCH 3.1": "0.000 [0.000, 0.000]",
+    "v3.1": "0.000 [0.000, 0.000]",
+    "disagree": "0%"
+   },
+   "trie samples T=1.0": {
+    "n": "247",
+    "v2": "0.505 [0.480, 0.533]",
+    "SURPRISE": "0.595 [0.573, 0.618]",
+    "MATCH": "0.575 [0.558, 0.592]",
+    "v3": "0.559 [0.542, 0.574]",
+    "min3": "0.414 [0.393, 0.433]",
+    "SURPRISE 3.1": "0.532 [0.507, 0.558]",
+    "MATCH 3.1": "0.459 [0.446, 0.474]",
+    "v3.1": "0.476 [0.459, 0.492]",
+    "disagree": "9%"
+   },
+   "held-out human, short (60-260 B)": {
+    "n": "500",
+    "v2": "0.935 [0.921, 0.948]",
+    "SURPRISE": "0.943 [0.931, 0.953]",
+    "MATCH": "0.947 [0.935, 0.958]",
+    "v3": "0.942 [0.932, 0.950]",
+    "min3": "0.879 [0.864, 0.896]",
+    "SURPRISE 3.1": "0.940 [0.926, 0.953]",
+    "MATCH 3.1": "0.946 [0.934, 0.958]",
+    "v3.1": "0.931 [0.918, 0.942]",
+    "disagree": "4%"
+   }
+  }
+ },
+ "cost": {
+  "web.v2": {
+   "timing": {
+    "pack_bytes": 32204071,
+    "pack_model_s": 2.051,
+    "pack_v2_s": 4.319,
+    "pack_vectors_s": 1.076,
+    "n_featurised": 32976,
+    "extract_ms": 0.3455,
+    "extend_ms": 0.1478,
+    "v3_ms": 0.0,
+    "score_texts": 9000,
+    "score_s": 7.423,
+    "texts_per_s": 1212.5,
+    "total_s": 27.36
+   },
+   "memtime": "wall_s=27.45 user_s=26.46 sys_s=0.66 maxrss_mb=648.9 rc=0"
+  },
+  "web.v3": {
+   "timing": {
+    "pack_bytes": 32204071,
+    "pack_model_s": 2.086,
+    "pack_v2_s": 4.207,
+    "pack_vectors_s": 1.075,
+    "n_featurised": 32976,
+    "extract_ms": 0.3593,
+    "extend_ms": 0.1503,
+    "v3_ms": 1.1771,
+    "score_texts": 9000,
+    "score_s": 19.399,
+    "texts_per_s": 463.9,
+    "total_s": 46.05
+   },
+   "memtime": "wall_s=46.19 user_s=61.44 sys_s=0.73 maxrss_mb=749.2 rc=0"
+  },
+  "web.v31": {
+   "timing": {
+    "pack_bytes": 32204071,
+    "pack_model_s": 1.913,
+    "pack_v2_s": 3.973,
+    "pack_vectors_s": 1.194,
+    "n_featurised": 32976,
+    "extract_ms": 0.3617,
+    "extend_ms": 0.1518,
+    "v3_ms": 1.4995,
+    "score_texts": 9000,
+    "score_s": 22.525,
+    "texts_per_s": 399.6,
+    "total_s": 51.0
+   },
+   "memtime": "wall_s=51.10 user_s=70.33 sys_s=0.65 maxrss_mb=768.1 rc=0"
+  },
+  "wiki.v2": {
+   "timing": {
+    "pack_bytes": 17521535,
+    "pack_model_s": 0.964,
+    "pack_v2_s": 2.126,
+    "pack_vectors_s": 0.483,
+    "n_featurised": 7138,
+    "extract_ms": 0.2959,
+    "extend_ms": 0.1299,
+    "v3_ms": 0.0,
+    "score_texts": 3500,
+    "score_s": 2.002,
+    "texts_per_s": 1748.5,
+    "total_s": 8.86
+   },
+   "memtime": "wall_s=8.92 user_s=8.47 sys_s=0.36 maxrss_mb=385.0 rc=0"
+  },
+  "wiki.v3": {
+   "timing": {
+    "pack_bytes": 17521535,
+    "pack_model_s": 1.079,
+    "pack_v2_s": 2.168,
+    "pack_vectors_s": 0.529,
+    "n_featurised": 7138,
+    "extract_ms": 0.3112,
+    "extend_ms": 0.1313,
+    "v3_ms": 0.7018,
+    "score_texts": 3500,
+    "score_s": 4.792,
+    "texts_per_s": 730.3,
+    "total_s": 13.89
+   },
+   "memtime": "wall_s=13.95 user_s=17.47 sys_s=0.44 maxrss_mb=481.2 rc=0"
+  },
+  "wiki.v31": {
+   "timing": {
+    "pack_bytes": 17521535,
+    "pack_model_s": 1.133,
+    "pack_v2_s": 2.256,
+    "pack_vectors_s": 0.495,
+    "n_featurised": 7138,
+    "extract_ms": 0.3124,
+    "extend_ms": 0.1309,
+    "v3_ms": 0.9636,
+    "score_texts": 3500,
+    "score_s": 5.962,
+    "texts_per_s": 587.1,
+    "total_s": 15.34
+   },
+   "memtime": "wall_s=15.41 user_s=19.39 sys_s=0.45 maxrss_mb=488.9 rc=0"
+  }
+ },
+ "k5_means": {
+  "C1": {
+   "seeds": 4,
+   "v2": 0.479,
+   "SURPRISE": 0.596,
+   "MATCH": 0.565,
+   "v3": 0.5467500000000001,
+   "min3": 0.40625,
+   "SURPRISE 3.1": 0.48324999999999996,
+   "MATCH 3.1": 0.4535,
+   "v3.1": 0.4475
+  },
+  "E8": {
+   "seeds": 4,
+   "v2": 0.34375,
+   "SURPRISE": 0.7085,
+   "MATCH": 0.581,
+   "v3": 0.54425,
+   "min3": 0.32025000000000003,
+   "SURPRISE 3.1": 0.6380000000000001,
+   "MATCH 3.1": 0.44625,
+   "v3.1": 0.429
+  },
+  "N100": {
+   "seeds": 1,
+   "v2": 0.363,
+   "SURPRISE": 0.673,
+   "MATCH": 0.563,
+   "v3": 0.533,
+   "min3": 0.343,
+   "SURPRISE 3.1": 0.589,
+   "MATCH 3.1": 0.432,
+   "v3.1": 0.435
+  },
+  "N300": {
+   "seeds": 1,
+   "v2": 0.382,
+   "SURPRISE": 0.675,
+   "MATCH": 0.566,
+   "v3": 0.541,
+   "min3": 0.356,
+   "SURPRISE 3.1": 0.591,
+   "MATCH 3.1": 0.434,
+   "v3.1": 0.443
+  },
+  "N30": {
+   "seeds": 1,
+   "v2": 0.375,
+   "SURPRISE": 0.685,
+   "MATCH": 0.575,
+   "v3": 0.545,
+   "min3": 0.349,
+   "SURPRISE 3.1": 0.612,
+   "MATCH 3.1": 0.444,
+   "v3.1": 0.447
+  },
+  "N7": {
+   "seeds": 1,
+   "v2": 0.35,
+   "SURPRISE": 0.698,
+   "MATCH": 0.577,
+   "v3": 0.542,
+   "min3": 0.321,
+   "SURPRISE 3.1": 0.632,
+   "MATCH 3.1": 0.442,
+   "v3.1": 0.431
+  },
+  "NALL": {
+   "seeds": 4,
+   "v2": 0.38999999999999996,
+   "SURPRISE": 0.6752500000000001,
+   "MATCH": 0.56875,
+   "v3": 0.5447500000000001,
+   "min3": 0.36450000000000005,
+   "SURPRISE 3.1": 0.5875,
+   "MATCH 3.1": 0.43775000000000003,
+   "v3.1": 0.44875
+  },
+  "U8": {
+   "seeds": 4,
+   "v2": 0.5,
+   "SURPRISE": 0.5947499999999999,
+   "MATCH": 0.57775,
+   "v3": 0.558,
+   "min3": 0.41324999999999995,
+   "SURPRISE 3.1": 0.5355000000000001,
+   "MATCH 3.1": 0.46075000000000005,
+   "v3.1": 0.47575
+  }
+ }
+}

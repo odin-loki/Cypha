@@ -91,4 +91,112 @@ Each is scored hit or miss under "Results". Probabilities are mine.
 
 ## Results
 
-(To be added after the runs.)
+Run 2026-11-04 with `scripts/scribe_eval/runs/v3_paper.sh all` at the registration commit (3e3bc6e), one pass, about 50 minutes on 4 cores. Tables: `paper/scribe/results_v2.0/` (written by `scripts/scribe_eval/v3_report.py` through `meta.py`; `v3_extra.md` holds the paired attack tables, the ablation, K5, stability and cost). Nothing in the metric was changed. No defect in profiles v1, v2, v3 or v31 was found, so no byte-for-byte check was needed; v2's numbers on every enwik run with a recorded seed reproduce version 1.0's exactly (fresh ladder, five seeds, three reference draws at each size, five pack sizes), and K5's v2 and v3 means reproduce K5_SCALE.md exactly.
+
+One design limit came to light (not a defect): v3's prompt statistics (MATCH's echo, and v3.1's `w_pgain` and `m_pcoh`) are read against prompt/continuation pairs that the tool cuts from inside the reference documents. `--ref-prompts` feeds v2p only. For a genre whose prompt and answer are different kinds of text (Dolly's instruction and response) or whose documents are short (ROC: 0 such pairs), these statistics have no fitting reference. See R7 and R9.
+
+### R1: the new fresh read (enwik9 [900, 924) MiB, read once)
+
+1 of 4,115 documents dropped by the filter; 500 standard samples.
+
+| Pair | v2 | SURPRISE | MATCH | v3 | SURPRISE 3.1 | MATCH 3.1 | **v3.1** |
+|---|---|---|---|---|---|---|---|
+| human > sentences shuffled | 0.974 | 0.951 | 0.941 ✗ | 0.982 | 0.934 ✗ | 0.935 ✗ | **0.966** |
+| sentences > words shuffled | 1.000 | 1.000 | 0.989 | 1.000 | 1.000 | 0.987 | **1.000** |
+| words shuffled > random words | 0.998 | 0.955 | 0.950 ✗ | 0.976 | 0.949 ✗ | 0.846 ✗ | **0.991** |
+| random words > random letters | 1.000 | 0.998 | 1.000 | 1.000 | 0.996 | 1.000 | **1.000** |
+| random letters > repeated phrase | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | **1.000** |
+| pairs passed | 5 | 5 | 3 | 5 | 3 | 3 | **5** |
+
+✗: fails (MATCH's 0.950 on the third pair is a fail on its interval). Human means: v2 0.909, v3 0.913, **v3.1 0.908** [0.896, 0.918].
+
+Attacks (P(human > attack) over all pairs, as the batteries' rule): **v3.1 passes 9 of 9 registered** (worst `generic` and `shuffle_docs` 0.970, then `stuff_human` 0.975); **v3's own rule 7 of 9** (misses `stuff_human`, `stuff_generic`). **Held-out: v3.1 passes 3 of 8**: `ho_stuff3_freq` 0.995, `ho_echo_scatter` 1.000, `ho_generic2` 0.953; fails `ho_stuff7_rare` 0.643, `ho_stuff_rand` 0.878, `ho_template` 0.529, `ho_title_swap` 0.650, `ho_list_related` 0.827. Extras: `reorder` 0.509, `cooc_out` 0.569, `offprompt` 0.821.
+
+Ablation (same accuracy): leaving v2 out fails two ladder pairs (0.940, 0.903); leaving MATCH 3.1 out loses `echo_copy` (0.546) and `ho_echo_scatter`; leaving SURPRISE 3.1 out loses both stuffing attacks and `generic` (0.586–0.926); the **plain mean of the v3.1 judges passes 7 of 9** (`echo_copy` 0.942, `stuff_generic` 0.935) and fails the ladder's third pair (0.860); the **minimum of the three passes 9 of 9 and 5 of 5** (first pair 0.959).
+
+### R2–R11, in short
+
+| Read | v2 | v3 | v3.1 |
+|---|---|---|---|
+| R2 web ladder (own pack) | 5 of 5; first pair 0.959; human 0.918 | 5 of 5; 0.965; 0.912 | **4 of 5**; first pair 0.948; human 0.903 |
+| R2 books ladder | 3 of 5; 0.782, 0.882 | 3 of 5; 0.837, 0.797 | 3 of 5; 0.821, 0.803 |
+| R2 web, Wikipedia reference | 4 of 5; human 0.839 (0.914 of own) | 4 of 5; 0.855 | 4 of 5; 0.836 (0.926 of own) |
+| R3 GPT-2 pure, Spearman | 0.900 | 0.900 | 0.900 |
+| R3 GPT-2 top-k 40, Spearman | **−0.700** (WebText below all four) | **+0.900** (WebText first) | **+0.900** (WebText first) |
+| R3 P(WebText > top-k), all pairs | 0.36–0.39 | 0.54–0.67 | 0.51–0.65 |
+| R4 families followed (of 9) | 7 | 7 | 7 |
+| R4 truncation, Spearman of means | −0.657 | −0.143 | −0.143 |
+| R5 HANNA CH story Kendall (no human stories) | 0.193 | 0.213 | 0.209 (p_BH 0.52 vs v2) |
+| R5 HANNA RE (open / with prompt) | 0.017 | 0.112 / 0.130 | 0.109 / 0.169 |
+| R5 HANNA CH system Kendall | 0.689 | 0.778 | 0.689 |
+| R6 MAUVE per pair q1–q3 (te25) | 0.543, 0.538, 0.541 | 0.550, 0.547, 0.559 | 0.547, 0.547, 0.556 |
+| R6 MAUVE system Spearman q1–q3 | 0.762, 0.786, 0.881 | 0.762, 0.786, 0.881 | 0.690, 0.762, 0.833 |
+| R7 OpenMEVA Pearson ROC / WP | 0.189 / 0.050 | 0.186 / 0.089 | 0.161 / 0.030 (with prompt WP 0.113) |
+| R8 n-grams, Spearman (6 systems) | 0.829 | 0.771 | 0.829 |
+| R8 human > 5-gram; 5 > 4; 4 > 3 | 0.991; 0.480; 0.505 | 0.979; 0.487; 0.501 | 0.975; 0.489; 0.503 |
+| R9 Dolly correct > other / echo / shuffled | 0.521 / 0.786 / 0.939 (v2p 0.961 / 0.957 / 0.864) | 0.470 / 0.926 / 0.907 | 0.536 / 0.952 / 0.752 |
+| R10 v2's attacks, human wins (paired) | generic 0.792; generic + topic 0.704 | 0.920; 0.320 | 0.964; **0.288** |
+| R11 seeds 1–5 | 5 of 5 each | 5 of 5 each | 5 of 5 each (first pair 0.956–0.983) |
+| R11 reference size (3 draws): 50 / 100 / 200 / 500 / 1,000 | 4,4,4 / 5,5,5 / 5,5,5 / 5 / 5 | 4,4,5 / 5 / 5 / 5 / 5 | 4,4,3 / 5,4,4 / 5,5,4 / 5 / 5 |
+| R11 pack 8–128 MiB | 5 of 5 each | 5 of 5 each | 5 of 5 each (first pair 0.951–0.961) |
+| R11 length, Pearson with bytes (standard / short / pooled) | 0.009 / 0.041 / −0.124 | 0.052 / −0.037 / −0.189 | 0.033 / −0.038 / −0.136 |
+
+R10 in full: v3.1 human wins 1.000 (copy), 0.808 (off-prompt), 1.000 (echo), 0.992 (stuffing every third word), 0.964 (generic), 0.288 (generic with topic words), 0.516 (numbers), 0.450 (negation), 1.000 (function-word loop). The generic paragraph with the prompt's topic words scores 0.947 under v3.1, above the human continuations (0.831).
+
+### R12: K5 (means over the saved seeds; GEN-A dev ladder)
+
+| Arm | seeds | v2 | SURPRISE | MATCH | v3 | SURPRISE 3.1 | MATCH 3.1 | v3.1 |
+|---|---|---|---|---|---|---|---|---|
+| old K5, 7 MB (E8) | 4 | 0.344 | 0.709 | 0.581 | 0.544 | 0.638 | 0.446 | 0.429 |
+| old K5, 330 MB (NALL) | 4 | 0.390 | 0.675 | 0.569 | 0.545 | 0.588 | 0.438 | 0.449 |
+| upgraded K5, 7 MB (U8) | 4 | 0.500 | 0.595 | 0.578 | 0.558 | 0.536 | 0.461 | 0.476 |
+| upgraded K5, 330 MB (C1) | 4 | 0.479 | 0.596 | 0.565 | 0.547 | 0.483 | 0.454 | 0.448 |
+| **gate (E8 → U8)** | | **+0.156** | −0.114 | −0.003 | +0.014 | −0.102 | +0.015 | **+0.047** |
+| **scale, old (E8 → NALL)** | | **+0.046** | −0.034 | −0.012 | +0.001 | −0.050 | −0.008 | **+0.020** |
+| **scale, upgraded (U8 → C1)** | | −0.021 | +0.001 | −0.013 | −0.011 | −0.053 | −0.007 | −0.028 |
+
+Seed 20261101 reproduces the published gate figures (v3.1 0.435 → 0.483). The single-seed sizes (N7 0.431, N30 0.447, N100 0.435, N300 0.443 under v3.1) do not rise with size. Under v3.1 the old K5's scale gain is half v2's, and it is carried by v2: SURPRISE 3.1 falls by 0.050.
+
+### R13: cost (one core, idle 4-core Xeon)
+
+| | texts/s, Wikipedia pack | peak RSS | texts/s, WebText pack | peak RSS |
+|---|---|---|---|---|
+| v2 | 1,749 | 385 MB | 1,213 | 649 MB |
+| v3 | 730 | 481 MB | 464 | 749 MB |
+| v3.1 | 587 | 489 MB | 400 | 768 MB |
+
+v3.1's own statistics cost 0.96 ms a text on the Wikipedia pack (1.50 ms on WebText). v3.1 is 3.0 times slower than v2.
+
+### The predictions, scored
+
+| # | Result | Verdict |
+|---|---|---|
+| Q1 | v2, v3, v3.1 5 of 5; v3.1's first pair 0.966, the thinnest; MATCH 3.1 fails 2 pairs | hit |
+| Q2 | v3.1 9 of 9; v3's rule 7 of 9 (predicted 4–6) | partly |
+| Q3 | 3 of 8; the five called fails all fail; `ho_echo_scatter` passes | hit |
+| Q4 | 0.908 | hit |
+| Q5 | no v2: 2 pairs fail; no MATCH 3.1: `echo_copy` 0.546, `ho_echo_scatter` fails; plain mean 7 of 9 | hit |
+| Q6 | v2 5, v3 5, v3.1 4 (first pair weakest); v3.1 human 0.903 < v2 0.918 | hit |
+| Q7 | v2 0.782; v3 0.837 and v3.1 0.821 better; but both pass 3 of 5, not 4 | partly |
+| Q8 | v3.1 keeps 0.926 of its own-genre score, v2 0.914: more, not less | miss |
+| Q9 | v2 −0.700 (every top-k system above WebText); SURPRISE and SURPRISE 3.1 put WebText above all four; v3.1 and v3 WebText first, +0.900 | hit |
+| Q10 | 0.900, medium below small | hit |
+| Q11 | 7 of 9 each, reordering followed by none; but truncation falls less under v3.1 (−0.143) than under v2 (−0.657) | partly |
+| Q12 | CH 0.209 (v3 0.213 > v2 0.193); system 0.689; RE with prompt 0.169 > open 0.109 > 0.05 | hit |
+| Q13 | per pair 0.547–0.556; q3 system 0.833; below v2 on all 3 | hit |
+| Q14 | ROC 0.161; WP 0.030 | hit |
+| Q15 | human > 5-gram 0.975 held; v3 does not order orders 3–5 better (0.487, 0.501 against 0.480, 0.505); v3's Spearman 0.771 | miss |
+| Q16 | correct > echo 0.952; > shuffled 0.752; > other 0.536 | miss |
+| Q17 | the five caught (0.964–1.000), generic + topic fails (0.288); numbers and negation 0.42–0.52, v3's negation 0.420 below the range | partly |
+| Q18 | seeds 5 of 5 each; 500 and 1,000 pass in every draw, 50 fails in every draw; packs 5 of 5; \|Pearson\| ≤ 0.04 per bucket | hit |
+| Q19 | gate reproduces; old scale +0.020; upgraded −0.028 | hit |
+| Q20 | 587 texts/s (above the 350–550 predicted), 489 MB, 3.0 times slower; web 400/s, 768 MB | partly |
+
+**12 hits, 5 partly, 3 misses.** The misses and partial misses, in short:
+- v3 caught more registered attacks on this region (7 of 9) than on its own fresh read (5 of 9).
+- Books stay hard for every judge: sentences shuffled across novels and words shuffled within sentences are not separated well enough (Q7).
+- v3.1 depends on genre less than v2, not more (Q8).
+- No judge orders n-gram orders 3–5 (Q15). The saturation that ties them is in the form groups of all three judges, not only v2's.
+- On Dolly, v3.1 cannot tell the right answer from another question's (Q16). The cause is the prompt reference above; v2p, with its genre's prompt–answer reference, stays the tool for question answering.
+- v3.1 does not see truncated sentences better than v2 (Q11). Both dip a little up to 75% strength (v2 0.932 → 0.869, v3.1 0.917 → 0.865) and rise at 100% (0.916, 0.936), where every sentence is a short, plain half; the rise is larger under v3.1, so its Spearman over the means is weaker.
+- v3.1 scores faster on an idle machine than predicted (Q20).
