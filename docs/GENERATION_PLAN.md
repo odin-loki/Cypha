@@ -1543,3 +1543,37 @@ Collected from the reports on Odin's PC: `D:\cypha_llm\big1tb\report.txt`, `D:\c
 
   - The best count rises with data, from 4 at 64 KiB to 6 at 512 KiB. §13.23's choice of 6 for layer 1 fits.
 - **GLNB writing:** best 0.046, against K5's 0.241 in the same run.
+
+### 13.28 SCRIBE v3.1 (2026-11-04; results)
+
+Odin's ask was "fool proof". v3 missed 4 of 9 attacks (§13.26), so v3.1 went after them. Full record: [reports/SCRIBE_V31.md](reports/SCRIBE_V31.md).
+
+- **What changed:**
+  - **The geometric mean of the three judges** (v2, SURPRISE 3.1, MATCH 3.1) instead of the plain mean. One judge's confident catch is no longer diluted.
+  - **New statistics for words that fit neither neighbour,** to catch keyword stuffing.
+  - **A group for text that is too bland,** to catch the generic paragraph.
+  - **Copied prompt sentences counted as 64-byte matches,** not repeated names.
+- **Protocol:**
+  - Designed on dev A and confirmed on dev B, with no change after B.
+  - Eight new attacks were written before any design work and never run on development data.
+  - Frozen before the fresh read. The fresh read was enwik9 [100, 124) MiB, past enwik8, read once.
+  - A registered near-duplicate filter dropped 2 of 2,106 documents.
+- **Results (fresh):**
+  - Ladder 5 of 5 (worst pair 0.968).
+  - **Registered attacks 9 of 9** (v3: 5 of 9). Keyword stuffing is only just caught (0.953).
+  - Human text 0.904 (v3: 0.906).
+  - All four rules hold.
+- **Still not fool-proof: the held-out attacks pass 2 of 8.**
+  - Caught: stuffing with frequent words every 3rd word, and prompt sentences scattered through the text.
+  - Missed:
+    - stuffing every 7th word, or at random gaps;
+    - one of four new generic paragraphs;
+    - a template that repeats the prompt's names;
+    - another document with the prompt's title swapped in;
+    - loosely related fluent sentences.
+  - Sentence order is still invisible. Truth is not checked.
+  - Stuffing is caught by its rate, not its pattern.
+- **K5 cross-check:** old K5 → upgraded K5 is v3.1 +0.048, with disjoint intervals. Most of that comes from v2 (+0.145); SURPRISE 3.1 moves −0.090 and MATCH 3.1 +0.008. **The sentence gate's gain is still not confirmed by a judge of another kind.**
+- **Cost:** 448 texts a second and 491 MB, against v3's 518 and 493.
+- **Byte for byte:** v1, v2 and v3 are unchanged. The agent checked them all; the cloud spot check repeated dev A for v3 and dev B for v2.
+- **Use:** report v2 (the score of record), v3.1, and the three parts. A text-level judge built from statistics can be gamed by anything fluent and on-topic. Odin's blind ratings, or a judge of another kind, stay the check for any claimed gain in writing.

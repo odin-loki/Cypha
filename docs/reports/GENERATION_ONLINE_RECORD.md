@@ -109,6 +109,11 @@ Odin: "Make another two metrics with different maths that complement each other 
 - Sentences reordered within a text are invisible to all three.
 - **The K5 sentence gate is not confirmed.** Old K5 → upgraded K5: v2 +0.145, SURPRISE −0.106, MATCH −0.009, v3 +0.011 (inside the intervals). SURPRISE finds the gated text too predictable.
 
+**SCRIBE v3.1** ([SCRIBE_V31](SCRIBE_V31.md), §13.28): the geometric mean of the three judges, plus detectors for keyword stuffing and bland text.
+- Fresh read (enwik9): ladder 5 of 5, registered attacks **9 of 9** (v3: 5 of 9), human 0.904.
+- **8 new attacks held out until the fresh read: 2 of 8 caught.** Stuffing at one word in 7, a template with the prompt's names, a title swap and loosely related sentences get through.
+- K5 gate: v3.1 +0.048, most of it from v2. Still not confirmed by a judge of another kind.
+
 ## 4. Smaller findings and fixes
 
 - GLNB's LSTM predicted from a state one byte stale. Fixed (§13.13).
@@ -130,7 +135,7 @@ Odin: "Make another two metrics with different maths that complement each other 
 | A judge of another kind for the sentence gate (Odin's blind ratings) | Odin | Next |
 | Online n-gram expert, document-aware learning, a bigger LSTM | Odin's PC | **Done**: 1.5793 → [ONLINE_LEARNING_UPGRADES.md](ONLINE_LEARNING_UPGRADES.md) |
 | SCRIBE v3 | cloud | **Done**: ladder 5 of 5, attacks 5 of 9 → [SCRIBE_V3.md](SCRIBE_V3.md) |
-| SCRIBE v3.1: catch keyword stuffing and generic paragraphs; fresh read on enwik9 | cloud | Proposed |
+| SCRIBE v3.1: catch keyword stuffing and generic paragraphs; fresh read on enwik9 | cloud | **Done**: registered attacks 9 of 9, held-out 2 of 8 → [SCRIBE_V31.md](SCRIBE_V31.md) |
 | Whole-distribution mixing with APM/SSE (PAQ-style) | Odin's PC | Checks passed; tuned on the first half (ABs 1.5621 against 1.6333); the registered read X1 running again after the PC's restart → branch `wip/full-mix` |
 
 This record is updated as those land.
