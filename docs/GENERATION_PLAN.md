@@ -1151,3 +1151,20 @@ None of this changes what the sampler writes. That needs the GLN and the online 
 - Read: the LSTM alone; M1 (the online chain with the LSTM as its last stage) against M0; M3 (plus the final layer, the LSTM an input) against M2.
 - **Rule:** the LSTM goes into `cyphalm_trie` (`context8k --lstm`, `sample --lstm`) if M1 − M0 ≤ −0.005 with its 95% interval below 0. Then a C++ run decides the default (registered then), and the 250-prompt writing test decides `sample`.
 - **Predictions:** the LSTM alone scores 2.2–2.5 bits per byte. M1 − M0 is −0.005 to −0.015, less than the GLN's −0.027, since the GLN held hashed counts as well. The 2 MiB warm-up helps by at least 0.02 alone.
+
+### 13.20 The 1 TB trie with the online content mixer (registered 2026-11-04, before the run; Odin's PC)
+
+**Odin:** "Run a big model on the PC. See what happens with the BPC and text generation." Then: "Do all that other stuff too."
+
+**Arms** (Odin's PC, one core each, side by side; no GLN, so the default chain is online with the final layer):
+- B0: `context8k ENWIK8 DOLLY --no-gln` (the trie trained on wiki's 7 MiB).
+- B1: `context8k ENWIK8 DOLLY --no-gln --model TRI2_PACKED` (the 1 TB trie, packed, 992 MB).
+- S1: `sample ENWIK8 … --prompts 250 --model TRI2_PACKED` on GEN-A dev, SCRIBE v2; against W0 (0.174 at T 0.6, the same machine, §13.17).
+
+**Rules:**
+- The 1 TB trie becomes the recommended `context8k` model if B1's `online_final_bpc` is at least 0.005 below B0's. It is a file, not a code default.
+- In writing, it becomes the recommended `sample` model if S1's best temperature is at least W0's best minus 0.02 and its copy share is within GEN_TRACK's limit.
+
+**Predictions:**
+- B1 is 1.640–1.650 (B0 near 1.654). The old frozen stack gained 0.007 from the 1 TB trie (1.6906 against 1.6979), and the online chain keeps that.
+- S1 is 0.15–0.20: a bigger trie of web text does not by itself make sentences.
