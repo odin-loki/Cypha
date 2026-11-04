@@ -392,6 +392,7 @@ struct Args {
     int k5_cap = 12;                              // §13.19: --k5-cap N, at most N consecutive training tokens (0: off)
     std::string k5_lstm, k5_lstm_mix = "geo";     // §13.24: --k5-lstm FILE (lstm-train's), reranking K5's nucleus
     double k5_lstm_w = 0.25;                      // §13.24: --k5-lstm-w W, the byte LSTM's weight
+    std::vector<std::pair<std::string, std::string>> k5_opts;  // docs/reports/K5_UPGRADES.md: every other --k5-... flag
 };
 
 std::string env_or(const char* name, const char* fallback) {
@@ -493,6 +494,7 @@ Args parse(int argc, char** argv, int from) {
         else if (s == "--k5-lstm") a.k5_lstm = next();               // §13.24
         else if (s == "--k5-lstm-mix") a.k5_lstm_mix = next();       // §13.24: geo or lin
         else if (s == "--k5-lstm-w") a.k5_lstm_w = std::atof(next()); // §13.24
+        else if (s.rfind("--k5-", 0) == 0) a.k5_opts.emplace_back(s, next());  // K5_UPGRADES.md (word_kn.hpp apply_flag)
         else if (s.rfind("--", 0) == 0) {
             std::cerr << "unknown option " << s << "\n";
             a.ok = false;
@@ -1594,6 +1596,13 @@ int cmd_sample(const Args& a) {
     }
     if (!a.k5.empty()) {  // §13.19: K5 writes every GEN line (T 1.0 unless --temps); the trie and its experts are not built
         cypha::cyphalm::wkn::Options base;
+        for (const auto& [k, v] : a.k5_opts) {  // K5_UPGRADES.md
+            std::string err;
+            if (!cypha::cyphalm::wkn::apply_flag(k, v, base, err)) {
+                std::cerr << err << "\n";
+                return 2;
+            }
+        }
         std::unique_ptr<cypha::online::ByteLSTM> kl;
         if (!a.k5_lstm.empty()) {  // §13.24: the byte LSTM reranks the words inside K5's nucleus
             kl = cypha::online::ByteLSTM::load_file(a.k5_lstm);
