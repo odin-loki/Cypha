@@ -11,15 +11,15 @@ Odin asked: "Make sure you document everything we have tried and the results." T
 | Writing | **K5, upgraded** (nucleus 0.8, 256 exchange classes, the prompt-association sentence gate), 12-word copy cap: `sample --k5 CLEAN.txt` | GEN-A test SCRIBE v2 **0.524** [0.493, 0.552] (gate provisional: needs a judge of another kind); plain K5 0.305 |
 | Writing, scale | Plain K5 on 330 MB of clean enwik9: test 0.380. The upgraded K5 does not gain from it (dev 0.479 against 0.500 on 7 MB), so the writer stays on 7 MB | test 0.380 (plain K5 only) |
 | Writing, bytes | The byte sampler (`sample`), no LSTM, no GLN | dev 0.174 at T 0.6; test 0.147 |
-| Prediction, `--full-mix` | the default below, then whole-distribution mixing with SSE (PAQ-style); off by default (twice the time) | **1.5051** bits per byte, about 1.1 GB |
-| Prediction | `context8k`: online chain (exponentiated gradient), online n-gram expert, byte LSTM at 256/20, slow and fast chains, online final layer with the copy gate | **1.5793** bits per byte (holdout second half, Odin's PC), 828 MB |
+| Prediction | `context8k`: online chain (exponentiated gradient), online n-gram expert, byte LSTM at 256/20, slow and fast chains, online final layer with the copy gate, then whole-distribution mixing with SSE (the full mix, on by default since §13.30) | **1.5051** bits per byte (`context8k_bpc`, Odin's PC), about 1.16 GB, about 35 minutes |
+| Prediction, `--no-full-mix` | the same without the full mix | 1.5793 (`online_final_bpc`), 875 MB |
 | Prediction, earlier on 4 November | the same without the n-gram, LSTM at 64 (`--no-ngram --lstm-size 64`) | 1.6238 (cloud), 1.6232 (PC), 247–269 MB |
 | Prediction before 1 November | the frozen chain | 1.6979 |
 | Answers | unchanged by all of the above | — |
 
 The two headline facts:
 - Writing on SCRIBE v2 test: 0.147 (bytes) → 0.305 (K5) → 0.524 (upgraded K5). The last step is provisional: SCRIBE v3's new judges do not confirm it (§3).
-- Prediction fell by 0.119 bits per byte by default (1.6971 → 1.5793 on Odin's PC), and by 0.192 with `--full-mix` (1.5051).
+- Prediction fell by 0.192 bits per byte: 1.6971 → 1.5051 on Odin's PC, by default.
 
 They came from different changes. What predicts better did not write better, in every experiment.
 
@@ -80,7 +80,8 @@ What the writing results say:
 | Bigger LSTM: 128/50, 256/100, 256/20, 128/20 | §13.26 | 1.6132, 1.6097, **1.6026**, 1.6118 | 256/20 **adopted** |
 | **N2 + LSTM 256/20 (C)** | §13.26 | **1.5793** (+61% time, 828 MB) | **The default now** |
 | Whole-distribution mixing with SSE, ABs, on the old default (X1) | §13.29 | 1.5499 against 1.6232 | Rule holds |
-| **The same on the new default (X2)** | §13.29 | **1.5051** against 1.5793 (−0.074; twice the time, +224 MB) | Rule holds; flag `--full-mix`, off until Odin decides |
+| **The same on the new default (X2)** | §13.29 | **1.5051** against 1.5793 (−0.074; twice the time, +224 MB) | Rule holds |
+| The full mix folded into the main pass (one LSTM, one n-gram) | §13.30 | 1.5051, numbers unchanged; +1% time instead of +83% | **On by default** |
 
 Alone, as experts:
 - the GLN scores 1.94 bits per byte (7 MiB of counts, the fixed LSTM);
@@ -142,9 +143,10 @@ Odin: "Make another two metrics with different maths that complement each other 
 | Online n-gram expert, document-aware learning, a bigger LSTM | Odin's PC | **Done**: 1.5793 → [ONLINE_LEARNING_UPGRADES.md](ONLINE_LEARNING_UPGRADES.md) |
 | SCRIBE v3 | cloud | **Done**: ladder 5 of 5, attacks 5 of 9 → [SCRIBE_V3.md](SCRIBE_V3.md) |
 | SCRIBE v3.1: catch keyword stuffing and generic paragraphs; fresh read on enwik9 | cloud | **Done**: registered attacks 9 of 9, held-out 2 of 8 → [SCRIBE_V31.md](SCRIBE_V31.md) |
-| Whole-distribution mixing with APM/SSE (PAQ-style) | Odin's PC | **Done**: 1.5051 on the new default (−0.074); behind `--full-mix` → [FULL_DISTRIBUTION_MIXING.md](FULL_DISTRIBUTION_MIXING.md) |
+| Whole-distribution mixing with APM/SSE (PAQ-style) | Odin's PC | **Done**: 1.5051 on the new default (−0.074) → [FULL_DISTRIBUTION_MIXING.md](FULL_DISTRIBUTION_MIXING.md) |
 | LSTM and n-gram optimised, every number unchanged | Odin's PC | **Done**: `context8k` 38% faster (LSTM 256 937 → 218 s); bit-for-bit check repeated in the cloud |
-| `--full-mix` folded into the main pass, then on by default (Odin: optimise "before going in") | Odin's PC | Running |
+| The full mix folded into the main pass, then on by default (Odin: optimise "before going in") | Odin's PC | **Done**: +1% time instead of +83%, numbers unchanged (§13.30) |
+| The report card's headline line (`context8k_bpc`?) | Odin | To decide |
 | SCRIBE v3 paper, Zenodo version 2.0 | cloud | **Written**: `paper/scribe/`; upload waits on Odin (v1.0 DOI, "New version") |
 
 This record is updated as those land.

@@ -1610,3 +1610,44 @@ The headline arm ABs mixes the two per bit. Settings were tuned by replay on the
 - **The rule fails** (−0.021). No test read. **The upgraded K5 stays on the 7 MB enwik8 text.** This replaces §13.25's recommendation of `train_all.txt`, which was for the old K5.
 - Copying rises to a quarter of written bytes (copy32 0.236). The 12-word cap held.
 - **SCRIBE v3 does not confirm the old K5's gain from more text either:** v2 +0.046, v3 +0.001, SURPRISE −0.034. With §13.26's finding on the sentence gate, both of 4 November's writing gains rest on v2 alone.
+
+### 13.30 The upgrades optimised, and the full mix on by default (2026-11-04)
+
+**Odin:** "See if you can't optimise all those upgrades before going in." Two sessions on Odin's PC. Each change had to leave every number unchanged, checked with `cmp` on the whole `context8k` output.
+
+**The LSTM and the n-gram** ([reports/ONLINE_LEARNING_UPGRADES.md](reports/ONLINE_LEARNING_UPGRADES.md), "Optimisation"):
+- The LSTM's dot products run two rows per SSE2 register. Each row keeps its own summation order, so the numbers are exact.
+- Gradients are summed once per window, with a vectorised Adam. The softmax is reused.
+- A pool of 4 threads runs from hidden size 128 up.
+- The n-gram's three arrays are packed into one 5-byte slot, its keys are prefetched, and pretraining runs on threads.
+- **Results:**
+  - The default `context8k` went from 32:41 to **20:07** (−38%) at the same load. The LSTM 256 went from 937 s to 218 s, the n-gram from 30 s to 7 s. Memory is unchanged.
+  - The cloud repeated the check on its own build: 65,536 LSTM-256 distributions and 262,144 n-gram probabilities were bit for bit identical to main's, on 1 and on 4 threads.
+- **Failed:** `--ngram-tb 23` saves 294 MB but is 0.0034 worse, against 0.001 allowed.
+- `CYPHA_LSTM_THREADS=1` and `CYPHA_NGRAM_THREADS=1` give the same output on a busy machine.
+
+**The full mix** ([reports/FULL_DISTRIBUTION_MIXING.md](reports/FULL_DISTRIBUTION_MIXING.md), "Optimisation and default"):
+- It used to train a second 256 LSTM and a second n-gram in its own pass. Now it reads the instances `context8k` already runs, inside their byte loops. Expert rows are computed ahead on 6 threads.
+- Similar-context is still built a second time, because the chain's copy has read the whole holdout.
+
+| Run (same load) | Wall | Peak RSS | Lines |
+|---|---:|---:|---|
+| main, `context8k` | 2063 s | 874 MB | reference |
+| main, `--full-mix` | 3773 s | 1057 MB | the old full mix |
+| **new default (full mix on)** | **2075 s** | **1161 MB** | full-mix lines = X2's (ABs 1.5051); all others = main's |
+| new, `--no-full-mix` | 1824 s | 875 MB | = main's |
+
+- **The full mix is on by default.** It now costs about +1% time instead of +83%, and +287 MB.
+  - `--no-full-mix` turns it off.
+  - It switches itself off, with one note, under `--gln`, `--doc-boost`, `--final-gate lstm`, `--frozen-mix`, `--no-online-final` and `--bkn-way a`.
+  - `glnx_prep.sh` passes `--no-full-mix`.
+- **A new last line, `context8k_bpc`, is the headline: 1.5051 on Odin's PC.**
+- The LSTM thread is now the bottleneck. The default uses about 7 threads.
+- **Open for Odin:** `scripts/cypha_report_card.sh` still reads the old chain line as its headline. Switching it to `context8k_bpc` would change the card's numbers, so it was left as is.
+
+**From 1.6979 to 1.5051 in four days**, with answers unchanged:
+- the online chain;
+- the online final layer;
+- the LSTM;
+- the online n-gram;
+- the whole-distribution mixing with SSE.
