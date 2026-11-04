@@ -75,6 +75,9 @@ inline void fit_lambdas(const std::vector<double>& pe, const std::vector<double>
 // mix_into passes -1 and the online chain takes short copies too (-0.023 on the dump). The frozen fit mix_into returns
 // to answers and samplers keeps B4B's clip.
 inline bool g_online_mix = false;
+// §13.22 (sample --online-lambdas): mix_into returns the online lambdas' state after the whole holdout, not the frozen
+// fit, so the sampler writes with what the online mixer has learned (copy's short matches still held at 0, B4B).
+inline bool g_online_lambdas_out = false;
 inline std::vector<double> online_mix(const std::vector<double>& pe, const std::vector<int>& bk, int nb,
                                       std::vector<double>& cur, int copy_m = -1) {
     std::vector<double> we(static_cast<std::size_t>(nb), 0.05), wc(static_cast<std::size_t>(nb), 0.95);
@@ -108,7 +111,11 @@ inline std::vector<double> mix_into(const std::vector<double>& pe, const std::ve
     if (g_online_mix) {  // the frozen fit is still returned, so answers and samplers that read it are unchanged
         fit_lambdas(pe, cur, bk, half, nb, lam.data());
         if (copy_m >= 0) cyphalm::copy_clip(lam.data(), copy_m);
-        online_mix(pe, bk, nb, cur);  // §13.15: the online path takes short copies
+        std::vector<double> on = online_mix(pe, bk, nb, cur);  // §13.15: the online path takes short copies
+        if (g_online_lambdas_out) {
+            if (copy_m >= 0) cyphalm::copy_clip(on.data(), copy_m);
+            return on;
+        }
         return lam;
     }
     fit_lambdas(pe, cur, bk, half, nb, lam.data());

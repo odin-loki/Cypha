@@ -369,6 +369,7 @@ struct Args {
     bool gln = false, gln_feedback = false;       // §13.15: sample --gln (off: it lowers SCRIBE); --gln-feedback
     std::string gln_mix = "lin", gln_clean;       // §13.16: sample's GLN mixing (lin, after, geo) and clean-prose text
     std::string gln_load;                         // §13.17: a GLN trained at scale (gln-train), for context8k and sample
+    bool online_lambdas = false;                  // §13.22: sample writes with the online mixer's learned lambdas
     double dk_plain = 0;                          // DK2: share of don't-know training turns with no token
     std::string fam_ent_at = "all";               // DK2: where --fam-ent's frames go (all | answer | start)
     bool copy_frame = false;                      // DK2: copy a frame's entity, not its end; the tag may repeat the message
@@ -458,6 +459,7 @@ Args parse(int argc, char** argv, int from) {
         else if (s == "--gln-mix") a.gln_mix = next(), a.gln = true;     // §13.16
         else if (s == "--gln-clean") a.gln_clean = next(), a.gln = true; // §13.16
         else if (s == "--gln-load") a.gln_load = next(), a.gln = true;  // §13.17
+        else if (s == "--online-lambdas") a.online_lambdas = true;      // §13.22
         else if (s == "--gln") a.gln = true;                      // §13.15
         else if (s == "--gln-feedback") a.gln = a.gln_feedback = true;  // §13.15
         else if (s == "--dk-plain") a.dk_plain = std::atof(next());  // DK2
@@ -1569,6 +1571,9 @@ int cmd_sample(const Args& a) {
     }
     const auto dt = make_doc(a.doc, data.data(), cfg.train, rc);  // GEN-C: nullptr without --doc
     if (rc) return rc;
+    // §13.22 --online-lambdas: every chain stage fit through mix_into learns online over the holdout, and the sampler
+    // writes with the lambdas' last state instead of the first half's frozen fit.
+    cypha::online::g_online_mix = cypha::online::g_online_lambdas_out = a.online_lambdas;
     double lsm[SimilarContext::kBuckets] = {0};
     std::unique_ptr<cypha::online::BitwiseGLN> gln;  // §13.15: --gln
     double lgln = 0;
@@ -1647,6 +1652,7 @@ int cmd_sample(const Args& a) {
     if (cps) model_line += "\tplan=" + a.plan;
     if (kn) model_line += "\tbkn=" + a.bkn + ":" + a.bkn_way;  // BKN
     if (gate.k > 0) model_line += "\tgate=" + a.gate;  // GEN-B
+    if (a.online_lambdas) model_line += "\tonline_lambdas";  // §13.22
     if (gln) model_line += "\tgln=" + std::to_string(lgln) + ":" + a.gln_mix + (a.gln_clean.empty() ? "" : ":clean");  // §13.15-16
     const int gmode = a.gln_mix == "gate" ? 3 : a.gln_mix == "geo" ? 2 : a.gln_mix == "after" ? 1 : 0;
     if (a.gln_mix != "lin" && a.gln_mix != "after" && a.gln_mix != "geo" && a.gln_mix != "gate") {

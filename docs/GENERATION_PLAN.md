@@ -1182,3 +1182,15 @@ None of this changes what the sampler writes. That needs the GLN and the online 
 **Rule:** an arm goes to C++ if it beats U0 by at least 0.003 bits per byte with its 95% interval below 0. Then a C++ run decides the default on §13.15's rules.
 
 **Predictions:** U1 is −0.003 to −0.010. U2 is within ±0.003. U3 is about U1.
+
+### 13.22 The online mixer in writing (registered 2026-11-04, before the run)
+
+**Odin:** "Online on every part." So far the online mixer only scores. `sample` still writes with lambdas fit once on the holdout's first half and frozen.
+
+`sample --online-lambdas`: every chain stage fit through `mix_into` (Kneser–Ney, class, copy, …) learns online over the whole holdout. The sampler then writes with the lambdas' last state. Copy's short matches stay at 0 in writing (B4B).
+
+**Arms:** W0 (`sample`) and SO (`sample --online-lambdas`), all 250 GEN-A dev prompts, SCRIBE v2, side by side on this container.
+
+**Rule:** `--online-lambdas` becomes `sample`'s default if SO's best temperature is at least W0's best minus 0.02 (no worse, within noise), with copy share within GEN_TRACK's limit.
+
+**Prediction:** SO is within ±0.02 of W0. The lambdas move little once learned, and writing is set more by the sampler than by small changes in the weights.
