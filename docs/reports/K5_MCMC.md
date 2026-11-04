@@ -154,6 +154,25 @@ They join the choice as any other arm. The final arms and the rule are unchanged
 - R4X is within ±0.02 of R4.
 - Neither is above M0 on v3.1 by more than 0.01.
 
+## Addendum 2 (2026-11-05, after reading the seed-0 arms through R4; before LE's and R4X's results and before E1b, E1c)
+
+**What prompted it.**
+- R4 (replace only) is worse than R1 on v3.1 (0.420): the insert and delete moves were not the cause. The addendum-1 prediction for R4 missed.
+- In every arm the loss on v3.1 sits in SURPRISE 3.1's bland group D_B (M0 7.4; R1 11.3; R4 and the others 9–11) and MATCH 3.1's predictability group D_P (M0 1.7; R1 3.7).
+- Annealing to T 0.6 raises K5's probability of the paragraph, which makes it blander and more copied.
+- The entity grid (E1) is the only term that raised v2 above M0 (0.524). Its v3.1 loss (0.469) is the smallest among the annealed arms.
+
+**New arms** (seed 0, as E1 otherwise: entity full, λ_entity 0.5, 1,000 steps, all moves):
+- **E1b:** T 1.0 → 0.8 (`--k5-mcmc-t1 0.8`).
+- **E1c:** T 1.0 throughout (`--k5-mcmc-t1 1.0`).
+
+They join the choice as any other arm. The final arms and the rule are unchanged.
+
+**Predictions:**
+- E1b: v2 0.49–0.52, v3.1 0.465–0.485.
+- E1c: v2 0.45–0.49 (as R2, the target has no nucleus), v3.1 0.47–0.49.
+- About a 20% chance that either is above M0's v3.1 (0.483) at seed 0.
+
 ## Results
 
 (Added after the runs.)
