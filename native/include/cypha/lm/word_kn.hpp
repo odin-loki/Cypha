@@ -309,6 +309,26 @@ class WordKN {
             for (const auto& [w, d] : oc->e) p[w] += ov->L * (d - ov->Dd) / den;
         }
     }
+    // docs/reports/K5_MCMC.md: P(w | ctx) alone, as dist would give it without an overlay; base_w is the floor's
+    // probability of w (p1()[w], or the class floor's).
+    double prob(const std::uint32_t* ctx, std::size_t n, std::uint32_t w, double base_w) const {
+        double p = base_w;
+        for (int k = 2; k <= order_; ++k) {
+            const std::size_t L = static_cast<std::size_t>(k - 1);
+            if (n < L) break;
+            Key key = 0;
+            for (std::size_t i = 0; i < L; ++i) key |= Key{ctx[n - 1 - i]} << (16 * i);
+            const Level& lv = lv_[k];
+            const auto it = std::lower_bound(lv.keys.begin(), lv.keys.end(), key);
+            if (it == lv.keys.end() || *it != key) break;
+            const auto c = static_cast<std::size_t>(it - lv.keys.begin());
+            p *= lv.gam[c];
+            const auto b = lv.ids.begin() + lv.off[c], e = lv.ids.begin() + lv.off[c + 1];
+            const auto f = std::lower_bound(b, e, static_cast<std::uint16_t>(w));
+            if (f != e && *f == w) p += lv.disc[static_cast<std::size_t>(f - lv.ids.begin())];
+        }
+        return p;
+    }
     std::size_t vocab_size() const { return V_; }
     std::size_t contexts(int k) const { return lv_[k].keys.size(); }
     std::size_t entries(int k) const { return k <= order_ ? lv_[k].ids.size() : 0; }
@@ -474,6 +494,19 @@ class ClassModel {
         pwc_.resize(V);
         for (std::size_t w = 0; w < V; ++w) pwc_[w] = cnt[w] / ctot[cls_[w]];
         K_ = K;
+        cmass_.assign(K + 2, 0.0);  // K5_MCMC.md: each class's word mass, for prob
+        for (std::size_t w = 0; w < V; ++w) cmass_[cls_[w]] += pwc_[w];
+    }
+    // K5_MCMC.md: dist's p[w] alone.
+    double prob(const std::uint32_t* ctx, std::size_t n, std::uint32_t w) const {
+        std::uint32_t cc[2];
+        const std::size_t m = std::min<std::size_t>(n, 2);
+        for (std::size_t i = 0; i < m; ++i) cc[i] = cls_[ctx[n - m + i]];
+        double pc[4096 + 2];
+        kn_.dist(cc, m, pc);
+        double z = 0;
+        for (std::size_t c = 0; c < K_ + 2; ++c) z += pc[c] * cmass_[c];
+        return pc[cls_[w]] * pwc_[w] / z;
     }
     bool on() const { return V_ > 0; }
     void dist(const std::uint32_t* ctx, std::size_t n, double* p) const {
@@ -492,7 +525,7 @@ class ClassModel {
  private:
     std::size_t V_ = 0, K_ = 0;
     std::vector<std::uint32_t> cls_;
-    std::vector<double> pwc_, loglik_;
+    std::vector<double> pwc_, loglik_, cmass_;
     WordKN kn_;
 };
 
@@ -635,7 +668,12 @@ struct ByteScorer {
     virtual double prior(std::string_view) { return 0; }
 };
 
+class K5;
 struct Options {
+    // docs/reports/K5_MCMC.md: rewrites each continuation after generate (k5_mcmc.hpp's paragraph sampler; seed is the
+    // continuation's), and post_desc joins the MODEL line. Empty: K5's own text, unchanged.
+    std::function<std::string(const K5&, std::string_view prompt, std::string gen, std::uint64_t seed, const Options&)> post;
+    std::string post_desc;
     // §13.24: the byte scorer (made once per continuation) and how it reranks the words inside the nucleus: 1 a product
     // of experts, p_k5^(1 - w) * p_bytes^w; 2 linear, (1 - w) p_k5 + w p_bytes, each normalised over the nucleus; 3 pmi,
     // p_k5 * (p_bytes / p_bytes_prior)^w (DExperts' form: the byte model adds only what the context tells it). K5
@@ -710,8 +748,11 @@ inline bool apply_flag(const std::string& name, const std::string& val, Options&
     if (name == "--k5-base") {  // reset every K5 setting: k5 (§13.19's K5) or k5up (the defaults); later flags apply on top
         if (val != "k5" && val != "k5up") return err = name + ": k5 or k5up", false;
         const auto keep_scorer = o.scorer;
+        const auto keep_post = o.post;
+        const auto keep_desc = o.post_desc;
         o = val == "k5" ? k5_v1() : Options{};
         o.scorer = keep_scorer;
+        o.post = keep_post, o.post_desc = keep_desc;
         return true;
     }
     if (name == "--k5-seed") return num(x, 0, 1e15) && ((o.seed_off = static_cast<std::uint64_t>(x)), true);
@@ -1005,6 +1046,13 @@ class K5 {
         if (cm_.on() && o.class_mode == 2)
             for (std::size_t w = 0; w < V; ++w) p[w] = (1 - o.class_w) * p[w] + o.class_w * tmp[w];
         if (o.cache_w > 0 || o.cache_w2 > 0) s.cache.apply(p, V, o.cache_w, o.cache_w2);
+    }
+
+    // docs/reports/K5_MCMC.md: model_dist's p[w] alone, after ctx[0, n) (its last word last). Without the online parts
+    // and the class mix (o.dyn 0, no cache, class_mode backoff), which word_prob_ok checks.
+    static bool word_prob_ok(const Options& o) { return o.dyn <= 0 && o.cache_w <= 0 && o.cache_w2 <= 0 && o.class_mode == 1; }
+    double word_prob(const std::uint32_t* ctx, std::size_t n, std::uint32_t w) const {
+        return kn_.prob(ctx, n, w, cm_.on() ? cm_.prob(ctx, n, w) : kn_.p1()[w]);
     }
 
     // fuzzy_bake.py cont_bits: bits of the continuation's tokens under KN (no zeroing; an unknown word gets <unk>'s
@@ -1397,6 +1445,7 @@ inline int run_sample(const std::string& text_path, int cap, const std::vector<s
             o.temperature = temps[ti];
             o.bytes = bytes;
             gens[j] = m.generate(prompts[id], seed + o.seed_off + id + 7919 * ti, o, &gst[j]);
+            if (o.post) gens[j] = o.post(m, prompts[id], std::move(gens[j]), seed + o.seed_off + id + 7919 * ti, o);  // K5_MCMC.md
         }
     };
     unsigned nth = std::max(1u, std::min(4u, std::thread::hardware_concurrency()));
@@ -1417,7 +1466,7 @@ inline int run_sample(const std::string& text_path, int cap, const std::vector<s
             std::cerr << "cannot write " << outs[f] << "\n";
             return 1;
         }
-        out << "MODEL\tk5\tclean=" << text_path << "\tcap=" << cap << "\tvocab=" << m.vocab().size() << bo.describe() << "\n";
+        out << "MODEL\tk5\tclean=" << text_path << "\tcap=" << cap << "\tvocab=" << m.vocab().size() << bo.describe() << bo.post_desc << "\n";
         for (int k = 0; k < per_file; ++k) {
             const std::size_t id = f * static_cast<std::size_t>(per_file) + static_cast<std::size_t>(k);
             out << "PROMPT\t" << id << "\t" << esc(prompts[id]) << "\n";

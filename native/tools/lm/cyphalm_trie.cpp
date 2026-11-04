@@ -281,6 +281,7 @@
 #include "cypha/lm/similar_context.hpp"
 #include "cypha/lm/token_model.hpp"  // BKN selftest: the reference Kneser-Ney
 #include "cypha/lm/word_kn.hpp"      // §13.19: sample --k5
+#include "cypha/lm/k5_mcmc.hpp"      // docs/reports/K5_MCMC.md: sample --k5 ... --k5-mcmc STEPS
 #include "cypha/eval/lci.hpp"
 #include "cypha/eval/scribe.hpp"
 #include "cypha/knowledge/unknown_signals.hpp"
@@ -2048,9 +2049,11 @@ int cmd_sample(const Args& a) {
     }
     if (!a.k5.empty()) {  // §13.19: K5 writes every GEN line (T 1.0 unless --temps); the trie and its experts are not built
         cypha::cyphalm::wkn::Options base;
+        cypha::cyphalm::wkn::mcmc::Params mp;  // K5_MCMC.md: --k5-mcmc... flags (k5_mcmc.hpp)
         for (const auto& [k, v] : a.k5_opts) {  // K5_UPGRADES.md
             std::string err;
-            if (!cypha::cyphalm::wkn::apply_flag(k, v, base, err)) {
+            if (k.rfind("--k5-mcmc", 0) == 0 ? !cypha::cyphalm::wkn::mcmc::apply_flag(k, v, mp, err)
+                                              : !cypha::cyphalm::wkn::apply_flag(k, v, base, err)) {
                 std::cerr << err << "\n";
                 return 2;
             }
@@ -2106,9 +2109,20 @@ int cmd_sample(const Args& a) {
             base.scorer_w = a.k5_lstm_w;
             std::cerr << "k5: the byte LSTM " << a.k5_lstm << " reranks the nucleus (" << a.k5_lstm_mix << ", w " << a.k5_lstm_w << ")\n";
         }
-        return cypha::cyphalm::wkn::run_sample(a.k5, a.k5_cap, prompts, conts, a.outs, a.prompts, static_cast<std::size_t>(a.bytes),
-                                               a.temps.empty() ? std::vector<double>{1.0} : temps, printable, &base,
-                                               a.k5_seed, a.k5_vmax);
+        cypha::cyphalm::wkn::mcmc::SharedStats mstats;  // K5_MCMC.md
+        if (mp.steps > 0) {
+            if (!mp.entity.empty() || (mp.topic != "cache" && mp.lt > 0)) {
+                std::cerr << "--k5-mcmc-topic / --k5-mcmc-entity: only the stand-in cache is built in this version\n";
+                return 2;
+            }
+            cypha::cyphalm::wkn::mcmc::install(base, mp, &mstats);
+            std::cerr << "k5: whole-paragraph MCMC" << mp.describe() << "\n";
+        }
+        const int krc = cypha::cyphalm::wkn::run_sample(a.k5, a.k5_cap, prompts, conts, a.outs, a.prompts, static_cast<std::size_t>(a.bytes),
+                                                        a.temps.empty() ? std::vector<double>{1.0} : temps, printable, &base,
+                                                        a.k5_seed, a.k5_vmax);
+        if (mp.steps > 0) mstats.print(stderr);
+        return krc;
     }
 
     if (a.model.empty()) {
@@ -6503,6 +6517,10 @@ int cmd_bkn(const Args& a) {
 int cmd_selftest() {
     if (std::string err; !cypha::cyphalm::wkn::self_test(err)) {  // §13.19: K5's tokens, bans, cap and KN
         std::cerr << "selftest: K5 (word_kn.hpp) " << err << "\n";
+        return 1;
+    }
+    if (std::string err; !cypha::cyphalm::wkn::mcmc::self_test(err)) {  // K5_MCMC.md: the paragraph sampler
+        std::cerr << "selftest: K5 MCMC (k5_mcmc.hpp) " << err << "\n";
         return 1;
     }
     if (!self_test()) {
