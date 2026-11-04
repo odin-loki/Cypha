@@ -45,12 +45,16 @@ inline double gln_stretch(double p) {
     return std::log(p / (1.0 - p));
 }
 
-// A byte LSTM: embedding 16, hidden 64, softmax over 256; learns online by truncated BPTT (window 20) and Adam.
-class ByteLSTM {
+// A byte LSTM: embedding 16, hidden HH (64 as ByteLSTM), softmax over 256; learns online by truncated BPTT (window 20
+// unless given) and Adam. ONLINE_LEARNING_UPGRADES (2026-11-04): the hidden size is a template parameter and the window a
+// constructor argument, so context8k can try a bigger LSTM (--lstm-size, --lstm-window); ByteLSTM (64, 20) is unchanged,
+// and the GLN and every other user read it as before.
+template <int HH>
+class ByteLSTMT {
 public:
-    static constexpr int H = 64, E = 16, X = E + H, T = 20;
+    static constexpr int H = HH, E = 16, X = E + H, kDefaultWindow = 20;
 
-    explicit ByteLSTM(std::uint64_t seed = 0, double lr = 0.003) : lr_(lr) {
+    explicit ByteLSTMT(std::uint64_t seed = 0, double lr = 0.003, int window = kDefaultWindow) : lr_(lr), win_(window) {
         std::mt19937_64 rng(seed);
         std::normal_distribution<double> nd(0.0, 1.0);
         auto fill = [&](std::vector<double>& v, std::size_t n, double s) {
@@ -93,7 +97,7 @@ public:
         if (learn) {
             cache_.y = y;
             buf_.push_back(cache_);
-            if (static_cast<int>(buf_.size()) >= T) bptt();
+            if (static_cast<int>(buf_.size()) >= win_) bptt();
         }
         cache_ = forward(y);
     }
@@ -129,12 +133,12 @@ public:
         write(o);
         return static_cast<bool>(o);
     }
-    static std::unique_ptr<ByteLSTM> load_file(const std::string& path) {
+    static std::unique_ptr<ByteLSTMT> load_file(const std::string& path) {
         std::ifstream i(path, std::ios::binary);
         char magic[4] = {0, 0, 0, 0};
         i.read(magic, 4);
         if (!i || std::memcmp(magic, "LST1", 4) != 0) return nullptr;
-        auto L = std::make_unique<ByteLSTM>();
+        auto L = std::make_unique<ByteLSTMT>();
         L->read(i);
         return i ? std::move(L) : nullptr;
     }
@@ -243,6 +247,7 @@ private:
     }
 
     double lr_;
+    int win_;
     int t_ = 0;
     std::vector<double> Em_, W_, b_, Wo_, bo_;
     std::vector<std::vector<double>> m_, v_;
@@ -250,5 +255,6 @@ private:
     Step cache_;
     std::vector<Step> buf_;
 };
+using ByteLSTM = ByteLSTMT<64>;  // the LSTM of §13.18: hidden 64, window 20
 
 }  // namespace cypha::online
