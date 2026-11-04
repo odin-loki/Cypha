@@ -375,8 +375,11 @@ struct Args {
     std::string gln_mix = "lin", gln_clean;       // §13.16: sample's GLN mixing (lin, after, geo) and clean-prose text
     std::string gln_load;                         // §13.17: a GLN trained at scale (gln-train), for context8k and sample
     bool online_lambdas = false;                  // §13.22: sample writes with the online mixer's learned lambdas
-    bool lstm = false, two_rates = false;         // §13.18: the byte LSTM expert; §13.21: slow and fast chains
-    std::string final_gate = "ig";                // §13.21: the final layer's weight sets: ig (bucket x byte class) or copy
+    // context8k's defaults since 2026-11-04 (§13.18, §13.21, D1-D3): the byte LSTM, the slow and fast chains, and the final
+    // layer's sets by copy x byte class x long match. --no-lstm, --one-rate and --final-gate ig restore D0's lines.
+    bool lstm = false, no_lstm = false;           // sample --lstm: the LSTM in writing (off); context8k: on unless --no-lstm
+    bool two_rates = true;                        // §13.21: slow and fast chains (context8k)
+    std::string final_gate = "copy";              // §13.21: the final layer's weight sets: copy (default) or ig
     double dk_plain = 0;                          // DK2: share of don't-know training turns with no token
     std::string fam_ent_at = "all";               // DK2: where --fam-ent's frames go (all | answer | start)
     bool copy_frame = false;                      // DK2: copy a frame's entity, not its end; the tag may repeat the message
@@ -471,7 +474,9 @@ Args parse(int argc, char** argv, int from) {
         else if (s == "--online-lambdas") a.online_lambdas = true;      // §13.22
         else if (s == "--lstm") a.lstm = true;                          // §13.18
         else if (s == "--lstm-mix") a.gln_mix = next(), a.lstm = true;  // §13.18: sample mixes the LSTM in this way
-        else if (s == "--two-rates") a.two_rates = true;                // §13.21
+        else if (s == "--two-rates") a.two_rates = true;                // §13.21 (the default)
+        else if (s == "--one-rate") a.two_rates = false;                // §13.21: the main chain only
+        else if (s == "--no-lstm") a.no_lstm = true;                    // §13.18: context8k without the LSTM
         else if (s == "--final-gate") a.final_gate = next();            // §13.21
         else if (s == "--gln") a.gln = true;                      // §13.15
         else if (s == "--gln-feedback") a.gln = a.gln_feedback = true;  // §13.15
@@ -1176,7 +1181,7 @@ int cmd_context8k(const Args& a) {
     // learning online from scratch over the holdout, each byte predicted before it is learned) as the chain's last stage,
     // a lambda per InfiniGram bucket, and one more input of --online-final.
     std::vector<double> plstm;
-    if (a.lstm) {
+    if (!a.no_lstm) {  // the default in context8k since §13.18's D1
         cypha::online::ByteLSTM L;
         plstm.resize(H);
         double P[256], lb = 0;

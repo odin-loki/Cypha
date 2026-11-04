@@ -1308,3 +1308,29 @@ Even so, each layer-1 weight set sees about half a million bits. The cost is abo
   - The byte sampler stays for answers, `chat`, and anywhere without that text.
 - The prediction (0.30–0.37) held.
 - This is the shuffled-sentence rung on SCRIBE's ladder (G2's level, §5). The byte default sits below it. Human text scores 0.923.
+
+**C++ results, §13.18 and §13.21** (2026-11-04, this container, D0–D3 side by side). Every arm's answer tallies match D0's. D0 matches C2 line for line (the refactors change nothing).
+
+| Arm | `online_final_bpc` | Against D0 | Wall | Peak RSS |
+|---|---:|---:|---:|---:|
+| D0: the default | 1.6543 | — | 1474 s | 251 MB |
+| D1: `--lstm` | 1.6311 | −0.0232 | 1556 s (+6%) | 255 MB |
+| D2: `--final-gate copy --two-rates` | 1.6489 | −0.0054 | 1493 s (+1%) | 265 MB |
+| D3: both | **1.6238** | **−0.0305** | 1544 s (+5%) | 269 MB |
+
+- The LSTM alone scores 2.6526; the chain with it, 1.6579.
+- **Both rules hold.** The LSTM (−0.023, at least 0.01 needed; +6% wall) and the two rates with the copy gate (−0.005, at least 0.003 needed; +1% wall) become `context8k`'s defaults. The default now reports 1.6238, against 1.6979 frozen before §13.15: **−0.074**, with no GLN. It takes 269 MB, against 371 MB with the GLN.
+  - `--no-lstm`, `--one-rate` and `--final-gate ig` restore D0's lines.
+  - `glnx_prep.sh` passes `--no-lstm --one-rate` with its flags, so the dump keeps the frozen chain's columns.
+- Predictions: D1 near 1.630 (1.6311), D2 near 1.647 (1.6489) and D3 near 1.623 (1.6238) all held.
+
+**§13.22 result: the online mixer in writing.** All 250 dev prompts, by temperature:
+
+| Arm | T 0.6 | T 0.8 | T 1.0 |
+|---|---:|---:|---:|
+| W0: `sample` | **0.174** [0.137, 0.209] | 0.155 | 0.073 |
+| SO: `sample --online-lambdas` | 0.147 [0.117, 0.180] | 0.127 | 0.084 |
+
+- SO's best is 0.027 below W0's, beyond the 0.02 allowed. **`--online-lambdas` stays a flag.** The prediction (within ±0.02) missed.
+- The lambdas learned online over the holdout's end fit that text, not the prompts.
+- The writer that wins is K5 (§13.19) in any case, and it has no lambdas.
