@@ -1710,3 +1710,41 @@ The headline arm ABs mixes the two per bit. Settings were tuned by replay on the
 - then four blind Claude raters, as in §13.31, on 50 dev prompts. They are the judge of another kind that §13.31 showed is needed.
 
 The test split is read once per adopted change.
+
+### 13.33 One expert per kind of structure, meta-mixed (2026-11-04; Odin's PC)
+
+**Odin:** "K5 does sentence structure basically. Why don't we work on an algorithm/mixer/expert for each type of structure or relation and metamix them all together. Let's do this."
+
+**The idea:**
+- K5 is the syntax expert.
+- Every other kind of structure gets its own expert.
+- Each expert scores a candidate sentence given the paragraph so far.
+- A learned meta-mixer joins the scores and picks the sentence. It does not blend next-word probabilities: §13.15–13.24 showed that blending makes text bland.
+
+**The experts (session 4, branch `wip/k5-structure`):**
+
+| Expert | Structure | Maths |
+|---|---|---|
+| K5 | word order, syntax | Kneser–Ney 5-gram |
+| class sequence | grammar skeleton | exchange-class n-gram |
+| topic | what the paragraph is about | LDA (session 2) |
+| entity grid | who each sentence is about | Markov chain over roles (session 2) |
+| relations | who did what to whom, typed slots (person, place, year) | counts of typed relation patterns |
+| reference | pronouns that match their antecedents | name–pronoun statistics |
+| time and number | years and numbers consistent with the prompt | simple distributions |
+| transitions | how sentences open and link | Markov chain over sentence-opening types |
+| rhythm | sentence length, balanced brackets and quotes | ECDFs |
+| novelty | no copying of training text, no echo of the prompt | suffix-array match lengths |
+
+**The meta-mixer:**
+- An online softmax ranker over the experts' scores, learned by exponentiated gradient, like the content mixer.
+- Its weight sets are chosen by a small context (sentence position, prompt length), as in PAQ. A second layer and a mixture over learning rates come from §13.32.
+- **Training signal:** clean Wikipedia that K5 never saw (the enwik9 text of K5_SCALE, overlap with GEN-A and SCRIBE already removed). At each sentence boundary, the real next sentence competes with N K5 drafts.
+- **Its own metric:** held-out "sentence bits", minus log₂ of the real sentence's probability among the candidates. This is measured for each expert alone and for the mix.
+
+**Judges for writing:**
+- SCRIBE v2 and v3.1 on GEN-A dev;
+- the four blind Claude raters (§13.31) as the deciding judge;
+- one test read only for an adopted arm.
+
+The MCMC sampler (session 3) can use the learned mix as its energy.
