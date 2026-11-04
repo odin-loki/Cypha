@@ -847,15 +847,15 @@ struct GenStats {
 class K5 {
  public:
     // Training text: one document per line. Returns false (and err) if it cannot be read or holds no tokens.
-    // bo: the build options (order, classes); null for K5's.
-    bool load(const std::string& path, int cap, std::string& err, const Options* bo = nullptr) {
+    // bo: the build options (order, classes); null for K5's. vmax: the vocabulary cap (K5_SCALE: --k5-vmax).
+    bool load(const std::string& path, int cap, std::string& err, const Options* bo = nullptr, std::size_t vmax = kVmax) {
         std::ifstream in(path, std::ios::binary);
         if (!in) {
             err = "cannot read " + path;
             return false;
         }
         const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-        build(text, cap, bo ? bo->order : kOrder, bo ? bo->classes : 0);
+        build(text, cap, bo ? bo->order : kOrder, bo ? bo->classes : 0, vmax);
         if (vocab_.size() <= 2) {
             err = path + " holds no tokens seen twice";
             return false;
@@ -863,7 +863,9 @@ class K5 {
         return true;
     }
 
-    void build(std::string_view text, int cap, int order = kOrder, std::size_t classes = 0) {
+    // vmax: the vocabulary's size cap (K5_SCALE: --k5-vmax), at most 65,536 (ids are 16 bits).
+    void build(std::string_view text, int cap, int order = kOrder, std::size_t classes = 0, std::size_t vmax = kVmax) {
+        vmax = std::min<std::size_t>(vmax, 65536);
         const auto t0 = std::chrono::steady_clock::now();
         // Types in first-occurrence order and every token's type (~0u: a document's start).
         std::unordered_map<std::string_view, std::uint32_t> type;
@@ -895,7 +897,7 @@ class K5 {
         vocab_ = {"<unk>", "<s>"};
         std::vector<std::uint32_t> id_of(tview.size(), kUnk);
         for (const std::uint32_t t : order_t) {
-            if (tcount[t] < 2 || vocab_.size() >= kVmax) break;
+            if (tcount[t] < 2 || vocab_.size() >= vmax) break;
             id_of[t] = static_cast<std::uint32_t>(vocab_.size());
             vocab_.emplace_back(tview[t]);
         }
@@ -1360,7 +1362,8 @@ inline double copy32_share(std::string_view ref, const std::vector<std::string>&
 inline int run_sample(const std::string& text_path, int cap, const std::vector<std::string>& prompts,
                       const std::vector<std::string>& conts, const std::vector<std::string>& outs, int per_file,
                       std::size_t bytes, const std::vector<double>& temps,
-                      const std::function<std::string(const std::string&)>& esc, const Options* base = nullptr) {
+                      const std::function<std::string(const std::string&)>& esc, const Options* base = nullptr,
+                      std::uint64_t seed = kSeed, std::size_t vmax = kVmax) {  // K5_SCALE: --k5-seed, --k5-vmax
     std::string err;
     K5 m;
     const Options bo = base ? *base : Options{};
@@ -1368,7 +1371,7 @@ inline int run_sample(const std::string& text_path, int cap, const std::vector<s
         std::cerr << "--k5-gate does not take --k5-lstm\n";
         return 2;
     }
-    if (!m.load(text_path, cap, err, &bo)) {
+    if (!m.load(text_path, cap, err, &bo, vmax)) {
         std::cerr << "--k5: " << err << "\n";
         return 1;
     }
@@ -1393,7 +1396,7 @@ inline int run_sample(const std::string& text_path, int cap, const std::vector<s
             Options o = base ? *base : Options{};
             o.temperature = temps[ti];
             o.bytes = bytes;
-            gens[j] = m.generate(prompts[id], kSeed + o.seed_off + id + 7919 * ti, o, &gst[j]);
+            gens[j] = m.generate(prompts[id], seed + o.seed_off + id + 7919 * ti, o, &gst[j]);
         }
     };
     unsigned nth = std::max(1u, std::min(4u, std::thread::hardware_concurrency()));

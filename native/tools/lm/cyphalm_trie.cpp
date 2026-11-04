@@ -88,6 +88,9 @@
 //        floor and an 8-candidate sentence gate by prompt association; --k5-base k5 (first) restores §13.19's K5. Other
 //        --k5-... flags (word_kn.hpp apply_flag): -seed, -nucleus, -cand-mass, -cand-max, -cache, -cache2, -cache-decay,
 //        -dyn, -order, -classes, -class-mode, -class-w, -gate.
+//        docs/reports/K5_SCALE.md: --k5-seed S (default 20261101; prompt id i draws from S + i; an S below 20261101 is an offset, so
+//        --k5-seed 1000 is 20262101, as K5_UPGRADES.md's seeds) and --k5-vmax V (the
+//        vocabulary cap, default 32000, at most 65536).
 //        chat and sample: --save FILE stores the trained packed trie with its weights and split (RAM_PROFILE M7);
 //        --model FILE serves that file without training (chat then prints no mix_stored: it measures the training form).
 //   bkn <wiki> K[:m:c:d] [more specs] [--bkn-fresh] [--bkn-stack]
@@ -394,6 +397,8 @@ struct Args {
     std::string temps;                            // TEMPS: sample's temperatures, T[,T][,T] (default 0.6,0.8,1.0)
     std::string k5;                               // §13.19: sample --k5 TEXT, K5 (word_kn.hpp) writes every GEN line
     int k5_cap = 12;                              // §13.19: --k5-cap N, at most N consecutive training tokens (0: off)
+    std::uint64_t k5_seed = cypha::cyphalm::wkn::kSeed;  // K5_SCALE: --k5-seed S
+    std::size_t k5_vmax = cypha::cyphalm::wkn::kVmax;    // K5_SCALE: --k5-vmax V
     std::string k5_lstm, k5_lstm_mix = "geo";     // §13.24: --k5-lstm FILE (lstm-train's), reranking K5's nucleus
     double k5_lstm_w = 0.25;                      // §13.24: --k5-lstm-w W, the byte LSTM's weight
     std::vector<std::pair<std::string, std::string>> k5_opts;  // docs/reports/K5_UPGRADES.md: every other --k5-... flag
@@ -495,6 +500,11 @@ Args parse(int argc, char** argv, int from) {
         else if (s == "--copy-frame") a.copy_frame = true;           // DK2
         else if (s == "--k5") a.k5 = next();                         // §13.19
         else if (s == "--k5-cap") a.k5_cap = std::atoi(next());      // §13.19
+        else if (s == "--k5-seed") {  // K5_SCALE: an absolute seed; below 20261101, an offset (K5_UPGRADES)
+            const std::uint64_t v = std::strtoull(next(), nullptr, 10);
+            a.k5_seed = v < cypha::cyphalm::wkn::kSeed ? cypha::cyphalm::wkn::kSeed + v : v;
+        }
+        else if (s == "--k5-vmax") a.k5_vmax = std::strtoull(next(), nullptr, 10);  // K5_SCALE
         else if (s == "--k5-lstm") a.k5_lstm = next();               // §13.24
         else if (s == "--k5-lstm-mix") a.k5_lstm_mix = next();       // §13.24: geo or lin
         else if (s == "--k5-lstm-w") a.k5_lstm_w = std::atof(next()); // §13.24
@@ -1659,7 +1669,8 @@ int cmd_sample(const Args& a) {
             std::cerr << "k5: the byte LSTM " << a.k5_lstm << " reranks the nucleus (" << a.k5_lstm_mix << ", w " << a.k5_lstm_w << ")\n";
         }
         return cypha::cyphalm::wkn::run_sample(a.k5, a.k5_cap, prompts, conts, a.outs, a.prompts, static_cast<std::size_t>(a.bytes),
-                                               a.temps.empty() ? std::vector<double>{1.0} : temps, printable, &base);
+                                               a.temps.empty() ? std::vector<double>{1.0} : temps, printable, &base,
+                                               a.k5_seed, a.k5_vmax);
     }
 
     if (a.model.empty()) {
