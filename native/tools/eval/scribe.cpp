@@ -1,6 +1,11 @@
 // SCRIBE: the generated-text metric (docs/PLAN.md section 6). One tool for every use; it replaces
 // scribe_ladder.cpp (v0 and v1). Library: native/include/cypha/eval/scribe.hpp (header-only, no neural network).
-// Reports: docs/reports/SCRIBE_V0.md, SCRIBE_V1.md, SCRIBE_V2.md, SCRIBE_V3.md. Plan of the v2 study: docs/SCRIBE_PAPER_PLAN.md.
+// Reports: docs/reports/SCRIBE_V0.md, SCRIBE_V1.md, SCRIBE_V2.md, SCRIBE_V3.md, SCRIBE_V31.md. Plan of the v2 study: docs/SCRIBE_PAPER_PLAN.md.
+//
+// SCRIBE v3.1 (--profile v31 for ladder, score and attacks; docs/reports/SCRIBE_V31.md): the geometric mean of v2,
+// SURPRISE 3.1 and MATCH 3.1, so one judge's confident catch is not diluted; the v3 judges are scored next to it.
+// attacks --heldout adds v3.1's held-out attacks (read once, on fresh data only). ladder / attacks --dedup drop test
+// documents that are near-duplicates of pack or reference documents; `dedup` only counts them.
 //
 // Subcommands
 //   docs     SRC --out F                                    cleaned documents, one JSON object per line
@@ -14,15 +19,18 @@
 //                                                           model output -> the text that is scored (and that every
 //                                                           baseline scores): continuation = whitespace collapsed and the
 //                                                           unterminated tail cut; wikiraw = v1's clean_generated_text
-//   ladder   --pack SRC --ref SRC --test SRC [--vectors P] [--profile v1|v2|v3] [--seed S] [--chain-rng]
-//            [--gen-trie F] [--model F]... [--export DIR] [--label L]
+//   ladder   --pack SRC --ref SRC --test SRC [--vectors P] [--profile v1|v2|v3|v31] [--seed S] [--chain-rng]
+//            [--gen-trie F] [--model F]... [--export DIR] [--label L] [--dedup]
 //                                                           the PLAN 6.4 V1 control ladder (and model rungs), report on stdout;
 //                                                           --profile v3 adds the table of v2, SURPRISE, MATCH, their mean (v3)
-//                                                           and minimum for every rung and pair (docs/reports/SCRIBE_V3.md)
-//   attacks  --pack SRC --ref SRC --test SRC --vectors P [--seed S] [--n 200] [--outside SRC] [--export DIR]
+//                                                           and minimum for every rung and pair (docs/reports/SCRIBE_V3.md);
+//                                                           v31 adds SURPRISE 3.1, MATCH 3.1 and v3.1
+//   attacks  --pack SRC --ref SRC --test SRC --vectors P [--profile v3|v31] [--seed S] [--n 200] [--outside SRC]
+//            [--export DIR] [--heldout] [--dedup]
 //                                                           v3's attack battery on prompt / continuation pairs of SRC: every
 //                                                           attack x metric, and the registered rule (exit 3 if it fails)
-//   score    --pack SRC --ref SRC [--vectors P] [--profile v1|v2|v3] [--v2 PARAMS] [--v3 PARAMS] [--ref-prompts F] --in F --out G
+//   dedup    --pack SRC --ref SRC --test SRC                how many test documents --dedup would drop (scores nothing)
+//   score    --pack SRC --ref SRC [--vectors P] [--profile v1|v2|v3|v31] [--v2 PARAMS] [--v3 PARAMS] [--ref-prompts F] --in F --out G
 //                                                           every text of F scored: axes, sub-scores, raw statistics; a text
 //                                                           with a "prompt" also gets the relevance statistics (R, scored
 //                                                           against --ref-prompts, and counted in D only with wR > 0).
@@ -75,6 +83,7 @@ double g_t0 = now_s();
 // ScribeV2Scorer::extend (skeleton, word rarity, 8-gram copy, relevance), and the number of texts featurised.
 double g_t_extract = 0, g_t_extend = 0, g_t_pack_model = 0, g_t_pack_v2 = 0, g_t_pack_vec = 0, g_t_v3 = 0;
 std::size_t g_n_feat = 0;
+std::string g_dedup_note;  // set by --dedup (near_duplicates), printed under a report's title
 
 
 // ===========================================================================
@@ -342,6 +351,61 @@ struct Sample {
   std::string text;
   int doc = 0;
 };
+
+// Fresh-data hygiene (SCRIBE v3.1, docs/reports/SCRIBE_V31.md): enwik9 holds some pages more than once, so a test
+// document can repeat a pack or reference document. A test document is a near-duplicate when more than half of its
+// bytes lie inside matches of the full 64 bytes (PackIndex::kCap) with the pack's or the reference's text. Returns one
+// flag per document; *bytes_dropped counts their bytes.
+std::vector<char> near_duplicates(const std::vector<std::string>& docs, const std::vector<std::string>& pack_docs,
+                                  const std::vector<std::string>& ref_docs, std::size_t* bytes_dropped = nullptr) {
+  std::vector<std::string> all(pack_docs);
+  all.insert(all.end(), ref_docs.begin(), ref_docs.end());
+  PackIndex px;
+  px.build(all, 4);
+  std::vector<char> dup(docs.size(), 0);
+  std::atomic<std::size_t> next{0};
+  auto work = [&]() {
+    for (std::size_t d; (d = next++) < docs.size();) {
+      const std::string& t = docs[d];
+      const std::size_t n = t.size();
+      if (n == 0) continue;
+      std::vector<char> cov(n, 0);
+      const unsigned char* p = reinterpret_cast<const unsigned char*>(t.data());
+      for (std::size_t i = 0; i + PackIndex::kCap <= n; ++i)
+        if (px.match(p + i, n - i) >= PackIndex::kCap) std::fill(cov.begin() + static_cast<std::ptrdiff_t>(i), cov.begin() + static_cast<std::ptrdiff_t>(i + PackIndex::kCap), 1);
+      std::size_t c = 0;
+      for (char x : cov) c += static_cast<std::size_t>(x);
+      dup[d] = 2 * c > n;
+    }
+  };
+  std::vector<std::thread> th;
+  for (int k = 1; k < 4; ++k) th.emplace_back(work);
+  work();
+  for (std::thread& x : th) x.join();
+  if (bytes_dropped) {
+    *bytes_dropped = 0;
+    for (std::size_t d = 0; d < docs.size(); ++d)
+      if (dup[d]) *bytes_dropped += docs[d].size();
+  }
+  return dup;
+}
+
+// --dedup: drops the near-duplicate test documents and says how many it dropped (stderr, and the report's header).
+std::string apply_dedup(std::vector<std::string>& test_docs, const std::vector<std::string>& pack_docs, const std::vector<std::string>& ref_docs) {
+  std::size_t bytes = 0, total = 0;
+  for (const std::string& d : test_docs) total += d.size();
+  const std::vector<char> dup = near_duplicates(test_docs, pack_docs, ref_docs, &bytes);
+  std::vector<std::string> kept;
+  for (std::size_t d = 0; d < test_docs.size(); ++d)
+    if (!dup[d]) kept.push_back(std::move(test_docs[d]));
+  char b[512];
+  std::snprintf(b, sizeof b, "Near-duplicate filter (--dedup): dropped %zu of %zu test documents (%zu of %zu bytes) with more than half their bytes inside 64-byte "
+                "matches with the pack or the reference.",
+                test_docs.size() - kept.size(), test_docs.size(), bytes, total);
+  test_docs = std::move(kept);
+  std::fprintf(stderr, "%s\n", b);
+  return b;
+}
 
 // Consecutive, non-overlapping windows of sentences with total length in [lo, hi] and at least
 // min_sent sentences; the target length is drawn uniformly in [lo, hi] per window (v0 and v1's rule).
@@ -847,7 +911,7 @@ struct Args {
 };
 
 Args parse_args(int argc, char** argv, int from) {
-  static const std::vector<std::string> flags = {"--short", "--chain-rng", "--quiet", "--window", "--ref-whole", "--timing", "--heldout"};
+  static const std::vector<std::string> flags = {"--short", "--chain-rng", "--quiet", "--window", "--ref-whole", "--timing", "--heldout", "--dedup"};
   Args a;
   for (int i = from; i < argc; ++i) {
     const std::string s = argv[i];
@@ -879,6 +943,16 @@ std::ofstream open_out(const std::string& path) {
     std::exit(1);
   }
   return o;
+}
+
+// dedup --pack SRC --ref SRC --test SRC: how many test documents the near-duplicate filter (--dedup) would drop. It
+// scores nothing, so it can be run on a fresh region before that region is read.
+int cmd_dedup(const Args& a) {
+  const std::vector<std::string> pack_docs = load_docs(a.get("--pack"));
+  const std::vector<std::string> ref_docs = load_docs(a.get("--ref"));
+  std::vector<std::string> test_docs = load_docs(a.get("--test"));
+  std::printf("%s\n", apply_dedup(test_docs, pack_docs, ref_docs).c_str());
+  return 0;
 }
 
 int cmd_docs(const Args& a) {
@@ -1085,7 +1159,7 @@ void export_v3_reference(const Ctx& c, const std::string& dir) {
       o31 << "{\"bucket\":" << b << ",\"v3\":" << v3_json(s, combine_v3(1, s.surprise, s.match)) << ",\"raw3\":" << v3_raw_json(f) << "}\n";
     }
     std::vector<std::vector<double>> pz;
-    const std::vector<int> pk = {M_ECHO, M_ECHO32, W_PGAIN, W_LEAD, M_PCOH};
+    const std::vector<int> pk = {M_ECHO, M_ECHO32, W_PGAIN, W_LEAD, M_PCOH, M_ECHO64};
     for (int k : pk) pz.push_back(c.v31s.echo_reference_z(b, k == M_ECHO ? 0 : k == M_ECHO32 ? 1 : k));
     for (std::size_t i = 0; i < pz[0].size(); ++i) {
       o31 << "{\"bucket\":" << b << ",\"prompted_z\":{";
@@ -1140,22 +1214,28 @@ void print_v3_ladder(const Ctx& c, const std::vector<Rung>& rungs, const std::ve
     std::printf(" | %.0f%% |\n", 100.0 * dis / static_cast<double>(rungs[i].res.size()));
   }
   for (int which = 0; which < (NM > 5 ? 2 : 1); ++which) {
-    std::printf("\nDeviance terms%s (mean over samples; L lexical, S order, C cohesion, P too predictable):\n\n", which ? " of the v3.1 judges" : "");
-    std::printf("| rung | SURPRISE D | D_L | D_S | D_C | D_P | MATCH D | D_L | D_S | D_C | D_P |\n|---|---|---|---|---|---|---|---|---|---|---|\n");
+    const int ng = which ? 6 : 4;  // v3.1 adds F (foreign words) and B (bland)
+    if (!which) {
+      std::printf("\nDeviance terms (mean over samples; L lexical, S order, C cohesion, P too predictable):\n\n");
+      std::printf("| rung | SURPRISE D | D_L | D_S | D_C | D_P | MATCH D | D_L | D_S | D_C | D_P |\n|---|---|---|---|---|---|---|---|---|---|---|\n");
+    } else {
+      std::printf("\nDeviance terms of the v3.1 judges (mean over samples; L lexical, S order, C cohesion, P too predictable, F foreign words, B bland):\n\n");
+      std::printf("| rung | SURPRISE D | D_L | D_S | D_C | D_P | D_F | D_B | MATCH D | D_L | D_S | D_C | D_P | D_F | D_B |\n|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n");
+    }
     for (std::size_t i = 0; i < R; ++i) {
       if (rungs[i].res.empty()) continue;
-      double a[2][5] = {};
+      double a[2][7] = {};
       for (const Result& x : rungs[i].res) {
         const ScoredV3& s = which ? x.v31 : x.v3;
         for (int m = 0; m < 2; ++m) {
           a[m][0] += s.D[m];
-          for (int g = 0; g < 4; ++g) a[m][g + 1] += s.Dg[m][g];
+          for (int g = 0; g < ng; ++g) a[m][g + 1] += s.Dg[m][g];
         }
       }
       const double n = static_cast<double>(rungs[i].res.size());
       std::printf("| %s", rungs[i].name.c_str());
       for (int m = 0; m < 2; ++m)
-        for (int g = 0; g < 5; ++g) std::printf(" | %.2f", a[m][g] / n);
+        for (int g = 0; g <= ng; ++g) std::printf(" | %.2f", a[m][g] / n);
       std::printf(" |\n");
     }
   }
@@ -1190,7 +1270,8 @@ int cmd_ladder(const Args& a) {
   const std::uint64_t seed = std::strtoull(a.get("--seed", "31415926").c_str(), nullptr, 10);
   const std::vector<std::string> pack_docs = load_docs(a.get("--pack"));
   const std::vector<std::string> ref_docs = load_docs(a.get("--ref"));
-  const std::vector<std::string> test_docs = load_docs(a.get("--test"));
+  std::vector<std::string> test_docs = load_docs(a.get("--test"));
+  if (a.has("--dedup")) g_dedup_note = apply_dedup(test_docs, pack_docs, ref_docs);
   std::fprintf(stderr, "[%.0fs] docs: pack %zu, ref %zu, test %zu\n", now_s() - g_t0, pack_docs.size(), ref_docs.size(), test_docs.size());
   set_v2_params(c, a.get("--v2"));
   set_v3_params(c, a.get("--v3"));
@@ -1295,6 +1376,7 @@ int cmd_ladder(const Args& a) {
 
   // ---- report
   std::printf("# SCRIBE %s ladder: %s (profile %s)\n\n", label.c_str(), a.get("--test").c_str(), c.profile.c_str());
+  if (!g_dedup_note.empty()) std::printf("%s\n\n", g_dedup_note.c_str());
   std::printf("Pack %s: %zu docs, %zu bytes, lexicon %zu words, %zu trigrams; vectors: %s. Reference %s: %zu standard + %zu short samples (seed %llu). "
               "Test: %zu standard samples (of %zu candidates), %zu short (seed %llu%s).\n\n",
               a.get("--pack").c_str(), c.n_pack_docs, c.pack_bytes, c.model.vocab_size(), c.model.n_trigrams(),
@@ -1839,6 +1921,7 @@ int attacks_report_v31(const Args& a, const Ctx& c, const std::string& label, st
                        const std::vector<std::vector<Features>>& feats, const std::vector<std::vector<V3Features>>& f3) {
   const char* mname[7] = {"v2", "SURPRISE", "MATCH", "v3", "SURPRISE 3.1", "MATCH 3.1", "v3.1"};
   std::printf("# SCRIBE v3.1 attack battery: %s (%s)\n\n", label.c_str(), a.get("--test").c_str());
+  if (!g_dedup_note.empty()) std::printf("%s\n\n", g_dedup_note.c_str());
   std::printf("%zu prompt / continuation pairs (seed %llu), one per document; every attack built from them; scored with the prompt (v2: open "
               "profile). Pack %s, reference %s, co-occurrence pools: %zu pack sentences, %zu outside (%s). v3.1 = power mean (exponent %g) of v2, "
               "SURPRISE 3.1 and MATCH 3.1.\n\n",
@@ -1882,14 +1965,14 @@ int attacks_report_v31(const Args& a, const Ctx& c, const std::string& label, st
   }
   std::printf("\nRule (v3.1): %d of %d registered attacks pass. (v3's rule on the same battery: %d of %d.)\n", rule_ok, rule_n, v3_ok, rule_n);
   if (ho_n) std::printf("Held-out attacks (v3.1 at 0.95, no rule): %d of %d pass.\n", ho_ok, ho_n);
-  std::printf("\nDeviance terms of the v3.1 judges (mean over texts):\n\n| attack | SURPRISE 3.1 D_L | D_S | D_C | D_P | MATCH 3.1 D_L | D_S | D_C | D_P | v2 D_L | D_S "
-              "| D_C | D_I |\n|---|---|---|---|---|---|---|---|---|---|---|---|---|\n");
+  std::printf("\nDeviance terms of the v3.1 judges (mean over texts; F foreign words, B bland):\n\n| attack | SURPRISE 3.1 D_L | D_S | D_C | D_P | D_F | D_B | MATCH 3.1 D_L | D_S "
+              "| D_C | D_P | D_F | D_B | v2 D_L | D_S | D_C | D_I |\n|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n");
   for (std::size_t k = 0; k < names.size(); ++k) {
     if (res[k].empty()) continue;
-    double g[2][4] = {}, v2g[4] = {};
+    double g[2][6] = {}, v2g[4] = {};
     for (const Result& r : res[k]) {
       for (int m = 0; m < 2; ++m)
-        for (int q = 0; q < 4; ++q) g[m][q] += r.v31.Dg[m][q];
+        for (int q = 0; q < 6; ++q) g[m][q] += r.v31.Dg[m][q];
       v2g[0] += r.v2.DL;
       v2g[1] += r.v2.DS;
       v2g[2] += r.v2.DC;
@@ -1898,7 +1981,7 @@ int attacks_report_v31(const Args& a, const Ctx& c, const std::string& label, st
     const double nn = static_cast<double>(res[k].size());
     std::printf("| %s", names[k].c_str());
     for (int m = 0; m < 2; ++m)
-      for (int q = 0; q < 4; ++q) std::printf(" | %.2f", g[m][q] / nn);
+      for (int q = 0; q < 6; ++q) std::printf(" | %.2f", g[m][q] / nn);
     for (int q = 0; q < 4; ++q) std::printf(" | %.2f", v2g[q] / nn);
     std::printf(" |\n");
   }
@@ -1935,7 +2018,8 @@ int cmd_attacks(const Args& a) {
   const std::size_t n = std::strtoull(a.get("--n", "200").c_str(), nullptr, 10);
   const std::vector<std::string> pack_docs = load_docs(a.get("--pack"));
   const std::vector<std::string> ref_docs = load_docs(a.get("--ref"));
-  const std::vector<std::string> test_docs = load_docs(a.get("--test"));
+  std::vector<std::string> test_docs = load_docs(a.get("--test"));
+  if (a.has("--dedup")) g_dedup_note = apply_dedup(test_docs, pack_docs, ref_docs);
   if (a.get("--vectors").empty()) {
     std::fprintf(stderr, "attacks needs --vectors (the co-occurrence attack and v2's coherence read them)\n");
     return 2;
@@ -2078,6 +2162,7 @@ int cmd_attacks(const Args& a) {
                                          feats, f3);
   const char* mname[4] = {"v2", "SURPRISE", "MATCH", "v3"};
   std::printf("# SCRIBE v3 attack battery: %s (%s)\n\n", label.c_str(), a.get("--test").c_str());
+  if (!g_dedup_note.empty()) std::printf("%s\n\n", g_dedup_note.c_str());
   std::printf("%zu prompt / continuation pairs (seed %llu), one per document; every attack built from them; scored with the prompt (v2: open "
               "profile). Pack %s, reference %s, co-occurrence pools: %zu pack sentences, %zu outside (%s).\n\n",
               N, static_cast<unsigned long long>(seed), a.get("--pack").c_str(), a.get("--ref").c_str(), cp.sents.size(), co.sents.size(),
@@ -2313,6 +2398,18 @@ int selftest() {
     CHECK(ok && ws.size() >= 2 && total + ws.size() - 1 == scribe_detail::collapse_ws(t).size());
     CHECK(text_windows("Short text. Only two sentences.").size() == 1);
   }
+  // ---- v3.1's near-duplicate filter: a document that repeats a pack document is dropped, a new one is kept ----
+  {
+    std::string page;
+    for (int i = 0; i < 6; ++i) page += "The river Avon rises near the village of Naseby and flows west through the county of Warwickshire. ";
+    std::vector<std::string> test = {page + "A short new ending.", "An entirely new document about the orbit of a small comet, written for this check, which shares no long string."};
+    std::size_t bytes = 0;
+    const std::vector<char> dup = near_duplicates(test, {page}, {"An unrelated reference document."}, &bytes);
+    CHECK(dup.size() == 2 && dup[0] && !dup[1] && bytes == test[0].size());
+    std::vector<std::string> t2 = test;
+    const std::string note = apply_dedup(t2, {page}, {});
+    CHECK(t2.size() == 1 && t2[0] == test[1] && note.find("dropped 1 of 2") != std::string::npos);
+  }
   // ---- v3.1's held-out attacks: construction only, on toy strings (they are never run on development data) ----
   {
     const std::string t = "a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15.";
@@ -2368,7 +2465,7 @@ int selftest() {
 int main(int argc, char** argv) {
   if (argc < 2) {
     std::fprintf(stderr,
-                 "usage: scribe <docs|prompts|samples|prepare|ladder|score|attacks|windows|selftest> ...  (see the header of native/tools/eval/scribe.cpp)\n");
+                 "usage: scribe <docs|prompts|samples|prepare|ladder|score|attacks|dedup|windows|selftest> ...  (see the header of native/tools/eval/scribe.cpp)\n");
     return 2;
   }
   const std::string cmd = argv[1];
@@ -2382,6 +2479,7 @@ int main(int argc, char** argv) {
   if (cmd == "score") return cmd_score(a);
   if (cmd == "windows") return cmd_windows(a);
   if (cmd == "attacks") return cmd_attacks(a);
+  if (cmd == "dedup") return cmd_dedup(a);
   std::fprintf(stderr, "unknown subcommand %s\n", cmd.c_str());
   return 2;
 }

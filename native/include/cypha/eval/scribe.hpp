@@ -3180,7 +3180,7 @@ enum V3Stat {
   // MATCH
   M_MED, M_P90, M_LONG, M_SHORT, M_LZ, M_TRI, M_COH, M_ECHO, M_ECHO32,
   // v3.1 only (computed and scored in profile v31; docs/reports/SCRIBE_V31.md)
-  W_FIT, W_FITHI, W_PGAIN, W_LEAD, M_BRIDGE, M_PCOH,
+  W_FIT, W_FITHI, W_PGAIN, W_LEAD, M_BRIDGE, M_PCOH, M_ECHO64,
   W3_N
 };
 constexpr int W3_N_V3 = W_FIT;  // the statistics of profile v3
@@ -3220,16 +3220,17 @@ inline const V3StatSpec& v3_spec(int k) {
       {"m_coh", 'M', 0.005, 'P', 'C', '-'},   // bytes shared with the other sentences, weighted by their pack information
       {"m_echo", 'M', 0.005, 'P', 'C', 0},    // share of bytes inside >= 8-byte matches with the prompt (prompted only)
       {"m_echo32", 'M', 0.005, 'P', 0, 0},   // share inside >= 32-byte matches with the prompt (copied prompt sentences)
-      // v3.1 (their groups here are the defaults of profile v31; profile v3 never computes them)
-      {"w_fit", 'W', 0.05, 'S', 'P', '+'},    // mean fit: minus the PMI of each word with its two-sided context (bits)
-      {"w_fithi", 'W', 0.01, 'S', 'P', '+'},  // share of words whose fit is above the reference words' fit_q quantile
+      // v3.1 (their groups here are profile v31's; profile v3 never computes them). F: foreign words, B: bland
+      {"w_fit", 'W', 0.05, 'F', 'B', '+'},    // mean fit: minus the PMI of each word with its two-sided context (bits)
+      {"w_fithi", 'W', 0.01, 'F', 'P', '+'},  // share of words whose fit is above the reference words' fit_q quantile
       {"w_pgain", 'W', 0.01, 'P', 'C', 0},    // bits per word a unigram cache of the prompt saves (prompted only)
       {"w_lead", 'W', 0.01, 0, 0, 0},         // first sentence's prompt gain minus the others' (reported only)
-      {"m_bridge", 'M', 0.005, 'S', 0, '+'},  // share of words whose two pack bigrams are absent while the neighbours' is present
-      {"m_pcoh", 'M', 0.005, 'P', 'C', 0}};   // bytes shared with the prompt from word starts, weighted by pack information
+      {"m_bridge", 'M', 0.005, 'F', 0, '+'},  // share of words whose two pack bigrams are absent while the neighbours' is present
+      {"m_pcoh", 'M', 0.005, 'P', 'C', 0},    // bytes shared with the prompt from word starts, weighted by pack information
+      {"m_echo64", 'M', 0.005, 'P', 0, 0}};  // share inside >= 64-byte matches with the prompt (copied prompt sentences, not names)
   return specs[k];
 }
-inline bool v3_prompted(int k) { return k == M_ECHO || k == M_ECHO32 || k == W_PGAIN || k == W_LEAD || k == M_PCOH; }
+inline bool v3_prompted(int k) { return k == M_ECHO || k == M_ECHO32 || k == W_PGAIN || k == W_LEAD || k == M_PCOH || k == M_ECHO64; }
 
 // Raw per-text material of v3. w_lo and w_hi need the reference's thresholds and are finished by V3Scorer::values.
 struct V3Features {
@@ -3245,7 +3246,7 @@ struct V3Features {
   // v3.1 (only with v31 = true)
   bool has_31 = false, has_pgain = false, has_lead = false, has_bridge = false, has_pcoh = false;
   std::vector<float> fit;  // per word: minus the PMI with the two-sided context (bits)
-  double w_fit = 0, w_pgain = 0, w_lead = 0, m_bridge = 0, m_pcoh = 0;
+  double w_fit = 0, w_pgain = 0, w_lead = 0, m_bridge = 0, m_pcoh = 0, m_echo64 = 0;
 };
 
 inline V3Features extract_v3(const SurpriseModel& sm, const PackIndex& px, const std::string& text, const std::string& prompt = "",
@@ -3450,6 +3451,14 @@ inline V3Features extract_v3(const SurpriseModel& sm, const PackIndex& px, const
       for (float x : cw) s += x;
       f.m_pcoh = s / static_cast<double>(n);
       f.has_pcoh = true;
+      // Copied prompt sentences: the share of bytes inside matches of the full 64 bytes with the prompt (people repeat
+      // names and short phrases of their prompt, up to 48 bytes on the development battery; not whole sentences).
+      std::vector<std::uint16_t> e64(n, 0);
+      for (size_t i = 0; i < n; ++i)
+        if (me[i] >= PackIndex::kCap) e64[i] = me[i];
+      size_t a64 = 0;
+      for (std::uint16_t c : match_cover(e64)) a64 += c > 0;
+      f.m_echo64 = static_cast<double>(a64) / static_cast<double>(n);
     }
   }
   return f;
@@ -3487,9 +3496,16 @@ inline std::vector<V3Features> extract_v3_all(const SurpriseModel& sm, const Pac
 //   score = exp(-D / tau)
 // Chosen on development ladder A and its attack battery (docs/reports/SCRIBE_V3.md); tau puts the mean score of dev A's
 // human samples at v2's (0.909).
+// v3.1 adds two groups (profile v31 only; in v3 they are empty and add nothing):
+//   F = sum of max(0, u - deadF) over the foreign-word sides (words that fit neither neighbour)
+//   B = sum of max(0, u - deadB) over the bland sides (too predictable word by word: no rare word, no name)
+//   D += capF satF(F - thF) + wB max(0, B - thB),  satF(x) = 1 - exp(-max(0, x) / kapF),  thF, thB = the qF, qB quantiles
 struct V3MetricParams {
   double dead = 1, deadL = 4, deadS = 1, deadC = 0, deadG = 1.5;
   double cap = 30, kap = 2, wC = 4, wG = 1, wP = 8, q = 0.99, tau = 20;
+  double deadF = 1, capF = 30, kapF = 2, qF = 0.99;  // v3.1: F, saturating like L and S
+  double deadB = 0, wB = 0, qB = 0.99;               // v3.1: B, linear beyond its threshold
+  double capL = 30;  // v3.1: L's own cap (profile v3 uses cap for L and S)
 };
 
 struct V3Params {
@@ -3501,8 +3517,9 @@ struct V3Params {
   double disagree = 0.5;  // flag a text when max - min of the three scores exceeds this
   // v3.1 (profile v31, docs/reports/SCRIBE_V31.md). Profile v3 leaves all of this at its v3 value.
   bool v31 = false;     // compute and score the v3.1 statistics
-  char grp[W3_N][2];    // group of each statistic's high side and low side ('L', 'S', 'C', 'P' or 0: not counted)
-  double swt[W3_N];     // weight of each statistic's L, S and C evidence
+  char grp[W3_N][2];    // group of each side ('L', 'S', 'C', 'P', v3.1's 'F' and 'B', or 0: not counted)
+  double swt[W3_N];     // weight of each statistic's non-P evidence
+  double sdz[W3_N];     // dead zone of each statistic's non-P sides (< 0: its group's)
   double fit_q = 0.9;   // w_fithi: share of words whose fit is above this quantile of the reference words' fit
   double cp = 0;        // the combination of v2, SURPRISE and MATCH: power mean with this exponent (0: geometric)
   V3Params() {
@@ -3515,10 +3532,45 @@ struct V3Params {
       grp[k][0] = v3_spec(k).plus;
       grp[k][1] = v3_spec(k).minus;
       swt[k] = 1;
+      sdz[k] = -1;
     }
   }
-  // Profile v31's defaults (frozen on development data; docs/reports/SCRIBE_V31.md).
-  void set_v31() { v31 = true; }
+  // Profile v31's defaults (chosen on development ladder A and its battery; docs/reports/SCRIBE_V31.md).
+  //   SURPRISE 3.1: the bland sides of w_mean, w_sd, w_hi, w_spell (low), w_lo, w_ctx (high) and w_fit (low) move from
+  //     P to B; w_anti, w_fit, w_fithi (high) form F; w_pgain is two-sided (P high, C low).
+  //   MATCH 3.1: m_bridge forms F; m_echo64 replaces m_echo32 (a copied sentence, not a repeated name); m_pcoh is
+  //     two-sided (P high, C low).
+  //   Both: L caps at 90 (= S's 30 + F's 60, so non-words stay below real words in any order), F caps at 60 (kapF 2,
+  //   dead zone 1, q 0.99), B counts 10 per unit beyond its 97.5th percentile; tau 27 and 32 put the mean of dev A's
+  //   human samples at 0.909, as for v3. SCRIBE v3.1 = the geometric mean of v2, SURPRISE 3.1 and MATCH 3.1 (cp 0).
+  void set_v31() {
+    v31 = true;
+    auto G = [&](int k, char hi, char lo) {
+      grp[k][0] = hi;
+      grp[k][1] = lo;
+    };
+    G(W_MEAN, 'L', 'B');
+    G(W_SD, 'L', 'B');
+    G(W_LO, 'B', 'S');
+    G(W_HI, 'L', 'B');
+    G(W_CTX, 'B', 'S');
+    G(W_SPELL, 'L', 'B');
+    G(W_ANTI, 'F', 0);
+    G(M_ECHO32, 0, 0);
+    for (V3MetricParams* mp : {&w, &m}) {
+      mp->capL = 90;
+      mp->capF = 60;
+      mp->kapF = 2;
+      mp->deadF = 1;
+      mp->qF = 0.99;
+      mp->deadB = 0;
+      mp->qB = 0.975;
+      mp->wB = 10;
+    }
+    w.tau = 27;
+    m.tau = 32;
+    cp = 0;
+  }
   static int stat_index(const std::string& name) {
     for (int k = 0; k < W3_N; ++k)
       if (name == v3_spec(k).name) return k;
@@ -3544,7 +3596,8 @@ struct V3Params {
       else if (k == "disagree") disagree = x;
       else if (k == "fit_q") fit_q = x;
       else if (k == "cp") cp = x;
-      else if (k.rfind("g.", 0) == 0 || k.rfind("wt.", 0) == 0) {  // g.<stat>=XY (groups of the high, low side; 0 = none), wt.<stat>=x
+      else if (k.rfind("g.", 0) == 0 || k.rfind("wt.", 0) == 0 || k.rfind("dz.", 0) == 0) {
+        // g.<stat>=XY (groups of the high and low side; 0 = none), wt.<stat>=x (weight), dz.<stat>=x (dead zone)
         const bool g = k[0] == 'g';
         const int s = stat_index(k.substr(g ? 2 : 3));
         if (s < 0) return false;
@@ -3553,11 +3606,13 @@ struct V3Params {
           if (v.size() != 2) return false;
           for (int side = 0; side < 2; ++side) {
             const char c = v[static_cast<size_t>(side)];
-            if (c != '0' && c != 'L' && c != 'S' && c != 'C' && c != 'P') return false;
+            if (c != '0' && c != 'L' && c != 'S' && c != 'C' && c != 'P' && c != 'F' && c != 'B') return false;
             grp[s][side] = c == '0' ? 0 : c;
           }
-        } else {
+        } else if (k[0] == 'w') {
           swt[s] = x;
+        } else {
+          sdz[s] = x;
         }
       } else if (k.size() > 2 && (k[0] == 'w' || k[0] == 'm') && k[1] == '.') {
         V3MetricParams& mp = k[0] == 'w' ? w : m;
@@ -3574,6 +3629,14 @@ struct V3Params {
         else if (k == "wP") mp.wP = x;
         else if (k == "q") mp.q = x;
         else if (k == "tau") mp.tau = x;
+        else if (k == "deadF") mp.deadF = x;
+        else if (k == "capF") mp.capF = x;
+        else if (k == "kapF") mp.kapF = x;
+        else if (k == "qF") mp.qF = x;
+        else if (k == "deadB") mp.deadB = x;
+        else if (k == "wB") mp.wB = x;
+        else if (k == "qB") mp.qB = x;
+        else if (k == "capL") mp.capL = x;
         else return false;
       } else {
         return false;
@@ -3587,11 +3650,12 @@ struct ScoredV3 {
   double z[W3_N] = {};
   bool has[W3_N] = {};
   bool imputed[W3_N] = {};
-  double E[2][4] = {};   // [SURPRISE, MATCH][L, S, C, G] evidence sums (G: the too-predictable sides, graded)
+  double E[2][6] = {};   // [SURPRISE, MATCH][L, S, C, G, F, B] evidence sums (G: the too-predictable sides, graded; F, B: v3.1)
   double eP[W3_N] = {};  // each statistic's evidence on its too-predictable side
-  double Dg[2][4] = {};  // their terms of D
+  double Dg[2][6] = {};  // their terms of D (Dg[.][3] = graded G plus X)
   double D[2] = {};
   double surprise = 0, match = 0;
+  bool v31 = false;      // scored by profile v31 (its JSON adds F and B)
 };
 
 class V3Scorer {
@@ -3667,16 +3731,17 @@ class V3Scorer {
         if (is_echo(k)) pq_[b][k].finish(v3_spec(k).min_sd);
     }
     for (int b = 0; b < 2; ++b) {
-      std::vector<double> E[2][4];
+      std::vector<double> E[2][6];
       for (const V3Features& f : ref_[b]) {
         const ScoredV3 o = evidence(f);
         for (int m = 0; m < 2; ++m)
-          for (int g = 0; g < 4; ++g) E[m][g].push_back(o.E[m][g]);
+          for (int g = 0; g < 6; ++g) E[m][g].push_back(o.E[m][g]);
       }
       for (int m = 0; m < 2; ++m)
-        for (int g = 0; g < 4; ++g) {
+        for (int g = 0; g < 6; ++g) {
+          const V3MetricParams& mp = m == 0 ? params.w : params.m;
           std::sort(E[m][g].begin(), E[m][g].end());
-          th_[m][b][g] = scribe_detail::quantile_sorted(E[m][g], m == 0 ? params.w.q : params.m.q);
+          th_[m][b][g] = scribe_detail::quantile_sorted(E[m][g], g == 4 ? mp.qF : g == 5 ? mp.qB : mp.q);
         }
       // Too predictable: each statistic counts only beyond what the q share of human samples show on it.
       std::vector<double> eP[W3_N];
@@ -3755,6 +3820,8 @@ class V3Scorer {
     has[M_BRIDGE] = f.has_bridge;
     x[M_PCOH] = f.m_pcoh;
     has[M_PCOH] = f.has_pcoh;
+    x[M_ECHO64] = f.m_echo64;
+    has[M_ECHO64] = f.has_pcoh;
   }
 
   int bucket(const V3Features& f) const {
@@ -3790,8 +3857,9 @@ class V3Scorer {
         const char g = params.grp[k][side];
         if (!g) continue;
         const double u = side == 0 ? z : -z;
-        const int gi = g == 'L' ? 0 : g == 'S' ? 1 : g == 'C' ? 2 : 3;
-        double dz = gi == 0 ? mp.deadL : gi == 1 ? mp.deadS : gi == 2 ? mp.deadC : mp.dead;
+        const int gi = g == 'L' ? 0 : g == 'S' ? 1 : g == 'C' ? 2 : g == 'P' ? 3 : g == 'F' ? 4 : 5;
+        double dz = gi == 0 ? mp.deadL : gi == 1 ? mp.deadS : gi == 2 ? mp.deadC : gi == 3 ? mp.dead : gi == 4 ? mp.deadF : mp.deadB;
+        if (gi != 3 && params.sdz[k] >= 0) dz = params.sdz[k];
         double wt = params.swt[k];
         if (k == M_LZ && gi == 2) {
           dz = params.lz_dead;
@@ -3814,7 +3882,7 @@ class V3Scorer {
     for (int m = 0; m < 2; ++m) {
       const V3MetricParams& mp = m == 0 ? params.w : params.m;
       auto sat = [&](double x) { return mp.cap * (1.0 - std::exp(-std::max(0.0, x) / mp.kap)); };
-      o.Dg[m][0] = sat(o.E[m][0] - th_[m][b][0]);
+      o.Dg[m][0] = params.v31 ? mp.capL * (1.0 - std::exp(-std::max(0.0, o.E[m][0] - th_[m][b][0]) / mp.kap)) : sat(o.E[m][0] - th_[m][b][0]);
       o.Dg[m][1] = sat(o.E[m][1] - th_[m][b][1]);
       o.Dg[m][2] = mp.wC * o.E[m][2];
       double ex = 0;
@@ -3822,6 +3890,12 @@ class V3Scorer {
         if ((v3_spec(k).metric == 'W') == (m == 0)) ex += std::max(0.0, o.eP[k] - thP_[b][k]);
       o.Dg[m][3] = mp.wG * o.E[m][3] + mp.wP * ex;
       o.D[m] = o.Dg[m][0] + o.Dg[m][1] + o.Dg[m][2] + o.Dg[m][3];
+      if (params.v31) {  // v3.1's foreign-word (saturating) and bland (linear beyond its threshold) groups
+        o.v31 = true;
+        o.Dg[m][4] = mp.capF * (1.0 - std::exp(-std::max(0.0, o.E[m][4] - th_[m][b][4]) / mp.kapF));
+        o.Dg[m][5] = mp.wB * std::max(0.0, o.E[m][5] - th_[m][b][5]);
+        o.D[m] += o.Dg[m][4] + o.Dg[m][5];
+      }
     }
     o.surprise = std::exp(-o.D[0] / params.w.tau);
     o.match = std::exp(-o.D[1] / params.m.tau);
@@ -3837,7 +3911,7 @@ class V3Scorer {
   double thP_[2][W3_N] = {};  // [bucket][statistic]: the too-predictable side's threshold
   size_t nref_[2] = {0, 0};
   double th_lo_ = 0, th_hi_ = 0, th_fit_ = 0;
-  double th_[2][2][4] = {};  // [metric][bucket][group]
+  double th_[2][2][6] = {};  // [metric][bucket][group]
 };
 
 // SCRIBE v3 = the mean of v2, SURPRISE and MATCH; also their minimum, and a flag when they disagree.
@@ -3866,11 +3940,11 @@ inline double combine_v31(double v2, double surprise, double match, double cp) {
 inline std::string v3_json(const ScoredV3& s, const V3Combined& c) {
   std::string o = "{\"surprise\":" + scribe_num(s.surprise) + ",\"match\":" + scribe_num(s.match) + ",\"min3\":" + scribe_num(c.min3) +
                   ",\"spread\":" + scribe_num(c.spread) + ",\"disagree\":" + (c.disagree ? "1" : "0");
-  const char* G = "LSCP";
+  const char* G = "LSCPFB";
   for (int m = 0; m < 2; ++m) {
     o += m == 0 ? ",\"surprise_D\":{" : ",\"match_D\":{";
     o += "\"D\":" + scribe_num(s.D[m]);
-    for (int g = 0; g < 4; ++g) o += ",\"D" + std::string(1, G[g]) + "\":" + scribe_num(s.Dg[m][g]) + ",\"" + std::string(1, G[g]) + "\":" + scribe_num(s.E[m][g]);
+    for (int g = 0; g < (s.v31 ? 6 : 4); ++g) o += ",\"D" + std::string(1, G[g]) + "\":" + scribe_num(s.Dg[m][g]) + ",\"" + std::string(1, G[g]) + "\":" + scribe_num(s.E[m][g]);
     o += "}";
   }
   o += ",\"z\":{";
@@ -3879,7 +3953,7 @@ inline std::string v3_json(const ScoredV3& s, const V3Combined& c) {
     if (!s.has[k] && !s.imputed[k]) continue;
     if (!first) o += ",";
     first = false;
-    o += "\"" + std::string(v3_spec(k).name) + "\":" + scribe_num(s.z[k], 4);
+    o += "\"" + std::string(v3_spec(k).name) + "\":" + scribe_num(s.z[k], s.v31 ? 6 : 4);
   }
   o += "}}";
   return o;
@@ -3894,7 +3968,7 @@ inline std::string v3_raw_json(const V3Features& f) {
          ",\"m_words\":" + opt(f.has_m, f.m_words) + ",\"m_coh\":" + opt(f.has_m_coh, f.m_coh) + ",\"m_echo\":" + opt(f.has_echo, f.m_echo) + ",\"m_echo32\":" + opt(f.has_echo, f.m_echo32) +
          (f.has_31 || f.has_bridge || f.has_pcoh || f.has_pgain
               ? ",\"w_fit\":" + opt(f.has_31, f.w_fit) + ",\"w_pgain\":" + opt(f.has_pgain, f.w_pgain) + ",\"w_lead\":" + opt(f.has_lead, f.w_lead) +
-                    ",\"m_bridge\":" + opt(f.has_bridge, f.m_bridge) + ",\"m_pcoh\":" + opt(f.has_pcoh, f.m_pcoh)
+                    ",\"m_bridge\":" + opt(f.has_bridge, f.m_bridge) + ",\"m_pcoh\":" + opt(f.has_pcoh, f.m_pcoh) + ",\"m_echo64\":" + opt(f.has_pcoh, f.m_echo64)
               : std::string()) +
          "}";
 }
@@ -4003,6 +4077,56 @@ inline void scribe_v3_selftest(int& checks, int& fails) {
       check(q0.has_pcoh && q1.has_pcoh && q0.m_pcoh < q1.m_pcoh && p0.m_pcoh > q0.m_pcoh, "m_pcoh rises with the prompt's strings");
       check(p0.has_lead && p1.has_lead && p1.w_lead > p0.w_lead, "w_lead: the first sentence carries the prompt's words");
     }
+  }
+  // v3.1's groups: F (foreign words, saturating at capF) and B (bland, linear beyond its quantile); v3 ignores them.
+  {
+    std::mt19937_64 r(11);
+    std::normal_distribution<double> N(0.0, 1.0);
+    auto mk = [&](double fit_shift, double bland) {
+      V3Features f;
+      f.bytes = 500;
+      f.n_words = 90;
+      f.has_w = f.has_w_coh = f.has_m = f.has_m_coh = true;
+      for (int i = 0; i < 90; ++i) f.s.push_back(static_cast<float>(std::max(0.0, 9 + 5 * N(r) - 3 * bland)));
+      f.w_mean = 9.5 + 0.8 * N(r) - 0.8 * bland;
+      f.w_sd = 5 + 0.5 * N(r) - 0.5 * bland;
+      f.w_ac1 = 0.05 * N(r);
+      f.w_ctx = 3 + 0.4 * N(r);
+      f.w_spell = 1 + 0.3 * N(r) - 0.3 * bland;
+      f.w_coh = 0.7 + 0.3 * N(r);
+      f.m_med = 11 + N(r);
+      f.m_p90 = 18 + N(r);
+      f.m_short = 0.01 + 0.002 * N(r);
+      f.m_lz = 3 + 0.1 * N(r);
+      f.m_tri = 0.25 + 0.05 * N(r);
+      f.m_coh = 0.15 + 0.05 * N(r);
+      f.has_31 = f.has_bridge = true;
+      double s = 0;
+      for (int i = 0; i < 90; ++i) {
+        f.fit.push_back(static_cast<float>(-3 + 3 * N(r) + (i % 5 == 0 ? fit_shift : 0.0)));
+        s += f.fit.back();
+      }
+      f.w_fit = s / 90;
+      f.w_anti = 0.1 + 0.03 * N(r) + 0.03 * fit_shift;
+      f.m_bridge = 0.03 + 0.01 * N(r) + 0.01 * fit_shift;
+      return f;
+    };
+    V3Scorer v3, v31;
+    v31.params.set_v31();
+    for (int i = 0; i < 1000; ++i) {
+      const V3Features f = mk(0, 0);
+      v3.add_reference(f);
+      v31.add_reference(f);
+    }
+    v3.finish();
+    v31.finish();
+    const V3Features a = mk(0, 0), stuffed = mk(12, 0), bland = mk(0, 3);
+    const ScoredV3 s0 = v31.score(a), s1 = v31.score(stuffed), s2 = v31.score(bland);
+    check(s0.surprise > 0.7 && s1.Dg[0][4] > 20 && s1.Dg[0][4] <= v31.params.w.capF && s1.surprise < 0.5 * s0.surprise,
+          "v3.1: inserted words (fit and m_bridge far up) fill F, saturating at capF");
+    check(s2.Dg[0][5] > 0 && s2.surprise < s0.surprise && s0.Dg[0][5] == 0, "v3.1: a bland text is charged in B, a typical one is not");
+    check(v3.score(stuffed).Dg[0][4] == 0 && !v3.score(stuffed).v31 && v31.params.w.capL == 90 && v3.params.w.capL == 30,
+          "profile v3 ignores the v3.1 groups; v3.1's L cap (90) is S's plus F's");
   }
   // v3.1: the combination does not dilute one judge's confident catch.
   {
