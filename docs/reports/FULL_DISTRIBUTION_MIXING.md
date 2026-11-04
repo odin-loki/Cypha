@@ -221,3 +221,30 @@ So `--full-mix`'s ABs line becomes `context8k`'s headline bits per byte. The fla
 - Normalising the linear mixture gains almost nothing: its mass is already 0.9998.
 - The gain is nonlinear. SSE alone, after the linear final layer, takes 0.031 bits per byte. Logistic mixing with SSE takes 0.061. Mixing that with the geometric mixer takes 0.073.
 - The bitwise mixer over the raw experts alone (Rs) beats the whole linear chain and final layer by 0.013. The chain and final layer are still worth having as inputs: As beats Rs by 0.049.
+
+## Onto main's new default
+
+X1 passed, so `origin/main` (6aed3eb) was merged into `wip/full-mix` as a merge commit (4c3954b), as the cloud session asked.
+
+**What main changed in context8k:**
+- an online n-gram expert (`OnlineNgram`, orders 1–12) as a chain stage before the LSTM, and as 9 more final-layer inputs (its mixed probability, then each of its 8 orders);
+- the byte LSTM at hidden 256 (it was 64).
+
+The final layer now has 35 inputs. Its `online_final_bpc` is 1.5793 on this PC, by the cloud session's report.
+
+**What the replica needed:**
+- **The n-gram's whole distributions.** `OnlineNgram::code()` predicts and learns in one call. A new `dist()` gives its mixed and per-order distributions over all 256 bytes from the same state, learning nothing: a slot that another context holds reads as unseen, as `claim()` would leave it. The hook then calls `code()` to learn the byte, and checks that `dist()` gave the same probability (`ngram_dist_max_abs_diff`).
+- The n-gram stage in the replica chain, and its 9 inputs in the replica final layer, in main's order.
+- The LSTM at `--lstm-size` and `--lstm-window`.
+- The PAQ mixers read the n-gram too: its mixed distribution and each order's are 9 more inputs (33 in all; 25 raw).
+- The dump is FMX2 (the n-gram's 9 distributions after the LSTM's). `--full-mix` refuses `--doc-boost` (off by default), since the replica does not scale the steps.
+
+**Check run (X1m), before X2 is registered.** It runs side by side with M0, main's own binary, and the PC is nearly idle (load about 2).
+- X1m: `context8k --full-mix --full-mix-dump x1m.fmx` on the merged code.
+- M0: `context8k` from origin/main 6aed3eb, unchanged.
+- **Checks:**
+  - every line M0 prints, X1m prints identically;
+  - arm F equals M0's `online_final_bpc` exactly;
+  - the replica chain equals the chain;
+  - the n-gram's `dist()` equals `code()`.
+- Only these and the first half are read from X1m; its second half is not read before X2.
