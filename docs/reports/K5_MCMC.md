@@ -139,6 +139,21 @@ All MCMC arms use 1,000 steps (about 9 proposals per word), T 1.0 → 0.6, K 64,
 - **P8 (the rule).** About a 25% chance that any arm passes conditions 1–3 at 4 seeds. Non-overlapping intervals need about +0.03 v3.1. The raters' verdict is open. My guess: MCMC will not lift K5 from about 2 of 10 to 4.
 - **P9 (cost).** 1,000 steps add 1.4–1.9 s a paragraph-thread, about 50–70 s per 250 prompts on 8 threads, on top of about 90 s for K5's gated writing. Memory rises by less than 50 MB (the LDA model is 12 MB).
 
+## Addendum 1 (2026-11-05, after reading M0, R1, R2, R3 and C1; before R4)
+
+**What prompted it.** Every MCMC arm read so far is below M0 on v2 (0.421–0.468 against 0.498). Every paragraph grows by 7.5–11 words, even at 300 steps (R3). The insert and delete moves, with their length term, may cause much of the damage. They pad the text with cheap words and cut it at odd places. Replace-only moves keep the length and the sentence boundaries fixed.
+
+**New arms** (seed 0, all else as R1):
+- **R4:** replace only (`--k5-mcmc-moves 1,0,0`; the length term is then constant).
+- **R4X:** replace only, with the terms of the best of C1, L1, L2, E1, E2 and LE by the choosing conditions. If none keeps the conditions, it uses the one with the highest v3.1.
+
+They join the choice as any other arm. The final arms and the rule are unchanged.
+
+**Predictions:**
+- R4 is closer to M0 than R1 on both judges: v2 within 0.03 of M0, and v3.1 0.005–0.03 below M0.
+- R4X is within ±0.02 of R4.
+- Neither is above M0 on v3.1 by more than 0.01.
+
 ## Results
 
 (Added after the runs.)
