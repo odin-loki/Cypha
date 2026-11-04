@@ -143,6 +143,8 @@ Odin: "Make another two metrics with different maths that complement each other 
 | SCRIBE v3 | cloud | **Done**: ladder 5 of 5, attacks 5 of 9 → [SCRIBE_V3.md](SCRIBE_V3.md) |
 | SCRIBE v3.1: catch keyword stuffing and generic paragraphs; fresh read on enwik9 | cloud | **Done**: registered attacks 9 of 9, held-out 2 of 8 → [SCRIBE_V31.md](SCRIBE_V31.md) |
 | Whole-distribution mixing with APM/SSE (PAQ-style) | Odin's PC | **Done**: 1.5051 on the new default (−0.074); behind `--full-mix` → [FULL_DISTRIBUTION_MIXING.md](FULL_DISTRIBUTION_MIXING.md) |
-| `--full-mix` on by default (twice `context8k`'s time) | Odin | To decide |
+| LSTM and n-gram optimised, every number unchanged | Odin's PC | **Done**: `context8k` 38% faster (LSTM 256 937 → 218 s); bit-for-bit check repeated in the cloud |
+| `--full-mix` folded into the main pass, then on by default (Odin: optimise "before going in") | Odin's PC | Running |
+| SCRIBE v3 paper, Zenodo version 2.0 | cloud | **Written**: `paper/scribe/`; upload waits on Odin (v1.0 DOI, "New version") |
 
 This record is updated as those land.
