@@ -2591,6 +2591,8 @@ target_include_directories(cyphalm_trie PRIVATE
 # directory; $CYPHA_SIMVEC overrides it.
 target_compile_definitions(cyphalm_trie PRIVATE
   "CYPHA_SIMVEC_DEFAULT=\"${CMAKE_CURRENT_SOURCE_DIR}/../data/cyphalm/simvec_ppmi32.bin\"")
+find_package(Threads REQUIRED)  # context8k's full mix computes expert rows on std::thread (FULL_DISTRIBUTION_MIXING.md)
+target_link_libraries(cyphalm_trie PRIVATE Threads::Threads)
 cypha_mingw_apply_exe_link_options(cyphalm_trie)
 add_test(NAME native_cyphalm_trie_selftest COMMAND "$<TARGET_FILE:cyphalm_trie>" selftest)
 set_tests_properties(native_cyphalm_trie_selftest PROPERTIES TIMEOUT 60)

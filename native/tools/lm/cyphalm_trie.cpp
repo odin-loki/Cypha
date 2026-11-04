@@ -295,6 +295,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <functional>
+#include <thread>
 #include <iterator>
 #include <limits>
 #include <map>
@@ -414,9 +415,10 @@ struct Args {
     std::size_t k5_vmax = cypha::cyphalm::wkn::kVmax;    // K5_SCALE: --k5-vmax V
     std::string k5_lstm, k5_lstm_mix = "geo";     // §13.24: --k5-lstm FILE (lstm-train's), reranking K5's nucleus
     double k5_lstm_w = 0.25;                      // §13.24: --k5-lstm-w W, the byte LSTM's weight
-    // FULL_DISTRIBUTION_MIXING.md: context8k --full-mix (whole-distribution mixing, PAQ's way; off by default),
-    // --full-mix-dump FILE (its inputs, for full-mix-replay), --full-mix-params k=v,...
-    bool full_mix = false;
+    // FULL_DISTRIBUTION_MIXING.md: context8k's full mix (whole-distribution mixing, PAQ's way; on by default since
+    // "Optimisation and default", --no-full-mix turns it off), --full-mix-dump FILE (its inputs, for full-mix-replay),
+    // --full-mix-params k=v,...
+    bool full_mix = true;
     std::string full_mix_dump, full_mix_params;
     std::vector<std::pair<std::string, std::string>> k5_opts;  // docs/reports/K5_UPGRADES.md: every other --k5-... flag
 };
@@ -510,7 +512,8 @@ Args parse(int argc, char** argv, int from) {
         else if (s == "--one-rate") a.two_rates = false;                // §13.21: the main chain only
         else if (s == "--no-lstm") a.no_lstm = true;                    // §13.18: context8k without the LSTM
         else if (s == "--final-gate") a.final_gate = next();            // §13.21
-        else if (s == "--full-mix") a.full_mix = true;                  // FULL_DISTRIBUTION_MIXING.md
+        else if (s == "--full-mix") a.full_mix = true;                  // FULL_DISTRIBUTION_MIXING.md (the default)
+        else if (s == "--no-full-mix") a.full_mix = false;              // FULL_DISTRIBUTION_MIXING.md: the lines before it
         else if (s == "--full-mix-dump") a.full_mix_dump = next(), a.full_mix = true;
         else if (s == "--full-mix-params") a.full_mix_params = next(), a.full_mix = true;
         else if (s == "--ngram") a.ngram = true;                        // ONLINE_LEARNING_UPGRADES
@@ -926,165 +929,277 @@ bool good_start(const std::string& l);
 std::vector<double> mix_plan_into(const ContentPlanStore& st, const std::map<std::string, std::vector<std::string>>& frames,
                                   const std::uint8_t* data, std::size_t train, std::size_t half, std::vector<double>& cur);
 
-// FULL_DISTRIBUTION_MIXING.md: context8k --full-mix. One more pass over the holdout: every expert's whole next-byte
-// distribution (rebuilt as the chain built it: the similar-context and document experts and the LSTM are built again,
-// deterministically), streamed into cypha::online::fullmix::FullMixer, which replays the online chain and final layer
-// on whole distributions (checked against the chain here) and runs the PAQ-style arms. Prints full_mix_bpc (the
-// headline arm, second half) and every arm's first and second half. Nothing above it changes.
-int full_mix_context8k(const Args& a, const PackedModel& pm, const double w[6], const std::vector<std::uint8_t>& data,
-                       std::size_t kTrain, std::size_t half, const cypha::cyphalm::bkn::ByteKN* kn,
-                       const FmInfiniGram& ig, const ClassContext* cc, const std::vector<double>& doc_lam,
-                       const std::vector<double>& base, const std::vector<float>* snap3) {
-    namespace fx = cypha::online::fullmix;
-    if (!a.online_mix || !a.online_final || a.gln || a.bkn_way == "a" || (a.final_gate != "copy" && a.final_gate != "ig") ||
-        a.doc_boost != 1.0) {
-        std::cerr << "--full-mix needs the online chain and final layer, no GLN, --bkn-way b, --final-gate copy|ig, no --doc-boost\n";
-        return 2;
-    }
-    const auto t0 = std::chrono::steady_clock::now();
-    const std::size_t H = base.size();
-    int rc = 0;
-    const auto sc = default_sim(a, data.data(), kTrain, rc);
-    if (rc) return rc;
+// FULL_DISTRIBUTION_MIXING.md: context8k's full mix (on by default since "Optimisation and default"; --no-full-mix
+// turns it off). Every expert's whole next-byte distribution for every holdout byte, streamed into
+// cypha::online::fullmix::FullMixer, which replays the online chain and final layer on whole distributions (checked
+// against the chain) and runs the PAQ-style arms. The n-gram's and the LSTM's byte loops run inside this one (run()), on
+// the chain's own instances, so each is computed once. Rows come in blocks: producer threads compute block b + 1 (the
+// static experts split over kStatic threads; similar-context, the LSTM and the n-gram each on one thread, in order)
+// while the main thread mixes block b. Every value is computed by the same code in the same order as before, so the
+// output is the same to the last bit.
+struct FullMixRun {
+    static constexpr std::size_t kBlock = 512;
+    static constexpr int kStatic = 3;
+    const Args& a;
+    const PackedModel& pm;
+    const double* w;
+    const std::vector<std::uint8_t>& data;
+    std::size_t kTrain, H, half;
+    const cypha::cyphalm::bkn::ByteKN* kn;
+    const FmInfiniGram& ig;
+    const ClassContext* cc;
+    std::vector<double> doc_lam;
+    const std::vector<float>* snap3;
+    std::unique_ptr<SimilarContext> sc;
     std::unique_ptr<DocTopic> dt;
-    if (!a.no_doc && !(dt = make_doc(a.doc.empty() ? std::string("cache") : a.doc, data.data(), kTrain, rc))) return rc ? rc : 1;
-    fx::ChainSpec cs;
-    cs.kn = kn != nullptr, cs.cls = cc != nullptr, cs.sim = sc != nullptr, cs.copy = !a.no_copy, cs.doc = dt != nullptr;
-    cs.lstm = !a.no_lstm, cs.two_rates = a.two_rates, cs.final_gate = a.final_gate;
-    cs.kn_buckets = kn ? kn->buckets() : 1, cs.ig_buckets = kBuckets, cs.cls_buckets = ClassContext::kBuckets;
-    cs.sim_buckets = SimilarContext::kBuckets, cs.copy_buckets = kCopyBuckets, cs.doc_buckets = DocTopic::kBuckets;
-    cs.doc_lam = doc_lam;
-    if (dt) {
-        const auto& dp = dt->params();
-        cs.doc_on[0] = dp.trig, cs.doc_on[1] = dp.cache, cs.doc_on[2] = dp.topic;
-    }
-    // The online n-gram (ONLINE_LEARNING_UPGRADES), built and warmed as the chain built it; dist() gives its whole
-    // distributions, then code() learns the byte as in the chain.
-    std::unique_ptr<cypha::online::OnlineNgram> ng;
-    if (a.ngram) {
-        cypha::online::OnlineNgram::Params np;
-        np.orders.clear();
-        for (std::size_t p0 = 0; p0 < a.ngram_orders.size();) {
-            const std::size_t p1 = std::min(a.ngram_orders.find(',', p0), a.ngram_orders.size());
-            np.orders.push_back(std::atoi(a.ngram_orders.substr(p0, p1 - p0).c_str()));
-            p0 = p1 + 1;
+    cypha::online::fullmix::Params P;
+    std::unique_ptr<cypha::online::fullmix::FullMixer> fm;
+    int head = -1;
+    std::vector<double> chain_y;
+    double maxd3 = 0, maxng = 0, t_static = 0, t_sim = 0, t_lstm = 0, t_ng = 0, t_main = 0, t_wait = 0, seconds = 0;
+
+    struct Block {
+        std::size_t k0 = 0, n = 0;
+        int O = 0;
+        std::vector<double> trie, kn, ig, cls, sim, lstm, ng, ngo;
+        std::vector<std::uint8_t> em, pred, ig_has;
+        std::vector<int> kn_b, ig_b, ig_n, cls_b, sim_b, cpred, cn;
+        void size(int orders) {
+            O = orders;
+            const std::size_t B = kBlock;
+            trie.assign(B * 5 * 256, 0), kn.assign(B * 256, 0), ig.assign(B * 5 * 256, 0), cls.assign(B * 256, 0);
+            sim.assign(B * 256, 0), lstm.assign(B * 256, 0), ng.assign(B * 256, 0), ngo.assign(B * std::max(O, 1) * 256, 0);
+            em.assign(B, 0), pred.assign(B, 0), ig_has.assign(B, 0);
+            for (auto* v : {&kn_b, &ig_b, &ig_n, &cls_b, &sim_b, &cpred, &cn}) v->assign(B, 0);
         }
-        np.tb = a.ngram_tb, np.cap = a.ngram_cap, np.lr = a.ngram_lr;
-        ng = std::make_unique<cypha::online::OnlineNgram>(np);
-        const std::size_t warm = std::min<std::size_t>(kTrain, std::size_t{1} << 20);
-        ng->pretrain(data.data(), kTrain - warm);
-        double po[32];
-        for (std::size_t i = kTrain - warm; i < kTrain; ++i) ng->code(data[i], po);
-        cs.ngram_orders = ng->orders();
-    }
-    // The byte LSTM at the chain's size and window.
-    std::function<void(double*)> lstm_dist;
-    std::function<void(std::uint8_t)> lstm_step;
-    std::shared_ptr<void> lstm_hold;
-    auto make_lstm = [&](auto tag) {
-        using T = typename decltype(tag)::type;
-        auto L = std::make_shared<T>(0, 0.003, a.lstm_window);
-        lstm_dist = [L](double* p) { L->dist(p); };
-        lstm_step = [L](std::uint8_t y) { L->step(y, true); };
-        lstm_hold = L;
     };
-    if (cs.lstm) {
-        if (a.lstm_size == 64) make_lstm(std::type_identity<cypha::online::ByteLSTMT<64>>{});
-        else if (a.lstm_size == 128) make_lstm(std::type_identity<cypha::online::ByteLSTMT<128>>{});
-        else make_lstm(std::type_identity<cypha::online::ByteLSTMT<256>>{});
-    }
-    fx::Params P;
-    if (!P.parse(a.full_mix_params)) {
-        std::cerr << "--full-mix-params k=v,... (lr1 lr2 lrb apm eps floor decay ssef a2bits headline)\n";
-        return 2;
-    }
-    fx::FullMixer fm(cs, P, half);
-    fm.set_trie_weights(w);
-    const int head = fm.arm(P.headline);
-    if (head < 0) {
-        std::cerr << "--full-mix-params headline=ARM (F Fn Fs A As Rs B Bs ABs)\n";
-        return 2;
-    }
-    std::ofstream df;
-    if (!a.full_mix_dump.empty()) {
-        df.open(a.full_mix_dump, std::ios::binary);
-        fx::DumpHeader hd;
-        hd.H = H, hd.half = half, hd.kn = cs.kn, hd.cls = cs.cls, hd.sim = cs.sim, hd.copy = cs.copy, hd.doc = cs.doc;
-        hd.lstm = cs.lstm, hd.two_rates = cs.two_rates, hd.gate_copy = cs.final_gate == "copy";
-        for (int q = 0; q < 3; ++q) hd.doc_on[q] = cs.doc_on[q];
-        hd.kn_buckets = cs.kn_buckets, hd.doc_buckets = cs.doc_buckets;
-        std::copy(w, w + 6, hd.tw);
-        std::copy(doc_lam.begin(), doc_lam.end(), hd.doc_lam);
-        df.write(reinterpret_cast<const char*>(&hd), sizeof hd);
-        const std::uint32_t ngo = static_cast<std::uint32_t>(cs.ngram_orders);
-        df.write(reinterpret_cast<const char*>(&ngo), sizeof ngo);
-    }
-    std::unique_ptr<DocTopic::Stream> ds;
-    if (dt) ds = std::make_unique<DocTopic::Stream>(*dt);
-    static const int caps[5] = {4, 16, 64, 512, 8192};
-    FmInfiniGram::Cursor cur[5];
-    int prev[5] = {-1, -1, -1, -1, -1};
-    double maxd = 0, maxd3 = 0, maxng = 0;
-    std::vector<double> Png(256), Pngo(static_cast<std::size_t>(std::max(cs.ngram_orders, 1)) * 256);
-    for (std::size_t k = 0; k < H; ++k) {
-        const std::size_t i = kTrain + k;
-        fx::ByteIn in;
-        in.y = data[i], in.prev = data[i - 1], in.prev2 = data[i - 2];
-        double e[5][256];
-        unsigned pred = 0;
-        pm.fill_experts(data.data(), i, kTrain, Mode::Synth, e, in.em, pred, false);
-        in.pred = pred;
-        for (int j = 0; j < 5; ++j) in.trie[j] = e[j];
-        double Pk[256];
-        if (kn) {
-            int band = 0;
-            const int d = kn->dist(data.data(), i, Pk, &band);
-            in.kn = Pk, in.kn_b = d == 0 ? 0 : (d - 1) * 3 + band;
+
+    // The similar-context expert is built again: it learns online keys as it reads, so the chain's instance (which has
+    // read the whole holdout) would see the future. The document cache gets a fresh stream over the chain's tables.
+    int init() {
+        int rc = 0;
+        sc = default_sim(a, data.data(), kTrain, rc);
+        if (rc) return rc;
+        if (!a.no_doc && !(dt = make_doc(a.doc.empty() ? std::string("cache") : a.doc, data.data(), kTrain, rc))) return rc ? rc : 1;
+        if (!P.parse(a.full_mix_params)) {
+            std::cerr << "--full-mix-params k=v,... (lr1 lr2 lrb apm eps floor decay ssef a2bits headline)\n";
+            return 2;
         }
-        double Pi[5][256];
-        for (int c = 0; c < 5; ++c) {
-            const std::size_t len = std::min<std::size_t>(i, static_cast<std::size_t>(caps[c]));
-            const int hint = prev[c] < 0 ? -1 : std::min(prev[c] + 1, caps[c]);
-            const auto r = ig.query(data.data() + (i - len), len, caps[c], hint, 1, cur[c]);
-            prev[c] = r.n;
-            if (r.total) {
-                for (int s = 0; s < 256; ++s) Pi[c][s] = static_cast<double>(r.count[s]) / static_cast<double>(r.total);
-                in.ig[c] = Pi[c];
+        return 0;
+    }
+
+    void static_rows(Block& b, std::size_t r0, std::size_t r1) const {
+        static const int caps[5] = {4, 16, 64, 512, 8192};
+        FmInfiniGram::Cursor cur[5];
+        int prev[5] = {-1, -1, -1, -1, -1};
+        for (std::size_t r = r0; r < r1; ++r) {
+            const std::size_t i = kTrain + b.k0 + r;
+            bool em = false;
+            unsigned pred = 0;
+            pm.fill_experts(data.data(), i, kTrain, Mode::Synth, reinterpret_cast<double(*)[256]>(&b.trie[r * 1280]), em, pred, false);
+            b.em[r] = em, b.pred[r] = static_cast<std::uint8_t>(pred);
+            if (kn) {
+                int band = 0;
+                const int d = kn->dist(data.data(), i, &b.kn[r * 256], &band);
+                b.kn_b[r] = d == 0 ? 0 : (d - 1) * 3 + band;
             }
-            if (c == 4) in.ig_b = bucket(r.n, r.total), in.ig_n = r.n;
-        }
-        double Pc[256], Ps[256], Pd[3][256], Pl[256];
-        if (cc) in.cls_b = ClassContext::bucket(cc->predict(data.data(), i, Pc)), in.cls = Pc;
-        if (sc) in.sim_b = SimilarContext::bucket(sc->predict(data.data(), i, Ps)), in.sim = Ps;
-        in.cpred = copy_pred(data.data(), i, in.cn);
-        if (ds)
-            for (int q = 0; q < 3; ++q)
-                if (cs.doc_on[q]) in.doc_b[q] = ds->predict(q, Pd[q]), in.doc[q] = Pd[q];
-        if (cs.lstm) lstm_dist(Pl), in.lstm = Pl;
-        if (ng) ng->dist(Png.data(), Pngo.data()), in.ngram = Png.data(), in.ngram_o = Pngo.data();
-        fm.step(in, k);
-        if (df.is_open()) fx::dump_byte(df, in, cs.ngram_orders);
-        maxd = std::max(maxd, std::abs(fm.chain_y() - base[k]));
-        if (snap3) maxd3 = std::max(maxd3, std::abs(static_cast<double>(static_cast<float>(fm.snap3_y())) - (*snap3)[k]));
-        if (ds) ds->feed(data[i]);
-        if (cs.lstm) lstm_step(data[i]);
-        if (ng) {
-            double po[32];
-            maxng = std::max(maxng, std::abs(ng->code(data[i], po) - Png[data[i]]));
+            b.ig_has[r] = 0;
+            for (int c = 0; c < 5; ++c) {
+                const std::size_t len = std::min<std::size_t>(i, static_cast<std::size_t>(caps[c]));
+                const int hint = prev[c] < 0 ? -1 : std::min(prev[c] + 1, caps[c]);
+                const auto q = ig.query(data.data() + (i - len), len, caps[c], hint, 1, cur[c]);
+                prev[c] = q.n;
+                if (q.total) {
+                    double* P = &b.ig[(r * 5 + static_cast<std::size_t>(c)) * 256];
+                    for (int s = 0; s < 256; ++s) P[s] = static_cast<double>(q.count[s]) / static_cast<double>(q.total);
+                    b.ig_has[r] |= static_cast<std::uint8_t>(1 << c);
+                }
+                if (c == 4) b.ig_b[r] = bucket(q.n, q.total), b.ig_n[r] = q.n;
+            }
+            if (cc) b.cls_b[r] = ClassContext::bucket(cc->predict(data.data(), i, &b.cls[r * 256]));
+            b.cpred[r] = copy_pred(data.data(), i, b.cn[r]);
         }
     }
-    std::printf("full_mix_bpc %.4f (arm %s; first half %.4f)\n", fm.bpc(1, head), P.headline.c_str(), fm.bpc(0, head));
-    std::fflush(stdout);
-    std::ostringstream o;
-    fm.report(o);
-    std::printf("%sfull_mix_check chain_max_abs_diff %.3g after_copy_max_abs_diff %.3g ngram_dist_max_abs_diff %.3g\n",
-                o.str().c_str(), maxd, maxd3, maxng);
-    std::cerr << "full_mix state_bytes " << fm.bytes() << " seconds "
-              << std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count() << "\n";
-    return 0;
-}
+
+    /// The n-gram's and the LSTM's byte loops (the chain's own instances; L or ng may be null), and the full mix with
+    /// them. Fills what the chain reads from those loops: plstm and lb as the LSTM pass does, pngram, pngram_o and nb as
+    /// the n-gram pass does.
+    template <class LSTM>
+    int run(LSTM* L, cypha::online::OnlineNgram* ng, std::vector<double>& plstm, double& lb, std::vector<double>& pngram,
+            std::vector<std::vector<float>>& pngram_o, double& nb) {
+        namespace fx = cypha::online::fullmix;
+        const auto t0 = std::chrono::steady_clock::now();
+        fx::ChainSpec cs;
+        cs.kn = kn != nullptr, cs.cls = cc != nullptr, cs.sim = sc != nullptr, cs.copy = !a.no_copy, cs.doc = dt != nullptr;
+        cs.lstm = L != nullptr, cs.two_rates = a.two_rates, cs.final_gate = a.final_gate;
+        cs.kn_buckets = kn ? kn->buckets() : 1, cs.ig_buckets = kBuckets, cs.cls_buckets = ClassContext::kBuckets;
+        cs.sim_buckets = SimilarContext::kBuckets, cs.copy_buckets = kCopyBuckets, cs.doc_buckets = DocTopic::kBuckets;
+        cs.doc_lam = doc_lam;
+        if (dt) {
+            const auto& dp = dt->params();
+            cs.doc_on[0] = dp.trig, cs.doc_on[1] = dp.cache, cs.doc_on[2] = dp.topic;
+        }
+        cs.ngram_orders = ng ? ng->orders() : 0;
+        const int O = cs.ngram_orders;
+        fm = std::make_unique<fx::FullMixer>(cs, P, half);
+        fm->set_trie_weights(w);
+        head = fm->arm(P.headline);
+        if (head < 0) {
+            std::cerr << "--full-mix-params headline=ARM (F Fn Fs A As Rs B Bs ABs)\n";
+            return 2;
+        }
+        std::ofstream df;
+        if (!a.full_mix_dump.empty()) {
+            df.open(a.full_mix_dump, std::ios::binary);
+            fx::DumpHeader hd;
+            hd.H = H, hd.half = half, hd.kn = cs.kn, hd.cls = cs.cls, hd.sim = cs.sim, hd.copy = cs.copy, hd.doc = cs.doc;
+            hd.lstm = cs.lstm, hd.two_rates = cs.two_rates, hd.gate_copy = cs.final_gate == "copy";
+            for (int q = 0; q < 3; ++q) hd.doc_on[q] = cs.doc_on[q];
+            hd.kn_buckets = cs.kn_buckets, hd.doc_buckets = cs.doc_buckets;
+            std::copy(w, w + 6, hd.tw);
+            std::copy(doc_lam.begin(), doc_lam.end(), hd.doc_lam);
+            df.write(reinterpret_cast<const char*>(&hd), sizeof hd);
+            const std::uint32_t ngo = static_cast<std::uint32_t>(O);
+            df.write(reinterpret_cast<const char*>(&ngo), sizeof ngo);
+        }
+        if (L) plstm.resize(H);
+        if (ng) pngram.resize(H), pngram_o.assign(static_cast<std::size_t>(O), std::vector<float>(H));
+        chain_y.assign(H, 0.0);
+        std::unique_ptr<DocTopic::Stream> ds;
+        if (dt) ds = std::make_unique<DocTopic::Stream>(*dt);
+        using clk = std::chrono::steady_clock;
+        auto secs = [](clk::time_point s) { return std::chrono::duration<double>(clk::now() - s).count(); };
+        double ts[kStatic] = {}, tsim = 0, tl = 0, tn = 0;
+        // Producers: block b's rows, every value as the chain computes it.
+        auto produce = [&](Block* bp, std::vector<std::thread>& th) {
+            for (int t = 0; t < kStatic; ++t)
+                th.emplace_back([&, bp, t] {
+                    const auto s = clk::now();
+                    static_rows(*bp, bp->n * t / kStatic, bp->n * (t + 1) / kStatic);
+                    ts[t] += secs(s);
+                });
+            if (sc)
+                th.emplace_back([&, bp] {
+                    const auto s = clk::now();
+                    for (std::size_t r = 0; r < bp->n; ++r)
+                        bp->sim_b[r] = SimilarContext::bucket(sc->predict(data.data(), kTrain + bp->k0 + r, &bp->sim[r * 256]));
+                    tsim += secs(s);
+                });
+            if (L)
+                th.emplace_back([&, bp] {  // the LSTM pass: plstm[k] = max(P(y), 1e-12), lb over the second half, then learn
+                    const auto s = clk::now();
+                    for (std::size_t r = 0; r < bp->n; ++r) {
+                        const std::size_t k = bp->k0 + r;
+                        double* P = &bp->lstm[r * 256];
+                        L->dist(P);
+                        plstm[k] = std::max(P[data[kTrain + k]], 1e-12);
+                        if (k >= half) lb += -std::log2(plstm[k]);
+                        L->step(data[kTrain + k], true);
+                    }
+                    tl += secs(s);
+                });
+            if (ng)
+                th.emplace_back([&, bp] {  // the n-gram pass: its whole distributions first, then code() as the chain calls it
+                    const auto s = clk::now();
+                    double po[32];
+                    for (std::size_t r = 0; r < bp->n; ++r) {
+                        const std::size_t k = bp->k0 + r;
+                        const std::uint8_t y = data[kTrain + k];
+                        ng->dist(&bp->ng[r * 256], &bp->ngo[r * static_cast<std::size_t>(O) * 256]);
+                        const double pm = ng->code(y, po);
+                        maxng = std::max(maxng, std::abs(pm - bp->ng[r * 256 + y]));
+                        pngram[k] = std::max(pm, 1e-12);
+                        for (int q = 0; q < O; ++q) pngram_o[static_cast<std::size_t>(q)][k] = static_cast<float>(po[q]);
+                        if (k >= half) nb += -std::log2(pngram[k]);
+                    }
+                    tn += secs(s);
+                });
+        };
+        auto consume = [&](Block& b) {
+            double Pd[3][256];
+            for (std::size_t r = 0; r < b.n; ++r) {
+                const std::size_t k = b.k0 + r, i = kTrain + k;
+                fx::ByteIn in;
+                in.y = data[i], in.prev = data[i - 1], in.prev2 = data[i - 2];
+                for (int j = 0; j < 5; ++j) in.trie[j] = &b.trie[(r * 5 + static_cast<std::size_t>(j)) * 256];
+                in.em = b.em[r], in.pred = b.pred[r];
+                if (kn) in.kn = &b.kn[r * 256], in.kn_b = b.kn_b[r];
+                for (int c = 0; c < 5; ++c)
+                    if ((b.ig_has[r] >> c) & 1) in.ig[c] = &b.ig[(r * 5 + static_cast<std::size_t>(c)) * 256];
+                in.ig_b = b.ig_b[r], in.ig_n = b.ig_n[r];
+                if (cc) in.cls = &b.cls[r * 256], in.cls_b = b.cls_b[r];
+                if (sc) in.sim = &b.sim[r * 256], in.sim_b = b.sim_b[r];
+                in.cpred = b.cpred[r], in.cn = b.cn[r];
+                if (ds)
+                    for (int q = 0; q < 3; ++q)
+                        if (cs.doc_on[q]) in.doc_b[q] = ds->predict(q, Pd[q]), in.doc[q] = Pd[q];
+                if (L) in.lstm = &b.lstm[r * 256];
+                if (ng) in.ngram = &b.ng[r * 256], in.ngram_o = &b.ngo[r * static_cast<std::size_t>(O) * 256];
+                fm->step(in, k);
+                if (df.is_open()) fx::dump_byte(df, in, O);
+                chain_y[k] = fm->chain_y();
+                if (snap3) maxd3 = std::max(maxd3, std::abs(static_cast<double>(static_cast<float>(fm->snap3_y())) - (*snap3)[k]));
+                if (ds) ds->feed(data[i]);
+            }
+        };
+        Block buf[2];
+        buf[0].size(O), buf[1].size(O);
+        std::vector<std::thread> th;
+        auto start = [&](Block& b, std::size_t k0) {
+            b.k0 = k0, b.n = std::min(kBlock, H - k0);
+            produce(&b, th);
+        };
+        auto join = [&] {
+            const auto s = clk::now();
+            for (auto& t : th) t.join();
+            th.clear();
+            t_wait += secs(s);
+        };
+        start(buf[0], 0);
+        join();
+        for (std::size_t k0 = 0, cur = 0; k0 < H; k0 += kBlock, cur ^= 1) {
+            if (k0 + kBlock < H) start(buf[cur ^ 1], k0 + kBlock);  // the next block, while this one is mixed
+            const auto s = clk::now();
+            consume(buf[cur]);
+            t_main += secs(s);
+            join();
+        }
+        for (double t : ts) t_static += t;
+        t_sim = tsim, t_lstm = tl, t_ng = tn;
+        seconds = secs(t0);
+        return 0;
+    }
+
+    /// The full mix's lines (after online_final_bpc), checked against the chain.
+    void finish(const std::vector<double>& base) {
+        double maxd = 0;
+        for (std::size_t k = 0; k < H; ++k) maxd = std::max(maxd, std::abs(chain_y[k] - base[k]));
+        std::cout.flush();  // std::cout is not synced with stdio: its lines (online_final_bpc) go out first
+        std::printf("full_mix_bpc %.4f (arm %s; first half %.4f)\n", fm->bpc(1, head), P.headline.c_str(), fm->bpc(0, head));
+        std::fflush(stdout);
+        std::ostringstream o;
+        fm->report(o);
+        std::printf("%sfull_mix_check chain_max_abs_diff %.3g after_copy_max_abs_diff %.3g ngram_dist_max_abs_diff %.3g\n",
+                    o.str().c_str(), maxd, maxd3, maxng);
+        std::fflush(stdout);
+        std::fprintf(stderr,
+                     "full_mix state_bytes %zu seconds %.1f | thread busy s: static %.1f (%d threads) sim %.1f lstm %.1f ngram %.1f "
+                     "mix %.1f; main waited %.1f | mixer s: %s\n",
+                     fm->bytes(), seconds, t_static, kStatic, t_sim, t_lstm, t_ng, t_main, t_wait, fm->profile().c_str());
+    }
+    double headline_bpc() const { return fm->bpc(1, head); }
+};
 
 int cmd_context8k(const Args& a) {
+    // FULL_DISTRIBUTION_MIXING.md: the full mix replays the online chain and final layer, so it runs only where it can
+    // replay them; elsewhere it is switched off with one note, and the old command's lines are printed as before.
+    bool full_mix = a.full_mix;
+    if (full_mix && (!a.online_mix || !a.online_final || (a.gln && !a.no_gln) || a.bkn_way == "a" ||
+                     (a.final_gate != "copy" && a.final_gate != "ig") || a.doc_boost != 1.0)) {
+        std::cerr << "full mix off: it needs the online chain and final layer, no GLN, --bkn-way b, --final-gate copy|ig and "
+                     "no --doc-boost (--no-full-mix silences this)\n";
+        full_mix = false;
+    }
     Config cfg = a.cfg;
     std::vector<std::uint8_t> data;
     double w[6];
@@ -1297,11 +1412,16 @@ int cmd_context8k(const Args& a) {
     std::vector<float> d_sim, d_simb, d_doc[DocTopic::kParts], d_docb[DocTopic::kParts];
     if (keep) snaps.emplace_back(base.begin(), base.end());
     std::string chain = "trie_plus_context_8192";
+    // FULL_DISTRIBUTION_MIXING.md: context8k_bpc, the last line, is the best line this run printed: the full mix's
+    // headline arm, else online_final_bpc, else the last chain line.
+    double ctx_bpc = 0;
+    std::string ctx_src;
     auto chain_line = [&](const char* part) {
         double bits = 0;
         for (std::size_t k = half; k < H; ++k) bits += -std::log2(base[k]);
         chain += part;
         std::cout << chain << "_bpc " << bits / static_cast<double>(H - half) << "\n";
+        ctx_bpc = bits / static_cast<double>(H - half), ctx_src = chain;
     };
     if (cc) {
         mix_cls_into(*cc, data.data(), kTrain, half, base);
@@ -1421,6 +1541,17 @@ int cmd_context8k(const Args& a) {
     // final-layer inputs: its mixed probability and each order's.
     std::vector<double> pngram;
     std::vector<std::vector<float>> pngram_o;
+    // FULL_DISTRIBUTION_MIXING.md: with the full mix on, the n-gram's and the LSTM's byte loops run inside its row loop
+    // (FullMixRun::run), on these same instances; their lines and chain stages follow in the same order as below.
+    std::unique_ptr<FullMixRun> fmr;
+    if (full_mix) {
+        fmr.reset(new FullMixRun{a, pm, w, data, kTrain, H, half, kn.get(), ig, cc.get(), doc_lam,
+                                 snaps.size() == 4 ? &snaps[3] : nullptr});
+        if (const int frc = fmr->init()) return frc;
+    }
+    std::unique_ptr<cypha::online::OnlineNgram> ng_fused;
+    std::function<void()> ngram_tail;  // the n-gram's lines and chain stage, after its byte loop
+    double ng_bits = 0;
     if (a.ngram) {
         cypha::online::OnlineNgram::Params np;
         np.orders.clear();
@@ -1438,24 +1569,40 @@ int cmd_context8k(const Args& a) {
             return 2;
         }
         const auto t0 = std::chrono::steady_clock::now();
-        cypha::online::OnlineNgram ng(np);
+        auto ng = std::make_unique<cypha::online::OnlineNgram>(np);
         const std::size_t warm = std::min<std::size_t>(kTrain, std::size_t{1} << 20);
-        ng.pretrain(data.data(), kTrain - warm);
-        double po[32], nb = 0;
-        for (std::size_t i = kTrain - warm; i < kTrain; ++i) ng.code(data[i], po);
-        pngram.resize(H);
-        pngram_o.assign(static_cast<std::size_t>(ng.orders()), std::vector<float>(H));
-        for (std::size_t k = 0; k < H; ++k) {
-            pngram[k] = std::max(ng.code(data[kTrain + k], po), 1e-12);
-            for (int q = 0; q < ng.orders(); ++q) pngram_o[static_cast<std::size_t>(q)][k] = static_cast<float>(po[q]);
-            if (k >= half) nb += -std::log2(pngram[k]);
+        ng->pretrain(data.data(), kTrain - warm);
+        double po[32];
+        for (std::size_t i = kTrain - warm; i < kTrain; ++i) ng->code(data[i], po);
+        const double ng_mb = ng->bytes() / 1e6;
+        ngram_tail = [&, np, t0, ng_mb] {
+            std::cout << "ngram_alone_bpc " << ng_bits / static_cast<double>(H - half) << "\n";
+            std::cerr << "ngram orders " << a.ngram_orders << " tb " << np.tb << " cap " << np.cap << " lr " << np.lr << ": "
+                      << ng_mb << " MB, " << std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count()
+                      << " s\n";
+            mix_into(pngram, bk8k, half, kBuckets, base);
+            chain_line("_ngram");
+        };
+        if (fmr) {
+            ng_fused = std::move(ng);  // its byte loop runs in the full mix's
+        } else {
+            pngram.resize(H);
+            pngram_o.assign(static_cast<std::size_t>(ng->orders()), std::vector<float>(H));
+            for (std::size_t k = 0; k < H; ++k) {
+                pngram[k] = std::max(ng->code(data[kTrain + k], po), 1e-12);
+                for (int q = 0; q < ng->orders(); ++q) pngram_o[static_cast<std::size_t>(q)][k] = static_cast<float>(po[q]);
+                if (k >= half) ng_bits += -std::log2(pngram[k]);
+            }
+            ng.reset();
+            ngram_tail();
         }
-        std::cout << "ngram_alone_bpc " << nb / static_cast<double>(H - half) << "\n";
-        std::cerr << "ngram orders " << a.ngram_orders << " tb " << np.tb << " cap " << np.cap << " lr " << np.lr << ": "
-                  << ng.bytes() / 1e6 << " MB, " << std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count()
-                  << " s\n";
-        mix_into(pngram, bk8k, half, kBuckets, base);
-        chain_line("_ngram");
+    }
+    if (fmr && a.no_lstm) {  // the full mix's row loop with the n-gram only
+        double lb0 = 0;
+        if (const int frc = fmr->run<cypha::online::ByteLSTM>(nullptr, ng_fused.get(), plstm, lb0, pngram, pngram_o, ng_bits))
+            return frc;
+        ng_fused.reset();
+        if (ngram_tail) ngram_tail();
     }
     if (!a.no_lstm) {  // the default in context8k since §13.18's D1
         // ONLINE_LEARNING_UPGRADES: --lstm-size picks the hidden size (64, 128, 256) and --lstm-window the BPTT window; 64
@@ -1472,7 +1619,12 @@ int cmd_context8k(const Args& a) {
                 lgate.resize(H);
             }
             double P[256], lb = 0;
-            for (std::size_t k = 0; k < H; ++k) {
+            if (fmr) {  // FULL_DISTRIBUTION_MIXING.md: this byte loop, and the n-gram's, inside the full mix's
+                if (const int frc = fmr->run(&L, ng_fused.get(), plstm, lb, pngram, pngram_o, ng_bits)) return frc;
+                ng_fused.reset();
+                if (ngram_tail) ngram_tail();
+            }
+            for (std::size_t k = 0; !fmr && k < H; ++k) {
                 if (!lgate.empty()) {
                     int g = 0;
                     for (int m = 0; m < 4; ++m) {
@@ -1490,6 +1642,7 @@ int cmd_context8k(const Args& a) {
             std::cout << "lstm_alone_bpc " << lb / static_cast<double>(H - half) << "\n";
             std::cerr << "lstm hidden " << LH << " window " << a.lstm_window << ": "
                       << std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count() << " s\n";
+            return 0;
         };
         if (a.lstm_window < 1 || a.lstm_window > 1000) {
             std::cerr << "--lstm-window 1..1000\n";
@@ -1497,13 +1650,13 @@ int cmd_context8k(const Args& a) {
         }
         if (a.lstm_size == 64) {
             cypha::online::ByteLSTMT<64> L(0, 0.003, a.lstm_window);
-            lstm_pass(L);
+            if (const int lrc = lstm_pass(L)) return lrc;
         } else if (a.lstm_size == 128) {
             cypha::online::ByteLSTMT<128> L(0, 0.003, a.lstm_window);
-            lstm_pass(L);
+            if (const int lrc = lstm_pass(L)) return lrc;
         } else if (a.lstm_size == 256) {
             cypha::online::ByteLSTMT<256> L(0, 0.003, a.lstm_window);
-            lstm_pass(L);
+            if (const int lrc = lstm_pass(L)) return lrc;
         } else {
             std::cerr << "--lstm-size 64|128|256\n";
             return 2;
@@ -1607,14 +1760,19 @@ int cmd_context8k(const Args& a) {
         }
         if (dump) std::cerr << "dumped " << H << " rows of " << C << " columns to " << a.dump_experts << " (half " << half << ")\n";
         if (a.online_final)
+            ctx_bpc = fin_bits / static_cast<double>(H - half), ctx_src = "online_final";
             std::cout << "online_final_bpc " << fin_bits / static_cast<double>(H - half) << " (chain "
                       << chain_bits / static_cast<double>(H - half) << ")\n";
     }
-    // FULL_DISTRIBUTION_MIXING.md: --full-mix mixes every expert's whole distribution, PAQ's way, after the final layer.
-    if (a.full_mix)
-        if (const int frc = full_mix_context8k(a, pm, w, data, kTrain, half, kn.get(), ig, cc.get(), doc_lam, base,
-                                               snaps.size() == 4 ? &snaps[3] : nullptr))
-            return frc;
+    // FULL_DISTRIBUTION_MIXING.md: the full mix's lines (its rows ran with the n-gram's and the LSTM's, above).
+    if (fmr && !fmr->fm) {  // no n-gram and no LSTM: nothing ran its row loop yet
+        double lb0 = 0, nb0 = 0;
+        if (const int frc = fmr->run<cypha::online::ByteLSTM>(nullptr, nullptr, plstm, lb0, pngram, pngram_o, nb0)) return frc;
+    }
+    if (fmr) {
+        fmr->finish(base);
+        ctx_bpc = fmr->headline_bpc(), ctx_src = "full_mix " + fmr->P.headline;
+    }
 
     const int edges[] = {4, 8, 16, 32, 64, 256, 1024, 8193};
     const char* names[] = {"<4", "4-7", "8-15", "16-31", "32-63", "64-255", "256-1023", "1024-8192"};
@@ -1704,6 +1862,7 @@ int cmd_context8k(const Args& a) {
         std::cout << "GEN\t" << q.kind << "\t" << printable(g) << "\n";
     }
     for (auto& [k, v] : tally) std::cout << "TALLY " << k << " " << v.first << "/" << v.second << "\n";
+    std::cout << "context8k_bpc " << ctx_bpc << " (" << ctx_src << ")\n";  // FULL_DISTRIBUTION_MIXING.md: the headline
     return 0;
 }
 
