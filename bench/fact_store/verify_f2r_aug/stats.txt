@@ -1,0 +1,194 @@
+pages in dump 12346, redirects 3664, main-namespace articles 8587
+wikidata values: 17973 seeds, 4203 gold (scoring only), 2651 gold (subject, relation) pairs
+pass 1 (seeds, types): 0.936295 s; place pages 4137, person pages 3429, lexicon strings 1963
+
+SEEDS per relation (infobox/template | wiki table | category | text total | wikidata | subjects)
+  capital           83      6      0      89     148     172
+  largest_city      63      0      0      63       0      63
+  country          100      1      0     101    1949    1452
+  location         154      0      0     154       0     154
+  located_in         0      0    329     329     573     512
+  birth_place      120      0    331     451    1003    1063
+  death_place       88      0      0      88     833     842
+  birth_date       129      0      0     129     856     824
+  death_date        91      0      0      91     694     678
+  birth_year         0      0   1144    1144    1063    1277
+  death_year         0      0    921     921     785     997
+  founded          113      2      0     115     916     862
+  author             0      0      2       2     141     126
+  director          59      0     27      86      57      76
+  composer          26      0      8      34      98      93
+  founder            0      0      0       0     294     180
+  creator           86      0      0      86     181     165
+  spouse            26      0      0      26    1004     566
+  predecessor      197      0      0     197       0     106
+  successor        209      0      0     209       0     113
+  developer         59      0      0      59     201     151
+  publisher         66      0      0      66      93      90
+  owner             25      0      0      25       0      25
+  genre            147      0      0     147    1251     479
+  language         168      3      0     171     269     243
+  currency          47      4      0      51     100     115
+  occupation        39      0   1042    1081    5174    1218
+  nationality       21      0   1042    1063       0     608
+  party             98      0      0      98       0      35
+  family           117      0      0     117       0     117
+  order            133      0      0     133       0     133
+  class            158      0      0     158       0     158
+  inventor           0      0      0       0     224     182
+  total seeds 7484 from the text + 17907 from Wikidata over 3960 subject pages
+pass 2-3 (train 80% / test 20% by subject, all folds): 18.380702 s
+
+PATTERNS per relation (candidates = >= 2 training subjects; kept = >= 20 checks and Wilson lower bound >= 0.7)
+  relation      candidates checked>=1 checks>=20 kept   top kept patterns (precision, checks, Wilson lower)
+  capital               8         2         0     0
+  largest_city          6         1         0     0
+  country              33        21         1     0
+  location              6         6         0     0
+  located_in           64        36         2     0
+  birth_place         126        87        17     8
+      ^ [S] was born in [O] ,                               0.916  n=119  lo=0.852  rel=0.909
+      [S] was born in [O] ,                                 0.913  n=127  lo=0.852  rel=0.907
+      [S] was born in [O]                                   0.897  n=184  lo=0.844  rel=0.892
+      ^ [S] was born in [O]                                 0.896  n=173  lo=0.842  rel=0.891
+      [P] was born in [O]                                   0.906  n=53  lo=0.797  rel=0.891
+  death_place          72        56        17     2
+      [P] died in [O]                                       0.875  n=32  lo=0.719  rel=0.853
+      ^ [P] died in [O]                                     0.875  n=32  lo=0.719  rel=0.853
+  birth_date          111        68        10    10
+      ^ [S] ( [O] -                                         0.975  n=317  lo=0.951  rel=0.972
+      ^ [S] ( [O]                                           0.965  n=341  lo=0.940  rel=0.962
+      [S] ( born [O] in                                     1.000  n=34  lo=0.898  rel=0.972
+      ^ [S] ( born [O]                                      0.945  n=127  lo=0.891  rel=0.938
+      ^ [S] ( born [O] in                                   1.000  n=31  lo=0.890  rel=0.970
+  death_date          148        81        21    14
+      ^ [S] ( <M> # , # - [O] )                             0.975  n=242  lo=0.947  rel=0.971
+      [S] ( <M> # , # - [O] )                               0.969  n=262  lo=0.941  rel=0.966
+      ^ [S] ( <M> # , # - [O]                               0.968  n=250  lo=0.938  rel=0.964
+      [S] ( <M> # , # - [O]                                 0.963  n=271  lo=0.933  rel=0.960
+      [S] ( <M> # # - [O] )                                 1.000  n=27  lo=0.875  rel=0.966
+  birth_year          168       103        18    15
+      ^ [S] ( [O]                                           0.998  n=467  lo=0.988  rel=0.996
+      ^ [S] ( [O] -                                         0.998  n=431  lo=0.987  rel=0.995
+      ^ [S] ( born [O]                                      1.000  n=154  lo=0.976  rel=0.994
+      ^ [S] ( born [O] )                                    1.000  n=99  lo=0.963  rel=0.990
+      [S] ( [O] -                                           0.956  n=499  lo=0.934  rel=0.954
+  death_year          209       138        28    17
+      ^ [S] ( <M> # , # - [O] )                             0.997  n=312  lo=0.982  rel=0.994
+      [S] ( <M> # , # - [O] )                               0.994  n=338  lo=0.979  rel=0.991
+      ^ [S] ( <M> # , # - [O]                               0.994  n=322  lo=0.978  rel=0.991
+      [S] ( <M> # , # - [O]                                 0.991  n=349  lo=0.975  rel=0.989
+      ^ [S] ( # - [O] )                                     1.000  n=48  lo=0.926  rel=0.980
+  founded              75        46        10     0
+  author               19         8         0     0
+  director              9         7         0     0
+  founder               5         3         0     0
+  creator               6         3         0     0
+  spouse               41        32         5     0
+  successor             2         0         0     0
+  developer             5         2         0     0
+  genre                36        18         4     0
+  language             25        18         4     4
+      [S] ( [O]                                             1.000  n=33  lo=0.896  rel=0.971
+      [S] ( [O] :                                           1.000  n=30  lo=0.886  rel=0.969
+      the [S] ( [O]                                         1.000  n=22  lo=0.851  rel=0.958
+      the [S] ( [O] :                                       1.000  n=22  lo=0.851  rel=0.958
+  occupation           96        54         2     0
+  nationality          40        17         3     0
+  party                 5         0         0     0
+  class                 2         1         0     0
+  inventor              1         0         0     0
+  seeds in the training split 101564, in the held-out split 25391 (summed over folds)
+pass 4 (extraction over all 8587 articles): 5.694636 s; raw new facts 1435
+
+NEW FACTS per relation (seeds before | raw extractions | candidates 0.5<=P<0.8 | admitted P>=0.8 | admitted also grade>=Moderate | seeds+admitted after)
+  capital            89       0       0       0       0        89
+  largest_city       63       0       0       0       0        63
+  country           101       0       0       0       0       101
+  location          154       0       0       0       0       154
+  located_in        329       0       0       0       0       329
+  birth_place       451     206      83     122       0       573
+  death_place        88      35       5      30       0       118
+  birth_date        129     671      46     605       0       734
+  death_date         91     424       1     423       0       514
+  birth_year       1144      77      36      21       0      1165
+  death_year        921      20       7      13       0       934
+  founded           115       0       0       0       0       115
+  author              2       0       0       0       0         2
+  director           86       0       0       0       0        86
+  composer           34       0       0       0       0        34
+  creator            86       0       0       0       0        86
+  spouse             26       0       0       0       0        26
+  predecessor       197       0       0       0       0       197
+  successor         209       0       0       0       0       209
+  developer          59       0       0       0       0        59
+  publisher          66       0       0       0       0        66
+  owner              25       0       0       0       0        25
+  genre             147       0       0       0       0       147
+  language          171       2       0       2       0       173
+  currency           51       0       0       0       0        51
+  occupation       1081       0       0       0       0      1081
+  nationality      1063       0       0       0       0      1063
+  party              98       0       0       0       0        98
+  family            117       0       0       0       0       117
+  order             133       0       0       0       0       133
+  class             158       0       0       0       0       158
+  TOTAL            7484    1435     178    1216       0      8700
+
+WIKIDATA CHECK of new facts on gold subjects (admitted P>=0.8: right/checked, Wilson 95%, coarse | candidates 0.5..0.8: right/checked)
+  birth_place     12/16   [0.505, 0.898] coarse 0 | 1/2
+  death_place      3/3    [0.439, 1.000] coarse 0 | 1/1
+  birth_date      85/87   [0.920, 0.994] coarse 0 | 2/7
+  death_date      71/74   [0.887, 0.986] coarse 0 | 0/0
+  birth_year       1/1    [0.207, 1.000] coarse 0 | 0/5
+  death_year       1/1    [0.207, 1.000] coarse 0 | 1/1
+  TOTAL          173/182  [0.909, 0.974] coarse 0 | 5/16
+
+SHARD shard_facts.tsv: store facts 6302 (BPC-train pages 504, BPC-holdout pages 171, after the slice 5627, left out); sentences 675 (4 from the fact's own pattern, 0 longer than 80 bytes); rows 2001
+  shard_source extracted 228
+  shard_source extracted_holdout 87
+  shard_source seed 1260
+  shard_source seed_holdout 426
+  shard_relation author 3
+  shard_relation birth_date 173
+  shard_relation birth_place 139
+  shard_relation birth_year 359
+  shard_relation capital 37
+  shard_relation class 93
+  shard_relation composer 12
+  shard_relation creator 18
+  shard_relation currency 33
+  shard_relation death_date 152
+  shard_relation death_place 48
+  shard_relation death_year 346
+  shard_relation developer 3
+  shard_relation director 6
+  shard_relation family 63
+  shard_relation founded 6
+  shard_relation genre 33
+  shard_relation largest_city 36
+  shard_relation located_in 96
+  shard_relation occupation 258
+  shard_relation order 75
+  shard_relation owner 3
+  shard_relation publisher 9
+  leak_check dropped_equal_to_dev 18 dropped_equal_to_test 6 final_question_equal 0
+  dev_covered gold_in_response Who created the Amber Diceless Roleplaying Game?
+  dev_covered gold_in_response where was alexander mackenzie born
+  dev_covered gold_in_response When was Arthur Meighen born?
+  dev_covered gold_in_response What is the capital of Angola?
+  dev_covered gold_in_response What currency does Azerbaijan use?
+  dev_covered gold_in_response Which city is the capital of Afghanistan?
+  dev_covered gold_in_response What is the capital of Anguilla?
+  dev_covered other_value      Where was Albert Sidney Johnston born?
+  dev_covered gold_in_response when did allan dwan die
+  dev_covered gold_in_response Where was Albert Schweitzer born?
+  dev_covered gold_in_response When was Avicenna born?
+  dev_covered gold_in_response When was Andrei Tarkovsky born?
+  dev_covered gold_in_response When was Al Gore born?
+  dev_covered gold_in_response When was Alan Kay born?
+  dev_covered gold_in_response When did Alcuin die?
+  dev_covered gold_in_response What is the capital of Alabama?
+  dev_coverage in_slice 100 entity_in_shard 59 entity_and_relation 16 response_holds_a_dev_answer 15
+
+run time 25.3 s, peak RAM 118 MB, facts written aug/facts_f2.tsv

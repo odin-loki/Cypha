@@ -1,0 +1,1259 @@
+relation	pattern	train_subjects	train_sentences	checks	correct	unchecked	precision	wilson_lower	reliability	kept	frame
+birth_place	[S] was born in [[[O]]],	324	392	88	81	9	0.920455	0.844801	0.911111	1	[S] was born in [[[O]]],
+birth_place	^[S] was born in [[[O]]],	312	380	85	78	9	0.917647	0.83964	0.908046	1	[S] was born in [[[O]]],
+birth_place	[S] was born in [[[O]]]	496	604	139	125	13	0.899281	0.838034	0.893617	1	[S] was born in [[[O]]]
+birth_place	^[S] was born in [[[O]]]	476	580	134	120	12	0.895522	0.83226	0.889706	1	[S] was born in [[[O]]]
+birth_place	[P] was born in [[[O]]]	156	184	42	39	11	0.928571	0.809906	0.909091	1	[S] was born in [[[O]]]
+birth_place	^[P] was born in [[[O]]]	156	184	42	39	11	0.928571	0.809906	0.909091	1	[S] was born in [[[O]]]
+birth_place	[P] was born in [[[O]]],	88	100	24	22	9	0.916667	0.741512	0.884615	1	[S] was born in [[[O]]],
+birth_place	^[P] was born in [[[O]]],	88	100	24	22	9	0.916667	0.741512	0.884615	1	[S] was born in [[[O]]],
+death_place	[S] died in [[[O]]]	76	100	21	19	1	0.904762	0.710859	0.869565	1	[S] died in [[[O]]]
+birth_date	'''[S]''' ([[[O]]] &amp;ndash;	708	836	179	177	62	0.988827	0.960183	0.983425	1	'''[S]''' ([[[O]]] &amp;ndash;
+birth_date	^'''[S]''' ([[[O]]] &amp;ndash;	660	784	167	165	58	0.988024	0.957391	0.982249	1	'''[S]''' ([[[O]]] &amp;ndash;
+birth_date	^'''[S]''' ([[[O]]]	1264	1464	327	316	126	0.966361	0.940777	0.963526	1	'''[S]''' ([[[O]]]
+birth_date	'''[S]''' ([[[O]]]	1372	1576	356	343	140	0.963483	0.938533	0.960894	1	'''[S]''' ([[[O]]]
+birth_date	'''[S]''' (born [[[O]]] in	124	124	31	31	3	1	0.889745	0.969697	1	'''[S]''' (born [[[O]]] in
+birth_date	^'''[S]''' (born [[[O]]]	464	508	123	116	23	0.943089	0.887178	0.936	1	'''[S]''' (born [[[O]]]
+birth_date	'''[S]''' (born [[[O]]]	496	552	132	124	24	0.939394	0.884964	0.932836	1	'''[S]''' (born [[[O]]]
+birth_date	^'''[S]''' (born [[[O]]] in	116	116	29	29	3	1	0.88303	0.967742	1	'''[S]''' (born [[[O]]] in
+birth_date	'''[S]''' ([[[O]]] –	112	140	28	28	8	1	0.879357	0.966667	1	'''[S]''' ([[[O]]] –
+birth_date	^'''[S]''' ([[[O]]] -	248	268	65	62	20	0.953846	0.872862	0.940299	1	'''[S]''' ([[[O]]] -
+birth_date	^'''[S]''' ([[[O]]] –	104	132	26	26	8	1	0.871271	0.964286	1	'''[S]''' ([[[O]]] –
+birth_date	'''[S]''' ([[[O]]] -	260	280	70	65	23	0.928571	0.843446	0.916667	1	'''[S]''' ([[[O]]] -
+birth_date	'''[S]''' (born [[[O]]])	304	352	83	76	18	0.915663	0.836005	0.905882	1	'''[S]''' (born [[[O]]])
+birth_date	^'''[S]''' (born [[[O]]])	280	316	77	70	17	0.909091	0.824039	0.898734	1	'''[S]''' (born [[[O]]])
+birth_date	'''[S]''' ([[[O]]]&amp;ndash;	120	132	32	30	10	0.9375	0.798529	0.911765	1	'''[S]''' ([[[O]]]&amp;ndash;
+birth_date	^'''[S]''' ([[[O]]]&amp;ndash;	104	116	28	26	7	0.928571	0.773546	0.9	1	'''[S]''' ([[[O]]]&amp;ndash;
+death_date	^'''[S]''' ([[<M> #]], [[#]] &amp;ndash; [[[O]]]	524	600	134	131	44	0.977612	0.936246	0.970588	1	'''[S]''' ([[<M> #]], [[#]] &amp;ndash; [[[O]]]
+death_date	^'''[S]''' ([[<M> #]], [[#]] &amp;ndash; [[[O]]])	512	588	131	128	43	0.977099	0.934833	0.969925	1	'''[S]''' ([[<M> #]], [[#]] &amp;ndash; [[[O]]])
+death_date	'''[S]''' ([[<M> #]], [[#]] &amp;ndash; [[[O]]]	560	640	144	140	46	0.972222	0.930758	0.965753	1	'''[S]''' ([[<M> #]], [[#]] &amp;ndash; [[[O]]]
+death_date	'''[S]''' ([[<M> #]], [[#]] &amp;ndash; [[[O]]])	548	628	141	137	45	0.971631	0.929332	0.965035	1	'''[S]''' ([[<M> #]], [[#]] &amp;ndash; [[[O]]])
+death_date	'''[S]''' ([[<M> #]], [[#]] - [[[O]]])	200	212	50	50	13	1	0.928652	0.980769	1	'''[S]''' ([[<M> #]], [[#]] - [[[O]]])
+death_date	^'''[S]''' ([[<M> #]], [[#]] - [[[O]]])	184	196	46	46	13	1	0.922926	0.979167	1	'''[S]''' ([[<M> #]], [[#]] - [[[O]]])
+death_date	'''[S]''' ([[<M> #]], [[#]] - [[[O]]]	208	220	53	52	13	0.981132	0.900571	0.963636	1	'''[S]''' ([[<M> #]], [[#]] - [[[O]]]
+death_date	^'''[S]''' ([[<M> #]], [[#]] - [[[O]]]	192	204	49	48	13	0.979592	0.893065	0.960784	1	'''[S]''' ([[<M> #]], [[#]] - [[[O]]]
+death_date	'''[S]''' ([[<M> #]], [[#]]&amp;ndash;[[[O]]]	84	96	21	21	6	1	0.845361	0.956522	1	'''[S]''' ([[<M> #]], [[#]]&amp;ndash;[[[O]]]
+death_date	[S] died on [[[O]]]	84	104	21	21	10	1	0.845361	0.956522	1	[S] died on [[[O]]]
+death_date	'''[S]''' ([[<M> #]], [[#]] – [[[O]]]	80	104	20	20	6	1	0.838875	0.954545	1	'''[S]''' ([[<M> #]], [[#]] – [[[O]]]
+death_date	'''[S]''' ([[<M> #]], [[#]] – [[[O]]])	80	104	20	20	6	1	0.838875	0.954545	1	'''[S]''' ([[<M> #]], [[#]] – [[[O]]])
+death_date	^'''[S]''' ([[<M> #]], [[#]] – [[[O]]]	80	104	20	20	6	1	0.838875	0.954545	1	'''[S]''' ([[<M> #]], [[#]] – [[[O]]]
+death_date	^'''[S]''' ([[<M> #]], [[#]] – [[[O]]])	80	104	20	20	6	1	0.838875	0.954545	1	'''[S]''' ([[<M> #]], [[#]] – [[[O]]])
+death_date	^[S] died on [[[O]]]	80	100	20	20	10	1	0.838875	0.954545	1	[S] died on [[[O]]]
+birth_year	^'''[S]''' ([[[O]]]	1792	3096	449	448	4	0.997773	0.987494	0.995565	1	'''[S]''' ([[[O]]]
+birth_year	'''[S]''' ([[[O]]]	1956	3388	492	490	4	0.995935	0.985301	0.993927	1	'''[S]''' ([[[O]]]
+birth_year	^'''[S]''' ([[[O]]] &amp;ndash;	896	1548	224	224	1	1	0.98314	0.995575	1	'''[S]''' ([[[O]]] &amp;ndash;
+birth_year	'''[S]''' ([[[O]]] &amp;ndash;	956	1660	240	239	1	0.995833	0.97678	0.991736	1	'''[S]''' ([[[O]]] &amp;ndash;
+birth_year	'''[S]''' (born [[[O]]]	624	1120	156	156	0	1	0.975967	0.993671	1	'''[S]''' (born [[[O]]]
+birth_year	^'''[S]''' (born [[[O]]]	584	1048	146	146	0	1	0.974363	0.993243	1	'''[S]''' (born [[[O]]]
+birth_year	'''[S]''' (born [[[O]]])	404	712	101	101	0	1	0.963359	0.990291	1	'''[S]''' (born [[[O]]])
+birth_year	^'''[S]''' (born [[[O]]])	376	660	94	94	0	1	0.960738	0.989583	1	'''[S]''' (born [[[O]]])
+birth_year	'''[S]''' ([[[O]]] -	368	652	93	92	0	0.989247	0.941581	0.978947	1	'''[S]''' ([[[O]]] -
+birth_year	^'''[S]''' ([[[O]]] -	336	596	85	84	0	0.988235	0.936328	0.977011	1	'''[S]''' ([[[O]]] -
+birth_year	'''[S]''' ([[[O]]]&amp;ndash;	168	288	42	42	0	1	0.916201	0.977273	1	'''[S]''' ([[[O]]]&amp;ndash;
+birth_year	'''[S]''' ([[[O]]] –	140	244	35	35	1	1	0.901099	0.972973	1	'''[S]''' ([[[O]]] –
+birth_year	^'''[S]''' ([[[O]]]&amp;ndash;	140	244	35	35	0	1	0.901099	0.972973	1	'''[S]''' ([[[O]]]&amp;ndash;
+birth_year	'''[S]''' (born [[[O]]] in	136	256	34	34	0	1	0.898485	0.972222	1	'''[S]''' (born [[[O]]] in
+birth_year	'''[S]''' ([[[O]]]-	132	216	33	33	1	1	0.89573	0.971429	1	'''[S]''' ([[[O]]]-
+birth_year	^'''[S]''' ([[[O]]] –	132	228	33	33	1	1	0.89573	0.971429	1	'''[S]''' ([[[O]]] –
+birth_year	^'''[S]''' (born [[[O]]] in	128	240	32	32	0	1	0.892821	0.970588	1	'''[S]''' (born [[[O]]] in
+birth_year	^'''[S]''' ([[[O]]]-	112	180	28	28	1	1	0.879357	0.966667	1	'''[S]''' ([[[O]]]-
+death_year	'''[S]''' ([[<M> #]], [[#]] &amp;ndash; [[[O]]]	752	1300	189	188	1	0.994709	0.970643	0.989529	1	'''[S]''' ([[<M> #]], [[#]] &amp;ndash; [[[O]]]
+death_year	'''[S]''' ([[<M> #]], [[#]] &amp;ndash; [[[O]]])	736	1276	185	184	1	0.994595	0.970022	0.989305	1	'''[S]''' ([[<M> #]], [[#]] &amp;ndash; [[[O]]])
+death_year	^'''[S]''' ([[<M> #]], [[#]] &amp;ndash; [[[O]]]	704	1212	177	176	1	0.99435	0.968696	0.988827	1	'''[S]''' ([[<M> #]], [[#]] &amp;ndash; [[[O]]]
+death_year	^'''[S]''' ([[<M> #]], [[#]] &amp;ndash; [[[O]]])	688	1188	173	172	1	0.99422	0.967989	0.988571	1	'''[S]''' ([[<M> #]], [[#]] &amp;ndash; [[[O]]])
+death_year	'''[S]''' ([[<M> #]], [[#]] - [[[O]]]	264	476	66	66	0	1	0.944997	0.985294	1	'''[S]''' ([[<M> #]], [[#]] - [[[O]]]
+death_year	'''[S]''' ([[<M> #]], [[#]] - [[[O]]])	252	452	63	63	0	1	0.942529	0.984615	1	'''[S]''' ([[<M> #]], [[#]] - [[[O]]])
+death_year	^'''[S]''' ([[<M> #]], [[#]] - [[[O]]]	248	444	62	62	0	1	0.941656	0.984375	1	'''[S]''' ([[<M> #]], [[#]] - [[[O]]]
+death_year	^'''[S]''' ([[<M> #]], [[#]] - [[[O]]])	236	420	59	59	0	1	0.938871	0.983607	1	'''[S]''' ([[<M> #]], [[#]] - [[[O]]])
+death_year	[S] died on [[[O]]]	124	204	31	31	0	1	0.889745	0.969697	1	[S] died on [[[O]]]
+death_year	^[S] died on [[[O]]]	120	196	30	30	0	1	0.886487	0.96875	1	[S] died on [[[O]]]
+death_year	'''[S]''' ([[<M> #]], [[#]]&amp;ndash;[[[O]]]	108	188	27	27	0	1	0.875445	0.965517	1	'''[S]''' ([[<M> #]], [[#]]&amp;ndash;[[[O]]]
+death_year	'''[S]''' ([[<M> #]], [[#]] – [[[O]]]	104	176	26	26	0	1	0.871271	0.964286	1	'''[S]''' ([[<M> #]], [[#]] – [[[O]]]
+death_year	'''[S]''' ([[<M> #]], [[#]] – [[[O]]])	104	176	26	26	0	1	0.871271	0.964286	1	'''[S]''' ([[<M> #]], [[#]] – [[[O]]])
+death_year	^'''[S]''' ([[<M> #]], [[#]] – [[[O]]]	104	176	26	26	0	1	0.871271	0.964286	1	'''[S]''' ([[<M> #]], [[#]] – [[[O]]]
+death_year	^'''[S]''' ([[<M> #]], [[#]] – [[[O]]])	104	176	26	26	0	1	0.871271	0.964286	1	'''[S]''' ([[<M> #]], [[#]] – [[[O]]])
+death_year	'''[S]''' ([[<M> #]], [[#]]&amp;ndash;[[[O]]])	96	172	24	24	0	1	0.862024	0.961538	1	'''[S]''' ([[<M> #]], [[#]]&amp;ndash;[[[O]]])
+death_year	^'''[S]''' ([[<M> #]], [[#]]&amp;ndash;[[[O]]]	92	160	23	23	0	1	0.856883	0.96	1	'''[S]''' ([[<M> #]], [[#]]&amp;ndash;[[[O]]]
+death_year	[S] died in [O]	84	128	21	21	1	1	0.845361	0.956522	1	[S] died in [O]
+death_year	^'''[S]''' ([[<M> #]], [[#]]&amp;ndash;[[[O]]])	84	152	21	21	0	1	0.845361	0.956522	1	'''[S]''' ([[<M> #]], [[#]]&amp;ndash;[[[O]]])
+language	'''[S]''' ([[[O]]]	108	188	33	33	0	1	0.89573	0.971429	1	'''[S]''' ([[[O]]]
+language	'''[S]''' ([[[O]]]:	100	172	30	30	0	1	0.886487	0.96875	1	'''[S]''' ([[[O]]]:
+language	The '''[S]''' ([[[O]]]	64	96	20	20	0	1	0.838875	0.954545	1	The '''[S]''' ([[[O]]]
+language	The '''[S]''' ([[[O]]]:	64	96	20	20	0	1	0.838875	0.954545	1	The '''[S]''' ([[[O]]]:
+capital	[S] are [[[O]]]	6	6	1	0	0	0	0	0.333333	0	[S] are [[[O]]]
+capital	[S] are [[[O]]],	6	6	0	0	0	0	0	0.5	0	[S] are [[[O]]],
+capital	[S] is [[[O]]]	6	12	1	0	0	0	0	0.333333	0	[S] is [[[O]]]
+capital	[S] is [[[O]]],	6	12	0	0	0	0	0	0.5	0	[S] is [[[O]]],
+largest_city	[S] are [[[O]]]	6	6	1	0	0	0	0	0.333333	0	[S] are [[[O]]]
+largest_city	[S] are [[[O]]],	6	6	0	0	0	0	0	0.5	0	[S] are [[[O]]],
+country	'''[S]''' is an [[[O]]]	24	24	7	7	3	1	0.64567	0.888889	0	'''[S]''' is an [[[O]]]
+country	^'''[S]''' is an [[[O]]]	24	24	7	7	2	1	0.64567	0.888889	0	'''[S]''' is an [[[O]]]
+country	'''[S]''' is a [[[O]]]	20	20	5	5	3	1	0.565518	0.857143	0	'''[S]''' is a [[[O]]]
+country	'''[S]''' is an [[[O]]] [[football (soccer)|football	16	16	4	4	0	1	0.510109	0.833333	0	'''[S]''' is an [[[O]]] [[football (soccer)|football
+country	^'''[S]''' is a [[[O]]]	16	16	4	4	3	1	0.510109	0.833333	0	'''[S]''' is a [[[O]]]
+country	^'''[S]''' is an [[[O]]] [[football (soccer)|football	16	16	4	4	0	1	0.510109	0.833333	0	'''[S]''' is an [[[O]]] [[football (soccer)|football
+country	'''[S]''' was an [[[O]]]	16	16	5	4	1	0.8	0.375535	0.714286	0	'''[S]''' was an [[[O]]]
+country	'''[S]''') is a [[[O]]]	12	12	4	3	0	0.75	0.300642	0.666667	0	'''[S]''') is a [[[O]]]
+country	^'''[S]''' was an [[[O]]]	11	11	1	1	1	1	0.206549	0.666667	0	'''[S]''' was an [[[O]]]
+country	[[[O]]], [S]	24	28	29	6	97	0.206897	0.0984607	0.225806	0	[[[O]]], [S]
+country	'''''[S]''''' was a long-running [[[O]]]	6	6	0	0	0	0	0	0.5	0	'''''[S]''''' was a long-running [[[O]]]
+country	'''[S]''' is [[[O]]]	6	6	0	0	0	0	0	0.5	0	'''[S]''' is [[[O]]]
+country	'''[S]''' is an [[[O]	6	6	0	0	1	0	0	0.5	0	'''[S]''' is an [[[O]
+country	('''[S]''') is a [[[O]]]	6	6	0	0	0	0	0	0.5	0	('''[S]''') is a [[[O]]]
+country	[P] also depends on [[[O]]]	6	6	0	0	0	0	0	0.5	0	[S] also depends on [[[O]]]
+country	[P] also depends on [[[O]]] for	6	6	0	0	0	0	0	0.5	0	[S] also depends on [[[O]]] for
+country	[S] in the [[[O]]]	8	8	1	0	2	0	0	0.333333	0	[S] in the [[[O]]]
+country	[S] is the [[official language]] of [[[O]]]	8	16	0	0	0	0	0	0.5	0	[S] is the [[official language]] of [[[O]]]
+country	[S] is the official language of [[[O]]]	6	12	0	0	0	0	0	0.5	0	[S] is the official language of [[[O]]]
+country	[[[O]]], [S] is	6	6	4	0	5	0	0	0.166667	0	[[[O]]], [S] is
+country	^'''''[S]''''' was a long-running [[[O]]]	6	6	0	0	0	0	0	0.5	0	'''''[S]''''' was a long-running [[[O]]]
+country	^'''[S]''' is an [[[O]	6	6	0	0	0	0	0	0.5	0	'''[S]''' is an [[[O]
+country	^[P] also depends on [[[O]]]	6	6	0	0	0	0	0	0.5	0	[S] also depends on [[[O]]]
+country	^[P] also depends on [[[O]]] for	6	6	0	0	0	0	0	0.5	0	[S] also depends on [[[O]]] for
+country	^[S] is the [[official language]] of [[[O]]]	8	16	0	0	0	0	0	0.5	0	[S] is the [[official language]] of [[[O]]]
+country	^[S] is the official language of [[[O]]]	6	12	0	0	0	0	0	0.5	0	[S] is the official language of [[[O]]]
+country	of [[[O]]], [S]	6	9	2	0	4	0	0	0.25	0	of [[[O]]], [S]
+location	[S] was born in [[[O]]],	12	12	4	3	94	0.75	0.300642	0.666667	0	[S] was born in [[[O]]],
+location	[S] was born in [[[O]]]	12	12	5	3	149	0.6	0.230724	0.571429	0	[S] was born in [[[O]]]
+location	^[S] was born in [[[O]]]	6	6	2	0	77	0	0	0.25	0	[S] was born in [[[O]]]
+location	^[S] was born in [[[O]]],	6	6	1	0	50	0	0	0.333333	0	[S] was born in [[[O]]],
+located_in	'''[S]''' is a city located in [[[O]]]	24	24	6	6	0	1	0.609666	0.875	0	'''[S]''' is a city located in [[[O]]]
+located_in	^'''[S]''' is a city located in [[[O]]]	24	24	6	6	0	1	0.609666	0.875	0	'''[S]''' is a city located in [[[O]]]
+located_in	'''[S]''' is a city located in [[[O]]].	12	12	3	3	0	1	0.438503	0.8	0	'''[S]''' is a city located in [[[O]]].
+located_in	'''[S]''' is the [[county seat]] of [[[O]]]	12	12	3	3	0	1	0.438503	0.8	0	'''[S]''' is the [[county seat]] of [[[O]]]
+located_in	^'''[S]''' is a city located in [[[O]]].	12	12	3	3	0	1	0.438503	0.8	0	'''[S]''' is a city located in [[[O]]].
+located_in	'''[S]''' is a town in [[[O]]]	20	24	7	5	0	0.714286	0.358934	0.666667	0	'''[S]''' is a town in [[[O]]]
+located_in	^'''[S]''' is a town in [[[O]]]	20	24	7	5	0	0.714286	0.358934	0.666667	0	'''[S]''' is a town in [[[O]]]
+located_in	'''[S]''' is a town in [[[O]]],	16	20	6	4	0	0.666667	0.299993	0.625	0	'''[S]''' is a town in [[[O]]],
+located_in	^'''[S]''' is a town in [[[O]]],	16	20	6	4	0	0.666667	0.299993	0.625	0	'''[S]''' is a town in [[[O]]],
+located_in	[S] is [O]'	16	20	7	4	0	0.571429	0.250458	0.555556	0	[S] is [O]'
+located_in	[O], [S]	32	48	20	8	13	0.4	0.218807	0.409091	0	[O], [S]
+located_in	[S] is [O]	16	20	9	4	0	0.444444	0.188779	0.454545	0	[S] is [O]
+located_in	in [O], [S]	12	16	7	3	0	0.428571	0.15822	0.444444	0	in [O], [S]
+located_in	[S] and [O]	20	20	25	7	16	0.28	0.142839	0.296296	0	[S] and [O]
+located_in	of [O], [S]	11	11	2	1	2	0.5	0.0945312	0.5	0	of [O], [S]
+located_in	[S] and [[[O]]]	6	6	6	0	9	0	2.77556e-17	0.125	0	[S] and [[[O]]]
+located_in	'''[S]''' is a [[[O]]]	6	12	0	0	0	0	0	0.5	0	'''[S]''' is a [[[O]]]
+located_in	'''[S]''' is a city in southwestern [[[O]]]	6	6	0	0	0	0	0	0.5	0	'''[S]''' is a city in southwestern [[[O]]]
+located_in	'''[S]''' is a city in southwestern [[[O]]],	6	6	0	0	0	0	0	0.5	0	'''[S]''' is a city in southwestern [[[O]]],
+located_in	'''[S]''' is the capital of [[[O]]]	6	6	0	0	0	0	0	0.5	0	'''[S]''' is the capital of [[[O]]]
+located_in	'''[S]''' is the capital of the [[[O]]]	6	6	0	0	0	0	0	0.5	0	'''[S]''' is the capital of the [[[O]]]
+located_in	[O] in #, the [S]	6	9	0	0	0	0	0	0.5	0	[O] in #, the [S]
+located_in	[O], [S] is	6	6	2	0	0	0	0	0.25	0	[O], [S] is
+located_in	[P] is [O]	8	8	0	0	0	0	0	0.5	0	[S] is [O]
+located_in	[P] is [O]'	8	8	0	0	0	0	0	0.5	0	[S] is [O]'
+located_in	[P] is the [[county seat]] of [[[O]]]	8	8	0	0	0	0	0	0.5	0	[S] is the [[county seat]] of [[[O]]]
+located_in	[S] has [O]	6	15	0	0	0	0	0	0.5	0	[S] has [O]
+located_in	[S] has [O]'	6	15	0	0	0	0	0	0.5	0	[S] has [O]'
+located_in	[S] is located in [[[O]]]	6	6	0	0	0	0	0	0.5	0	[S] is located in [[[O]]]
+located_in	[S] to [O]	6	6	1	0	0	0	0	0.333333	0	[S] to [O]
+located_in	[S] to [O] in	6	6	0	0	0	0	0	0.5	0	[S] to [O] in
+located_in	^'''[S]''' is a [[[O]]]	6	12	0	0	0	0	0	0.5	0	'''[S]''' is a [[[O]]]
+located_in	^'''[S]''' is a city in southwestern [[[O]]]	6	6	0	0	0	0	0	0.5	0	'''[S]''' is a city in southwestern [[[O]]]
+located_in	^'''[S]''' is a city in southwestern [[[O]]],	6	6	0	0	0	0	0	0.5	0	'''[S]''' is a city in southwestern [[[O]]],
+located_in	^'''[S]''' is the [[county seat]] of [[[O]]]	6	6	0	0	0	0	0	0.5	0	'''[S]''' is the [[county seat]] of [[[O]]]
+located_in	^'''[S]''' is the capital of [[[O]]]	6	6	0	0	0	0	0	0.5	0	'''[S]''' is the capital of [[[O]]]
+located_in	^'''[S]''' is the capital of the [[[O]]]	6	6	0	0	0	0	0	0.5	0	'''[S]''' is the capital of the [[[O]]]
+located_in	^[P] is [O]	8	8	0	0	0	0	0	0.5	0	[S] is [O]
+located_in	^[P] is [O]'	8	8	0	0	0	0	0	0.5	0	[S] is [O]'
+located_in	^[P] is the [[county seat]] of [[[O]]]	8	8	0	0	0	0	0	0.5	0	[S] is the [[county seat]] of [[[O]]]
+located_in	^[S] has [O]	6	15	0	0	0	0	0	0.5	0	[S] has [O]
+located_in	^[S] has [O]'	6	15	0	0	0	0	0	0.5	0	[S] has [O]'
+birth_place	'''[S]''' ([[<M> #]], [[#]], [[[O]]]	28	28	7	7	2	1	0.64567	0.888889	0	'''[S]''' ([[<M> #]], [[#]], [[[O]]]
+birth_place	[S] was born in [[[O]]] to	32	44	10	9	2	0.9	0.59585	0.833333	0	[S] was born in [[[O]]] to
+birth_place	[P] was born at [[[O]]]	20	20	5	5	0	1	0.565518	0.857143	0	[S] was born at [[[O]]]
+birth_place	[P] was born in [[[O]]] and	20	20	5	5	0	1	0.565518	0.857143	0	[S] was born in [[[O]]] and
+birth_place	^'''[S]''' ([[<M> #]], [[#]], [[[O]]]	20	20	5	5	2	1	0.565518	0.857143	0	'''[S]''' ([[<M> #]], [[#]], [[[O]]]
+birth_place	^[P] was born at [[[O]]]	20	20	5	5	0	1	0.565518	0.857143	0	[S] was born at [[[O]]]
+birth_place	^[P] was born in [[[O]]] and	20	20	5	5	0	1	0.565518	0.857143	0	[S] was born in [[[O]]] and
+birth_place	[S] was born in [[[O]]] in	32	36	9	8	0	0.888889	0.565	0.818182	0	[S] was born in [[[O]]] in
+birth_place	^[S] was born in [O]	32	32	9	8	1	0.888889	0.565	0.818182	0	[S] was born in [O]
+birth_place	^[S] was born in [[[O]]] in	32	36	9	8	0	0.888889	0.565	0.818182	0	[S] was born in [[[O]]] in
+birth_place	^[S] was born in [[[O]]] to	28	40	9	8	2	0.888889	0.565	0.818182	0	[S] was born in [[[O]]] to
+birth_place	'''[S]''' ([[[O]]]	40	48	12	10	0	0.833333	0.551969	0.785714	0	'''[S]''' ([[[O]]]
+birth_place	[S] was born in [[[O]]].	40	44	12	10	0	0.833333	0.551969	0.785714	0	[S] was born in [[[O]]].
+birth_place	^'''[S]''' ([[[O]]]	40	48	12	10	0	0.833333	0.551969	0.785714	0	'''[S]''' ([[[O]]]
+birth_place	^[S] was born in [[[O]]].	40	44	12	10	0	0.833333	0.551969	0.785714	0	[S] was born in [[[O]]].
+birth_place	'''[S]''' ([[<M> #]], [[#]], [[[O]]],	16	16	4	4	0	1	0.510109	0.833333	0	'''[S]''' ([[<M> #]], [[#]], [[[O]]],
+birth_place	[P] was born in [[[O]]] to	16	24	4	4	0	1	0.510109	0.833333	0	[S] was born in [[[O]]] to
+birth_place	^[P] was born in [[[O]]] to	16	24	4	4	0	1	0.510109	0.833333	0	[S] was born in [[[O]]] to
+birth_place	^[S] was born in [O],	16	16	4	4	0	1	0.510109	0.833333	0	[S] was born in [O],
+birth_place	'''[S]''' ([[[O]]],	32	40	10	8	0	0.8	0.490162	0.75	0	'''[S]''' ([[[O]]],
+birth_place	[S] was born in [O]	32	32	10	8	1	0.8	0.490162	0.75	0	[S] was born in [O]
+birth_place	^'''[S]''' ([[[O]]],	32	40	10	8	0	0.8	0.490162	0.75	0	'''[S]''' ([[[O]]],
+birth_place	[S] was born in [[[O]]] and	24	32	7	6	0	0.857143	0.486872	0.777778	0	[S] was born in [[[O]]] and
+birth_place	^[S] was born in [[[O]]] and	24	32	7	6	0	0.857143	0.486872	0.777778	0	[S] was born in [[[O]]] and
+birth_place	[S] was born in [[[O]]] on	20	28	6	5	1	0.833333	0.436497	0.75	0	[S] was born in [[[O]]] on
+birth_place	[S] was born in [O],	16	16	5	4	0	0.8	0.375535	0.714286	0	[S] was born in [O],
+birth_place	[S]''' in [[[O]]]	16	20	5	4	1	0.8	0.375535	0.714286	0	[S]''' in [[[O]]]
+birth_place	^[S] was born in [[[O]]] on	16	24	5	4	0	0.8	0.375535	0.714286	0	[S] was born in [[[O]]] on
+birth_place	[S] in [[[O]]],	12	16	4	3	1	0.75	0.300642	0.666667	0	[S] in [[[O]]],
+birth_place	[S]''' in [[[O]]],	12	16	4	3	1	0.75	0.300642	0.666667	0	[S]''' in [[[O]]],
+birth_place	[O] where [S]	16	20	6	4	0	0.666667	0.299993	0.625	0	[O] where [S]
+birth_place	'''[S]''' in [[[O]]]	11	18	1	1	0	1	0.206549	0.666667	0	'''[S]''' in [[[O]]]
+birth_place	[S] was born at [[[O]]]	27	31	1	1	1	1	0.206549	0.666667	0	[S] was born at [[[O]]]
+birth_place	[S] was born at [[[O]]],	15	15	1	1	1	1	0.206549	0.666667	0	[S] was born at [[[O]]],
+birth_place	[S] was born in [[[O]]] (	11	15	1	1	1	1	0.206549	0.666667	0	[S] was born in [[[O]]] (
+birth_place	^'''[S]''' ([[<M> #]], [[#]], [[[O]]],	11	11	1	1	0	1	0.206549	0.666667	0	'''[S]''' ([[<M> #]], [[#]], [[[O]]],
+birth_place	^[S] was born at [[[O]]]	27	31	1	1	1	1	0.206549	0.666667	0	[S] was born at [[[O]]]
+birth_place	^[S] was born at [[[O]]],	15	15	1	1	1	1	0.206549	0.666667	0	[S] was born at [[[O]]],
+birth_place	^[S] was born in [[[O]]] (	11	11	1	1	1	1	0.206549	0.666667	0	[S] was born in [[[O]]] (
+birth_place	[S] in [[[O]]]	12	16	6	3	1	0.5	0.187616	0.5	0	[S] in [[[O]]]
+birth_place	in [[[O]]], [S]	40	44	36	11	2	0.305556	0.180045	0.315789	0	in [[[O]]], [S]
+birth_place	[[[O]]], [S]	56	60	80	16	7	0.2	0.127028	0.207317	0	[[[O]]], [S]
+birth_place	in [O], [S]	28	36	41	8	4	0.195122	0.102344	0.209302	0	in [O], [S]
+birth_place	[S] returned to [O]	20	20	26	5	3	0.192308	0.0850706	0.214286	0	[S] returned to [O]
+birth_place	[O], [S]	48	60	102	14	18	0.137255	0.0835537	0.144231	0	[O], [S]
+birth_place	[S] returned to [O] and	11	11	5	1	0	0.2	0.0362241	0.285714	0	[S] returned to [O] and
+birth_place	^[S] returned to [O]	11	11	9	1	1	0.111111	0.0198909	0.181818	0	[S] returned to [O]
+birth_place	, [[[O]]], [S]	11	11	11	1	1	0.0909091	0.0162322	0.153846	0	, [[[O]]], [S]
+birth_place	[O], [S] became	6	6	3	0	0	0	5.55112e-17	0.2	0	[O], [S] became
+birth_place	^[S] returned to [O] and	8	8	3	0	0	0	5.55112e-17	0.2	0	[S] returned to [O] and
+birth_place	'''[S]''' (born in [[[O]]]	6	6	0	0	1	0	0	0.5	0	'''[S]''' (born in [[[O]]]
+birth_place	'''[S]''' in [[[O]]],	8	12	0	0	0	0	0	0.5	0	'''[S]''' in [[[O]]],
+birth_place	'''[S]''' on [[<M> #]], [[#]] in [[[O]]]	6	6	0	0	0	0	0	0.5	0	'''[S]''' on [[<M> #]], [[#]] in [[[O]]]
+birth_place	, [S] was back in [O]	6	6	0	0	0	0	0	0.5	0	, [S] was back in [O]
+birth_place	[O] where [S] was	6	6	1	0	0	0	0	0.333333	0	[O] where [S] was
+birth_place	[O], where [S]	6	6	4	0	1	0	0	0.166667	0	[O], where [S]
+birth_place	[P] died in [O]	6	6	4	0	2	0	0	0.166667	0	[S] died in [O]
+birth_place	[P] grew up in [[[O]]]	6	6	0	0	0	0	0	0.5	0	[S] grew up in [[[O]]]
+birth_place	[P] lived in [[[O]]]	8	8	0	0	0	0	0	0.5	0	[S] lived in [[[O]]]
+birth_place	[P] was born at [[[O]]],	8	8	0	0	0	0	0	0.5	0	[S] was born at [[[O]]],
+birth_place	[P] was born in [O]	6	6	0	0	0	0	0	0.5	0	[S] was born in [O]
+birth_place	[P] was born in [O],	6	6	0	0	0	0	0	0.5	0	[S] was born in [O],
+birth_place	[P] was born in [[[O]]] in	6	6	1	0	1	0	0	0.333333	0	[S] was born in [[[O]]] in
+birth_place	[P] was born in [[[O]]] near	6	6	0	0	0	0	0	0.5	0	[S] was born in [[[O]]] near
+birth_place	[P] was born in [[[O]]].	6	12	0	0	0	0	0	0.5	0	[S] was born in [[[O]]].
+birth_place	[P] was born near [[[O]]]	8	8	0	0	0	0	0	0.5	0	[S] was born near [[[O]]]
+birth_place	[S] left [O]	6	6	4	0	1	0	0	0.166667	0	[S] left [O]
+birth_place	[S] left [O] to	6	6	0	0	0	0	0	0.5	0	[S] left [O] to
+birth_place	[S] was back in [O]	6	6	1	0	0	0	0	0.333333	0	[S] was back in [O]
+birth_place	[S] was born at [[[O]]] in	8	12	0	0	0	0	0	0.5	0	[S] was born at [[[O]]] in
+birth_place	[S] was born in [[#]] in [[[O]]]	6	6	0	0	0	0	0	0.5	0	[S] was born in [[#]] in [[[O]]]
+birth_place	[S] was born in [[[O]]] as	6	6	0	0	0	0	0	0.5	0	[S] was born in [[[O]]] as
+birth_place	[S] was born in the town of [[[O]]]	6	9	0	0	0	0	0	0.5	0	[S] was born in the town of [[[O]]]
+birth_place	[S]'s hometown of [O]	6	6	0	0	0	0	0	0.5	0	[S]'s hometown of [O]
+birth_place	[[[O]]], [S] studied	6	6	0	0	0	0	0	0.5	0	[[[O]]], [S] studied
+birth_place	[[[O]]], [S] was	6	9	8	0	1	0	0	0.1	0	[[[O]]], [S] was
+birth_place	^'''[S]''' (born in [[[O]]]	6	6	0	0	1	0	0	0.5	0	'''[S]''' (born in [[[O]]]
+birth_place	^[P] died in [O]	6	6	4	0	2	0	0	0.166667	0	[S] died in [O]
+birth_place	^[P] grew up in [[[O]]]	6	6	0	0	0	0	0	0.5	0	[S] grew up in [[[O]]]
+birth_place	^[P] lived in [[[O]]]	8	8	0	0	0	0	0	0.5	0	[S] lived in [[[O]]]
+birth_place	^[P] was born at [[[O]]],	8	8	0	0	0	0	0	0.5	0	[S] was born at [[[O]]],
+birth_place	^[P] was born in [O]	6	6	0	0	0	0	0	0.5	0	[S] was born in [O]
+birth_place	^[P] was born in [O],	6	6	0	0	0	0	0	0.5	0	[S] was born in [O],
+birth_place	^[P] was born in [[[O]]] in	6	6	1	0	1	0	0	0.333333	0	[S] was born in [[[O]]] in
+birth_place	^[P] was born in [[[O]]] near	6	6	0	0	0	0	0	0.5	0	[S] was born in [[[O]]] near
+birth_place	^[P] was born in [[[O]]].	6	12	0	0	0	0	0	0.5	0	[S] was born in [[[O]]].
+birth_place	^[P] was born near [[[O]]]	8	8	0	0	0	0	0	0.5	0	[S] was born near [[[O]]]
+birth_place	^[S] was born at [[[O]]] in	8	12	0	0	0	0	0	0.5	0	[S] was born at [[[O]]] in
+birth_place	^[S] was born in [[#]] in [[[O]]]	6	6	0	0	0	0	0	0.5	0	[S] was born in [[#]] in [[[O]]]
+birth_place	^[S] was born in [[[O]]] as	6	6	0	0	0	0	0	0.5	0	[S] was born in [[[O]]] as
+birth_place	^[S] was born in the town of [[[O]]]	6	9	0	0	0	0	0	0.5	0	[S] was born in the town of [[[O]]]
+birth_place	born '''[S]''' in [[[O]]]	8	12	0	0	0	0	0	0.5	0	born '''[S]''' in [[[O]]]
+birth_place	born '''[S]''' in [[[O]]],	8	12	0	0	0	0	0	0.5	0	born '''[S]''' in [[[O]]],
+birth_place	born '''[S]''' on [[<M> #]], [[#]] in [[[O]]]	6	6	0	0	0	0	0	0.5	0	born '''[S]''' on [[<M> #]], [[#]] in [[[O]]]
+birth_place	born [S] in [[[O]]]	6	9	0	0	0	0	0	0.5	0	born [S] in [[[O]]]
+birth_place	born [S] in [[[O]]],	6	9	0	0	0	0	0	0.5	0	born [S] in [[[O]]],
+birth_place	of [O] where [S]	6	6	0	0	0	0	0	0.5	0	of [O] where [S]
+birth_place	to [O], where [S]	6	6	1	0	0	0	0	0.333333	0	to [O], where [S]
+death_place	[P] died in [[[O]]]	72	80	20	18	3	0.9	0.698966	0.863636	0	[S] died in [[[O]]]
+death_place	^[P] died in [[[O]]]	72	80	20	18	3	0.9	0.698966	0.863636	0	[S] died in [[[O]]]
+death_place	[S] died in [[[O]]],	48	68	13	12	1	0.923077	0.66686	0.866667	0	[S] died in [[[O]]],
+death_place	^[S] died in [[[O]]]	60	84	17	15	1	0.882353	0.656636	0.842105	0	[S] died in [[[O]]]
+death_place	[P] died at [O]	28	28	7	7	0	1	0.64567	0.888889	0	[S] died at [O]
+death_place	^[P] died at [O]	28	28	7	7	0	1	0.64567	0.888889	0	[S] died at [O]
+death_place	^[S] died in [[[O]]],	40	60	11	10	1	0.909091	0.622642	0.846154	0	[S] died in [[[O]]],
+death_place	[P] died in [[[O]]],	24	32	6	6	0	1	0.609666	0.875	0	[S] died in [[[O]]],
+death_place	^[P] died in [[[O]]],	24	32	6	6	0	1	0.609666	0.875	0	[S] died in [[[O]]],
+death_place	[P] died at [O] on	16	16	4	4	0	1	0.510109	0.833333	0	[S] died at [O] on
+death_place	^[P] died at [O] on	16	16	4	4	0	1	0.510109	0.833333	0	[S] died at [O] on
+death_place	, [S] died in [[[O]]]	12	12	3	3	0	1	0.438503	0.8	0	, [S] died in [[[O]]]
+death_place	[P] died in [[[O]]].	20	20	6	5	2	0.833333	0.436497	0.75	0	[S] died in [[[O]]].
+death_place	^[P] died in [[[O]]].	20	20	6	5	2	0.833333	0.436497	0.75	0	[S] died in [[[O]]].
+death_place	[P] died in [O]	24	28	8	6	3	0.75	0.409275	0.7	0	[S] died in [O]
+death_place	^[P] died in [O]	24	28	8	6	3	0.75	0.409275	0.7	0	[S] died in [O]
+death_place	[P] died in [[[O]]] in	16	16	5	4	0	0.8	0.375535	0.714286	0	[S] died in [[[O]]] in
+death_place	^[P] died in [[[O]]] in	16	16	5	4	0	0.8	0.375535	0.714286	0	[S] died in [[[O]]] in
+death_place	, [S] moved to [[[O]]]	16	16	9	4	3	0.444444	0.188779	0.454545	0	, [S] moved to [[[O]]]
+death_place	[S] moved to [[[O]]]	16	16	14	4	8	0.285714	0.117214	0.3125	0	[S] moved to [[[O]]]
+death_place	[P] returned to [O]	20	24	23	5	6	0.217391	0.0966398	0.24	0	[S] returned to [O]
+death_place	^[P] returned to [O]	20	24	23	5	6	0.217391	0.0966398	0.24	0	[S] returned to [O]
+death_place	[P] was born in [[[O]]]	24	24	34	6	19	0.176471	0.0834897	0.194444	0	[S] was born in [[[O]]]
+death_place	^[P] was born in [[[O]]]	24	24	34	6	19	0.176471	0.0834897	0.194444	0	[S] was born in [[[O]]]
+death_place	in [O], [S]	20	20	30	5	15	0.166667	0.0733654	0.1875	0	in [O], [S]
+death_place	in [[[O]]], [S]	16	32	25	4	13	0.16	0.0640345	0.185185	0	in [[[O]]], [S]
+death_place	^[S] was born in [[[O]]]	40	44	99	11	47	0.111111	0.0631856	0.118812	0	[S] was born in [[[O]]]
+death_place	[S] was born in [[[O]]]	40	44	102	11	50	0.107843	0.0612932	0.115385	0	[S] was born in [[[O]]]
+death_place	[P] was born in [[[O]]],	12	12	18	3	15	0.166667	0.0583658	0.2	0	[S] was born in [[[O]]],
+death_place	^[P] was born in [[[O]]],	12	12	18	3	15	0.166667	0.0583658	0.2	0	[S] was born in [[[O]]],
+death_place	[O], [S]	32	32	77	8	43	0.103896	0.0535929	0.113924	0	[O], [S]
+death_place	^[S] was born in [[[O]]],	24	28	63	6	31	0.0952381	0.0443835	0.107692	0	[S] was born in [[[O]]],
+death_place	[S] was born in [[[O]]],	24	28	65	6	32	0.0923077	0.0429951	0.104478	0	[S] was born in [[[O]]],
+death_place	[S] died in [O]	11	11	6	1	1	0.166667	0.0300534	0.25	0	[S] died in [O]
+death_place	^[S] died in [O]	11	11	6	1	1	0.166667	0.0300534	0.25	0	[S] died in [O]
+death_place	[[[O]]], [S]	16	32	62	4	25	0.0645161	0.0253729	0.078125	0	[[[O]]], [S]
+death_place	[S] returned to [O]	11	21	12	1	9	0.0833333	0.0148651	0.142857	0	[S] returned to [O]
+death_place	[P] returned to [O] in	6	6	3	0	2	0	5.55112e-17	0.2	0	[S] returned to [O] in
+death_place	^[P] returned to [O] in	6	6	3	0	2	0	5.55112e-17	0.2	0	[S] returned to [O] in
+death_place	^[S] was born in [[[O]]] on	6	6	3	0	0	0	5.55112e-17	0.2	0	[S] was born in [[[O]]] on
+death_place	in [O], [S] was	6	6	3	0	0	0	5.55112e-17	0.2	0	in [O], [S] was
+death_place	[O], [S] was	6	6	6	0	2	0	2.77556e-17	0.125	0	[O], [S] was
+death_place	, [S] died in [[[O]]],	6	6	0	0	0	0	0	0.5	0	, [S] died in [[[O]]],
+death_place	, [S] moved to [[[O]]] in	6	6	0	0	0	0	0	0.5	0	, [S] moved to [[[O]]] in
+death_place	, [S] returned to [O]	6	15	2	0	0	0	0	0.25	0	, [S] returned to [O]
+death_place	, [S]'s [O]	6	6	0	0	0	0	0	0.5	0	, [S]'s [O]
+death_place	[P] died at [O] in	6	6	0	0	0	0	0	0.5	0	[S] died at [O] in
+death_place	[P] died at [[[O]]]	6	6	0	0	0	0	0	0.5	0	[S] died at [[[O]]]
+death_place	[P] died in [O] on	6	9	0	0	0	0	0	0.5	0	[S] died in [O] on
+death_place	[P] moved to [[[O]]]	8	8	0	0	3	0	0	0.5	0	[S] moved to [[[O]]]
+death_place	[P] remained in [O]	6	6	1	0	0	0	0	0.333333	0	[S] remained in [O]
+death_place	[S] died at his home in [O]	6	6	0	0	0	0	0	0.5	0	[S] died at his home in [O]
+death_place	[S] died in [[[O]]] on	6	6	0	0	0	0	0	0.5	0	[S] died in [[[O]]] on
+death_place	[S] moved to [[[O]]] in	6	6	1	0	1	0	0	0.333333	0	[S] moved to [[[O]]] in
+death_place	[S] returned to [O] and	8	12	1	0	2	0	0	0.333333	0	[S] returned to [O] and
+death_place	[S] was back in [O]	6	9	1	0	0	0	0	0.333333	0	[S] was back in [O]
+death_place	[S] was born in [[[O]]] on	6	6	4	0	0	0	0	0.166667	0	[S] was born in [[[O]]] on
+death_place	[S] went to [O]	6	9	1	0	0	0	0	0.333333	0	[S] went to [O]
+death_place	[S]'s [O]	6	6	2	0	3	0	0	0.25	0	[S]'s [O]
+death_place	^[P] died at [O] in	6	6	0	0	0	0	0	0.5	0	[S] died at [O] in
+death_place	^[P] died at [[[O]]]	6	6	0	0	0	0	0	0.5	0	[S] died at [[[O]]]
+death_place	^[P] died in [O] on	6	9	0	0	0	0	0	0.5	0	[S] died in [O] on
+death_place	^[P] moved to [[[O]]]	8	8	0	0	3	0	0	0.5	0	[S] moved to [[[O]]]
+death_place	^[P] remained in [O]	6	6	1	0	0	0	0	0.333333	0	[S] remained in [O]
+death_place	to [O], [S]	6	6	5	0	4	0	0	0.142857	0	to [O], [S]
+birth_date	^'''[S]''' (born [[[O]]],	64	72	16	16	1	1	0.806392	0.944444	0	'''[S]''' (born [[[O]]],
+birth_date	'''[S]''' on [[[O]]]	48	64	12	12	2	1	0.757506	0.928571	0	'''[S]''' on [[[O]]]
+birth_date	born '''[S]''' on [[[O]]]	44	60	11	11	1	1	0.741167	0.923077	0	born '''[S]''' on [[[O]]]
+birth_date	'''[S]''' (born [[[O]]],	64	72	17	16	1	0.941176	0.73018	0.894737	0	'''[S]''' (born [[[O]]],
+birth_date	'''[S]''' (b. [[[O]]]	40	40	10	10	3	1	0.722467	0.916667	0	'''[S]''' (b. [[[O]]]
+birth_date	^'''[S]''' (b. [[[O]]]	40	40	10	10	3	1	0.722467	0.916667	0	'''[S]''' (b. [[[O]]]
+birth_date	'''[S]''' ([[[O]]]-	52	52	14	13	20	0.928571	0.685313	0.875	0	'''[S]''' ([[[O]]]-
+birth_date	'''[S]''' on [[[O]]])	32	48	8	8	0	1	0.675592	0.9	0	'''[S]''' on [[[O]]])
+birth_date	or '''[S]''' ([[[O]]]	32	32	8	8	2	1	0.675592	0.9	0	or '''[S]''' ([[[O]]]
+birth_date	born '''[S]''' on [[[O]]])	28	44	7	7	0	1	0.64567	0.888889	0	born '''[S]''' on [[[O]]])
+birth_date	'''[S]''' ([[[O]]],	40	44	11	10	5	0.909091	0.622642	0.846154	0	'''[S]''' ([[[O]]],
+birth_date	^'''[S]''' ([[[O]]]-	40	40	11	10	18	0.909091	0.622642	0.846154	0	'''[S]''' ([[[O]]]-
+birth_date	'''[S]'''  ([[[O]]]	24	24	6	6	1	1	0.609666	0.875	0	'''[S]'''  ([[[O]]]
+birth_date	'''[S]''' ([[[O]]] in	24	24	6	6	2	1	0.609666	0.875	0	'''[S]''' ([[[O]]] in
+birth_date	'''[S]''' (b. [[[O]]])	24	24	6	6	3	1	0.609666	0.875	0	'''[S]''' (b. [[[O]]])
+birth_date	'''[S]''') ([[[O]]]	24	24	6	6	6	1	0.609666	0.875	0	'''[S]''') ([[[O]]]
+birth_date	^'''[S]''' (b. [[[O]]])	24	24	6	6	3	1	0.609666	0.875	0	'''[S]''' (b. [[[O]]])
+birth_date	^'''[S]''' ([[[O]]] in	20	20	5	5	2	1	0.565518	0.857143	0	'''[S]''' ([[[O]]] in
+birth_date	^'''[S]''' ([[[O]]],	32	36	9	8	3	0.888889	0.565	0.818182	0	'''[S]''' ([[[O]]],
+birth_date	'''[S]''' ([[[O]]]–	16	20	4	4	1	1	0.510109	0.833333	0	'''[S]''' ([[[O]]]–
+birth_date	'''[S]''' (b. [[[O]]] in	16	16	4	4	0	1	0.510109	0.833333	0	'''[S]''' (b. [[[O]]] in
+birth_date	'''[S]''') ([[[O]]] &amp;ndash;	16	16	4	4	1	1	0.510109	0.833333	0	'''[S]''') ([[[O]]] &amp;ndash;
+birth_date	[S] was born in [O]	16	20	4	4	3	1	0.510109	0.833333	0	[S] was born in [O]
+birth_date	[S]''' (born [[[O]]]	16	16	4	4	0	1	0.510109	0.833333	0	[S]''' (born [[[O]]]
+birth_date	^'''[S]'''  ([[[O]]]	16	16	4	4	1	1	0.510109	0.833333	0	'''[S]'''  ([[[O]]]
+birth_date	^'''[S]''' ([[[O]]]–	16	20	4	4	1	1	0.510109	0.833333	0	'''[S]''' ([[[O]]]–
+birth_date	^'''[S]''' (b. [[[O]]] in	16	16	4	4	0	1	0.510109	0.833333	0	'''[S]''' (b. [[[O]]] in
+birth_date	^[S] was born on [[[O]]]	24	28	7	6	6	0.857143	0.486872	0.777778	0	[S] was born on [[[O]]]
+birth_date	[S] was born on [[[O]]]	28	32	9	7	6	0.777778	0.452589	0.727273	0	[S] was born on [[[O]]]
+birth_date	) '''[S]''' ([[[O]]] &amp;ndash;	12	12	3	3	0	1	0.438503	0.8	0	) '''[S]''' ([[[O]]] &amp;ndash;
+birth_date	'''[S]''', ([[[O]]]	20	20	6	5	6	0.833333	0.436497	0.75	0	'''[S]''', ([[[O]]]
+birth_date	[S] was born on [[[O]]],	16	20	5	4	1	0.8	0.375535	0.714286	0	[S] was born on [[[O]]],
+birth_date	^'''[S]''', ([[[O]]]	16	16	5	4	3	0.8	0.375535	0.714286	0	'''[S]''', ([[[O]]]
+birth_date	^[S] was born on [[[O]]],	12	16	4	3	1	0.75	0.300642	0.666667	0	[S] was born on [[[O]]],
+birth_date	[P] was born on [[[O]]]	16	20	6	4	0	0.666667	0.299993	0.625	0	[S] was born on [[[O]]]
+birth_date	^[P] was born on [[[O]]]	16	20	6	4	0	0.666667	0.299993	0.625	0	[S] was born on [[[O]]]
+birth_date	) '''[S]''' ([[[O]]]	12	12	5	3	0	0.6	0.230724	0.571429	0	) '''[S]''' ([[[O]]]
+birth_date	'''[S]'''  ([[[O]]] -	11	11	1	1	0	1	0.206549	0.666667	0	'''[S]'''  ([[[O]]] -
+birth_date	'''[S]''' ([[# <M>]], [[[O]]]	15	18	1	1	1	1	0.206549	0.666667	0	'''[S]''' ([[# <M>]], [[[O]]]
+birth_date	'''[S]''' ([[# <M>]], [[[O]]] &amp;ndash;	11	14	1	1	1	1	0.206549	0.666667	0	'''[S]''' ([[# <M>]], [[[O]]] &amp;ndash;
+birth_date	'''[S]''', (born [[[O]]]	11	11	1	1	0	1	0.206549	0.666667	0	'''[S]''', (born [[[O]]]
+birth_date	[S] was born in [O] in	11	14	1	1	2	1	0.206549	0.666667	0	[S] was born in [O] in
+birth_date	^'''[S]''' ([[# <M>]], [[[O]]]	11	14	1	1	1	1	0.206549	0.666667	0	'''[S]''' ([[# <M>]], [[[O]]]
+birth_date	or '''[S]''' ([[[O]]] &amp;ndash;	11	11	1	1	1	1	0.206549	0.666667	0	or '''[S]''' ([[[O]]] &amp;ndash;
+birth_date	[S] was born in [[[O]]]	11	14	2	1	1	0.5	0.0945312	0.5	0	[S] was born in [[[O]]]
+birth_date	[S]''' ([[[O]]]	11	11	2	1	3	0.5	0.0945312	0.5	0	[S]''' ([[[O]]]
+birth_date	'''[S]'''  ([[[O]]] &amp;ndash;	6	6	0	0	1	0	0	0.5	0	'''[S]'''  ([[[O]]] &amp;ndash;
+birth_date	'''[S]''' (born [O]	6	6	0	0	2	0	0	0.5	0	'''[S]''' (born [O]
+birth_date	'''[S]''' (born [O])	6	6	0	0	2	0	0	0.5	0	'''[S]''' (born [O])
+birth_date	'''[S]''' (c. [[[O]]]	6	6	1	0	9	0	0	0.333333	0	'''[S]''' (c. [[[O]]]
+birth_date	'''[S]''' [[Order of the British Empire|CBE]] (born [[[O]]]	6	6	0	0	0	0	0	0.5	0	'''[S]''' [[Order of the British Empire|CBE]] (born [[[O]]]
+birth_date	'''[S]''' [[Order of the British Empire|CBE]] (born [[[O]]])	6	6	0	0	0	0	0	0.5	0	'''[S]''' [[Order of the British Empire|CBE]] (born [[[O]]])
+birth_date	'''[S]''' on [[[O]]] in	6	6	0	0	0	0	0	0.5	0	'''[S]''' on [[[O]]] in
+birth_date	'''[S]''' on [[[O]]],	6	6	0	0	0	0	0	0.5	0	'''[S]''' on [[[O]]],
+birth_date	'''[S]''' {{IPA|/b&amp;##;&amp;##;nti/}} ([[[O]]]	6	6	0	0	0	0	0	0.5	0	'''[S]''' {{IPA|/b&amp;##;&amp;##;nti/}} ([[[O]]]
+birth_date	'''[S]''' {{IPA|/b&amp;##;&amp;##;nti/}} ([[[O]]] &amp;ndash;	6	6	0	0	0	0	0	0.5	0	'''[S]''' {{IPA|/b&amp;##;&amp;##;nti/}} ([[[O]]] &amp;ndash;
+birth_date	'''[S]''') ([[[O]]],	6	6	0	0	1	0	0	0.5	0	'''[S]''') ([[[O]]],
+birth_date	'''[S]''') (born [[[O]]]	6	6	0	0	1	0	0	0.5	0	'''[S]''') (born [[[O]]]
+birth_date	'''[S]''', ([[[O]]] &amp;ndash;	8	8	0	0	2	0	0	0.5	0	'''[S]''', ([[[O]]] &amp;ndash;
+birth_date	'''[S]''', ([[[O]]] -	6	6	0	0	0	0	0	0.5	0	'''[S]''', ([[[O]]] -
+birth_date	'''[S]''', [[Order of the British Empire|CBE]] (born [[[O]]]	8	12	0	0	0	0	0	0.5	0	'''[S]''', [[Order of the British Empire|CBE]] (born [[[O]]]
+birth_date	'''[S]''', [[Order of the British Empire|CBE]] (born [[[O]]])	8	12	0	0	0	0	0	0.5	0	'''[S]''', [[Order of the British Empire|CBE]] (born [[[O]]])
+birth_date	'''[S]]]''' ([[[O]]]	8	8	1	0	2	0	0	0.333333	0	'''[S]]]''' ([[[O]]]
+birth_date	Admiral]] '''[S]''' ([[[O]]]	6	6	0	0	0	0	0	0.5	0	Admiral]] '''[S]''' ([[[O]]]
+birth_date	Admiral]] '''[S]''' ([[[O]]] &amp;ndash;	6	6	0	0	0	0	0	0.5	0	Admiral]] '''[S]''' ([[[O]]] &amp;ndash;
+birth_date	General]] '''[S]''' (born [[[O]]]	6	6	0	0	0	0	0	0.5	0	General]] '''[S]''' (born [[[O]]]
+birth_date	[P] was born on [[[O]]] at	8	12	0	0	0	0	0	0.5	0	[S] was born on [[[O]]] at
+birth_date	[P] was born on [[[O]]] in	6	6	0	0	0	0	0	0.5	0	[S] was born on [[[O]]] in
+birth_date	[S] ''' ([[[O]]]	6	6	0	0	0	0	0	0.5	0	[S] ''' ([[[O]]]
+birth_date	[S] ''' ([[[O]]] &amp;ndash;	6	6	0	0	0	0	0	0.5	0	[S] ''' ([[[O]]] &amp;ndash;
+birth_date	[S] Tennō'') ([[[O]]]	8	8	0	0	6	0	0	0.5	0	[S] Tennō'') ([[[O]]]
+birth_date	[S] Tennō'') ([[[O]]]-	8	8	0	0	5	0	0	0.5	0	[S] Tennō'') ([[[O]]]-
+birth_date	[S] was born in [[[O]]] in	6	9	0	0	1	0	0	0.5	0	[S] was born in [[[O]]] in
+birth_date	[S] was born on [O]	6	6	0	0	1	0	0	0.5	0	[S] was born on [O]
+birth_date	[S] was born on [O] in	6	6	0	0	1	0	0	0.5	0	[S] was born on [O] in
+birth_date	[S] was born on [[[O]]] at	6	6	0	0	0	0	0	0.5	0	[S] was born on [[[O]]] at
+birth_date	[S]''' ([[[O]]] -	8	8	0	0	0	0	0	0.5	0	[S]''' ([[[O]]] -
+birth_date	[S]''' (born [[[O]]])	6	6	0	0	0	0	0	0.5	0	[S]''' (born [[[O]]])
+birth_date	^'''[S]'''  ([[[O]]] -	6	6	0	0	0	0	0	0.5	0	'''[S]'''  ([[[O]]] -
+birth_date	^'''[S]''' ([[# <M>]], [[[O]]] &amp;ndash;	6	9	0	0	1	0	0	0.5	0	'''[S]''' ([[# <M>]], [[[O]]] &amp;ndash;
+birth_date	^'''[S]''' [[Order of the British Empire|CBE]] (born [[[O]]]	6	6	0	0	0	0	0	0.5	0	'''[S]''' [[Order of the British Empire|CBE]] (born [[[O]]]
+birth_date	^'''[S]''' [[Order of the British Empire|CBE]] (born [[[O]]])	6	6	0	0	0	0	0	0.5	0	'''[S]''' [[Order of the British Empire|CBE]] (born [[[O]]])
+birth_date	^'''[S]''' {{IPA|/b&amp;##;&amp;##;nti/}} ([[[O]]]	6	6	0	0	0	0	0	0.5	0	'''[S]''' {{IPA|/b&amp;##;&amp;##;nti/}} ([[[O]]]
+birth_date	^'''[S]''' {{IPA|/b&amp;##;&amp;##;nti/}} ([[[O]]] &amp;ndash;	6	6	0	0	0	0	0	0.5	0	'''[S]''' {{IPA|/b&amp;##;&amp;##;nti/}} ([[[O]]] &amp;ndash;
+birth_date	^'''[S]''', ([[[O]]] -	6	6	0	0	0	0	0	0.5	0	'''[S]''', ([[[O]]] -
+birth_date	^'''[S]''', (born [[[O]]]	8	8	0	0	0	0	0	0.5	0	'''[S]''', (born [[[O]]]
+birth_date	^'''[S]''', [[Order of the British Empire|CBE]] (born [[[O]]]	8	12	0	0	0	0	0	0.5	0	'''[S]''', [[Order of the British Empire|CBE]] (born [[[O]]]
+birth_date	^'''[S]''', [[Order of the British Empire|CBE]] (born [[[O]]])	8	12	0	0	0	0	0	0.5	0	'''[S]''', [[Order of the British Empire|CBE]] (born [[[O]]])
+birth_date	^'''[S]]]''' ([[[O]]]	8	8	0	0	1	0	0	0.5	0	'''[S]]]''' ([[[O]]]
+birth_date	^[P] was born on [[[O]]] at	8	12	0	0	0	0	0	0.5	0	[S] was born on [[[O]]] at
+birth_date	^[P] was born on [[[O]]] in	6	6	0	0	0	0	0	0.5	0	[S] was born on [[[O]]] in
+birth_date	^[S] ''' ([[[O]]]	6	6	0	0	0	0	0	0.5	0	[S] ''' ([[[O]]]
+birth_date	^[S] ''' ([[[O]]] &amp;ndash;	6	6	0	0	0	0	0	0.5	0	[S] ''' ([[[O]]] &amp;ndash;
+birth_date	^[S] was born in [O]	6	9	0	0	3	0	0	0.5	0	[S] was born in [O]
+birth_date	^[S] was born in [O] in	6	9	0	0	2	0	0	0.5	0	[S] was born in [O] in
+birth_date	^[S] was born in [[[O]]]	6	9	0	0	1	0	0	0.5	0	[S] was born in [[[O]]]
+birth_date	^[S] was born in [[[O]]] in	6	9	0	0	1	0	0	0.5	0	[S] was born in [[[O]]] in
+birth_date	^[S] was born on [O]	6	6	0	0	1	0	0	0.5	0	[S] was born on [O]
+birth_date	^[S] was born on [O] in	6	6	0	0	1	0	0	0.5	0	[S] was born on [O] in
+birth_date	^[S] was born on [[[O]]] at	6	6	0	0	0	0	0	0.5	0	[S] was born on [[[O]]] at
+birth_date	as '''[S]''' ([[[O]]]	6	6	0	0	0	0	0	0.5	0	as '''[S]''' ([[[O]]]
+birth_date	born '''[S]''' on [[[O]]] in	6	6	0	0	0	0	0	0.5	0	born '''[S]''' on [[[O]]] in
+birth_date	born '''[S]''' on [[[O]]],	6	6	0	0	0	0	0	0.5	0	born '''[S]''' on [[[O]]],
+birth_date	or '''[S]''' ([[[O]]]-	6	6	0	0	1	0	0	0.5	0	or '''[S]''' ([[[O]]]-
+birth_date	or '''[S]''') ([[[O]]]	6	6	0	0	1	0	0	0.5	0	or '''[S]''') ([[[O]]]
+birth_date	or '''[S]''') ([[[O]]],	6	6	0	0	0	0	0	0.5	0	or '''[S]''') ([[[O]]],
+death_date	'''[S]''' ([[<M> #]], [[#]]&amp;ndash;[[[O]]])	76	88	19	19	5	1	0.831821	0.952381	0	'''[S]''' ([[<M> #]], [[#]]&amp;ndash;[[[O]]])
+death_date	^'''[S]''' ([[<M> #]], [[#]]&amp;ndash;[[[O]]]	72	84	18	18	5	1	0.824121	0.95	0	'''[S]''' ([[<M> #]], [[#]]&amp;ndash;[[[O]]]
+death_date	^'''[S]''' ([[<M> #]], [[#]]&amp;ndash;[[[O]]])	68	80	17	17	4	1	0.815682	0.947368	0	'''[S]''' ([[<M> #]], [[#]]&amp;ndash;[[[O]]])
+death_date	'''[S]''' ([[<M> #]] [[#]] &amp;ndash; [[[O]]]	56	80	14	14	5	1	0.784689	0.9375	0	'''[S]''' ([[<M> #]] [[#]] &amp;ndash; [[[O]]]
+death_date	'''[S]''' ([[<M> #]] [[#]] &amp;ndash; [[[O]]])	56	80	14	14	5	1	0.784689	0.9375	0	'''[S]''' ([[<M> #]] [[#]] &amp;ndash; [[[O]]])
+death_date	^'''[S]''' ([[<M> #]] [[#]] &amp;ndash; [[[O]]]	52	76	13	13	5	1	0.771905	0.933333	0	'''[S]''' ([[<M> #]] [[#]] &amp;ndash; [[[O]]]
+death_date	^'''[S]''' ([[<M> #]] [[#]] &amp;ndash; [[[O]]])	52	76	13	13	5	1	0.771905	0.933333	0	'''[S]''' ([[<M> #]] [[#]] &amp;ndash; [[[O]]])
+death_date	'''[S]''' ([[#]] - [[[O]]])	44	48	11	11	1	1	0.741167	0.923077	0	'''[S]''' ([[#]] - [[[O]]])
+death_date	[S] died on [[[O]]],	44	60	11	11	4	1	0.741167	0.923077	0	[S] died on [[[O]]],
+death_date	^[S] died on [[[O]]],	44	60	11	11	4	1	0.741167	0.923077	0	[S] died on [[[O]]],
+death_date	'''[S]''' ([[# <M>]] [[#]] &amp;ndash; [[[O]]]	40	52	10	10	0	1	0.722467	0.916667	0	'''[S]''' ([[# <M>]] [[#]] &amp;ndash; [[[O]]]
+death_date	'''[S]''' ([[# <M>]] [[#]] &amp;ndash; [[[O]]])	40	52	10	10	0	1	0.722467	0.916667	0	'''[S]''' ([[# <M>]] [[#]] &amp;ndash; [[[O]]])
+death_date	^'''[S]''' ([[# <M>]] [[#]] &amp;ndash; [[[O]]]	36	48	9	9	0	1	0.700855	0.909091	0	'''[S]''' ([[# <M>]] [[#]] &amp;ndash; [[[O]]]
+death_date	^'''[S]''' ([[# <M>]] [[#]] &amp;ndash; [[[O]]])	36	48	9	9	0	1	0.700855	0.909091	0	'''[S]''' ([[# <M>]] [[#]] &amp;ndash; [[[O]]])
+death_date	^'''[S]''' ([[#]] - [[[O]]])	32	36	8	8	1	1	0.675592	0.9	0	'''[S]''' ([[#]] - [[[O]]])
+death_date	'''[S]''' ([[#]] - [[[O]]]	48	52	13	12	1	0.923077	0.66686	0.866667	0	'''[S]''' ([[#]] - [[[O]]]
+death_date	'''[S]''' ([[#]]-[[[O]]]	28	32	7	7	11	1	0.64567	0.888889	0	'''[S]''' ([[#]]-[[[O]]]
+death_date	'''[S]''' ([[#]]-[[[O]]])	28	32	7	7	11	1	0.64567	0.888889	0	'''[S]''' ([[#]]-[[[O]]])
+death_date	[S] Tennō'') ([[#]]-[[[O]]]	28	28	7	7	1	1	0.64567	0.888889	0	[S] Tennō'') ([[#]]-[[[O]]]
+death_date	[S] died in [O]	40	40	11	10	11	0.909091	0.622642	0.846154	0	[S] died in [O]
+death_date	[S] Tennō'') ([[#]]-[[[O]]])	24	24	6	6	1	1	0.609666	0.875	0	[S] Tennō'') ([[#]]-[[[O]]])
+death_date	^'''[S]''' ([[#]]-[[[O]]]	24	28	6	6	10	1	0.609666	0.875	0	'''[S]''' ([[#]]-[[[O]]]
+death_date	^'''[S]''' ([[#]]-[[[O]]])	24	28	6	6	10	1	0.609666	0.875	0	'''[S]''' ([[#]]-[[[O]]])
+death_date	^'''[S]''' ([[#]] - [[[O]]]	36	40	10	9	1	0.9	0.59585	0.833333	0	'''[S]''' ([[#]] - [[[O]]]
+death_date	'''[S]''' ([[#]] &amp;ndash; [[[O]]]	44	44	13	11	1	0.846154	0.577654	0.8	0	'''[S]''' ([[#]] &amp;ndash; [[[O]]]
+death_date	'''[S]''' ([[# <M>]] [[#]] – [[[O]]]	20	20	5	5	1	1	0.565518	0.857143	0	'''[S]''' ([[# <M>]] [[#]] – [[[O]]]
+death_date	'''[S]''' ([[# <M>]] [[#]] – [[[O]]])	20	20	5	5	1	1	0.565518	0.857143	0	'''[S]''' ([[# <M>]] [[#]] – [[[O]]])
+death_date	'''[S]''' ([[#]]&amp;ndash;[[[O]]]	20	20	5	5	5	1	0.565518	0.857143	0	'''[S]''' ([[#]]&amp;ndash;[[[O]]]
+death_date	'''[S]''' ([[#]]&amp;ndash;[[[O]]])	20	20	5	5	5	1	0.565518	0.857143	0	'''[S]''' ([[#]]&amp;ndash;[[[O]]])
+death_date	'''[S]''' ([[<M> #]], [[#]]-[[[O]]])	20	20	5	5	1	1	0.565518	0.857143	0	'''[S]''' ([[<M> #]], [[#]]-[[[O]]])
+death_date	[[[O]]]), better known as '''[S]'''	20	32	5	5	1	1	0.565518	0.857143	0	[[[O]]]), better known as '''[S]'''
+death_date	^'''[S]''' ([[#]]&amp;ndash;[[[O]]]	20	20	5	5	3	1	0.565518	0.857143	0	'''[S]''' ([[#]]&amp;ndash;[[[O]]]
+death_date	^'''[S]''' ([[#]]&amp;ndash;[[[O]]])	20	20	5	5	3	1	0.565518	0.857143	0	'''[S]''' ([[#]]&amp;ndash;[[[O]]])
+death_date	[P] died on [[[O]]]	32	32	9	8	2	0.888889	0.565	0.818182	0	[S] died on [[[O]]]
+death_date	^[P] died on [[[O]]]	32	32	9	8	2	0.888889	0.565	0.818182	0	[S] died on [[[O]]]
+death_date	'''[S]''' ([[#]] &amp;ndash; [[[O]]])	40	40	12	10	1	0.833333	0.551969	0.785714	0	'''[S]''' ([[#]] &amp;ndash; [[[O]]])
+death_date	^'''[S]''' ([[#]] &amp;ndash; [[[O]]]	36	36	11	9	1	0.818182	0.523019	0.769231	0	'''[S]''' ([[#]] &amp;ndash; [[[O]]]
+death_date	^'''[S]''' ([[#]] &amp;ndash; [[[O]]])	36	36	11	9	1	0.818182	0.523019	0.769231	0	'''[S]''' ([[#]] &amp;ndash; [[[O]]])
+death_date	[S] died in [O],	16	16	4	4	3	1	0.510109	0.833333	0	[S] died in [O],
+death_date	[[[O]]]), also known as '''[S]'''	16	16	4	4	3	1	0.510109	0.833333	0	[[[O]]]), also known as '''[S]'''
+death_date	^'''[S]''' ([[# <M>]] [[#]] – [[[O]]]	16	16	4	4	1	1	0.510109	0.833333	0	'''[S]''' ([[# <M>]] [[#]] – [[[O]]]
+death_date	^'''[S]''' ([[# <M>]] [[#]] – [[[O]]])	16	16	4	4	1	1	0.510109	0.833333	0	'''[S]''' ([[# <M>]] [[#]] – [[[O]]])
+death_date	^'''[S]''' ([[<M> #]], [[#]]-[[[O]]])	16	16	4	4	1	1	0.510109	0.833333	0	'''[S]''' ([[<M> #]], [[#]]-[[[O]]])
+death_date	[P] died in [O]	32	36	10	8	3	0.8	0.490162	0.75	0	[S] died in [O]
+death_date	^[P] died in [O]	32	36	10	8	3	0.8	0.490162	0.75	0	[S] died in [O]
+death_date	^[S] died in [O]	24	24	7	6	9	0.857143	0.486872	0.777778	0	[S] died in [O]
+death_date	[P] died in [[[O]]]	28	32	9	7	4	0.777778	0.452589	0.727273	0	[S] died in [[[O]]]
+death_date	^[P] died in [[[O]]]	28	32	9	7	4	0.777778	0.452589	0.727273	0	[S] died in [[[O]]]
+death_date	&amp;ndash; [[[O]]]), better known as '''[S]'''	12	20	3	3	0	1	0.438503	0.8	0	&amp;ndash; [[[O]]]), better known as '''[S]'''
+death_date	'''[S]''' ([[<M> #]] [[#]]&amp;ndash;[[[O]]]	12	12	3	3	0	1	0.438503	0.8	0	'''[S]''' ([[<M> #]] [[#]]&amp;ndash;[[[O]]]
+death_date	'''[S]''' ([[<M> #]] [[#]]&amp;ndash;[[[O]]])	12	12	3	3	0	1	0.438503	0.8	0	'''[S]''' ([[<M> #]] [[#]]&amp;ndash;[[[O]]])
+death_date	'''[S]''' ([[<M> #]],[[#]] &amp;ndash; [[[O]]]	12	16	3	3	0	1	0.438503	0.8	0	'''[S]''' ([[<M> #]],[[#]] &amp;ndash; [[[O]]]
+death_date	'''[S]''' ([[<M> #]],[[#]] &amp;ndash; [[[O]]])	12	16	3	3	0	1	0.438503	0.8	0	'''[S]''' ([[<M> #]],[[#]] &amp;ndash; [[[O]]])
+death_date	[S] died on [[[O]]] in	12	12	3	3	1	1	0.438503	0.8	0	[S] died on [[[O]]] in
+death_date	^'''[S]''' ([[<M> #]],[[#]] &amp;ndash; [[[O]]]	12	16	3	3	0	1	0.438503	0.8	0	'''[S]''' ([[<M> #]],[[#]] &amp;ndash; [[[O]]]
+death_date	^'''[S]''' ([[<M> #]],[[#]] &amp;ndash; [[[O]]])	12	16	3	3	0	1	0.438503	0.8	0	'''[S]''' ([[<M> #]],[[#]] &amp;ndash; [[[O]]])
+death_date	'''[S]''' ([[<M> #]], [[#]]-[[[O]]]	20	20	6	5	1	0.833333	0.436497	0.75	0	'''[S]''' ([[<M> #]], [[#]]-[[[O]]]
+death_date	^'''[S]''' ([[<M> #]], [[#]]-[[[O]]]	16	16	5	4	1	0.8	0.375535	0.714286	0	'''[S]''' ([[<M> #]], [[#]]-[[[O]]]
+death_date	[[[O]]], [S] died	16	16	6	4	2	0.666667	0.299993	0.625	0	[[[O]]], [S] died
+death_date	&amp;ndash; [[[O]]]), also known as '''[S]'''	11	11	1	1	1	1	0.206549	0.666667	0	&amp;ndash; [[[O]]]), also known as '''[S]'''
+death_date	'''[S]''' ([[<M> #]] [[#]] - [[[O]]])	15	18	1	1	1	1	0.206549	0.666667	0	'''[S]''' ([[<M> #]] [[#]] - [[[O]]])
+death_date	'''[S]''' (c. [[#]] &amp;ndash; [[[O]]]	11	15	1	1	1	1	0.206549	0.666667	0	'''[S]''' (c. [[#]] &amp;ndash; [[[O]]]
+death_date	'''[S]''' (c. [[#]] &amp;ndash; [[[O]]])	11	15	1	1	1	1	0.206549	0.666667	0	'''[S]''' (c. [[#]] &amp;ndash; [[[O]]])
+death_date	'''[S]''' (died [[[O]]]	11	11	1	1	0	1	0.206549	0.666667	0	'''[S]''' (died [[[O]]]
+death_date	'''[S]''' (died [[[O]]])	11	11	1	1	0	1	0.206549	0.666667	0	'''[S]''' (died [[[O]]])
+death_date	[P] died on [O]	11	11	1	1	1	1	0.206549	0.666667	0	[S] died on [O]
+death_date	[[[O]]]), better known as '''[S]''',	15	26	1	1	1	1	0.206549	0.666667	0	[[[O]]]), better known as '''[S]''',
+death_date	^'''[S]''' ([[<M> #]] [[#]] - [[[O]]])	15	18	1	1	1	1	0.206549	0.666667	0	'''[S]''' ([[<M> #]] [[#]] - [[[O]]])
+death_date	^'''[S]''' (c. [[#]] &amp;ndash; [[[O]]]	11	15	1	1	0	1	0.206549	0.666667	0	'''[S]''' (c. [[#]] &amp;ndash; [[[O]]]
+death_date	^'''[S]''' (c. [[#]] &amp;ndash; [[[O]]])	11	15	1	1	0	1	0.206549	0.666667	0	'''[S]''' (c. [[#]] &amp;ndash; [[[O]]])
+death_date	^[P] died on [O]	11	11	1	1	1	1	0.206549	0.666667	0	[S] died on [O]
+death_date	'''[S]''' ([[<M> #]] [[#]] - [[[O]]]	15	18	2	1	1	0.5	0.0945312	0.5	0	'''[S]''' ([[<M> #]] [[#]] - [[[O]]]
+death_date	[S] died in [[[O]]]	23	23	2	1	1	0.5	0.0945312	0.5	0	[S] died in [[[O]]]
+death_date	^'''[S]''' ([[<M> #]] [[#]] - [[[O]]]	15	18	2	1	1	0.5	0.0945312	0.5	0	'''[S]''' ([[<M> #]] [[#]] - [[[O]]]
+death_date	On [[[O]]], [S]	24	24	41	6	94	0.146341	0.0688425	0.162791	0	On [[[O]]], [S]
+death_date	[O], [S]'	12	24	17	3	13	0.176471	0.0619113	0.210526	0	[O], [S]'
+death_date	[[[O]]], [S]	52	64	222	13	278	0.0585586	0.0345378	0.0625	0	[[[O]]], [S]
+death_date	In [[[O]]], [S]	12	16	82	3	93	0.0365854	0.0125196	0.047619	0	In [[[O]]], [S]
+death_date	[O], [S]	24	44	258	6	307	0.0232558	0.0107009	0.0269231	0	[O], [S]
+death_date	[P] reigned from [[#]] to [[[O]]]	6	6	3	0	0	0	5.55112e-17	0.2	0	[S] reigned from [[#]] to [[[O]]]
+death_date	^[P] reigned from [[#]] to [[[O]]]	6	6	3	0	0	0	5.55112e-17	0.2	0	[S] reigned from [[#]] to [[[O]]]
+death_date	&amp;ndash; [[[O]]]), also known as '''[S]''',	6	6	0	0	0	0	0	0.5	0	&amp;ndash; [[[O]]]), also known as '''[S]''',
+death_date	&amp;ndash; [[[O]]]), better known as '''[S]''',	6	12	0	0	0	0	0	0.5	0	&amp;ndash; [[[O]]]), better known as '''[S]''',
+death_date	&amp;ndash; [[[O]]]), called '''[S]'''	8	12	0	0	0	0	0	0.5	0	&amp;ndash; [[[O]]]), called '''[S]'''
+death_date	&amp;ndash;[[[O]]]), commonly known as '''[S]'''	6	6	0	0	0	0	0	0.5	0	&amp;ndash;[[[O]]]), commonly known as '''[S]'''
+death_date	&amp;ndash;[[[O]]]), commonly known as '''[S]''',	6	6	0	0	0	0	0	0.5	0	&amp;ndash;[[[O]]]), commonly known as '''[S]''',
+death_date	'''[S]'''  ([[<M> #]], [[#]] &amp;ndash; [[[O]]]	6	6	0	0	1	0	0	0.5	0	'''[S]'''  ([[<M> #]], [[#]] &amp;ndash; [[[O]]]
+death_date	'''[S]'''  ([[<M> #]], [[#]] &amp;ndash; [[[O]]])	6	6	0	0	1	0	0	0.5	0	'''[S]'''  ([[<M> #]], [[#]] &amp;ndash; [[[O]]])
+death_date	'''[S]'''  ([[<M> #]], [[#]] - [[[O]]]	6	6	0	0	0	0	0	0.5	0	'''[S]'''  ([[<M> #]], [[#]] - [[[O]]]
+death_date	'''[S]'''  ([[<M> #]], [[#]] - [[[O]]])	6	6	0	0	0	0	0	0.5	0	'''[S]'''  ([[<M> #]], [[#]] - [[[O]]])
+death_date	'''[S]''' ([[#]] or [[#]] &amp;ndash; [[[O]]]	6	6	0	0	0	0	0	0.5	0	'''[S]''' ([[#]] or [[#]] &amp;ndash; [[[O]]]
+death_date	'''[S]''' ([[#]] or [[#]] &amp;ndash; [[[O]]])	6	6	0	0	0	0	0	0.5	0	'''[S]''' ([[#]] or [[#]] &amp;ndash; [[[O]]])
+death_date	'''[S]''' ([[#]]? &amp;ndash; [[[O]]]	6	9	0	0	0	0	0	0.5	0	'''[S]''' ([[#]]? &amp;ndash; [[[O]]]
+death_date	'''[S]''' ([[#]]? &amp;ndash; [[[O]]])	6	9	0	0	0	0	0	0.5	0	'''[S]''' ([[#]]? &amp;ndash; [[[O]]])
+death_date	'''[S]''' ([[<M> #]] [[#]] – [[[O]]]	6	9	0	0	1	0	0	0.5	0	'''[S]''' ([[<M> #]] [[#]] – [[[O]]]
+death_date	'''[S]''' ([[<M> #]] [[#]] – [[[O]]])	6	9	0	0	1	0	0	0.5	0	'''[S]''' ([[<M> #]] [[#]] – [[[O]]])
+death_date	'''[S]''' ([[<M> #]], [[#]]–[[[O]]]	6	9	0	0	0	0	0	0.5	0	'''[S]''' ([[<M> #]], [[#]]–[[[O]]]
+death_date	'''[S]''' ([[<M> #]], [[#]]–[[[O]]])	6	9	0	0	0	0	0	0.5	0	'''[S]''' ([[<M> #]], [[#]]–[[[O]]])
+death_date	'''[S]''' (c. [[#]]&amp;ndash;[[[O]]]	6	6	0	0	0	0	0	0.5	0	'''[S]''' (c. [[#]]&amp;ndash;[[[O]]]
+death_date	'''[S]''' (c. [[#]]&amp;ndash;[[[O]]])	6	6	0	0	0	0	0	0.5	0	'''[S]''' (c. [[#]]&amp;ndash;[[[O]]])
+death_date	'''[S]''' (c.[[#]] &amp;ndash; [[[O]]]	8	12	0	0	0	0	0	0.5	0	'''[S]''' (c.[[#]] &amp;ndash; [[[O]]]
+death_date	'''[S]''' (c.[[#]] &amp;ndash; [[[O]]])	8	12	0	0	0	0	0	0.5	0	'''[S]''' (c.[[#]] &amp;ndash; [[[O]]])
+death_date	'''[S]''' (d. [[[O]]]	8	8	0	0	3	0	0	0.5	0	'''[S]''' (d. [[[O]]]
+death_date	'''[S]''' (d. [[[O]]])	8	8	0	0	3	0	0	0.5	0	'''[S]''' (d. [[[O]]])
+death_date	'''[S]''' {{IPA|/b&amp;##;&amp;##;nti/}} ([[<M> #]], [[#]] &amp;ndash; [[[O]]]	6	6	0	0	0	0	0	0.5	0	'''[S]''' {{IPA|/b&amp;##;&amp;##;nti/}} ([[<M> #]], [[#]] &amp;ndash; [[[O]]]
+death_date	'''[S]''' {{IPA|/b&amp;##;&amp;##;nti/}} ([[<M> #]], [[#]] &amp;ndash; [[[O]]])	6	6	0	0	0	0	0	0.5	0	'''[S]''' {{IPA|/b&amp;##;&amp;##;nti/}} ([[<M> #]], [[#]] &amp;ndash; [[[O]]])
+death_date	) '''[S]''' ([[<M> #]], [[#]] &amp;ndash; [[[O]]]	6	6	1	0	0	0	0	0.333333	0	) '''[S]''' ([[<M> #]], [[#]] &amp;ndash; [[[O]]]
+death_date	) '''[S]''' ([[<M> #]], [[#]] &amp;ndash; [[[O]]])	6	6	1	0	0	0	0	0.333333	0	) '''[S]''' ([[<M> #]], [[#]] &amp;ndash; [[[O]]])
+death_date	) '''[S]''' ([[<M> #]], [[#]] - [[[O]]]	6	6	0	0	0	0	0	0.5	0	) '''[S]''' ([[<M> #]], [[#]] - [[[O]]]
+death_date	) '''[S]''' ([[<M> #]], [[#]] - [[[O]]])	6	6	0	0	0	0	0	0.5	0	) '''[S]''' ([[<M> #]], [[#]] - [[[O]]])
+death_date	In [O], [S]	8	12	121	0	136	0	0	0.00813008	0	In [O], [S]
+death_date	In [[[O]]], [S] died	6	6	0	0	0	0	0	0.5	0	In [[[O]]], [S] died
+death_date	On [[[O]]], [S] died	6	6	1	0	1	0	0	0.333333	0	On [[[O]]], [S] died
+death_date	When [S] died in [O]	12	12	0	0	1	0	0	0.5	0	When [S] died in [O]
+death_date	When [S] died in [O],	8	8	0	0	1	0	0	0.5	0	When [S] died in [O],
+death_date	[P] died in [O] of	6	6	0	0	0	0	0	0.5	0	[S] died in [O] of
+death_date	[P] died in [O],	6	6	1	0	0	0	0	0.333333	0	[S] died in [O],
+death_date	[P] died in [O].	6	9	0	0	0	0	0	0.5	0	[S] died in [O].
+death_date	[P] died in [[[O]]],	6	6	2	0	1	0	0	0.25	0	[S] died in [[[O]]],
+death_date	[P] died on [[[O]]] at	6	6	0	0	0	0	0	0.5	0	[S] died on [[[O]]] at
+death_date	[P] died on [[[O]]],	8	8	0	0	0	0	0	0.5	0	[S] died on [[[O]]],
+death_date	[P] died on [[[O]]].	6	6	1	0	0	0	0	0.333333	0	[S] died on [[[O]]].
+death_date	[S] ''' ([[<M> #]], [[#]] &amp;ndash; [[[O]]]	6	6	0	0	0	0	0	0.5	0	[S] ''' ([[<M> #]], [[#]] &amp;ndash; [[[O]]]
+death_date	[S] ''' ([[<M> #]], [[#]] &amp;ndash; [[[O]]])	6	6	0	0	0	0	0	0.5	0	[S] ''' ([[<M> #]], [[#]] &amp;ndash; [[[O]]])
+death_date	[S] died in [O] at	6	6	0	0	1	0	0	0.5	0	[S] died in [O] at
+death_date	[S] died in [[[O]]] at	8	8	0	0	0	0	0	0.5	0	[S] died in [[[O]]] at
+death_date	[S] died on [[[O]]] and	12	12	0	0	1	0	0	0.5	0	[S] died on [[[O]]] and
+death_date	[S] died on [[[O]]] at	6	6	0	0	1	0	0	0.5	0	[S] died on [[[O]]] at
+death_date	[S] passed away in [O]	8	8	0	0	1	0	0	0.5	0	[S] passed away in [O]
+death_date	[S]'s death in [[[O]]]	8	16	0	0	0	0	0	0.5	0	[S]'s death in [[[O]]]
+death_date	[S]'s death in [[[O]]],	8	16	0	0	0	0	0	0.5	0	[S]'s death in [[[O]]],
+death_date	[[[O]]]) (also '''[S]'''	6	6	0	0	0	0	0	0.5	0	[[[O]]]) (also '''[S]'''
+death_date	[[[O]]]), also known as '''[S]''' and	6	6	0	0	0	0	0	0.5	0	[[[O]]]), also known as '''[S]''' and
+death_date	[[[O]]]), also known as '''[S]''',	6	6	0	0	0	0	0	0.5	0	[[[O]]]), also known as '''[S]''',
+death_date	[[[O]]]), called '''[S]'''	8	12	0	0	1	0	0	0.5	0	[[[O]]]), called '''[S]'''
+death_date	[[[O]]]), commonly known as '''[S]'''	6	6	0	0	1	0	0	0.5	0	[[[O]]]), commonly known as '''[S]'''
+death_date	[[[O]]]), commonly known as '''[S]''',	6	6	0	0	1	0	0	0.5	0	[[[O]]]), commonly known as '''[S]''',
+death_date	^'''[S]'''  ([[<M> #]], [[#]] - [[[O]]]	6	6	0	0	0	0	0	0.5	0	'''[S]'''  ([[<M> #]], [[#]] - [[[O]]]
+death_date	^'''[S]'''  ([[<M> #]], [[#]] - [[[O]]])	6	6	0	0	0	0	0	0.5	0	'''[S]'''  ([[<M> #]], [[#]] - [[[O]]])
+death_date	^'''[S]''' ([[#]] or [[#]] &amp;ndash; [[[O]]]	6	6	0	0	0	0	0	0.5	0	'''[S]''' ([[#]] or [[#]] &amp;ndash; [[[O]]]
+death_date	^'''[S]''' ([[#]] or [[#]] &amp;ndash; [[[O]]])	6	6	0	0	0	0	0	0.5	0	'''[S]''' ([[#]] or [[#]] &amp;ndash; [[[O]]])
+death_date	^'''[S]''' ([[#]]? &amp;ndash; [[[O]]]	6	9	0	0	0	0	0	0.5	0	'''[S]''' ([[#]]? &amp;ndash; [[[O]]]
+death_date	^'''[S]''' ([[#]]? &amp;ndash; [[[O]]])	6	9	0	0	0	0	0	0.5	0	'''[S]''' ([[#]]? &amp;ndash; [[[O]]])
+death_date	^'''[S]''' ([[<M> #]] [[#]]&amp;ndash;[[[O]]]	6	6	0	0	0	0	0	0.5	0	'''[S]''' ([[<M> #]] [[#]]&amp;ndash;[[[O]]]
+death_date	^'''[S]''' ([[<M> #]] [[#]]&amp;ndash;[[[O]]])	6	6	0	0	0	0	0	0.5	0	'''[S]''' ([[<M> #]] [[#]]&amp;ndash;[[[O]]])
+death_date	^'''[S]''' ([[<M> #]], [[#]]–[[[O]]]	6	9	0	0	0	0	0	0.5	0	'''[S]''' ([[<M> #]], [[#]]–[[[O]]]
+death_date	^'''[S]''' ([[<M> #]], [[#]]–[[[O]]])	6	9	0	0	0	0	0	0.5	0	'''[S]''' ([[<M> #]], [[#]]–[[[O]]])
+death_date	^'''[S]''' (c.[[#]] &amp;ndash; [[[O]]]	8	12	0	0	0	0	0	0.5	0	'''[S]''' (c.[[#]] &amp;ndash; [[[O]]]
+death_date	^'''[S]''' (c.[[#]] &amp;ndash; [[[O]]])	8	12	0	0	0	0	0	0.5	0	'''[S]''' (c.[[#]] &amp;ndash; [[[O]]])
+death_date	^'''[S]''' (d. [[[O]]]	8	8	0	0	3	0	0	0.5	0	'''[S]''' (d. [[[O]]]
+death_date	^'''[S]''' (d. [[[O]]])	8	8	0	0	3	0	0	0.5	0	'''[S]''' (d. [[[O]]])
+death_date	^'''[S]''' (died [[[O]]]	6	6	0	0	0	0	0	0.5	0	'''[S]''' (died [[[O]]]
+death_date	^'''[S]''' (died [[[O]]])	6	6	0	0	0	0	0	0.5	0	'''[S]''' (died [[[O]]])
+death_date	^'''[S]''' {{IPA|/b&amp;##;&amp;##;nti/}} ([[<M> #]], [[#]] &amp;ndash; [[[O]]]	6	6	0	0	0	0	0	0.5	0	'''[S]''' {{IPA|/b&amp;##;&amp;##;nti/}} ([[<M> #]], [[#]] &amp;ndash; [[[O]]]
+death_date	^'''[S]''' {{IPA|/b&amp;##;&amp;##;nti/}} ([[<M> #]], [[#]] &amp;ndash; [[[O]]])	6	6	0	0	0	0	0	0.5	0	'''[S]''' {{IPA|/b&amp;##;&amp;##;nti/}} ([[<M> #]], [[#]] &amp;ndash; [[[O]]])
+death_date	^[P] died in [O] of	6	6	0	0	0	0	0	0.5	0	[S] died in [O] of
+death_date	^[P] died in [O],	6	6	1	0	0	0	0	0.333333	0	[S] died in [O],
+death_date	^[P] died in [O].	6	9	0	0	0	0	0	0.5	0	[S] died in [O].
+death_date	^[P] died in [[[O]]],	6	6	2	0	1	0	0	0.25	0	[S] died in [[[O]]],
+death_date	^[P] died on [[[O]]] at	6	6	0	0	0	0	0	0.5	0	[S] died on [[[O]]] at
+death_date	^[P] died on [[[O]]],	8	8	0	0	0	0	0	0.5	0	[S] died on [[[O]]],
+death_date	^[P] died on [[[O]]].	6	6	1	0	0	0	0	0.333333	0	[S] died on [[[O]]].
+death_date	^[S] ''' ([[<M> #]], [[#]] &amp;ndash; [[[O]]]	6	6	0	0	0	0	0	0.5	0	[S] ''' ([[<M> #]], [[#]] &amp;ndash; [[[O]]]
+death_date	^[S] ''' ([[<M> #]], [[#]] &amp;ndash; [[[O]]])	6	6	0	0	0	0	0	0.5	0	[S] ''' ([[<M> #]], [[#]] &amp;ndash; [[[O]]])
+death_date	^[S] died in [O],	8	8	0	0	1	0	0	0.5	0	[S] died in [O],
+death_date	^[S] died in [[[O]]]	20	20	0	0	0	0	0	0.5	0	[S] died in [[[O]]]
+death_date	^[S] died in [[[O]]] at	8	8	0	0	0	0	0	0.5	0	[S] died in [[[O]]] at
+death_date	^[S] died on [[[O]]] and	12	12	0	0	1	0	0	0.5	0	[S] died on [[[O]]] and
+death_date	^[S] died on [[[O]]] at	6	6	0	0	1	0	0	0.5	0	[S] died on [[[O]]] at
+death_date	^[S] died on [[[O]]] in	6	6	0	0	1	0	0	0.5	0	[S] died on [[[O]]] in
+death_date	in [O], [S]	6	15	42	0	22	0	0	0.0227273	0	in [O], [S]
+death_date	on [[[O]]], [S]	6	6	9	0	3	0	0	0.0909091	0	on [[[O]]], [S]
+death_date	or '''[S]''' ([[#]] &amp;ndash; [[[O]]]	6	6	0	0	0	0	0	0.5	0	or '''[S]''' ([[#]] &amp;ndash; [[[O]]]
+death_date	– [[[O]]]), better known as '''[S]'''	8	12	0	0	0	0	0	0.5	0	– [[[O]]]), better known as '''[S]'''
+death_date	– [[[O]]]), better known as '''[S]''',	8	12	0	0	0	0	0	0.5	0	– [[[O]]]), better known as '''[S]''',
+birth_year	'''[S]''' (born [[[O]]],	72	136	18	18	0	1	0.824121	0.95	0	'''[S]''' (born [[[O]]],
+birth_year	^'''[S]''' (born [[[O]]],	68	132	17	17	0	1	0.815682	0.947368	0	'''[S]''' (born [[[O]]],
+birth_year	'''[S]''' ([[[O]]],	60	104	16	16	0	1	0.806392	0.944444	0	'''[S]''' ([[[O]]],
+birth_year	'''[S]''' (b. [[[O]]]	52	92	13	13	0	1	0.771905	0.933333	0	'''[S]''' (b. [[[O]]]
+birth_year	^'''[S]''' (b. [[[O]]]	52	92	13	13	0	1	0.771905	0.933333	0	'''[S]''' (b. [[[O]]]
+birth_year	^[S] was born on [[[O]]]	52	72	13	13	0	1	0.771905	0.933333	0	[S] was born on [[[O]]]
+birth_year	'''[S]''', ([[[O]]]	48	80	12	12	0	1	0.757506	0.928571	0	'''[S]''', ([[[O]]]
+birth_year	^'''[S]''' ([[[O]]],	48	84	12	12	0	1	0.757506	0.928571	0	'''[S]''' ([[[O]]],
+birth_year	born '''[S]''' on [[[O]]]	48	88	12	12	0	1	0.757506	0.928571	0	born '''[S]''' on [[[O]]]
+birth_year	[S] Tennō'') ([[[O]]]	40	68	10	10	0	1	0.722467	0.916667	0	[S] Tennō'') ([[[O]]]
+birth_year	or '''[S]''' ([[[O]]]	40	76	10	10	0	1	0.722467	0.916667	0	or '''[S]''' ([[[O]]]
+birth_year	[S] was born on [[[O]]]	56	80	15	14	0	0.933333	0.701835	0.882353	0	[S] was born on [[[O]]]
+birth_year	'''[S]''' (b. [[[O]]])	36	60	9	9	0	1	0.700855	0.909091	0	'''[S]''' (b. [[[O]]])
+birth_year	[S] Tennō'') ([[[O]]]-	36	64	9	9	0	1	0.700855	0.909091	0	[S] Tennō'') ([[[O]]]-
+birth_year	^'''[S]''' (b. [[[O]]])	36	60	9	9	0	1	0.700855	0.909091	0	'''[S]''' (b. [[[O]]])
+birth_year	'''[S]''' (c. [[[O]]]	72	104	20	18	2	0.9	0.698966	0.863636	0	'''[S]''' (c. [[[O]]]
+birth_year	'''[S]''' on [[[O]]]	52	96	14	13	0	0.928571	0.685313	0.875	0	'''[S]''' on [[[O]]]
+birth_year	'''[S]''' ([[[O]]] in	32	56	8	8	0	1	0.675592	0.9	0	'''[S]''' ([[[O]]] in
+birth_year	'''[S]''' on [[[O]]])	32	64	8	8	0	1	0.675592	0.9	0	'''[S]''' on [[[O]]])
+birth_year	^'''[S]''', ([[[O]]]	32	56	8	8	0	1	0.675592	0.9	0	'''[S]''', ([[[O]]]
+birth_year	^'''[S]''' (c. [[[O]]]	60	88	17	15	1	0.882353	0.656636	0.842105	0	'''[S]''' (c. [[[O]]]
+birth_year	'''[S]''') ([[[O]]]	44	80	12	11	0	0.916667	0.64612	0.857143	0	'''[S]''') ([[[O]]]
+birth_year	'''[S]'''  ([[[O]]]	28	48	7	7	0	1	0.64567	0.888889	0	'''[S]'''  ([[[O]]]
+birth_year	^'''[S]''' ([[[O]]] in	28	48	7	7	0	1	0.64567	0.888889	0	'''[S]''' ([[[O]]] in
+birth_year	born '''[S]''' on [[[O]]])	28	56	7	7	0	1	0.64567	0.888889	0	born '''[S]''' on [[[O]]])
+birth_year	[S] was born on [[[O]]],	24	36	6	6	0	1	0.609666	0.875	0	[S] was born on [[[O]]],
+birth_year	'''[S]''' ([[# <M>]], [[[O]]]	20	36	5	5	0	1	0.565518	0.857143	0	'''[S]''' ([[# <M>]], [[[O]]]
+birth_year	'''[S]''' (born [O]	20	28	5	5	0	1	0.565518	0.857143	0	'''[S]''' (born [O]
+birth_year	'''[S]''') ([[[O]]] &amp;ndash;	20	36	5	5	0	1	0.565518	0.857143	0	'''[S]''') ([[[O]]] &amp;ndash;
+birth_year	'''[S]''', ([[[O]]] &amp;ndash;	20	28	5	5	0	1	0.565518	0.857143	0	'''[S]''', ([[[O]]] &amp;ndash;
+birth_year	) '''[S]''' ([[[O]]]	20	36	5	5	0	1	0.565518	0.857143	0	) '''[S]''' ([[[O]]]
+birth_year	^'''[S]'''  ([[[O]]]	20	32	5	5	0	1	0.565518	0.857143	0	'''[S]'''  ([[[O]]]
+birth_year	^[S] was born on [[[O]]],	20	28	5	5	0	1	0.565518	0.857143	0	[S] was born on [[[O]]],
+birth_year	'''[S]''' ([O]	16	24	4	4	0	1	0.510109	0.833333	0	'''[S]''' ([O]
+birth_year	'''[S]''' ([[# <M>]], [[[O]]] &amp;ndash;	16	28	4	4	0	1	0.510109	0.833333	0	'''[S]''' ([[# <M>]], [[[O]]] &amp;ndash;
+birth_year	'''[S]''' ([[[O]]]?	16	28	4	4	0	1	0.510109	0.833333	0	'''[S]''' ([[[O]]]?
+birth_year	'''[S]''' ([[[O]]]–	16	32	4	4	1	1	0.510109	0.833333	0	'''[S]''' ([[[O]]]–
+birth_year	'''[S]''' (b. [[[O]]] in	16	32	4	4	0	1	0.510109	0.833333	0	'''[S]''' (b. [[[O]]] in
+birth_year	'''[S]''' (born [O])	16	24	4	4	0	1	0.510109	0.833333	0	'''[S]''' (born [O])
+birth_year	'''[S]''' (c. [[[O]]] &amp;ndash;	16	24	4	4	0	1	0.510109	0.833333	0	'''[S]''' (c. [[[O]]] &amp;ndash;
+birth_year	'''[S]''' (c.[[[O]]]	16	32	4	4	0	1	0.510109	0.833333	0	'''[S]''' (c.[[[O]]]
+birth_year	'''[S]''' (ca. [[[O]]]	16	24	4	4	0	1	0.510109	0.833333	0	'''[S]''' (ca. [[[O]]]
+birth_year	'''[S]''', born [[[O]]]	16	20	4	4	0	1	0.510109	0.833333	0	'''[S]''', born [[[O]]]
+birth_year	'''[S]]]''' ([[[O]]]	16	28	4	4	1	1	0.510109	0.833333	0	'''[S]]]''' ([[[O]]]
+birth_year	[S]''' (born [[[O]]]	16	32	4	4	0	1	0.510109	0.833333	0	[S]''' (born [[[O]]]
+birth_year	^'''[S]''' ([O]	16	24	4	4	0	1	0.510109	0.833333	0	'''[S]''' ([O]
+birth_year	^'''[S]''' ([[# <M>]], [[[O]]]	16	28	4	4	0	1	0.510109	0.833333	0	'''[S]''' ([[# <M>]], [[[O]]]
+birth_year	^'''[S]''' ([[[O]]]?	16	28	4	4	0	1	0.510109	0.833333	0	'''[S]''' ([[[O]]]?
+birth_year	^'''[S]''' ([[[O]]]–	16	32	4	4	1	1	0.510109	0.833333	0	'''[S]''' ([[[O]]]–
+birth_year	^'''[S]''' (b. [[[O]]] in	16	32	4	4	0	1	0.510109	0.833333	0	'''[S]''' (b. [[[O]]] in
+birth_year	^'''[S]''' (c.[[[O]]]	16	32	4	4	0	1	0.510109	0.833333	0	'''[S]''' (c.[[[O]]]
+birth_year	or '''[S]''' ([[[O]]] &amp;ndash;	16	32	4	4	0	1	0.510109	0.833333	0	or '''[S]''' ([[[O]]] &amp;ndash;
+birth_year	or '''[S]''') ([[[O]]]	16	28	4	4	0	1	0.510109	0.833333	0	or '''[S]''') ([[[O]]]
+birth_year	[S] was born in [O]	24	40	7	6	0	0.857143	0.486872	0.777778	0	[S] was born in [O]
+birth_year	'''[S]'''  ([[[O]]] &amp;ndash;	12	20	3	3	0	1	0.438503	0.8	0	'''[S]'''  ([[[O]]] &amp;ndash;
+birth_year	'''[S]''' (c. [[[O]]]&amp;ndash;	12	20	3	3	0	1	0.438503	0.8	0	'''[S]''' (c. [[[O]]]&amp;ndash;
+birth_year	'''[S]''') ([[[O]]],	12	20	3	3	0	1	0.438503	0.8	0	'''[S]''') ([[[O]]],
+birth_year	'''[S]''') (born [[[O]]]	12	20	3	3	0	1	0.438503	0.8	0	'''[S]''') (born [[[O]]]
+birth_year	) '''[S]''' ([[[O]]] &amp;ndash;	12	24	3	3	0	1	0.438503	0.8	0	) '''[S]''' ([[[O]]] &amp;ndash;
+birth_year	[S] was born in [[[O]]] in	12	20	3	3	0	1	0.438503	0.8	0	[S] was born in [[[O]]] in
+birth_year	[S] was born on [O]	12	20	3	3	0	1	0.438503	0.8	0	[S] was born on [O]
+birth_year	[S] was born on [O] in	12	20	3	3	0	1	0.438503	0.8	0	[S] was born on [O] in
+birth_year	^'''[S]''' ([[# <M>]], [[[O]]] &amp;ndash;	12	20	3	3	0	1	0.438503	0.8	0	'''[S]''' ([[# <M>]], [[[O]]] &amp;ndash;
+birth_year	^'''[S]''' (ca. [[[O]]]	12	16	3	3	0	1	0.438503	0.8	0	'''[S]''' (ca. [[[O]]]
+birth_year	^[S] was born in [[[O]]]	12	20	3	3	0	1	0.438503	0.8	0	[S] was born in [[[O]]]
+birth_year	^[S] was born in [[[O]]] in	12	20	3	3	0	1	0.438503	0.8	0	[S] was born in [[[O]]] in
+birth_year	^[S] was born on [O]	12	20	3	3	0	1	0.438503	0.8	0	[S] was born on [O]
+birth_year	^[S] was born on [O] in	12	20	3	3	0	1	0.438503	0.8	0	[S] was born on [O] in
+birth_year	or '''[S]''' ([[[O]]]-	12	20	3	3	0	1	0.438503	0.8	0	or '''[S]''' ([[[O]]]-
+birth_year	[S]''' ([[[O]]]	24	36	8	6	0	0.75	0.409275	0.7	0	[S]''' ([[[O]]]
+birth_year	'''[S]''' (c. [[[O]]] -	16	24	5	4	1	0.8	0.375535	0.714286	0	'''[S]''' (c. [[[O]]] -
+birth_year	'''[S]''' (c. [[[O]]]-	16	20	5	4	1	0.8	0.375535	0.714286	0	'''[S]''' (c. [[[O]]]-
+birth_year	[S] was born in [O] in	16	28	5	4	0	0.8	0.375535	0.714286	0	[S] was born in [O] in
+birth_year	[S] was born in [[[O]]]	16	28	5	4	0	0.8	0.375535	0.714286	0	[S] was born in [[[O]]]
+birth_year	^'''[S]''' (c. [[[O]]]-	16	20	5	4	0	0.8	0.375535	0.714286	0	'''[S]''' (c. [[[O]]]-
+birth_year	^[S] was born in [O]	16	24	5	4	0	0.8	0.375535	0.714286	0	[S] was born in [O]
+birth_year	^[S] was born in [O] in	12	20	4	3	0	0.75	0.300642	0.666667	0	[S] was born in [O] in
+birth_year	[P] was born on [[[O]]]	16	32	6	4	0	0.666667	0.299993	0.625	0	[S] was born on [[[O]]]
+birth_year	^[P] was born on [[[O]]]	16	32	6	4	0	0.666667	0.299993	0.625	0	[S] was born on [[[O]]]
+birth_year	'''[S]'''  ([[[O]]] -	11	19	1	1	0	1	0.206549	0.666667	0	'''[S]'''  ([[[O]]] -
+birth_year	'''[S]''' on [[[O]]],	11	15	1	1	0	1	0.206549	0.666667	0	'''[S]''' on [[[O]]],
+birth_year	'''[S]''', ([[[O]]] -	11	22	1	1	0	1	0.206549	0.666667	0	'''[S]''', ([[[O]]] -
+birth_year	'''[S]''', (born [[[O]]]	11	18	1	1	0	1	0.206549	0.666667	0	'''[S]''', (born [[[O]]]
+birth_year	'''[S]''', born [[[O]]] in	11	15	1	1	0	1	0.206549	0.666667	0	'''[S]''', born [[[O]]] in
+birth_year	[S] was born on [[[O]]] at	11	18	1	1	0	1	0.206549	0.666667	0	[S] was born on [[[O]]] at
+birth_year	[S] was born on [[[O]]] in	15	19	1	1	0	1	0.206549	0.666667	0	[S] was born on [[[O]]] in
+birth_year	^'''[S]''' (born [O]	11	11	1	1	0	1	0.206549	0.666667	0	'''[S]''' (born [O]
+birth_year	^'''[S]''' (c. [[[O]]] &amp;ndash;	11	18	1	1	0	1	0.206549	0.666667	0	'''[S]''' (c. [[[O]]] &amp;ndash;
+birth_year	^'''[S]''', ([[[O]]] &amp;ndash;	11	15	1	1	0	1	0.206549	0.666667	0	'''[S]''', ([[[O]]] &amp;ndash;
+birth_year	^'''[S]''', ([[[O]]] -	11	22	1	1	0	1	0.206549	0.666667	0	'''[S]''', ([[[O]]] -
+birth_year	^'''[S]''', born [[[O]]]	11	15	1	1	0	1	0.206549	0.666667	0	'''[S]''', born [[[O]]]
+birth_year	^'''[S]]]''' ([[[O]]]	11	19	1	1	0	1	0.206549	0.666667	0	'''[S]]]''' ([[[O]]]
+birth_year	^[S] was born on [[[O]]] at	11	18	1	1	0	1	0.206549	0.666667	0	[S] was born on [[[O]]] at
+birth_year	^[S] was born on [[[O]]] in	15	19	1	1	0	1	0.206549	0.666667	0	[S] was born on [[[O]]] in
+birth_year	born '''[S]''' on [[[O]]],	11	15	1	1	0	1	0.206549	0.666667	0	born '''[S]''' on [[[O]]],
+birth_year	^'''[S]''' (c. [[[O]]] -	11	18	2	1	1	0.5	0.0945312	0.5	0	'''[S]''' (c. [[[O]]] -
+birth_year	[[[O]]], [S]	8	12	356	0	10	0	8.67362e-19	0.0027933	0	[[[O]]], [S]
+birth_year	'''[S]''' ([O] &amp;ndash;	6	9	0	0	0	0	0	0.5	0	'''[S]''' ([O] &amp;ndash;
+birth_year	'''[S]''' ([[[O]]] (	6	6	0	0	0	0	0	0.5	0	'''[S]''' ([[[O]]] (
+birth_year	'''[S]''' ([[[O]]] or	6	9	0	0	0	0	0	0.5	0	'''[S]''' ([[[O]]] or
+birth_year	'''[S]''' ([[[O]]]&amp;mdash;	8	16	0	0	0	0	0	0.5	0	'''[S]''' ([[[O]]]&amp;mdash;
+birth_year	'''[S]''' ([[[O]]]&amp;nbsp;&amp;ndash;	6	9	0	0	0	0	0	0.5	0	'''[S]''' ([[[O]]]&amp;nbsp;&amp;ndash;
+birth_year	'''[S]''' ([[[O]]]/	6	6	0	0	0	0	0	0.5	0	'''[S]''' ([[[O]]]/
+birth_year	'''[S]''' (born on [[[O]]]	6	9	0	0	0	0	0	0.5	0	'''[S]''' (born on [[[O]]]
+birth_year	'''[S]''' (c. [O]	8	12	1	0	0	0	0	0.333333	0	'''[S]''' (c. [O]
+birth_year	'''[S]''' (c.[[[O]]] &amp;ndash;	8	16	0	0	0	0	0	0.5	0	'''[S]''' (c.[[[O]]] &amp;ndash;
+birth_year	'''[S]''' (ca. [[[O]]]-	6	6	0	0	0	0	0	0.5	0	'''[S]''' (ca. [[[O]]]-
+birth_year	'''[S]''' [[Order of the British Empire|CBE]] (born [[[O]]]	6	12	0	0	0	0	0	0.5	0	'''[S]''' [[Order of the British Empire|CBE]] (born [[[O]]]
+birth_year	'''[S]''' [[Order of the British Empire|CBE]] (born [[[O]]])	6	12	0	0	0	0	0	0.5	0	'''[S]''' [[Order of the British Empire|CBE]] (born [[[O]]])
+birth_year	'''[S]''' on [[[O]]] in	6	12	0	0	0	0	0	0.5	0	'''[S]''' on [[[O]]] in
+birth_year	'''[S]''' {{IPA|/b&amp;##;&amp;##;nti/}} ([[[O]]]	6	12	0	0	0	0	0	0.5	0	'''[S]''' {{IPA|/b&amp;##;&amp;##;nti/}} ([[[O]]]
+birth_year	'''[S]''' {{IPA|/b&amp;##;&amp;##;nti/}} ([[[O]]] &amp;ndash;	6	12	0	0	0	0	0	0.5	0	'''[S]''' {{IPA|/b&amp;##;&amp;##;nti/}} ([[[O]]] &amp;ndash;
+birth_year	'''[S]''') (born [[[O]]])	6	9	0	0	0	0	0	0.5	0	'''[S]''') (born [[[O]]])
+birth_year	'''[S]''', ([[[O]]]&amp;ndash;	6	12	0	0	0	0	0	0.5	0	'''[S]''', ([[[O]]]&amp;ndash;
+birth_year	'''[S]''', [[Order of the British Empire|CBE]] (born [[[O]]]	8	16	0	0	0	0	0	0.5	0	'''[S]''', [[Order of the British Empire|CBE]] (born [[[O]]]
+birth_year	'''[S]''', [[Order of the British Empire|CBE]] (born [[[O]]])	8	16	0	0	0	0	0	0.5	0	'''[S]''', [[Order of the British Empire|CBE]] (born [[[O]]])
+birth_year	'''[S]''', [[[O]]]	8	12	0	0	0	0	0	0.5	0	'''[S]''', [[[O]]]
+birth_year	'''[S]]]''' ([[[O]]]&amp;ndash;	6	12	0	0	0	0	0	0.5	0	'''[S]]]''' ([[[O]]]&amp;ndash;
+birth_year	) '''[S]''' ([[[O]]] -	6	9	0	0	0	0	0	0.5	0	) '''[S]''' ([[[O]]] -
+birth_year	, '''[S]''' (born [[[O]]]	6	9	0	0	0	0	0	0.5	0	, '''[S]''' (born [[[O]]]
+birth_year	: '''[S]''') ([[[O]]]	6	9	1	0	0	0	0	0.333333	0	: '''[S]''') ([[[O]]]
+birth_year	Admiral]] '''[S]''' ([[[O]]]	6	12	0	0	0	0	0	0.5	0	Admiral]] '''[S]''' ([[[O]]]
+birth_year	Admiral]] '''[S]''' ([[[O]]] &amp;ndash;	6	12	0	0	0	0	0	0.5	0	Admiral]] '''[S]''' ([[[O]]] &amp;ndash;
+birth_year	General]] '''[S]''' (born [[[O]]]	6	12	0	0	0	0	0	0.5	0	General]] '''[S]''' (born [[[O]]]
+birth_year	Saint '''[S]''' ([[[O]]]	8	16	0	0	0	0	0	0.5	0	Saint '''[S]''' ([[[O]]]
+birth_year	[P] was born on [[[O]]] at	8	16	0	0	0	0	0	0.5	0	[S] was born on [[[O]]] at
+birth_year	[P] was born on [[[O]]] in	6	12	0	0	0	0	0	0.5	0	[S] was born on [[[O]]] in
+birth_year	[S] ''' ([[[O]]]	6	9	0	0	0	0	0	0.5	0	[S] ''' ([[[O]]]
+birth_year	[S] ''' ([[[O]]] &amp;ndash;	6	9	0	0	0	0	0	0.5	0	[S] ''' ([[[O]]] &amp;ndash;
+birth_year	[S] was born around [[[O]]]	6	9	0	0	0	0	0	0.5	0	[S] was born around [[[O]]]
+birth_year	[S] was born in [O] and	8	12	0	0	0	0	0	0.5	0	[S] was born in [O] and
+birth_year	[S]''' ([[[O]]] &amp;ndash;	6	6	0	0	0	0	0	0.5	0	[S]''' ([[[O]]] &amp;ndash;
+birth_year	[S]''' ([[[O]]] -	8	16	0	0	0	0	0	0.5	0	[S]''' ([[[O]]] -
+birth_year	[S]''' (born [[[O]]])	6	12	0	0	0	0	0	0.5	0	[S]''' (born [[[O]]])
+birth_year	^'''[S]'''  ([[[O]]] &amp;ndash;	6	9	0	0	0	0	0	0.5	0	'''[S]'''  ([[[O]]] &amp;ndash;
+birth_year	^'''[S]'''  ([[[O]]] -	6	9	0	0	0	0	0	0.5	0	'''[S]'''  ([[[O]]] -
+birth_year	^'''[S]''' ([O] &amp;ndash;	6	9	0	0	0	0	0	0.5	0	'''[S]''' ([O] &amp;ndash;
+birth_year	^'''[S]''' ([[[O]]] (	6	6	0	0	0	0	0	0.5	0	'''[S]''' ([[[O]]] (
+birth_year	^'''[S]''' ([[[O]]] or	6	9	0	0	0	0	0	0.5	0	'''[S]''' ([[[O]]] or
+birth_year	^'''[S]''' ([[[O]]]&amp;mdash;	8	16	0	0	0	0	0	0.5	0	'''[S]''' ([[[O]]]&amp;mdash;
+birth_year	^'''[S]''' ([[[O]]]&amp;nbsp;&amp;ndash;	6	9	0	0	0	0	0	0.5	0	'''[S]''' ([[[O]]]&amp;nbsp;&amp;ndash;
+birth_year	^'''[S]''' ([[[O]]]/	6	6	0	0	0	0	0	0.5	0	'''[S]''' ([[[O]]]/
+birth_year	^'''[S]''' (born [O])	8	8	0	0	0	0	0	0.5	0	'''[S]''' (born [O])
+birth_year	^'''[S]''' (born on [[[O]]]	6	9	0	0	0	0	0	0.5	0	'''[S]''' (born on [[[O]]]
+birth_year	^'''[S]''' (c. [[[O]]]&amp;ndash;	6	9	0	0	0	0	0	0.5	0	'''[S]''' (c. [[[O]]]&amp;ndash;
+birth_year	^'''[S]''' (c.[[[O]]] &amp;ndash;	8	16	0	0	0	0	0	0.5	0	'''[S]''' (c.[[[O]]] &amp;ndash;
+birth_year	^'''[S]''' (ca. [[[O]]]-	6	6	0	0	0	0	0	0.5	0	'''[S]''' (ca. [[[O]]]-
+birth_year	^'''[S]''' [[Order of the British Empire|CBE]] (born [[[O]]]	6	12	0	0	0	0	0	0.5	0	'''[S]''' [[Order of the British Empire|CBE]] (born [[[O]]]
+birth_year	^'''[S]''' [[Order of the British Empire|CBE]] (born [[[O]]])	6	12	0	0	0	0	0	0.5	0	'''[S]''' [[Order of the British Empire|CBE]] (born [[[O]]])
+birth_year	^'''[S]''' {{IPA|/b&amp;##;&amp;##;nti/}} ([[[O]]]	6	12	0	0	0	0	0	0.5	0	'''[S]''' {{IPA|/b&amp;##;&amp;##;nti/}} ([[[O]]]
+birth_year	^'''[S]''' {{IPA|/b&amp;##;&amp;##;nti/}} ([[[O]]] &amp;ndash;	6	12	0	0	0	0	0	0.5	0	'''[S]''' {{IPA|/b&amp;##;&amp;##;nti/}} ([[[O]]] &amp;ndash;
+birth_year	^'''[S]''', (born [[[O]]]	8	12	0	0	0	0	0	0.5	0	'''[S]''', (born [[[O]]]
+birth_year	^'''[S]''', [[Order of the British Empire|CBE]] (born [[[O]]]	8	16	0	0	0	0	0	0.5	0	'''[S]''', [[Order of the British Empire|CBE]] (born [[[O]]]
+birth_year	^'''[S]''', [[Order of the British Empire|CBE]] (born [[[O]]])	8	16	0	0	0	0	0	0.5	0	'''[S]''', [[Order of the British Empire|CBE]] (born [[[O]]])
+birth_year	^'''[S]''', born [[[O]]] in	8	12	0	0	0	0	0	0.5	0	'''[S]''', born [[[O]]] in
+birth_year	^[P] was born on [[[O]]] at	8	16	0	0	0	0	0	0.5	0	[S] was born on [[[O]]] at
+birth_year	^[P] was born on [[[O]]] in	6	12	0	0	0	0	0	0.5	0	[S] was born on [[[O]]] in
+birth_year	^[S] ''' ([[[O]]]	6	9	0	0	0	0	0	0.5	0	[S] ''' ([[[O]]]
+birth_year	^[S] ''' ([[[O]]] &amp;ndash;	6	9	0	0	0	0	0	0.5	0	[S] ''' ([[[O]]] &amp;ndash;
+birth_year	^[S] was born around [[[O]]]	6	9	0	0	0	0	0	0.5	0	[S] was born around [[[O]]]
+birth_year	and '''[S]''' ([[[O]]]	6	6	0	0	0	0	0	0.5	0	and '''[S]''' ([[[O]]]
+birth_year	as '''[S]''' ([[[O]]]	6	12	0	0	0	0	0	0.5	0	as '''[S]''' ([[[O]]]
+birth_year	as '''[S]''', ([[[O]]]	6	9	0	0	0	0	0	0.5	0	as '''[S]''', ([[[O]]]
+birth_year	as '''[S]''', ([[[O]]] &amp;ndash;	6	9	0	0	0	0	0	0.5	0	as '''[S]''', ([[[O]]] &amp;ndash;
+birth_year	born '''[S]''' on [[[O]]] in	6	12	0	0	0	0	0	0.5	0	born '''[S]''' on [[[O]]] in
+birth_year	born '''[S]''', [[[O]]]	8	12	0	0	0	0	0	0.5	0	born '''[S]''', [[[O]]]
+birth_year	in [[[O]]], [S]	8	12	64	0	3	0	0	0.0151515	0	in [[[O]]], [S]
+birth_year	or '''[S]''' (c. [[[O]]]	6	9	0	0	1	0	0	0.5	0	or '''[S]''' (c. [[[O]]]
+birth_year	or '''[S]''') ([[[O]]],	6	12	0	0	0	0	0	0.5	0	or '''[S]''') ([[[O]]],
+death_year	'''[S]''' ([[<M> #]] [[#]] &amp;ndash; [[[O]]]	76	128	19	19	0	1	0.831821	0.952381	0	'''[S]''' ([[<M> #]] [[#]] &amp;ndash; [[[O]]]
+death_year	'''[S]''' ([[<M> #]] [[#]] &amp;ndash; [[[O]]])	76	128	19	19	0	1	0.831821	0.952381	0	'''[S]''' ([[<M> #]] [[#]] &amp;ndash; [[[O]]])
+death_year	^'''[S]''' ([[<M> #]] [[#]] &amp;ndash; [[[O]]]	72	120	18	18	0	1	0.824121	0.95	0	'''[S]''' ([[<M> #]] [[#]] &amp;ndash; [[[O]]]
+death_year	^'''[S]''' ([[<M> #]] [[#]] &amp;ndash; [[[O]]])	72	120	18	18	0	1	0.824121	0.95	0	'''[S]''' ([[<M> #]] [[#]] &amp;ndash; [[[O]]])
+death_year	'''[S]''' ([[#]]-[[[O]]]	68	108	17	17	1	1	0.815682	0.947368	0	'''[S]''' ([[#]]-[[[O]]]
+death_year	'''[S]''' ([[#]]-[[[O]]])	68	108	17	17	1	1	0.815682	0.947368	0	'''[S]''' ([[#]]-[[[O]]])
+death_year	^[S] died in [O]	64	92	16	16	0	1	0.806392	0.944444	0	[S] died in [O]
+death_year	[S] died on [[[O]]],	60	100	15	15	0	1	0.796117	0.941176	0	[S] died on [[[O]]],
+death_year	^'''[S]''' ([[#]]-[[[O]]]	60	96	15	15	1	1	0.796117	0.941176	0	'''[S]''' ([[#]]-[[[O]]]
+death_year	^'''[S]''' ([[#]]-[[[O]]])	60	96	15	15	1	1	0.796117	0.941176	0	'''[S]''' ([[#]]-[[[O]]])
+death_year	^[S] died on [[[O]]],	60	100	15	15	0	1	0.796117	0.941176	0	[S] died on [[[O]]],
+death_year	'''[S]''' ([[#]] &amp;ndash; [[[O]]]	56	104	14	14	0	1	0.784689	0.9375	0	'''[S]''' ([[#]] &amp;ndash; [[[O]]]
+death_year	'''[S]''' ([[#]] &amp;ndash; [[[O]]])	52	96	13	13	0	1	0.771905	0.933333	0	'''[S]''' ([[#]] &amp;ndash; [[[O]]])
+death_year	'''[S]''' ([[#]] - [[[O]]])	48	92	12	12	0	1	0.757506	0.928571	0	'''[S]''' ([[#]] - [[[O]]])
+death_year	^'''[S]''' ([[#]] &amp;ndash; [[[O]]]	48	88	12	12	0	1	0.757506	0.928571	0	'''[S]''' ([[#]] &amp;ndash; [[[O]]]
+death_year	^'''[S]''' ([[#]] &amp;ndash; [[[O]]])	48	88	12	12	0	1	0.757506	0.928571	0	'''[S]''' ([[#]] &amp;ndash; [[[O]]])
+death_year	'''[S]''' ([[# <M>]] [[#]] &amp;ndash; [[[O]]]	40	80	10	10	0	1	0.722467	0.916667	0	'''[S]''' ([[# <M>]] [[#]] &amp;ndash; [[[O]]]
+death_year	'''[S]''' ([[# <M>]] [[#]] &amp;ndash; [[[O]]])	40	80	10	10	0	1	0.722467	0.916667	0	'''[S]''' ([[# <M>]] [[#]] &amp;ndash; [[[O]]])
+death_year	'''[S]''' ([[#]]&amp;ndash;[[[O]]]	40	68	10	10	0	1	0.722467	0.916667	0	'''[S]''' ([[#]]&amp;ndash;[[[O]]]
+death_year	'''[S]''' ([[#]]&amp;ndash;[[[O]]])	40	68	10	10	0	1	0.722467	0.916667	0	'''[S]''' ([[#]]&amp;ndash;[[[O]]])
+death_year	^'''[S]''' ([[# <M>]] [[#]] &amp;ndash; [[[O]]]	36	72	9	9	0	1	0.700855	0.909091	0	'''[S]''' ([[# <M>]] [[#]] &amp;ndash; [[[O]]]
+death_year	^'''[S]''' ([[# <M>]] [[#]] &amp;ndash; [[[O]]])	36	72	9	9	0	1	0.700855	0.909091	0	'''[S]''' ([[# <M>]] [[#]] &amp;ndash; [[[O]]])
+death_year	^'''[S]''' ([[#]] - [[[O]]])	36	68	9	9	0	1	0.700855	0.909091	0	'''[S]''' ([[#]] - [[[O]]])
+death_year	'''[S]''' ([[#]] - [[[O]]]	52	96	14	13	0	0.928571	0.685313	0.875	0	'''[S]''' ([[#]] - [[[O]]]
+death_year	[S] Tennō'') ([[#]]-[[[O]]]	32	60	8	8	0	1	0.675592	0.9	0	[S] Tennō'') ([[#]]-[[[O]]]
+death_year	^'''[S]''' ([[#]]&amp;ndash;[[[O]]]	32	60	8	8	0	1	0.675592	0.9	0	'''[S]''' ([[#]]&amp;ndash;[[[O]]]
+death_year	^'''[S]''' ([[#]]&amp;ndash;[[[O]]])	32	60	8	8	0	1	0.675592	0.9	0	'''[S]''' ([[#]]&amp;ndash;[[[O]]])
+death_year	[S] Tennō'') ([[#]]-[[[O]]])	28	52	7	7	0	1	0.64567	0.888889	0	[S] Tennō'') ([[#]]-[[[O]]])
+death_year	[S] died in [O],	28	48	7	7	0	1	0.64567	0.888889	0	[S] died in [O],
+death_year	[[[O]]]), also known as '''[S]'''	28	48	7	7	0	1	0.64567	0.888889	0	[[[O]]]), also known as '''[S]'''
+death_year	[P] died on [[[O]]]	40	68	11	10	0	0.909091	0.622642	0.846154	0	[S] died on [[[O]]]
+death_year	^'''[S]''' ([[#]] - [[[O]]]	40	72	11	10	0	0.909091	0.622642	0.846154	0	'''[S]''' ([[#]] - [[[O]]]
+death_year	^[P] died on [[[O]]]	40	68	11	10	0	0.909091	0.622642	0.846154	0	[S] died on [[[O]]]
+death_year	'''[S]''' ([[<M> #]] [[#]] - [[[O]]]	24	44	6	6	0	1	0.609666	0.875	0	'''[S]''' ([[<M> #]] [[#]] - [[[O]]]
+death_year	'''[S]''' ([[<M> #]], [[#]]-[[[O]]])	24	40	6	6	0	1	0.609666	0.875	0	'''[S]''' ([[<M> #]], [[#]]-[[[O]]])
+death_year	[[[O]]]), better known as '''[S]'''	24	44	6	6	0	1	0.609666	0.875	0	[[[O]]]), better known as '''[S]'''
+death_year	^'''[S]''' ([[<M> #]] [[#]] - [[[O]]]	24	44	6	6	0	1	0.609666	0.875	0	'''[S]''' ([[<M> #]] [[#]] - [[[O]]]
+death_year	&amp;ndash; [[[O]]]), also known as '''[S]'''	20	32	5	5	0	1	0.565518	0.857143	0	&amp;ndash; [[[O]]]), also known as '''[S]'''
+death_year	'''[S]''' ([[# <M>]] [[#]] – [[[O]]]	20	36	5	5	1	1	0.565518	0.857143	0	'''[S]''' ([[# <M>]] [[#]] – [[[O]]]
+death_year	'''[S]''' ([[# <M>]] [[#]] – [[[O]]])	20	36	5	5	1	1	0.565518	0.857143	0	'''[S]''' ([[# <M>]] [[#]] – [[[O]]])
+death_year	'''[S]''' ([[<M> #]] [[#]] - [[[O]]])	20	36	5	5	0	1	0.565518	0.857143	0	'''[S]''' ([[<M> #]] [[#]] - [[[O]]])
+death_year	'''[S]''' (d. [[[O]]]	20	36	5	5	0	1	0.565518	0.857143	0	'''[S]''' (d. [[[O]]]
+death_year	'''[S]''' (d. [[[O]]])	20	36	5	5	0	1	0.565518	0.857143	0	'''[S]''' (d. [[[O]]])
+death_year	[[[O]]]), better known as '''[S]''',	20	36	5	5	0	1	0.565518	0.857143	0	[[[O]]]), better known as '''[S]''',
+death_year	^'''[S]''' ([[<M> #]] [[#]] - [[[O]]])	20	36	5	5	0	1	0.565518	0.857143	0	'''[S]''' ([[<M> #]] [[#]] - [[[O]]])
+death_year	^'''[S]''' ([[<M> #]], [[#]]-[[[O]]])	20	32	5	5	0	1	0.565518	0.857143	0	'''[S]''' ([[<M> #]], [[#]]-[[[O]]])
+death_year	^'''[S]''' (d. [[[O]]]	20	36	5	5	0	1	0.565518	0.857143	0	'''[S]''' (d. [[[O]]]
+death_year	^'''[S]''' (d. [[[O]]])	20	36	5	5	0	1	0.565518	0.857143	0	'''[S]''' (d. [[[O]]])
+death_year	[P] died in [[[O]]]	40	68	12	10	1	0.833333	0.551969	0.785714	0	[S] died in [[[O]]]
+death_year	^[P] died in [[[O]]]	40	68	12	10	1	0.833333	0.551969	0.785714	0	[S] died in [[[O]]]
+death_year	[S] died in [[[O]]]	28	48	8	7	0	0.875	0.529112	0.8	0	[S] died in [[[O]]]
+death_year	[[[O]]], [S] died	28	44	8	7	0	0.875	0.529112	0.8	0	[[[O]]], [S] died
+death_year	'''[S]''' (c. [[#]] &amp;ndash; [[[O]]]	16	28	4	4	0	1	0.510109	0.833333	0	'''[S]''' (c. [[#]] &amp;ndash; [[[O]]]
+death_year	'''[S]''' (c. [[#]] &amp;ndash; [[[O]]])	16	28	4	4	0	1	0.510109	0.833333	0	'''[S]''' (c. [[#]] &amp;ndash; [[[O]]])
+death_year	On [[[O]]], [S] died	16	24	4	4	0	1	0.510109	0.833333	0	On [[[O]]], [S] died
+death_year	[P] died on [O]	16	24	4	4	0	1	0.510109	0.833333	0	[S] died on [O]
+death_year	[S] died on [[[O]]] in	16	28	4	4	0	1	0.510109	0.833333	0	[S] died on [[[O]]] in
+death_year	[S] died on [[[O]]].	16	20	4	4	0	1	0.510109	0.833333	0	[S] died on [[[O]]].
+death_year	^'''[S]''' ([[# <M>]] [[#]] – [[[O]]]	16	28	4	4	1	1	0.510109	0.833333	0	'''[S]''' ([[# <M>]] [[#]] – [[[O]]]
+death_year	^'''[S]''' ([[# <M>]] [[#]] – [[[O]]])	16	28	4	4	1	1	0.510109	0.833333	0	'''[S]''' ([[# <M>]] [[#]] – [[[O]]])
+death_year	^[P] died on [O]	16	24	4	4	0	1	0.510109	0.833333	0	[S] died on [O]
+death_year	^[S] died on [[[O]]].	16	20	4	4	0	1	0.510109	0.833333	0	[S] died on [[[O]]].
+death_year	'''[S]''' ([[<M> #]], [[#]]-[[[O]]]	24	40	7	6	0	0.857143	0.486872	0.777778	0	'''[S]''' ([[<M> #]], [[#]]-[[[O]]]
+death_year	[P] died in [O]	36	64	12	9	1	0.75	0.467695	0.714286	0	[S] died in [O]
+death_year	^[P] died in [O]	36	64	12	9	1	0.75	0.467695	0.714286	0	[S] died in [O]
+death_year	&amp;ndash; [[[O]]]), better known as '''[S]'''	12	24	3	3	0	1	0.438503	0.8	0	&amp;ndash; [[[O]]]), better known as '''[S]'''
+death_year	'''[S]'''  ([[<M> #]], [[#]] &amp;ndash; [[[O]]]	12	20	3	3	0	1	0.438503	0.8	0	'''[S]'''  ([[<M> #]], [[#]] &amp;ndash; [[[O]]]
+death_year	'''[S]'''  ([[<M> #]], [[#]] &amp;ndash; [[[O]]])	12	20	3	3	0	1	0.438503	0.8	0	'''[S]'''  ([[<M> #]], [[#]] &amp;ndash; [[[O]]])
+death_year	'''[S]''' ([[<M> #]] [[#]] – [[[O]]]	12	20	3	3	0	1	0.438503	0.8	0	'''[S]''' ([[<M> #]] [[#]] – [[[O]]]
+death_year	'''[S]''' ([[<M> #]] [[#]] – [[[O]]])	12	20	3	3	0	1	0.438503	0.8	0	'''[S]''' ([[<M> #]] [[#]] – [[[O]]])
+death_year	'''[S]''' ([[<M> #]] [[#]]&amp;ndash;[[[O]]]	12	20	3	3	0	1	0.438503	0.8	0	'''[S]''' ([[<M> #]] [[#]]&amp;ndash;[[[O]]]
+death_year	'''[S]''' ([[<M> #]] [[#]]&amp;ndash;[[[O]]])	12	20	3	3	0	1	0.438503	0.8	0	'''[S]''' ([[<M> #]] [[#]]&amp;ndash;[[[O]]])
+death_year	'''[S]''' ([[<M> #]],[[#]] &amp;ndash; [[[O]]]	12	24	3	3	0	1	0.438503	0.8	0	'''[S]''' ([[<M> #]],[[#]] &amp;ndash; [[[O]]]
+death_year	'''[S]''' ([[<M> #]],[[#]] &amp;ndash; [[[O]]])	12	24	3	3	0	1	0.438503	0.8	0	'''[S]''' ([[<M> #]],[[#]] &amp;ndash; [[[O]]])
+death_year	) '''[S]''' ([[<M> #]], [[#]] &amp;ndash; [[[O]]]	12	24	3	3	0	1	0.438503	0.8	0	) '''[S]''' ([[<M> #]], [[#]] &amp;ndash; [[[O]]]
+death_year	) '''[S]''' ([[<M> #]], [[#]] &amp;ndash; [[[O]]])	12	24	3	3	0	1	0.438503	0.8	0	) '''[S]''' ([[<M> #]], [[#]] &amp;ndash; [[[O]]])
+death_year	[S] died in [O] at	12	20	3	3	0	1	0.438503	0.8	0	[S] died in [O] at
+death_year	[S] died on [[[O]]] at	12	20	3	3	0	1	0.438503	0.8	0	[S] died on [[[O]]] at
+death_year	^'''[S]''' ([[<M> #]],[[#]] &amp;ndash; [[[O]]]	12	24	3	3	0	1	0.438503	0.8	0	'''[S]''' ([[<M> #]],[[#]] &amp;ndash; [[[O]]]
+death_year	^'''[S]''' ([[<M> #]],[[#]] &amp;ndash; [[[O]]])	12	24	3	3	0	1	0.438503	0.8	0	'''[S]''' ([[<M> #]],[[#]] &amp;ndash; [[[O]]])
+death_year	^[S] died on [[[O]]] at	12	20	3	3	0	1	0.438503	0.8	0	[S] died on [[[O]]] at
+death_year	^[S] died on [[[O]]] in	12	20	3	3	0	1	0.438503	0.8	0	[S] died on [[[O]]] in
+death_year	^'''[S]''' ([[<M> #]], [[#]]-[[[O]]]	20	32	6	5	0	0.833333	0.436497	0.75	0	'''[S]''' ([[<M> #]], [[#]]-[[[O]]]
+death_year	[P] reigned from [[#]] to [[[O]]]	12	24	5	3	0	0.6	0.230724	0.571429	0	[S] reigned from [[#]] to [[[O]]]
+death_year	^[P] reigned from [[#]] to [[[O]]]	12	24	5	3	0	0.6	0.230724	0.571429	0	[S] reigned from [[#]] to [[[O]]]
+death_year	&amp;ndash; [[[O]]]), also known as '''[S]''',	11	18	1	1	0	1	0.206549	0.666667	0	&amp;ndash; [[[O]]]), also known as '''[S]''',
+death_year	'''[S]''' (died [[[O]]]	11	22	1	1	0	1	0.206549	0.666667	0	'''[S]''' (died [[[O]]]
+death_year	'''[S]''' (died [[[O]]])	11	22	1	1	0	1	0.206549	0.666667	0	'''[S]''' (died [[[O]]])
+death_year	When [S] died in [O]	15	27	1	1	0	1	0.206549	0.666667	0	When [S] died in [O]
+death_year	When [S] died in [O],	11	19	1	1	0	1	0.206549	0.666667	0	When [S] died in [O],
+death_year	[S] died in [O] in	11	11	1	1	0	1	0.206549	0.666667	0	[S] died in [O] in
+death_year	[S] died in [O] of	11	11	1	1	0	1	0.206549	0.666667	0	[S] died in [O] of
+death_year	[S] died on [[[O]]] and	15	27	1	1	0	1	0.206549	0.666667	0	[S] died on [[[O]]] and
+death_year	[[[O]]]), also known as '''[S]''',	11	18	1	1	0	1	0.206549	0.666667	0	[[[O]]]), also known as '''[S]''',
+death_year	[[[O]]]), called '''[S]'''	11	22	1	1	0	1	0.206549	0.666667	0	[[[O]]]), called '''[S]'''
+death_year	^'''[S]''' (c. [[#]] &amp;ndash; [[[O]]]	11	22	1	1	0	1	0.206549	0.666667	0	'''[S]''' (c. [[#]] &amp;ndash; [[[O]]]
+death_year	^'''[S]''' (c. [[#]] &amp;ndash; [[[O]]])	11	22	1	1	0	1	0.206549	0.666667	0	'''[S]''' (c. [[#]] &amp;ndash; [[[O]]])
+death_year	^[S] died in [O] in	11	11	1	1	0	1	0.206549	0.666667	0	[S] died in [O] in
+death_year	^[S] died in [O] of	11	11	1	1	0	1	0.206549	0.666667	0	[S] died in [O] of
+death_year	^[S] died in [O],	15	27	1	1	0	1	0.206549	0.666667	0	[S] died in [O],
+death_year	^[S] died on [[[O]]] and	15	27	1	1	0	1	0.206549	0.666667	0	[S] died on [[[O]]] and
+death_year	On [[[O]]], [S]	48	72	51	12	66	0.235294	0.140049	0.245283	0	On [[[O]]], [S]
+death_year	on [[[O]]], [S]	16	32	17	4	7	0.235294	0.0955504	0.263158	0	on [[[O]]], [S]
+death_year	[P] died in [O],	11	18	2	1	0	0.5	0.0945312	0.5	0	[S] died in [O],
+death_year	[P] died on [[[O]]].	11	15	2	1	0	0.5	0.0945312	0.5	0	[S] died on [[[O]]].
+death_year	^[P] died in [O],	11	18	2	1	0	0.5	0.0945312	0.5	0	[S] died in [O],
+death_year	^[P] died on [[[O]]].	11	15	2	1	0	0.5	0.0945312	0.5	0	[S] died on [[[O]]].
+death_year	[O], [S]'	16	28	25	4	5	0.16	0.0640345	0.185185	0	[O], [S]'
+death_year	[[[O]]], [S]	96	156	288	24	180	0.0833333	0.0566375	0.0862069	0	[[[O]]], [S]
+death_year	[[[O]]], [S] was	16	24	44	4	35	0.0909091	0.0359222	0.108696	0	[[[O]]], [S] was
+death_year	[O], [S] was	12	24	60	3	34	0.05	0.0171495	0.0645161	0	[O], [S] was
+death_year	In [[[O]]], [S]	16	28	99	4	75	0.040404	0.0158226	0.049505	0	In [[[O]]], [S]
+death_year	[O], [S]	36	76	337	9	209	0.0267062	0.0141126	0.0294985	0	[O], [S]
+death_year	In [O], [S]	11	22	162	1	91	0.00617284	0.00109049	0.0121951	0	In [O], [S]
+death_year	On [[[O]]], [S] was	6	6	3	0	8	0	5.55112e-17	0.2	0	On [[[O]]], [S] was
+death_year	[[[O]]], [S] went	6	9	3	0	0	0	5.55112e-17	0.2	0	[[[O]]], [S] went
+death_year	on [[[O]]], [S] was	8	16	3	0	0	0	5.55112e-17	0.2	0	on [[[O]]], [S] was
+death_year	of [O], [S]	8	16	14	0	15	0	1.38778e-17	0.0625	0	of [O], [S]
+death_year	&amp;ndash; [[[O]]]), better known as '''[S]''',	6	12	0	0	0	0	0	0.5	0	&amp;ndash; [[[O]]]), better known as '''[S]''',
+death_year	&amp;ndash; [[[O]]]), called '''[S]'''	8	16	0	0	0	0	0	0.5	0	&amp;ndash; [[[O]]]), called '''[S]'''
+death_year	&amp;ndash;[[[O]]]), commonly known as '''[S]'''	6	12	0	0	0	0	0	0.5	0	&amp;ndash;[[[O]]]), commonly known as '''[S]'''
+death_year	&amp;ndash;[[[O]]]), commonly known as '''[S]''',	6	12	0	0	0	0	0	0.5	0	&amp;ndash;[[[O]]]), commonly known as '''[S]''',
+death_year	'''[S]'''  ([[<M> #]], [[#]] - [[[O]]]	6	12	0	0	0	0	0	0.5	0	'''[S]'''  ([[<M> #]], [[#]] - [[[O]]]
+death_year	'''[S]'''  ([[<M> #]], [[#]] - [[[O]]])	6	12	0	0	0	0	0	0.5	0	'''[S]'''  ([[<M> #]], [[#]] - [[[O]]])
+death_year	'''[S]''' ([[# <M>]] [[#]] - [[[O]]]	6	9	0	0	0	0	0	0.5	0	'''[S]''' ([[# <M>]] [[#]] - [[[O]]]
+death_year	'''[S]''' ([[# <M>]] [[#]] - [[[O]]])	6	9	0	0	0	0	0	0.5	0	'''[S]''' ([[# <M>]] [[#]] - [[[O]]])
+death_year	'''[S]''' ([[#]] or [[#]] &amp;ndash; [[[O]]]	6	12	0	0	0	0	0	0.5	0	'''[S]''' ([[#]] or [[#]] &amp;ndash; [[[O]]]
+death_year	'''[S]''' ([[#]] or [[#]] &amp;ndash; [[[O]]])	6	12	0	0	0	0	0	0.5	0	'''[S]''' ([[#]] or [[#]] &amp;ndash; [[[O]]])
+death_year	'''[S]''' ([[#]]? &amp;ndash; [[[O]]]	6	12	0	0	0	0	0	0.5	0	'''[S]''' ([[#]]? &amp;ndash; [[[O]]]
+death_year	'''[S]''' ([[#]]? &amp;ndash; [[[O]]])	6	12	0	0	0	0	0	0.5	0	'''[S]''' ([[#]]? &amp;ndash; [[[O]]])
+death_year	'''[S]''' ([[<M> #]], [[#]] &amp;ndash; [[[O]]];	8	12	0	0	0	0	0	0.5	0	'''[S]''' ([[<M> #]], [[#]] &amp;ndash; [[[O]]];
+death_year	'''[S]''' ([[<M> #]], [[#]]&amp;ndash;[[[O]]]?	8	12	0	0	0	0	0	0.5	0	'''[S]''' ([[<M> #]], [[#]]&amp;ndash;[[[O]]]?
+death_year	'''[S]''' ([[<M> #]], [[#]]–[[[O]]]	6	12	0	0	0	0	0	0.5	0	'''[S]''' ([[<M> #]], [[#]]–[[[O]]]
+death_year	'''[S]''' ([[<M> #]], [[#]]–[[[O]]])	6	12	0	0	0	0	0	0.5	0	'''[S]''' ([[<M> #]], [[#]]–[[[O]]])
+death_year	'''[S]''' ([[<M> #]],[[#]]-[[[O]]]	8	12	0	0	0	0	0	0.5	0	'''[S]''' ([[<M> #]],[[#]]-[[[O]]]
+death_year	'''[S]''' ([[<M> #]],[[#]]-[[[O]]])	8	12	0	0	0	0	0	0.5	0	'''[S]''' ([[<M> #]],[[#]]-[[[O]]])
+death_year	'''[S]''' (c. [[# BC]]-[[[O]]]	6	9	0	0	0	0	0	0.5	0	'''[S]''' (c. [[# BC]]-[[[O]]]
+death_year	'''[S]''' (c. [[#]] - [[[O]]]	8	16	0	0	0	0	0	0.5	0	'''[S]''' (c. [[#]] - [[[O]]]
+death_year	'''[S]''' (c. [[#]] - [[[O]]])	8	16	0	0	0	0	0	0.5	0	'''[S]''' (c. [[#]] - [[[O]]])
+death_year	'''[S]''' (c. [[#]]&amp;ndash;[[[O]]]	6	12	0	0	0	0	0	0.5	0	'''[S]''' (c. [[#]]&amp;ndash;[[[O]]]
+death_year	'''[S]''' (c. [[#]]&amp;ndash;[[[O]]])	6	12	0	0	0	0	0	0.5	0	'''[S]''' (c. [[#]]&amp;ndash;[[[O]]])
+death_year	'''[S]''' (c. [[#]]-[[[O]]]	6	9	0	0	0	0	0	0.5	0	'''[S]''' (c. [[#]]-[[[O]]]
+death_year	'''[S]''' (c.[[#]] &amp;ndash; [[[O]]]	8	16	0	0	0	0	0	0.5	0	'''[S]''' (c.[[#]] &amp;ndash; [[[O]]]
+death_year	'''[S]''' (c.[[#]] &amp;ndash; [[[O]]])	8	16	0	0	0	0	0	0.5	0	'''[S]''' (c.[[#]] &amp;ndash; [[[O]]])
+death_year	'''[S]''' {{IPA|/b&amp;##;&amp;##;nti/}} ([[<M> #]], [[#]] &amp;ndash; [[[O]]]	6	12	0	0	0	0	0	0.5	0	'''[S]''' {{IPA|/b&amp;##;&amp;##;nti/}} ([[<M> #]], [[#]] &amp;ndash; [[[O]]]
+death_year	'''[S]''' {{IPA|/b&amp;##;&amp;##;nti/}} ([[<M> #]], [[#]] &amp;ndash; [[[O]]])	6	12	0	0	0	0	0	0.5	0	'''[S]''' {{IPA|/b&amp;##;&amp;##;nti/}} ([[<M> #]], [[#]] &amp;ndash; [[[O]]])
+death_year	'''[S]''') ([[#]] &amp;ndash; [[[O]]]	6	9	0	0	0	0	0	0.5	0	'''[S]''') ([[#]] &amp;ndash; [[[O]]]
+death_year	'''[S]''') ([[#]] &amp;ndash; [[[O]]])	6	9	0	0	0	0	0	0.5	0	'''[S]''') ([[#]] &amp;ndash; [[[O]]])
+death_year	'''[S]''', ([[#]]&amp;ndash;[[[O]]]	6	12	0	0	0	0	0	0.5	0	'''[S]''', ([[#]]&amp;ndash;[[[O]]]
+death_year	'''[S]''', ([[#]]&amp;ndash;[[[O]]])	6	12	0	0	0	0	0	0.5	0	'''[S]''', ([[#]]&amp;ndash;[[[O]]])
+death_year	'''[S]''', ([[<M> #]] [[#]] &amp;ndash; [[[O]]]	6	6	0	0	0	0	0	0.5	0	'''[S]''', ([[<M> #]] [[#]] &amp;ndash; [[[O]]]
+death_year	'''[S]''', ([[<M> #]] [[#]] &amp;ndash; [[[O]]])	6	6	0	0	0	0	0	0.5	0	'''[S]''', ([[<M> #]] [[#]] &amp;ndash; [[[O]]])
+death_year	) '''[S]''' ([[<M> #]], [[#]] - [[[O]]]	6	12	0	0	0	0	0	0.5	0	) '''[S]''' ([[<M> #]], [[#]] - [[[O]]]
+death_year	) '''[S]''' ([[<M> #]], [[#]] - [[[O]]])	6	12	0	0	0	0	0	0.5	0	) '''[S]''' ([[<M> #]], [[#]] - [[[O]]])
+death_year	In [[[O]]], [S] died	6	12	0	0	0	0	0	0.5	0	In [[[O]]], [S] died
+death_year	[P] died in [O] of	6	12	0	0	0	0	0	0.5	0	[S] died in [O] of
+death_year	[P] died in [O].	6	12	0	0	0	0	0	0.5	0	[S] died in [O].
+death_year	[P] died in [[[O]]] and	6	9	0	0	0	0	0	0.5	0	[S] died in [[[O]]] and
+death_year	[P] died in [[[O]]],	6	12	2	0	1	0	0	0.25	0	[S] died in [[[O]]],
+death_year	[P] died in [[[O]]].	6	9	0	0	0	0	0	0.5	0	[S] died in [[[O]]].
+death_year	[P] died of a heart attack on [[[O]]]	6	6	0	0	0	0	0	0.5	0	[S] died of a heart attack on [[[O]]]
+death_year	[P] died on [O] at	6	9	0	0	0	0	0	0.5	0	[S] died on [O] at
+death_year	[P] died on [[[O]]] at	6	12	0	0	0	0	0	0.5	0	[S] died on [[[O]]] at
+death_year	[P] died on [[[O]]],	8	16	0	0	0	0	0	0.5	0	[S] died on [[[O]]],
+death_year	[P] funeral was held on [[[O]]]	8	16	0	0	0	0	0	0.5	0	[S] funeral was held on [[[O]]]
+death_year	[P] funeral was held on [[[O]]] at	8	16	0	0	0	0	0	0.5	0	[S] funeral was held on [[[O]]] at
+death_year	[P] reigned from [[#]] to [[[O]]].	6	12	1	0	0	0	0	0.333333	0	[S] reigned from [[#]] to [[[O]]].
+death_year	[S] ''' ([[<M> #]], [[#]] &amp;ndash; [[[O]]]	6	9	0	0	0	0	0	0.5	0	[S] ''' ([[<M> #]], [[#]] &amp;ndash; [[[O]]]
+death_year	[S] ''' ([[<M> #]], [[#]] &amp;ndash; [[[O]]])	6	9	0	0	0	0	0	0.5	0	[S] ''' ([[<M> #]], [[#]] &amp;ndash; [[[O]]])
+death_year	[S] died [[[O]]]	6	9	0	0	0	0	0	0.5	0	[S] died [[[O]]]
+death_year	[S] died in [O] and	6	9	0	0	0	0	0	0.5	0	[S] died in [O] and
+death_year	[S] died in [[[O]]] at	8	16	0	0	0	0	0	0.5	0	[S] died in [[[O]]] at
+death_year	[S] died in [[[O]]],	8	12	1	0	0	0	0	0.333333	0	[S] died in [[[O]]],
+death_year	[S] died on [O]	6	9	0	0	0	0	0	0.5	0	[S] died on [O]
+death_year	[S] passed away in [O]	8	16	0	0	1	0	0	0.5	0	[S] passed away in [O]
+death_year	[S]''' ([[<M> #]], [[#]] &amp;ndash; [[[O]]]	6	6	0	0	0	0	0	0.5	0	[S]''' ([[<M> #]], [[#]] &amp;ndash; [[[O]]]
+death_year	[S]''' ([[<M> #]], [[#]] &amp;ndash; [[[O]]])	6	6	0	0	0	0	0	0.5	0	[S]''' ([[<M> #]], [[#]] &amp;ndash; [[[O]]])
+death_year	[S]'s death in [[[O]]]	8	16	0	0	0	0	0	0.5	0	[S]'s death in [[[O]]]
+death_year	[S]'s death in [[[O]]],	8	16	0	0	0	0	0	0.5	0	[S]'s death in [[[O]]],
+death_year	[[[O]]]) (also '''[S]'''	6	12	0	0	0	0	0	0.5	0	[[[O]]]) (also '''[S]'''
+death_year	[[[O]]]), also known as '''[S]''' and	6	12	0	0	0	0	0	0.5	0	[[[O]]]), also known as '''[S]''' and
+death_year	[[[O]]]), commonly known as '''[S]'''	6	12	0	0	1	0	0	0.5	0	[[[O]]]), commonly known as '''[S]'''
+death_year	[[[O]]]), commonly known as '''[S]''',	6	12	0	0	1	0	0	0.5	0	[[[O]]]), commonly known as '''[S]''',
+death_year	[[[O]]], [S],	6	9	0	0	4	0	0	0.5	0	[[[O]]], [S],
+death_year	^'''[S]'''  ([[<M> #]], [[#]] &amp;ndash; [[[O]]]	6	9	0	0	0	0	0	0.5	0	'''[S]'''  ([[<M> #]], [[#]] &amp;ndash; [[[O]]]
+death_year	^'''[S]'''  ([[<M> #]], [[#]] &amp;ndash; [[[O]]])	6	9	0	0	0	0	0	0.5	0	'''[S]'''  ([[<M> #]], [[#]] &amp;ndash; [[[O]]])
+death_year	^'''[S]'''  ([[<M> #]], [[#]] - [[[O]]]	6	12	0	0	0	0	0	0.5	0	'''[S]'''  ([[<M> #]], [[#]] - [[[O]]]
+death_year	^'''[S]'''  ([[<M> #]], [[#]] - [[[O]]])	6	12	0	0	0	0	0	0.5	0	'''[S]'''  ([[<M> #]], [[#]] - [[[O]]])
+death_year	^'''[S]''' ([[#]] or [[#]] &amp;ndash; [[[O]]]	6	12	0	0	0	0	0	0.5	0	'''[S]''' ([[#]] or [[#]] &amp;ndash; [[[O]]]
+death_year	^'''[S]''' ([[#]] or [[#]] &amp;ndash; [[[O]]])	6	12	0	0	0	0	0	0.5	0	'''[S]''' ([[#]] or [[#]] &amp;ndash; [[[O]]])
+death_year	^'''[S]''' ([[#]]? &amp;ndash; [[[O]]]	6	12	0	0	0	0	0	0.5	0	'''[S]''' ([[#]]? &amp;ndash; [[[O]]]
+death_year	^'''[S]''' ([[#]]? &amp;ndash; [[[O]]])	6	12	0	0	0	0	0	0.5	0	'''[S]''' ([[#]]? &amp;ndash; [[[O]]])
+death_year	^'''[S]''' ([[<M> #]] [[#]] – [[[O]]]	6	9	0	0	0	0	0	0.5	0	'''[S]''' ([[<M> #]] [[#]] – [[[O]]]
+death_year	^'''[S]''' ([[<M> #]] [[#]] – [[[O]]])	6	9	0	0	0	0	0	0.5	0	'''[S]''' ([[<M> #]] [[#]] – [[[O]]])
+death_year	^'''[S]''' ([[<M> #]] [[#]]&amp;ndash;[[[O]]]	6	9	0	0	0	0	0	0.5	0	'''[S]''' ([[<M> #]] [[#]]&amp;ndash;[[[O]]]
+death_year	^'''[S]''' ([[<M> #]] [[#]]&amp;ndash;[[[O]]])	6	9	0	0	0	0	0	0.5	0	'''[S]''' ([[<M> #]] [[#]]&amp;ndash;[[[O]]])
+death_year	^'''[S]''' ([[<M> #]], [[#]] &amp;ndash; [[[O]]];	8	12	0	0	0	0	0	0.5	0	'''[S]''' ([[<M> #]], [[#]] &amp;ndash; [[[O]]];
+death_year	^'''[S]''' ([[<M> #]], [[#]]–[[[O]]]	6	12	0	0	0	0	0	0.5	0	'''[S]''' ([[<M> #]], [[#]]–[[[O]]]
+death_year	^'''[S]''' ([[<M> #]], [[#]]–[[[O]]])	6	12	0	0	0	0	0	0.5	0	'''[S]''' ([[<M> #]], [[#]]–[[[O]]])
+death_year	^'''[S]''' ([[<M> #]],[[#]]-[[[O]]]	8	12	0	0	0	0	0	0.5	0	'''[S]''' ([[<M> #]],[[#]]-[[[O]]]
+death_year	^'''[S]''' ([[<M> #]],[[#]]-[[[O]]])	8	12	0	0	0	0	0	0.5	0	'''[S]''' ([[<M> #]],[[#]]-[[[O]]])
+death_year	^'''[S]''' (c. [[# BC]]-[[[O]]]	6	9	0	0	0	0	0	0.5	0	'''[S]''' (c. [[# BC]]-[[[O]]]
+death_year	^'''[S]''' (c.[[#]] &amp;ndash; [[[O]]]	8	16	0	0	0	0	0	0.5	0	'''[S]''' (c.[[#]] &amp;ndash; [[[O]]]
+death_year	^'''[S]''' (c.[[#]] &amp;ndash; [[[O]]])	8	16	0	0	0	0	0	0.5	0	'''[S]''' (c.[[#]] &amp;ndash; [[[O]]])
+death_year	^'''[S]''' (died [[[O]]]	6	12	0	0	0	0	0	0.5	0	'''[S]''' (died [[[O]]]
+death_year	^'''[S]''' (died [[[O]]])	6	12	0	0	0	0	0	0.5	0	'''[S]''' (died [[[O]]])
+death_year	^'''[S]''' {{IPA|/b&amp;##;&amp;##;nti/}} ([[<M> #]], [[#]] &amp;ndash; [[[O]]]	6	12	0	0	0	0	0	0.5	0	'''[S]''' {{IPA|/b&amp;##;&amp;##;nti/}} ([[<M> #]], [[#]] &amp;ndash; [[[O]]]
+death_year	^'''[S]''' {{IPA|/b&amp;##;&amp;##;nti/}} ([[<M> #]], [[#]] &amp;ndash; [[[O]]])	6	12	0	0	0	0	0	0.5	0	'''[S]''' {{IPA|/b&amp;##;&amp;##;nti/}} ([[<M> #]], [[#]] &amp;ndash; [[[O]]])
+death_year	^'''[S]''', ([[<M> #]] [[#]] &amp;ndash; [[[O]]]	6	6	0	0	0	0	0	0.5	0	'''[S]''', ([[<M> #]] [[#]] &amp;ndash; [[[O]]]
+death_year	^'''[S]''', ([[<M> #]] [[#]] &amp;ndash; [[[O]]])	6	6	0	0	0	0	0	0.5	0	'''[S]''', ([[<M> #]] [[#]] &amp;ndash; [[[O]]])
+death_year	^[P] died in [O] of	6	12	0	0	0	0	0	0.5	0	[S] died in [O] of
+death_year	^[P] died in [O].	6	12	0	0	0	0	0	0.5	0	[S] died in [O].
+death_year	^[P] died in [[[O]]] and	6	9	0	0	0	0	0	0.5	0	[S] died in [[[O]]] and
+death_year	^[P] died in [[[O]]],	6	12	2	0	1	0	0	0.25	0	[S] died in [[[O]]],
+death_year	^[P] died in [[[O]]].	6	9	0	0	0	0	0	0.5	0	[S] died in [[[O]]].
+death_year	^[P] died of a heart attack on [[[O]]]	6	6	0	0	0	0	0	0.5	0	[S] died of a heart attack on [[[O]]]
+death_year	^[P] died on [O] at	6	9	0	0	0	0	0	0.5	0	[S] died on [O] at
+death_year	^[P] died on [[[O]]] at	6	12	0	0	0	0	0	0.5	0	[S] died on [[[O]]] at
+death_year	^[P] died on [[[O]]],	8	16	0	0	0	0	0	0.5	0	[S] died on [[[O]]],
+death_year	^[P] funeral was held on [[[O]]]	8	16	0	0	0	0	0	0.5	0	[S] funeral was held on [[[O]]]
+death_year	^[P] funeral was held on [[[O]]] at	8	16	0	0	0	0	0	0.5	0	[S] funeral was held on [[[O]]] at
+death_year	^[P] reigned from [[#]] to [[[O]]].	6	12	1	0	0	0	0	0.333333	0	[S] reigned from [[#]] to [[[O]]].
+death_year	^[S] ''' ([[<M> #]], [[#]] &amp;ndash; [[[O]]]	6	9	0	0	0	0	0	0.5	0	[S] ''' ([[<M> #]], [[#]] &amp;ndash; [[[O]]]
+death_year	^[S] ''' ([[<M> #]], [[#]] &amp;ndash; [[[O]]])	6	9	0	0	0	0	0	0.5	0	[S] ''' ([[<M> #]], [[#]] &amp;ndash; [[[O]]])
+death_year	^[S] died [[[O]]]	6	9	0	0	0	0	0	0.5	0	[S] died [[[O]]]
+death_year	^[S] died in [O] and	6	9	0	0	0	0	0	0.5	0	[S] died in [O] and
+death_year	^[S] died in [O] at	6	9	0	0	0	0	0	0.5	0	[S] died in [O] at
+death_year	^[S] died in [[[O]]]	20	36	0	0	0	0	0	0.5	0	[S] died in [[[O]]]
+death_year	^[S] died in [[[O]]] at	8	16	0	0	0	0	0	0.5	0	[S] died in [[[O]]] at
+death_year	^[S] died on [O]	6	9	0	0	0	0	0	0.5	0	[S] died on [O]
+death_year	in [O], [S]	6	12	46	0	18	0	0	0.0208333	0	in [O], [S]
+death_year	or '''[S]''' ([[#]] &amp;ndash; [[[O]]]	6	12	0	0	0	0	0	0.5	0	or '''[S]''' ([[#]] &amp;ndash; [[[O]]]
+death_year	– [[[O]]]), better known as '''[S]'''	8	16	0	0	0	0	0	0.5	0	– [[[O]]]), better known as '''[S]'''
+death_year	– [[[O]]]), better known as '''[S]''',	8	16	0	0	0	0	0	0.5	0	– [[[O]]]), better known as '''[S]''',
+founded	[S] was founded on [[[O]]]	24	44	6	6	0	1	0.609666	0.875	0	[S] was founded on [[[O]]]
+founded	^[S] was founded on [[[O]]]	24	44	6	6	0	1	0.609666	0.875	0	[S] was founded on [[[O]]]
+founded	[S] was founded in [O]	20	20	5	5	4	1	0.565518	0.857143	0	[S] was founded in [O]
+founded	^[S] was founded in [O]	20	20	5	5	3	1	0.565518	0.857143	0	[S] was founded in [O]
+founded	[S] was founded in [[[O]]]	24	36	7	6	2	0.857143	0.486872	0.777778	0	[S] was founded in [[[O]]]
+founded	[S] was founded in [O] by	12	12	3	3	1	1	0.438503	0.8	0	[S] was founded in [O] by
+founded	^[S] was founded in [O] by	12	12	3	3	1	1	0.438503	0.8	0	[S] was founded in [O] by
+founded	[P] was founded in [[[O]]]	20	24	6	5	1	0.833333	0.436497	0.75	0	[S] was founded in [[[O]]]
+founded	^[P] was founded in [[[O]]]	20	24	6	5	1	0.833333	0.436497	0.75	0	[S] was founded in [[[O]]]
+founded	^[S] was founded in [[[O]]]	20	32	6	5	2	0.833333	0.436497	0.75	0	[S] was founded in [[[O]]]
+founded	the [S] in [O]	12	16	5	3	0	0.6	0.230724	0.571429	0	the [S] in [O]
+founded	[P] was founded on [[[O]]]	11	14	1	1	0	1	0.206549	0.666667	0	[S] was founded on [[[O]]]
+founded	^[P] was founded on [[[O]]]	11	14	1	1	0	1	0.206549	0.666667	0	[S] was founded on [[[O]]]
+founded	[S] in [O],	16	16	13	4	12	0.307692	0.126807	0.333333	0	[S] in [O],
+founded	[S] in [O]	36	40	41	9	52	0.219512	0.120032	0.232558	0	[S] in [O]
+founded	[S] on [[[O]]]	16	20	14	4	14	0.285714	0.117214	0.3125	0	[S] on [[[O]]]
+founded	[S] on [[[O]]],	11	11	2	1	2	0.5	0.0945312	0.5	0	[S] on [[[O]]],
+founded	[[[O]]], the [S]	12	12	29	3	12	0.103448	0.0358149	0.129032	0	[[[O]]], the [S]
+founded	[S] in [O].	11	11	8	1	16	0.125	0.0224175	0.2	0	[S] in [O].
+founded	[O], [S]	24	24	163	6	609	0.0368098	0.0169775	0.0424242	0	[O], [S]
+founded	in [O], [S]	11	11	23	1	106	0.0434783	0.00771667	0.08	0	in [O], [S]
+founded	of [O], the [S]	6	6	3	0	0	0	5.55112e-17	0.2	0	of [O], the [S]
+founded	[[[O]]] the [S]	8	12	14	0	2	0	1.38778e-17	0.0625	0	[[[O]]] the [S]
+founded	'''''[S]''''' ([[[O]]]	6	6	1	0	6	0	0	0.333333	0	'''''[S]''''' ([[[O]]]
+founded	'''''[S]''''' ([[[O]]])	6	6	1	0	6	0	0	0.333333	0	'''''[S]''''' ([[[O]]])
+founded	'''[S]''', was founded in [[[O]]]	6	6	0	0	0	0	0	0.5	0	'''[S]''', was founded in [[[O]]]
+founded	'''[S]''', was founded in [[[O]]] as	6	6	0	0	0	0	0	0.5	0	'''[S]''', was founded in [[[O]]] as
+founded	In [O], [S]	6	6	45	0	198	0	0	0.0212766	0	In [O], [S]
+founded	[O], the [S]	6	6	27	0	5	0	0	0.0344828	0	[O], the [S]
+founded	[P] was established in [[[O]]]	6	9	0	0	1	0	0	0.5	0	[S] was established in [[[O]]]
+founded	[P] was established in [[[O]]] as	6	9	0	0	1	0	0	0.5	0	[S] was established in [[[O]]] as
+founded	[P] was founded in [O]	8	12	1	0	0	0	0	0.333333	0	[S] was founded in [O]
+founded	[P] was founded in [[[O]]] by	6	6	0	0	1	0	0	0.5	0	[S] was founded in [[[O]]] by
+founded	[P] was founded on [[[O]]],	8	8	0	0	0	0	0	0.5	0	[S] was founded on [[[O]]],
+founded	[P] was written in [[[O]]]	6	6	0	0	0	0	0	0.5	0	[S] was written in [[[O]]]
+founded	[S] Act of [O]	8	8	1	0	0	0	0	0.333333	0	[S] Act of [O]
+founded	[S] formed in [[[O]]]	6	6	0	0	0	0	0	0.5	0	[S] formed in [[[O]]]
+founded	[S] formed in [[[O]]],	6	6	0	0	0	0	0	0.5	0	[S] formed in [[[O]]],
+founded	[S] was founded in [[[O]]] by	6	12	0	0	0	0	0	0.5	0	[S] was founded in [[[O]]] by
+founded	[S] was founded in [[[O]]] in	6	6	0	0	0	0	0	0.5	0	[S] was founded in [[[O]]] in
+founded	[S] was founded on [[[O]]] by	6	12	0	0	0	0	0	0.5	0	[S] was founded on [[[O]]] by
+founded	[S] was founded on [[[O]]],	8	12	0	0	0	0	0	0.5	0	[S] was founded on [[[O]]],
+founded	[S] was originally founded in [[[O]]]	8	8	0	0	0	0	0	0.5	0	[S] was originally founded in [[[O]]]
+founded	[S] was originally founded in [[[O]]] by	8	8	0	0	0	0	0	0.5	0	[S] was originally founded in [[[O]]] by
+founded	[[[O]]] as '''[S]'''	6	12	0	0	0	0	0	0.5	0	[[[O]]] as '''[S]'''
+founded	[[[O]]], [S]	6	6	79	0	319	0	0	0.0123457	0	[[[O]]], [S]
+founded	[[[O]]], [S] became	6	6	11	0	17	0	0	0.0769231	0	[[[O]]], [S] became
+founded	[[[O]]], the '''[S]'''	6	6	0	0	0	0	0	0.5	0	[[[O]]], the '''[S]'''
+founded	[[[O]]], the '''[S]''' is	6	6	0	0	0	0	0	0.5	0	[[[O]]], the '''[S]''' is
+founded	^'''''[S]''''' ([[[O]]]	6	6	1	0	6	0	0	0.333333	0	'''''[S]''''' ([[[O]]]
+founded	^'''''[S]''''' ([[[O]]])	6	6	1	0	6	0	0	0.333333	0	'''''[S]''''' ([[[O]]])
+founded	^[P] was established in [[[O]]]	6	9	0	0	1	0	0	0.5	0	[S] was established in [[[O]]]
+founded	^[P] was established in [[[O]]] as	6	9	0	0	1	0	0	0.5	0	[S] was established in [[[O]]] as
+founded	^[P] was founded in [O]	8	12	1	0	0	0	0	0.333333	0	[S] was founded in [O]
+founded	^[P] was founded in [[[O]]] by	6	6	0	0	1	0	0	0.5	0	[S] was founded in [[[O]]] by
+founded	^[P] was founded on [[[O]]],	8	8	0	0	0	0	0	0.5	0	[S] was founded on [[[O]]],
+founded	^[P] was written in [[[O]]]	6	6	0	0	0	0	0	0.5	0	[S] was written in [[[O]]]
+founded	^[S] was founded in [[[O]]] by	6	12	0	0	0	0	0	0.5	0	[S] was founded in [[[O]]] by
+founded	^[S] was founded on [[[O]]] by	6	12	0	0	0	0	0	0.5	0	[S] was founded on [[[O]]] by
+founded	^[S] was founded on [[[O]]],	8	12	0	0	0	0	0	0.5	0	[S] was founded on [[[O]]],
+founded	^[S] was originally founded in [[[O]]]	8	8	0	0	0	0	0	0.5	0	[S] was originally founded in [[[O]]]
+founded	^[S] was originally founded in [[[O]]] by	8	8	0	0	0	0	0	0.5	0	[S] was originally founded in [[[O]]] by
+founded	of [S] in [O]	6	6	2	0	10	0	0	0.25	0	of [S] in [O]
+founded	the [S] in [O],	6	6	1	0	0	0	0	0.333333	0	the [S] in [O],
+founded	the [S] on [[[O]]]	8	12	1	0	0	0	0	0.333333	0	the [S] on [[[O]]]
+founded	the [S] on [[[O]]],	8	8	0	0	0	0	0	0.5	0	the [S] on [[[O]]],
+author	[O]'s [S]	16	16	4	4	16	1	0.510109	0.833333	0	[O]'s [S]
+author	'''''[S]''''' is a [[science fiction]] novel by [[[O]]]	12	12	3	3	0	1	0.438503	0.8	0	'''''[S]''''' is a [[science fiction]] novel by [[[O]]]
+author	'''''[S]''''' is a [[science fiction]] novel by [[[O]]],	12	12	3	3	0	1	0.438503	0.8	0	'''''[S]''''' is a [[science fiction]] novel by [[[O]]],
+author	^'''''[S]''''' is a [[science fiction]] novel by [[[O]]]	12	12	3	3	0	1	0.438503	0.8	0	'''''[S]''''' is a [[science fiction]] novel by [[[O]]]
+author	^'''''[S]''''' is a [[science fiction]] novel by [[[O]]],	12	12	3	3	0	1	0.438503	0.8	0	'''''[S]''''' is a [[science fiction]] novel by [[[O]]],
+author	[P] was [[[O]]]	6	6	0	0	7	0	0	0.5	0	[S] was [[[O]]]
+author	[P] was [[[O]]]'	6	6	0	0	1	0	0	0.5	0	[S] was [[[O]]]'
+author	[[[O]]]'s '''''[S]'''''	6	6	0	0	1	0	0	0.5	0	[[[O]]]'s '''''[S]'''''
+author	^[P] was [[[O]]]	6	6	0	0	7	0	0	0.5	0	[S] was [[[O]]]
+author	^[P] was [[[O]]]'	6	6	0	0	1	0	0	0.5	0	[S] was [[[O]]]'
+director	[P] was directed by [[[O]]]	24	36	7	6	0	0.857143	0.486872	0.777778	0	[S] was directed by [[[O]]]
+director	^[P] was directed by [[[O]]]	24	36	7	6	0	0.857143	0.486872	0.777778	0	[S] was directed by [[[O]]]
+director	[P] was directed by [[[O]]],	12	12	3	3	0	1	0.438503	0.8	0	[S] was directed by [[[O]]],
+director	^[P] was directed by [[[O]]],	12	12	3	3	0	1	0.438503	0.8	0	[S] was directed by [[[O]]],
+director	[P] was directed by [[[O]]] and	11	22	2	1	0	0.5	0.0945312	0.5	0	[S] was directed by [[[O]]] and
+director	^[P] was directed by [[[O]]] and	11	22	2	1	0	0.5	0.0945312	0.5	0	[S] was directed by [[[O]]] and
+director	''[S]'' was directed by [[[O]]]	6	15	0	0	0	0	0	0.5	0	''[S]'' was directed by [[[O]]]
+director	''[S]'' was directed by [[[O]]],	6	15	0	0	0	0	0	0.5	0	''[S]'' was directed by [[[O]]],
+director	[O]'s [S]	8	24	1	0	11	0	0	0.333333	0	[O]'s [S]
+founder	[S] was founded in [[#]] by [[[O]]]	11	11	1	1	0	1	0.206549	0.666667	0	[S] was founded in [[#]] by [[[O]]]
+founder	^[S] was founded in [[#]] by [[[O]]]	11	11	1	1	0	1	0.206549	0.666667	0	[S] was founded in [[#]] by [[[O]]]
+creator	[O]'s [S]	11	11	2	1	12	0.5	0.0945312	0.5	0	[O]'s [S]
+spouse	[S] married [[[O]]] in	16	16	4	4	0	1	0.510109	0.833333	0	[S] married [[[O]]] in
+spouse	[S] married [[[O]]]	56	64	21	14	5	0.666667	0.453735	0.652174	0	[S] married [[[O]]]
+spouse	^[S] married [[[O]]]	28	36	9	7	1	0.777778	0.452589	0.727273	0	[S] married [[[O]]]
+spouse	^[S] married [[[O]]] in	12	12	3	3	0	1	0.438503	0.8	0	[S] married [[[O]]] in
+spouse	[P] married [[[O]]]	28	32	10	7	1	0.7	0.396778	0.666667	0	[S] married [[[O]]]
+spouse	^[P] married [[[O]]]	28	32	10	7	1	0.7	0.396778	0.666667	0	[S] married [[[O]]]
+spouse	, [S] married [[[O]]]	20	20	9	5	2	0.555556	0.266651	0.545455	0	, [S] married [[[O]]]
+spouse	[S] married [O]	32	32	18	8	15	0.444444	0.245595	0.45	0	[S] married [O]
+spouse	, [S] married [[[O]]].	11	11	1	1	1	1	0.206549	0.666667	0	, [S] married [[[O]]].
+spouse	[P] married [[[O]]],	11	11	1	1	0	1	0.206549	0.666667	0	[S] married [[[O]]],
+spouse	[S] married [[[O]]].	11	11	1	1	1	1	0.206549	0.666667	0	[S] married [[[O]]].
+spouse	^[P] married [[[O]]],	11	11	1	1	0	1	0.206549	0.666667	0	[S] married [[[O]]],
+spouse	, [S] married [O]	16	16	9	4	6	0.444444	0.188779	0.454545	0	, [S] married [O]
+spouse	[S] married [[[O]]],	16	16	10	4	1	0.4	0.16818	0.416667	0	[S] married [[[O]]],
+spouse	[S] married [O],	12	12	7	3	6	0.428571	0.15822	0.444444	0	[S] married [O],
+spouse	[S] met [[[O]]]	6	6	3	0	5	0	5.55112e-17	0.2	0	[S] met [[[O]]]
+spouse	[[[O]]], [S]	8	8	96	0	98	0	3.46945e-18	0.0102041	0	[[[O]]], [S]
+spouse	, [S] married [O],	6	6	2	0	0	0	0	0.25	0	, [S] married [O],
+spouse	, [S] married [O].	8	8	1	0	1	0	0	0.333333	0	, [S] married [O].
+spouse	, [S] met [[[O]]]	6	6	2	0	2	0	0	0.25	0	, [S] met [[[O]]]
+spouse	[P] married [O]	8	8	5	0	7	0	0	0.142857	0	[S] married [O]
+spouse	[P] married [[[O]]] on	6	9	1	0	1	0	0	0.333333	0	[S] married [[[O]]] on
+spouse	[S] married [O].	8	8	2	0	1	0	0	0.25	0	[S] married [O].
+spouse	[S] wed [O]	6	6	0	0	0	0	0	0.5	0	[S] wed [O]
+spouse	[S]'s wife, [O]	6	6	0	0	1	0	0	0.5	0	[S]'s wife, [O]
+spouse	^[P] married [O]	8	8	5	0	7	0	0	0.142857	0	[S] married [O]
+spouse	^[P] married [[[O]]] on	6	9	1	0	1	0	0	0.333333	0	[S] married [[[O]]] on
+spouse	^[S] married [O]	6	6	2	0	4	0	0	0.25	0	[S] married [O]
+spouse	^[S] wed [O]	6	6	0	0	0	0	0	0.5	0	[S] wed [O]
+developer	[S], [O]	16	28	5	4	201	0.8	0.375535	0.714286	0	[S], [O]
+developer	[O]'s [S]	8	8	3	0	29	0	5.55112e-17	0.2	0	[O]'s [S]
+developer	[O] released [S]	6	9	0	0	3	0	0	0.5	0	[O] released [S]
+developer	[O] released [S] #	6	9	0	0	0	0	0	0.5	0	[O] released [S] #
+developer	the [S], [O]	6	9	0	0	10	0	0	0.5	0	the [S], [O]
+genre	'''[S]''' is a [[[O]]]	36	64	11	9	3	0.818182	0.523019	0.769231	0	'''[S]''' is a [[[O]]]
+genre	^'''[S]''' is a [[[O]]]	36	64	11	9	3	0.818182	0.523019	0.769231	0	'''[S]''' is a [[[O]]]
+genre	'''''[S]''''' is a [[[O]]] novel	12	24	3	3	0	1	0.438503	0.8	0	'''''[S]''''' is a [[[O]]] novel
+genre	^'''''[S]''''' is a [[[O]]] novel	12	24	3	3	0	1	0.438503	0.8	0	'''''[S]''''' is a [[[O]]] novel
+genre	'''''[S]''''' is a [[[O]]]	24	48	8	6	6	0.75	0.409275	0.7	0	'''''[S]''''' is a [[[O]]]
+genre	^'''''[S]''''' is a [[[O]]]	24	48	8	6	6	0.75	0.409275	0.7	0	'''''[S]''''' is a [[[O]]]
+genre	'''[S]''' is a [[[O]]] [[role-playing	16	28	5	4	0	0.8	0.375535	0.714286	0	'''[S]''' is a [[[O]]] [[role-playing
+genre	^'''[S]''' is a [[[O]]] [[role-playing	16	28	5	4	0	0.8	0.375535	0.714286	0	'''[S]''' is a [[[O]]] [[role-playing
+genre	[O], [S]	16	20	15	4	25	0.266667	0.108975	0.294118	0	[O], [S]
+genre	[O] of [S]	12	12	14	3	21	0.214286	0.0757139	0.25	0	[O] of [S]
+genre	[S]'s [O]	11	11	34	1	39	0.0294118	0.00521091	0.0555556	0	[S]'s [O]
+genre	'''''[S]''''' ([[#]]) is a [[[O]]]	6	9	0	0	0	0	0	0.5	0	'''''[S]''''' ([[#]]) is a [[[O]]]
+genre	'''''[S]''''' is a [[#]] [[[O]]]	6	12	0	0	0	0	0	0.5	0	'''''[S]''''' is a [[#]] [[[O]]]
+genre	'''[S]''' are a [[[O]]]	6	12	0	0	0	0	0	0.5	0	'''[S]''' are a [[[O]]]
+genre	'''[S]''') is a [[[O]]]	6	9	0	0	0	0	0	0.5	0	'''[S]''') is a [[[O]]]
+genre	''[S]'' is a [[[O]]]	8	16	0	0	0	0	0	0.5	0	''[S]'' is a [[[O]]]
+genre	The [O] of [S]	6	6	0	0	2	0	0	0.5	0	The [O] of [S]
+genre	The [O] of [S],	6	6	0	0	0	0	0	0.5	0	The [O] of [S],
+genre	[O] of [S],	6	6	2	0	2	0	0	0.25	0	[O] of [S],
+genre	^'''''[S]''''' ([[#]]) is a [[[O]]]	6	9	0	0	0	0	0	0.5	0	'''''[S]''''' ([[#]]) is a [[[O]]]
+genre	^'''''[S]''''' is a [[#]] [[[O]]]	6	12	0	0	0	0	0	0.5	0	'''''[S]''''' is a [[#]] [[[O]]]
+genre	^''[S]'' is a [[[O]]]	8	16	0	0	0	0	0	0.5	0	''[S]'' is a [[[O]]]
+genre	in [O], [S]	6	9	0	0	1	0	0	0.5	0	in [O], [S]
+language	^'''[S]''' ([[[O]]]	20	48	7	7	0	1	0.64567	0.888889	0	'''[S]''' ([[[O]]]
+language	or '''[S]''' ([[[O]]]	20	28	6	6	0	1	0.609666	0.875	0	or '''[S]''' ([[[O]]]
+language	or '''[S]''' ([[[O]]]:	20	28	6	6	0	1	0.609666	0.875	0	or '''[S]''' ([[[O]]]:
+language	^'''[S]''' ([[[O]]]:	12	32	4	4	0	1	0.510109	0.833333	0	'''[S]''' ([[[O]]]:
+language	[S] residents age # and older speak [[[O]]]	11	44	2	2	0	1	0.34238	0.75	0	[S] residents age # and older speak [[[O]]]
+language	[S] residents age # and older speak [[[O]]] at	11	44	2	2	0	1	0.34238	0.75	0	[S] residents age # and older speak [[[O]]] at
+language	of [S] residents age # and older speak [[[O]]]	11	44	2	2	0	1	0.34238	0.75	0	of [S] residents age # and older speak [[[O]]]
+language	of [S] residents age # and older speak [[[O]]] at	11	44	2	2	0	1	0.34238	0.75	0	of [S] residents age # and older speak [[[O]]] at
+language	([[[O]]]: ''República de [S]	11	11	1	1	0	1	0.206549	0.666667	0	([[[O]]]: ''República de [S]
+language	([[[O]]]: ''República de [S]'',	11	11	1	1	0	1	0.206549	0.666667	0	([[[O]]]: ''República de [S]'',
+language	[[[O]]]: ''República de [S]	11	11	1	1	0	1	0.206549	0.666667	0	[[[O]]]: ''República de [S]
+language	[[[O]]]: ''República de [S]'',	11	11	1	1	0	1	0.206549	0.666667	0	[[[O]]]: ''República de [S]'',
+language	'''[S]''' ([[[O]]]/	6	12	0	0	0	0	0	0.5	0	'''[S]''' ([[[O]]]/
+language	[S] are [[[O]]]	8	16	2	0	0	0	0	0.25	0	[S] are [[[O]]]
+language	[S] are [[[O]]] and	8	16	0	0	0	0	0	0.5	0	[S] are [[[O]]] and
+language	^'''[S]''' ([[[O]]]/	6	12	0	0	0	0	0	0.5	0	'''[S]''' ([[[O]]]/
+language	in [S] are [[[O]]]	8	16	2	0	0	0	0	0.25	0	in [S] are [[[O]]]
+language	in [S] are [[[O]]] and	8	16	0	0	0	0	0	0.5	0	in [S] are [[[O]]] and
+language	the '''[S]''' ([[[O]]]	6	9	0	0	0	0	0	0.5	0	the '''[S]''' ([[[O]]]
+language	the '''[S]''' ([[[O]]]:	6	9	0	0	0	0	0	0.5	0	the '''[S]''' ([[[O]]]:
+occupation	a [O], [S]	40	60	14	10	1	0.714286	0.453509	0.6875	0	a [O], [S]
+occupation	^[S] was the [O] of	12	16	4	3	0	0.75	0.300642	0.666667	0	[S] was the [O] of
+occupation	a [O], [S] was	12	16	4	3	0	0.75	0.300642	0.666667	0	a [O], [S] was
+occupation	[S] the [O]	16	32	6	4	1	0.666667	0.299993	0.625	0	[S] the [O]
+occupation	[O], [S] was	28	52	15	7	1	0.466667	0.248095	0.470588	0	[O], [S] was
+occupation	^[S] was the [O]	12	16	5	3	0	0.6	0.230724	0.571429	0	[S] was the [O]
+occupation	[S] was the [O]	20	28	11	5	1	0.454545	0.212713	0.461538	0	[S] was the [O]
+occupation	[O], [S]	76	144	67	20	12	0.298507	0.202315	0.304348	0	[O], [S]
+occupation	[S] was the [O] of	16	20	9	4	1	0.444444	0.188779	0.454545	0	[S] was the [O] of
+occupation	[S] was appointed [O]	11	14	5	1	0	0.2	0.0362241	0.285714	0	[S] was appointed [O]
+occupation	[S] as [O]	6	21	3	0	0	0	5.55112e-17	0.2	0	[S] as [O]
+occupation	[S] was appointed [O] of	8	8	3	0	0	0	5.55112e-17	0.2	0	[S] was appointed [O] of
+occupation	[P] was [O] of	8	8	6	0	1	0	2.77556e-17	0.125	0	[S] was [O] of
+occupation	^[P] was [O] of	8	8	6	0	1	0	2.77556e-17	0.125	0	[S] was [O] of
+occupation	[S]'s [O]	6	6	14	0	1	0	1.38778e-17	0.0625	0	[S]'s [O]
+occupation	, [S] was more than a [O]	6	9	0	0	0	0	0	0.5	0	, [S] was more than a [O]
+occupation	[O] and [S]	6	9	1	0	0	0	0	0.333333	0	[O] and [S]
+occupation	[O], [S] is	6	18	0	0	0	0	0	0.5	0	[O], [S] is
+occupation	[P] became a [O]	6	6	1	0	0	0	0	0.333333	0	[S] became a [O]
+occupation	[P] is best known as the [O]	6	6	0	0	0	0	0	0.5	0	[S] is best known as the [O]
+occupation	[P] is best known as the [O] of	6	6	0	0	0	0	0	0.5	0	[S] is best known as the [O] of
+occupation	[P] is the [O]	6	6	2	0	0	0	0	0.25	0	[S] is the [O]
+occupation	[P] is the [O] of	6	6	2	0	0	0	0	0.25	0	[S] is the [O] of
+occupation	[P] was [O]	8	8	8	0	1	0	0	0.1	0	[S] was [O]
+occupation	[P] was a [O]	6	9	5	0	1	0	0	0.142857	0	[S] was a [O]
+occupation	[P] was succeeded as [O]	6	6	0	0	0	0	0	0.5	0	[S] was succeeded as [O]
+occupation	[P] was the second [O]	6	9	1	0	0	0	0	0.333333	0	[S] was the second [O]
+occupation	[P] was the son of [O]	6	6	2	0	1	0	0	0.25	0	[S] was the son of [O]
+occupation	[P] worked as a [O]	6	9	1	0	0	0	0	0.333333	0	[S] worked as a [O]
+occupation	[S] as the [O]	8	8	1	0	0	0	0	0.333333	0	[S] as the [O]
+occupation	[S] decided to become a [O]	6	9	0	0	0	0	0	0.5	0	[S] decided to become a [O]
+occupation	[S] is best known as the [O]	6	6	0	0	0	0	0	0.5	0	[S] is best known as the [O]
+occupation	[S] is best known as the [O] of	6	6	0	0	0	0	0	0.5	0	[S] is best known as the [O] of
+occupation	[S] the first [O]	6	6	0	0	0	0	0	0.5	0	[S] the first [O]
+occupation	[S] took over as [O]	6	9	0	0	0	0	0	0.5	0	[S] took over as [O]
+occupation	[S] was a [O]	12	12	4	0	4	0	0	0.166667	0	[S] was a [O]
+occupation	[S] was more than a [O]	6	9	0	0	0	0	0	0.5	0	[S] was more than a [O]
+occupation	[[[O]]], [S]	8	12	0	0	0	0	0	0.5	0	[[[O]]], [S]
+occupation	^[P] became a [O]	6	6	1	0	0	0	0	0.333333	0	[S] became a [O]
+occupation	^[P] is best known as the [O]	6	6	0	0	0	0	0	0.5	0	[S] is best known as the [O]
+occupation	^[P] is best known as the [O] of	6	6	0	0	0	0	0	0.5	0	[S] is best known as the [O] of
+occupation	^[P] is the [O]	6	6	2	0	0	0	0	0.25	0	[S] is the [O]
+occupation	^[P] is the [O] of	6	6	2	0	0	0	0	0.25	0	[S] is the [O] of
+occupation	^[P] was [O]	8	8	8	0	1	0	0	0.1	0	[S] was [O]
+occupation	^[P] was a [O]	6	9	5	0	1	0	0	0.142857	0	[S] was a [O]
+occupation	^[P] was succeeded as [O]	6	6	0	0	0	0	0	0.5	0	[S] was succeeded as [O]
+occupation	^[P] was the second [O]	6	9	1	0	0	0	0	0.333333	0	[S] was the second [O]
+occupation	^[P] was the son of [O]	6	6	2	0	1	0	0	0.25	0	[S] was the son of [O]
+occupation	^[P] worked as a [O]	6	9	1	0	0	0	0	0.333333	0	[S] worked as a [O]
+occupation	^[S] decided to become a [O]	6	9	0	0	0	0	0	0.5	0	[S] decided to become a [O]
+occupation	^[S] is best known as the [O]	6	6	0	0	0	0	0	0.5	0	[S] is best known as the [O]
+occupation	^[S] is best known as the [O] of	6	6	0	0	0	0	0	0.5	0	[S] is best known as the [O] of
+occupation	^[S] was a [O]	12	12	1	0	2	0	0	0.333333	0	[S] was a [O]
+occupation	a [O], [S] is	6	12	0	0	0	0	0	0.5	0	a [O], [S] is
+occupation	of [S] the [O]	8	12	0	0	1	0	0	0.5	0	of [S] the [O]
+occupation	that [S] was the [O]	6	9	0	0	1	0	0	0.5	0	that [S] was the [O]
+nationality	'''[S]''' ([[[O]]]	24	56	17	12	51	0.705882	0.468669	0.684211	0	'''[S]''' ([[[O]]]
+nationality	'''[S]''' ([[[O]]]:	16	32	13	8	37	0.615385	0.355229	0.6	0	'''[S]''' ([[[O]]]:
+nationality	^'''[S]''' ([[[O]]]	16	40	13	8	43	0.615385	0.355229	0.6	0	'''[S]''' ([[[O]]]
+nationality	[P] was [O]	12	12	4	3	4	0.75	0.300642	0.666667	0	[S] was [O]
+nationality	^[P] was [O]	12	12	4	3	4	0.75	0.300642	0.666667	0	[S] was [O]
+nationality	[S]'s [O]	28	36	34	7	32	0.205882	0.103495	0.222222	0	[S]'s [O]
+nationality	[O], [S]	20	24	34	5	14	0.147059	0.0644944	0.166667	0	[O], [S]
+nationality	'''[S]''', was a [[[O]]]	6	12	2	0	0	0	0	0.25	0	'''[S]''', was a [[[O]]]
+nationality	'''[S]''', was a [[[O]]] [[author	6	12	0	0	0	0	0	0.5	0	'''[S]''', was a [[[O]]] [[author
+nationality	[O] art, [S]	6	12	0	0	0	0	0	0.5	0	[O] art, [S]
+nationality	[O] art, [S]'	6	12	0	0	0	0	0	0.5	0	[O] art, [S]'
+nationality	[P] father was a [O]	6	12	0	0	0	0	0	0.5	0	[S] father was a [O]
+nationality	[P] next [O]	6	6	0	0	0	0	0	0.5	0	[S] next [O]
+nationality	[P] was the first [O]	6	12	1	0	2	0	0	0.333333	0	[S] was the first [O]
+nationality	[P] was the first [O] to	6	12	0	0	2	0	0	0.5	0	[S] was the first [O] to
+nationality	[S] was [O]	8	12	1	0	6	0	0	0.333333	0	[S] was [O]
+nationality	[S]'s first [O]	6	6	1	0	0	0	0	0.333333	0	[S]'s first [O]
+nationality	^'''[S]''' ([[[O]]]:	6	12	2	0	21	0	0	0.25	0	'''[S]''' ([[[O]]]:
+nationality	^[P] father was a [O]	6	12	0	0	0	0	0	0.5	0	[S] father was a [O]
+nationality	^[P] next [O]	6	6	0	0	0	0	0	0.5	0	[S] next [O]
+nationality	^[P] was the first [O]	6	12	1	0	2	0	0	0.333333	0	[S] was the first [O]
+nationality	^[P] was the first [O] to	6	12	0	0	2	0	0	0.5	0	[S] was the first [O] to
+nationality	^[S]'s [O]	6	9	5	0	10	0	0	0.142857	0	[S]'s [O]
+nationality	^[S]'s first [O]	6	6	1	0	0	0	0	0.333333	0	[S]'s first [O]
+nationality	in [O], [S]	6	6	0	0	0	0	0	0.5	0	in [O], [S]
+party	[O] nominated [S]	6	12	0	0	0	0	0	0.5	0	[O] nominated [S]
+party	[O] nominated [S] as	6	12	0	0	0	0	0	0.5	0	[O] nominated [S] as
+class	'''[S]''' are [[[O]	12	12	3	3	0	1	0.438503	0.8	0	'''[S]''' are [[[O]
+class	^'''[S]''' are [[[O]	6	6	0	0	0	0	0	0.5	0	'''[S]''' are [[[O]
+inventor	'''[S]''', named after [[[O]]]	6	6	0	0	0	0	0	0.5	0	'''[S]''', named after [[[O]]]

@@ -1,0 +1,1395 @@
+subject	relation	object	P	grade	n_evidence	best_pattern	source_page	byte_offset
+Bertolt Brecht	death_year	1956	0.9741	Low	2	^ [S] ( <M> # , # - [O] )	Bertolt Brecht	20315686
+André Gide	death_date	1951-02-19	0.9740	Low	2	^ [S] ( <M> # , # - [O] )	André Gide	4867079
+Auguste Rodin	death_date	1917-11-17	0.9740	Low	2	^ [S] ( <M> # , # - [O] )	Auguste Rodin	10996854
+Barry Goldwater	death_date	1998-05-29	0.9740	Low	2	^ [S] ( <M> # , # - [O] )	Barry Goldwater	28531031
+Berthe Morisot	death_date	1895-03-02	0.9740	Low	2	^ [S] ( <M> # , # - [O] )	Berthe Morisot	24056347
+C. L. Moore	death_date	1987-04-04	0.9740	Low	2	^ [S] ( <M> # , # - [O] )	C. L. Moore	47553813
+Frank Lloyd Wright	death_date	1959-04-09	0.9740	Low	2	^ [S] ( <M> # , # - [O] )	Frank Lloyd Wright	66500088
+Frank Zappa	death_date	1993-12-04	0.9740	Low	2	^ [S] ( <M> # , # - [O] )	Frank Zappa	66387771
+Gregor Mendel	death_date	1884-01-06	0.9740	Low	2	^ [S] ( <M> # , # - [O] )	Gregor Mendel	79460268
+Groucho Marx	death_date	1977-08-19	0.9739	Low	2	[S] ( <M> # , # - [O] )	Groucho Marx	78506706
+Constantin Brancusi	death_date	1957-03-16	0.9739	Low	2	^ [S] ( <M> # , # - [O]	Constantin Brancusi	40571557
+Gustave Eiffel	death_date	1923-12-27	0.9739	Low	2	^ [S] ( <M> # , # - [O]	Gustave Eiffel	77232565
+George Dantzig	death_date	2005-05-13	0.9739	Low	2	[S] ( # <M> # - [O]	George Dantzig	82590274
+George Stephenson	death_date	1848-08-12	0.9739	Low	2	[S] ( # <M> # - [O]	George Stephenson	79538759
+ABBA	birth_year	1972	0.9661	Low	1	^ [S] ( [O]	ABBA	3583782
+Aldous Huxley	birth_year	1894	0.9661	Low	1	^ [S] ( [O]	Aldous Huxley	1243970
+Alfred the Great	birth_year	0849	0.9661	Low	1	^ [S] ( [O]	Alfred the Great	8318258
+Antonio Canova	birth_year	1757	0.9661	Low	1	^ [S] ( [O]	Antonio Canova	10992006
+Arcadius	birth_year	0377	0.9661	Low	1	^ [S] ( [O]	Arcadius	11901969
+Bernardino Ochino	birth_year	1487	0.9661	Low	1	^ [S] ( [O]	Bernardino Ochino	23677314
+Bertolt Brecht	birth_year	1898	0.9661	Low	1	^ [S] ( [O]	Bertolt Brecht	20315686
+Charlemagne	birth_year	0742	0.9661	Low	1	^ [S] ( [O]	Charlemagne	31325912
+Charles Babbage	birth_year	1791	0.9661	Low	1	^ [S] ( [O]	Charles Babbage	34420024
+Christine de Pizan	birth_year	1364	0.9661	Low	1	^ [S] ( [O]	Christine de Pizan	47042058
+David Hume	birth_year	1711	0.9661	Low	1	^ [S] ( [O]	David Hume	48518115
+Ennius	birth_year	0239	0.9661	Low	1	^ [S] ( [O]	Ennius	61531675
+Fergus McDuck	birth_year	1835	0.9661	Low	1	^ [S] ( [O]	Fergus McDuck	73653282
+Henry Purcell	birth_year	1659	0.9661	Low	1	^ [S] ( [O]	Henry Purcell	90355998
+Aldous Huxley	death_year	1963	0.9661	Low	1	^ [S] ( <M> # , # - [O] )	Aldous Huxley	1243970
+Ambrose Bierce	death_year	1914	0.9660	Low	1	^ [S] ( <M> # , # - [O]	Ambrose Bierce	4808483
+David Hume	death_year	1776	0.9660	Low	1	^ [S] ( <M> # , # - [O]	David Hume	48518115
+ABBA	death_year	1983	0.9659	Low	1	^ [S] ( # - [O] )	ABBA	3583782
+Bernardino Ochino	death_year	1564	0.9659	Low	1	^ [S] ( # - [O] )	Bernardino Ochino	23677314
+Christine de Pizan	death_year	1430	0.9659	Low	1	^ [S] ( # - [O] )	Christine de Pizan	47042058
+Ennius	death_year	169 BC	0.9659	Low	1	^ [S] ( # - [O] )	Ennius	61531675
+Fergus McDuck	death_year	1902	0.9659	Low	1	^ [S] ( # - [O] )	Fergus McDuck	73653282
+A. A. Milne	death_date	1956-01-31	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	A. A. Milne	4031799
+A. E. Housman	death_date	1936-04-30	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	A. E. Housman	17311153
+Aaliyah	death_date	2001-08-25	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Aaliyah	11613451
+Abner Doubleday	death_date	1893-01-26	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Abner Doubleday	5120964
+Ada Lovelace	death_date	1852-11-27	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Ada Lovelace	4194268
+Adam Sedgwick	death_date	1873-01-27	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Adam Sedgwick	1704041
+Adam Weishaupt	death_date	1811-11-18	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Adam Weishaupt	11085060
+Adolph Wilhelm Hermann Kolbe	death_date	1884-11-25	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Adolph Wilhelm Hermann Kolbe	9306265
+Agner Krarup Erlang	death_date	1929-02-03	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Agner Krarup Erlang	15829334
+Al Capone	death_date	1947-01-25	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Al Capone	17393346
+Al Capp	death_date	1979-11-05	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Al Capp	16312556
+Alan Jay Lerner	death_date	1986-06-14	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Alan Jay Lerner	16308442
+Alan Turing	death_date	1954-06-07	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Alan Turing	5689371
+Alban Berg	death_date	1935-12-24	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Alban Berg	13384339
+Albert Einstein	death_date	1955-04-18	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Albert Einstein	1984995
+Albert Sidney Johnston	death_date	1862-04-06	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Albert Sidney Johnston	1855468
+Albert of Prussia	death_date	1568-03-20	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Albert of Prussia	7572070
+Albert, Duke of Saxony	death_date	1500-09-12	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Albert, Duke of Saxony	17653868
+Alberto Giacometti	death_date	1966-01-11	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Alberto Giacometti	13592463
+Albrecht Dürer	death_date	1528-04-06	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Albrecht Dürer	13330296
+Aldous Huxley	death_date	1963-11-22	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Aldous Huxley	1243970
+Alessandro Allori	death_date	1607-09-22	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Alessandro Allori	8380367
+Alessandro Scarlatti	death_date	1725-10-24	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Alessandro Scarlatti	13028904
+Alexander Emanuel Agassiz	death_date	1910-03-27	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Alexander Emanuel Agassiz	7767289
+Alexander II of Scotland	death_date	1249-07-06	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Alexander II of Scotland	8011677
+Alexander Severus	death_date	0235-03-18	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Alexander Severus	8030466
+Alexius II Comnenus	death_date	1183-10	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Alexius II Comnenus	8072987
+Alfons Maria Jakob	death_date	1931-10-17	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Alfons Maria Jakob	3716007
+Alfonso Leng	death_date	1974-11-11	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Alfonso Leng	12899453
+Alfonso XII of Spain	death_date	1885-11-25	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Alfonso XII of Spain	8505711
+Alfonso XIII of Spain	death_date	1941-02-28	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Alfonso XIII of Spain	8512250
+Alfred Ayer	death_date	1989-06-27	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Alfred Ayer	10745993
+Alfred Jarry	death_date	1907-11-01	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Alfred Jarry	9575199
+Algernon Swinburne	death_date	1909-04-10	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Algernon Swinburne	6231720
+Allan Dwan	death_date	1981-12-21	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Allan Dwan	451634
+Alphonse of Toulouse	death_date	1271-08-21	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Alphonse of Toulouse	9621509
+Alvar Aalto	death_date	1976-05-11	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Alvar Aalto	10664777
+Amos Bronson Alcott	death_date	1888-03-04	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Amos Bronson Alcott	6817320
+Anatole France	death_date	1924-10-12	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Anatole France	4862629
+Anders Celsius	death_date	1744-04-25	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Anders Celsius	14787780
+André Weil	death_date	1998-08-06	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	André Weil	10753978
+Andy Warhol	death_date	1987-02-22	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Andy Warhol	3345219
+Anne Brontë	death_date	1849-05-28	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Anne Brontë	10791380
+Antoine Thomson d'Abbadie	death_date	1897-03-19	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Antoine Thomson d'Abbadie	14251649
+Anton Drexler	death_date	1942-02-24	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Anton Drexler	11669581
+Antoninus Pius	death_date	0161-03-07	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Antoninus Pius	5977793
+Antonio Agliardi	death_date	1915-05-01	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Antonio Agliardi	7784808
+Antonio Canova	death_date	1822-10-13	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Antonio Canova	10992006
+Antonio Salieri	death_date	1825-05-07	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Antonio Salieri	12404990
+Antonio Vivaldi	death_date	1741-07-28	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Antonio Vivaldi	7081101
+Arthur Aikin	death_date	1854-04-15	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Arthur Aikin	7831428
+Arthur Miller	death_date	2005-02-10	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Arthur Miller	12749919
+Arthur Schopenhauer	death_date	1860-09-21	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Arthur Schopenhauer	1765360
+August Horch	death_date	1951-02-03	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	August Horch	10839605
+August Wilhelm Ambros	death_date	1876-06-28	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	August Wilhelm Ambros	8607731
+Augustin Louis Cauchy	death_date	1857-05-23	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Augustin Louis Cauchy	9402880
+Augustus De Morgan	death_date	1871-03-18	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Augustus De Morgan	7283435
+Avery Hopwood	death_date	1928-07-01	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Avery Hopwood	12917938
+Babrak Karmal	death_date	1996-12-03	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Babrak Karmal	26201560
+Barbara Olson	death_date	2001-09-11	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Barbara Olson	23623081
+Baruch Spinoza	death_date	1677-02-21	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Baruch Spinoza	18583656
+Basil Liddell Hart	death_date	1970-01-29	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Basil Liddell Hart	18841237
+Benjamin Tucker	death_date	1939-06-22	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Benjamin Tucker	27949033
+Benjamin Whorf	death_date	1941-07-26	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Benjamin Whorf	18067336
+Bert Bell	death_date	1959-10-11	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Bert Bell	29146432
+Bertolt Brecht	death_date	1956-08-14	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Bertolt Brecht	20315686
+Bertrand Andrieu	death_date	1822-12-10	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Bertrand Andrieu	22919045
+Bill Bixby	death_date	1993-11-21	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Bill Bixby	29521744
+Bing Crosby	death_date	1977-10-14	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Bing Crosby	22311962
+Blind Willie McTell	death_date	1959-08-15	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Blind Willie McTell	26876113
+Bob Wills	death_date	1975-05-13	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Bob Wills	28757465
+Boss Tweed	death_date	1878-04-12	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Boss Tweed	27862615
+Bram Stoker	death_date	1912-04-20	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Bram Stoker	22134024
+Brion Gysin	death_date	1986-07-13	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Brion Gysin	23605804
+Buckminster Fuller	death_date	1983-07-01	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Buckminster Fuller	22473342
+Burrhus Frederic Skinner	death_date	1990-08-18	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Burrhus Frederic Skinner	28984920
+Burt Lancaster	death_date	1994-10-20	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Burt Lancaster	26815564
+Béla Bartók	death_date	1945-09-26	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Béla Bartók	26683628
+C. Northcote Parkinson	death_date	1993-03-09	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	C. Northcote Parkinson	33590821
+Caitlin Clarke	death_date	2004-09-09	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Caitlin Clarke	43783474
+Carl Barks	death_date	2000-08-25	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Carl Barks	45311622
+Carl Meinhof	death_date	1944-02-11	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Carl Meinhof	39224287
+Carl Menger	death_date	1921-02-26	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Carl Menger	38734762
+Carl Rogers	death_date	1987-02-04	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Carl Rogers	46522989
+Carl von Clausewitz	death_date	1831-11-16	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Carl von Clausewitz	37631833
+Carlo Collodi	death_date	1890-10-26	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Carlo Collodi	45824940
+Carlo Goldoni	death_date	1793-02-06	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Carlo Goldoni	35333026
+Caspar David Friedrich	death_date	1840-05-07	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Caspar David Friedrich	33935173
+Cecil B. DeMille	death_date	1959-01-21	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Cecil B. DeMille	38195582
+Cem Karaca	death_date	2004-02-08	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Cem Karaca	46376955
+Charles Alston	death_date	1977-04-27	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Charles Alston	43258515
+Charles Ancillon	death_date	1715-07-05	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Charles Ancillon	38412146
+Charles Baudelaire	death_date	1867-08-31	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Charles Baudelaire	35398178
+Charles F. Hockett	death_date	2000-11-03	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Charles F. Hockett	47096145
+Charles Goren	death_date	1991-04-03	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Charles Goren	82510703
+Charles Lyell	death_date	1875-02-22	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Charles Lyell	45986892
+Charles Messier	death_date	1817-04-12	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Charles Messier	44829742
+Charles Mingus	death_date	1979-01-05	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Charles Mingus	47201025
+Charles Proteus Steinmetz	death_date	1923-10-26	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Charles Proteus Steinmetz	39739384
+Charles Robert Malden	death_date	1855-05-23	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Charles Robert Malden	37717954
+Charlotte Brontë	death_date	1855-03-31	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Charlotte Brontë	40278190
+Chet Atkins	death_date	2001-06-30	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Chet Atkins	47790523
+Chiang Kai-shek	death_date	1975-04-05	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Chiang Kai-shek	42795691
+Christiaan Barnard	death_date	2001-09-02	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Christiaan Barnard	43645495
+Christian Goldbach	death_date	1764-11-20	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Christian Goldbach	38925629
+Christoph Ludwig Agricola	death_date	1719	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Christoph Ludwig Agricola	38086738
+Chuck Jones	death_date	2002-02-22	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Chuck Jones	47225556
+Clarence Brown	death_date	1987-08-17	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Clarence Brown	47102673
+Claude Elwood Shannon	death_date	2001-02-24	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Claude Elwood Shannon	34379986
+Claude Louis Berthollet	death_date	1822-11-06	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Claude Louis Berthollet	47917332
+Clyde Tombaugh	death_date	1997-01-17	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Clyde Tombaugh	41265457
+Coco Chanel	death_date	1971-01-10	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Coco Chanel	77805723
+Corrado Gini	death_date	1965-03-13	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Corrado Gini	44835198
+Cotton Mather	death_date	1728-02-13	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Cotton Mather	44124899
+Crystal Eastman	death_date	1928-07-08	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Crystal Eastman	46979646
+Cy Young	death_date	1955-11-04	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Cy Young	42668697
+Dalton Trumbo	death_date	1976-09-10	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Dalton Trumbo	48561501
+Damon Runyon	death_date	1946-12-10	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Damon Runyon	56810759
+Dana Plato	death_date	1999-05-08	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Dana Plato	56396494
+Danny Kaye	death_date	1987-03-03	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Danny Kaye	56164077
+Dave Thomas	death_date	2002-01-08	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Dave Thomas	56688152
+David Angell	death_date	2001-09-11	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	David Angell	52437440
+David Hayes Agnew	death_date	1892-03-22	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	David Hayes Agnew	52099424
+David Janssen	death_date	1980-02-13	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	David Janssen	51651905
+David Rice Atchison	death_date	1886-01-26	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	David Rice Atchison	54129597
+David Thompson (explorer)	death_date	1857-02-10	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	David Thompson (explorer)	49182383
+Denis Diderot	death_date	1784-07-31	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Denis Diderot	50413352
+Django Reinhardt	death_date	1953-05-16	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Django Reinhardt	56380025
+Don Tennant	death_date	2001-12-08	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Don Tennant	56821553
+Donald A. Wollheim	death_date	1990-11-02	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Donald A. Wollheim	55313336
+Donald Campbell	death_date	1967-01-04	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Donald Campbell	56988176
+Douglas Adams	death_date	2001-05-11	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Douglas Adams	49689005
+Dr. Seuss	death_date	1991-09-24	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Dr. Seuss	55423768
+Duke Kahanamoku	death_date	1968-01-22	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Duke Kahanamoku	56777620
+Dwight L. Moody	death_date	1899-12-22	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Dwight L. Moody	52517592
+E. B. White	death_date	1985-10-01	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	E. B. White	61165801
+E. E. Cummings	death_date	1962-09-03	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	E. E. Cummings	59964462
+E. P. Thompson	death_date	1993-08-28	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	E. P. Thompson	59321373
+E.T.A. Hoffmann	death_date	1822-06-25	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	E.T.A. Hoffmann	63639338
+Ed Sullivan	death_date	1974-10-13	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Ed Sullivan	62265928
+Ed Wood, Jr.	death_date	1978-12-10	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Ed Wood, Jr.	65609190
+Edgar Allan Poe	death_date	1849-10-07	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Edgar Allan Poe	59669079
+Edgar Rice Burroughs	death_date	1950-03-19	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Edgar Rice Burroughs	60484166
+Edmund Burke	death_date	1797-07-09	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Edmund Burke	62817647
+Edvard Grieg	death_date	1907-09-04	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Edvard Grieg	59455574
+Edvard Munch	death_date	1944-01-23	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Edvard Munch	61376203
+Edward Bulwer-Lytton, 1st Baron Lytton	death_date	1873-01-18	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Edward Bulwer-Lytton, 1st Baron Lytton	65121240
+Edward Marlborough FitzGerald	death_date	1883-06-14	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Edward Marlborough FitzGerald	59620404
+Edward de Vere, 17th Earl of Oxford	death_date	1604-06-24	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Edward de Vere, 17th Earl of Oxford	63594057
+Edwin Abbott Abbott	death_date	1926	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Edwin Abbott Abbott	63433409
+Edwin Armstrong	death_date	1954-01-31	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Edwin Armstrong	64518532
+Edwin Austin Abbey	death_date	1911-08-01	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Edwin Austin Abbey	60734304
+Elbridge Gerry	death_date	1814-11-23	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Elbridge Gerry	64406327
+Eli Whitney	death_date	1825-01-08	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Eli Whitney	61006226
+Emanuel Leutze	death_date	1868-07-18	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Emanuel Leutze	60647680
+Emil Theodor Kocher	death_date	1917-07-27	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Emil Theodor Kocher	65353763
+Emma Abbott	death_date	1891-01-05	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Emma Abbott	63437535
+Enid Blyton	death_date	1968-11-28	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Enid Blyton	64212444
+Erasmus Darwin	death_date	1802-04-18	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Erasmus Darwin	57913955
+Erasmus Reinhold	death_date	1553-02-19	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Erasmus Reinhold	63278452
+Eric Cheney	death_date	2001-12-30	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Eric Cheney	65104061
+Ernest Hemingway	death_date	1961-07-02	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Ernest Hemingway	58890833
+Ernest Thayer	death_date	1940-08-21	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Ernest Thayer	60852080
+Ernst Haeckel	death_date	1919-08-08	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Ernst Haeckel	60557954
+Ernst Kaltenbrunner	death_date	1946-10-16	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Ernst Kaltenbrunner	63628129
+Erwin Schrödinger	death_date	1961-01-04	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Erwin Schrödinger	62253949
+Ethan Allen	death_date	1789-02-12	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Ethan Allen	58192923
+Eusebius Amort	death_date	1775-02-05	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Eusebius Amort	60700826
+Eva Braun	death_date	1945-04-30	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Eva Braun	60891536
+Eve Arden	death_date	1990-11-12	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Eve Arden	65234286
+F. Matthias Alexander	death_date	1955-10-10	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	F. Matthias Alexander	71117074
+F. Scott Fitzgerald	death_date	1940-12-21	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	F. Scott Fitzgerald	69238506
+Fay Wray	death_date	2004-08-08	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Fay Wray	68525586
+Felix Bloch	death_date	1983-09-10	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Felix Bloch	68132514
+Felix Hausdorff	death_date	1942-01-26	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Felix Hausdorff	68760377
+Ferdinand de Saussure	death_date	1913-02-22	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Ferdinand de Saussure	69266865
+Fiorello H. LaGuardia	death_date	1947-09-20	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Fiorello H. LaGuardia	72128593
+Ford Madox Brown	death_date	1893-10-06	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Ford Madox Brown	72421805
+Francis Hopkinson	death_date	1791-05-09	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Francis Hopkinson	69096840
+Francis Scott Key	death_date	1843-01-11	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Francis Scott Key	68416645
+Francisco Goya	death_date	1828-04-16	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Francisco Goya	67828841
+Frank Capra	death_date	1991-09-03	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Frank Capra	71852734
+Frank Herbert	death_date	1986-02-11	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Frank Herbert	67686162
+Franklin Schaffner	death_date	1989-07-02	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Franklin Schaffner	73793870
+Franz Boas	death_date	1942-12-22	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Franz Boas	73691326
+Franz Bopp	death_date	1867-10-23	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Franz Bopp	73761833
+Franz Mesmer	death_date	1815-03-05	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Franz Mesmer	74363628
+Franz Schmidt	death_date	1939-02-11	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Franz Schmidt	74163796
+Freddy Heineken	death_date	2002-01-03	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Freddy Heineken	73919676
+Frederick Soddy	death_date	1956-09-22	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Frederick Soddy	74231533
+Friedrich August Kekulé von Stradonitz	death_date	1896-07-13	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Friedrich August Kekulé von Stradonitz	72537079
+Friedrich Bessel	death_date	1846-03-17	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Friedrich Bessel	73081748
+Fritz Lang	death_date	1976-08-02	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Fritz Lang	73348632
+Fritz Leiber	death_date	1992-09-05	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Fritz Leiber	67861362
+Frédéric Bastiat	death_date	1850-12-24	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Frédéric Bastiat	71017264
+Frédéric Mistral	death_date	1914-03-25	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Frédéric Mistral	72579896
+Gary Kildall	death_date	1994-07-11	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Gary Kildall	80545387
+Gary Powers	death_date	1977-08-01	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Gary Powers	81188357
+Georg Philipp Telemann	death_date	1767-06-25	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Georg Philipp Telemann	82227882
+George Abbot (Archbishop of Canterbury)	death_date	1633-08-05	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	George Abbot (Archbishop of Canterbury)	14275708
+George Bernard Shaw	death_date	1950-11-02	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	George Bernard Shaw	81029207
+George Cukor	death_date	1983-01-24	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	George Cukor	80647329
+George Gershwin	death_date	1937-07-11	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	George Gershwin	82242387
+George Orwell	death_date	1950-01-21	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	George Orwell	75087066
+George Peppard	death_date	1994-05-08	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	George Peppard	79249003
+George Robert Aberigh-Mackay	death_date	1881	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	George Robert Aberigh-Mackay	81158927
+George S. Kaufman	death_date	1961-06-02	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	George S. Kaufman	81881428
+George Vancouver	death_date	1798-05-12	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	George Vancouver	81113816
+George Whipple	death_date	1976-02-01	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	George Whipple	77269703
+Georges Braque	death_date	1963-08-31	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Georges Braque	77801625
+Gerard Manley Hopkins	death_date	1889-06-08	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Gerard Manley Hopkins	79227672
+Gia Carangi	death_date	1986-11-18	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Gia Carangi	80621132
+Giacomo Puccini	death_date	1924-11-29	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Giacomo Puccini	80636789
+Gilbert N. Lewis	death_date	1946-03-23	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Gilbert N. Lewis	81887490
+Gioacchino Rossini	death_date	1868-11-13	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Gioacchino Rossini	78439323
+Giovanni Boccaccio	death_date	1375-12-21	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Giovanni Boccaccio	81542809
+Giuseppe Verdi	death_date	1901-01-27	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Giuseppe Verdi	81555267
+Glenn T. Seaborg	death_date	1999-02-25	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Glenn T. Seaborg	82627503
+Gram Parsons	death_date	1973-09-19	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Gram Parsons	81765839
+Grazia Deledda	death_date	1936-08-15	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Grazia Deledda	82622760
+Gustav Kirchhoff	death_date	1887-10-17	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Gustav Kirchhoff	77893614
+Gustav Klimt	death_date	1918-02-06	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Gustav Klimt	78497686
+Gustave Flaubert	death_date	1880-05-08	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Gustave Flaubert	77700440
+Gustave de Molinari	death_date	1912-01-28	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Gustave de Molinari	80390878
+Guy Fawkes	death_date	1606-01-31	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Guy Fawkes	80305522
+H. G. Wells	death_date	1946-08-13	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	H. G. Wells	84609307
+Hafizullah Amin	death_date	1979-12-27	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Hafizullah Amin	91152164
+Hal Clement	death_date	2003-10-29	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Hal Clement	88515153
+Hannibal Hamlin	death_date	1891-07-04	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Hannibal Hamlin	89178953
+Hans Gerhard Creutzfeldt	death_date	1964-12-30	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Hans Gerhard Creutzfeldt	84682344
+Hans-Georg Gadamer	death_date	2002-03-13	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Hans-Georg Gadamer	89233847
+Hansie Cronje	death_date	2002-06-01	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Hansie Cronje	89047584
+Harold Eugene Edgerton	death_date	1990-01-04	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Harold Eugene Edgerton	92612137
+Heinrich Rudolf Hertz	death_date	1894-01-01	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Heinrich Rudolf Hertz	84421282
+Heinrich Schliemann	death_date	1890-12-26	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Heinrich Schliemann	86098360
+Helene Kröller-Müller	death_date	1939-12-14	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Helene Kröller-Müller	89232408
+Henri Bergson	death_date	1941-01-04	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Henri Bergson	85154616
+Henrik Ibsen	death_date	1906-05-23	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Henrik Ibsen	91010942
+Henry Fielding	death_date	1754-10-08	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Henry Fielding	85324581
+Henry Ford	death_date	1947-04-07	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Henry Ford	83927614
+Henry J. Heinz	death_date	1919-05-14	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Henry J. Heinz	88323782
+Henry Moseley	death_date	1915-08-10	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Henry Moseley	92568937
+Henry Purcell	death_date	1695-11-21	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Henry Purcell	90355998
+Herbert Marcuse	death_date	1979-07-29	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Herbert Marcuse	87306713
+Herbert Simon	death_date	2001-02-09	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Herbert Simon	90798872
+Herman Hollerith	death_date	1929-11-17	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Herman Hollerith	89120352
+Honorius (emperor)	death_date	0423-08-15	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Honorius (emperor)	69099866
+Howard Carter	death_date	1939-03-02	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Howard Carter	85914776
+Hunter S. Thompson	death_date	2005-02-20	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Hunter S. Thompson	91631726
+Immanuel Kant	death_date	1804-02-12	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Immanuel Kant	93548314
+Isaac Albéniz	death_date	1909-05-18	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Isaac Albéniz	97733762
+Isaac Stern	death_date	2001-09-22	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Isaac Stern	99520320
+Isambard Kingdom Brunel	death_date	1859-09-15	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Isambard Kingdom Brunel	95542557
+Italo Calvino	death_date	1985-09-19	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Italo Calvino	95967252
+Ivar Aasen	death_date	1896-09-23	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Ivar Aasen	97811879
+Jacques-Louis David	death_date	1825-12-29	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Jacques-Louis David	56522487
+Jean-Baptiste-Siméon Chardin	death_date	1779-12-06	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Jean-Baptiste-Siméon Chardin	43699766
+Johann Gottlieb Fichte	death_date	1814-01-27	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Johann Gottlieb Fichte	76019492
+John Ray	death_date	1705-01-17	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	John Ray	99773912
+Lewis Carroll	death_date	1898-01-14	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Lewis Carroll	31620529
+Marie Louise Élisabeth Vigée-Lebrun	death_date	1842-03-30	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Marie Louise Élisabeth Vigée-Lebrun	62272546
+Robert Koch	death_date	1910-05-27	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Robert Koch	86867102
+The Amazing Criswell	death_date	1982-10-04	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	The Amazing Criswell	48131121
+W. Heath Robinson	death_date	1944-09-13	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	W. Heath Robinson	88962185
+Édouard Manet	death_date	1883-04-30	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Édouard Manet	60224209
+Évariste Galois	death_date	1832-05-31	0.9658	Low	1	^ [S] ( <M> # , # - [O] )	Évariste Galois	61523691
+Adolf Eichmann	death_date	1962-06-01	0.9658	Low	1	[S] ( <M> # , # - [O] )	Adolf Eichmann	4272462
+Adolphe Sax	death_date	1894-02-04	0.9658	Low	1	[S] ( <M> # , # - [O] )	Adolphe Sax	16876120
+Alexander Fleming	death_date	1955-03-11	0.9658	Low	1	[S] ( <M> # , # - [O] )	Alexander Fleming	9942134
+Anton Diabelli	death_date	1858-04-07	0.9658	Low	1	[S] ( <M> # , # - [O] )	Anton Diabelli	12784583
+Bela Lugosi	death_date	1956-08-16	0.9658	Low	1	[S] ( <M> # , # - [O] )	Bela Lugosi	29785982
+Charles Edward Jones	death_date	2001-09-11	0.9658	Low	1	[S] ( <M> # , # - [O] )	Charles Edward Jones	39785632
+Charles Williams	death_date	1945-05-15	0.9658	Low	1	[S] ( <M> # , # - [O] )	Charles Williams	40286569
+Clarence Johnson	death_date	1990-12-21	0.9658	Low	1	[S] ( <M> # , # - [O] )	Clarence Johnson	47330662
+Claude Monet	death_date	1926-12-05	0.9658	Low	1	[S] ( <M> # , # - [O] )	Claude Monet	40383730
+Colette	death_date	1954-08-03	0.9658	Low	1	[S] ( <M> # , # - [O] )	Colette	43243059
+Cordwainer Smith	death_date	1966-08-06	0.9658	Low	1	[S] ( <M> # , # - [O] )	Cordwainer Smith	44129958
+D. W. Griffith	death_date	1948-07-23	0.9658	Low	1	[S] ( <M> # , # - [O] )	D. W. Griffith	48262769
+David A. Huffman	death_date	1999-10-07	0.9658	Low	1	[S] ( <M> # , # - [O] )	David A. Huffman	55823892
+Donald Dewar	death_date	2000-10-11	0.9658	Low	1	[S] ( <M> # , # - [O] )	Donald Dewar	55213154
+Felix Wankel	death_date	1988-10-09	0.9658	Low	1	[S] ( <M> # , # - [O] )	Felix Wankel	71759750
+Francis II, Holy Roman Emperor	death_date	1835-03-02	0.9658	Low	1	[S] ( <M> # , # - [O] )	Francis II, Holy Roman Emperor	73002904
+Frédéric Bazille	death_date	1870-11-28	0.9658	Low	1	[S] ( <M> # , # - [O] )	Frédéric Bazille	72419906
+Georg Agricola	death_date	1555-11-21	0.9658	Low	1	[S] ( <M> # , # - [O] )	Georg Agricola	78947272
+Gerolamo Cardano	death_date	1576-09-21	0.9658	Low	1	[S] ( <M> # , # - [O] )	Gerolamo Cardano	82710246
+Grace Hopper	death_date	1992-01-01	0.9658	Low	1	[S] ( <M> # , # - [O] )	Grace Hopper	79595255
+Hannes Bok	death_date	1964-04-11	0.9658	Low	1	[S] ( <M> # , # - [O] )	Hannes Bok	85461722
+Huldrych Zwingli	death_date	1531-10-11	0.9658	Low	1	[S] ( <M> # , # - [O] )	Huldrych Zwingli	85713405
+William Kidd	death_date	1701-05-23	0.9658	Low	1	[S] ( <M> # , # - [O] )	William Kidd	44148298
+Albert the Warlike	death_date	1557	0.9657	Low	1	[S] ( <M> # # - [O] )	Albert the Warlike	7555821
+Alexis Carrel	death_date	1944-11-05	0.9657	Low	1	[S] ( <M> # # - [O] )	Alexis Carrel	4822889
+Arthur Conan Doyle	death_date	1930-07-07	0.9657	Low	1	[S] ( <M> # # - [O] )	Arthur Conan Doyle	3987075
+August Derleth	death_date	1971-07-04	0.9657	Low	1	[S] ( <M> # # - [O] )	August Derleth	4208617
+Beatrix Potter	death_date	1943-12-22	0.9657	Low	1	[S] ( <M> # # - [O] )	Beatrix Potter	26332458
+Brownie McGhee	death_date	1996-02-16	0.9657	Low	1	[S] ( <M> # # - [O] )	Brownie McGhee	28235710
+C. S. Forester	death_date	1966-04-02	0.9657	Low	1	[S] ( <M> # # - [O] )	C. S. Forester	35128668
+Camille Pissarro	death_date	1903-11-13	0.9657	Low	1	[S] ( <M> # # - [O] )	Camille Pissarro	45813234
+Carl Sagan	death_date	1996-12-20	0.9657	Low	1	[S] ( <M> # # - [O] )	Carl Sagan	42505316
+Charles Dickens	death_date	1870-06-09	0.9657	Low	1	[S] ( <M> # # - [O] )	Charles Dickens	35911383
+E. H. Shepard	death_date	1976-03-24	0.9657	Low	1	[S] ( <M> # # - [O] )	E. H. Shepard	64184744
+Eleanor Roosevelt	death_date	1962-11-07	0.9657	Low	1	[S] ( <M> # # - [O] )	Eleanor Roosevelt	60914371
+Emil Kraepelin	death_date	1926-10-07	0.9657	Low	1	[S] ( <M> # # - [O] )	Emil Kraepelin	62638275
+Eric Hoffer	death_date	1983-05-21	0.9657	Low	1	[S] ( <M> # # - [O] )	Eric Hoffer	59832131
+Eugène Viollet-le-Duc	death_date	1879-09-17	0.9657	Low	1	[S] ( <M> # # - [O] )	Eugène Viollet-le-Duc	60497285
+Federico Fellini	death_date	1993-10-31	0.9657	Low	1	[S] ( <M> # # - [O] )	Federico Fellini	74245853
+Frans Eemil Sillanpää	death_date	1964-06-03	0.9657	Low	1	[S] ( <M> # # - [O] )	Frans Eemil Sillanpää	71205340
+Gaspard-Gustave Coriolis	death_date	1843-09-19	0.9657	Low	1	[S] ( <M> # # - [O] )	Gaspard-Gustave Coriolis	82641427
+George Gordon, 1st Earl of Aberdeen	death_date	1720-04-20	0.9657	Low	1	[S] ( <M> # # - [O] )	George Gordon, 1st Earl of Aberdeen	81139340
+Gerald Gardner	death_date	1964-02-12	0.9657	Low	1	[S] ( <M> # # - [O] )	Gerald Gardner	80778939
+Hadrian	death_date	0138-07-10	0.9657	Low	1	[S] ( <M> # # - [O] )	Hadrian	86018815
+Heinrich Abeken	death_date	1872-08-08	0.9657	Low	1	[S] ( <M> # # - [O] )	Heinrich Abeken	90780146
+Herman Melville	death_date	1891-09-28	0.9657	Low	1	[S] ( <M> # # - [O] )	Herman Melville	86043828
+Hugo Gernsback	death_date	1967-08-19	0.9657	Low	1	[S] ( <M> # # - [O] )	Hugo Gernsback	86187335
+İsmet İnönü	death_date	1973-12-25	0.9657	Low	1	[S] ( <M> # # - [O] )	İsmet İnönü	93449568
+Ambrose Bierce	death_date	1914	0.9657	Low	1	^ [S] ( <M> # , # - [O]	Ambrose Bierce	4808483
+Arthur St. Clair	death_date	1736	0.9657	Low	1	^ [S] ( <M> # , # - [O]	Arthur St. Clair	14392509
+Catherine of Aragon	death_date	1536-01-07	0.9657	Low	1	^ [S] ( <M> # , # - [O]	Catherine of Aragon	43314925
+Cyril M. Kornbluth	death_date	1958-03-21	0.9657	Low	1	^ [S] ( <M> # , # - [O]	Cyril M. Kornbluth	47538231
+David Hume	death_date	1776-08-25	0.9657	Low	1	^ [S] ( <M> # , # - [O]	David Hume	48518115
+George Pólya	death_date	1985-09-07	0.9657	Low	1	^ [S] ( <M> # , # - [O]	George Pólya	81536285
+Gilles Deleuze	death_date	1995-11-04	0.9657	Low	1	^ [S] ( <M> # , # - [O]	Gilles Deleuze	79408517
+Charles Babbage	death_year	1871	0.9657	Low	1	[S] ( # <M> # - [O]	Charles Babbage	34420024
+Boston Corbett	death_year	1894	0.9657	Low	1	^ [S] ( # - [O]	Boston Corbett	27876757
+Abu Bakr	death_date	0634-08-23	0.9657	Low	1	[S] died on [O]	Abu Bakr	8671948
+Agatha Christie	death_date	1976-01-12	0.9657	Low	1	[S] died on [O]	Agatha Christie	4249728
+Albert Camus	death_date	1960-01-04	0.9657	Low	1	[S] died on [O]	Albert Camus	4234333
+Aleister Crowley	death_date	1947-12-01	0.9657	Low	1	[S] ( # <M> # - [O]	Aleister Crowley	5431057
+Antoni Gaudí	death_date	1926-06-10	0.9657	Low	1	[S] ( # <M> # - [O]	Antoni Gaudí	12645984
+Arthur Phillip	death_date	1814-08-31	0.9657	Low	1	[S] ( # <M> # - [O]	Arthur Phillip	14079583
+Benjamin Franklin	death_date	1790-04-17	0.9657	Low	1	[S] died on [O]	Benjamin Franklin	22104787
+Boris Pasternak	death_date	1960-05-30	0.9657	Low	1	[S] died on [O]	Boris Pasternak	27744236
+Caravaggio	death_date	1610-07-18	0.9657	Low	1	[S] ( # <M> # - [O]	Caravaggio	43658203
+Charles Darwin	death_date	1882-04-19	0.9657	Low	1	[S] ( # <M> # - [O]	Charles Darwin	30680153
+Charles I of England	death_date	1649-01-30	0.9657	Low	1	[S] ( # <M> # - [O]	Charles I of England	45739716
+Charles Martel	death_date	0741-10-22	0.9657	Low	1	[S] died on [O]	Charles Martel	39774391
+Dale Earnhardt	death_date	2001-02-18	0.9657	Low	1	[S] died on [O]	Dale Earnhardt	48357448
+David Beatty, 1st Earl Beatty	death_date	1936-03-11	0.9657	Low	1	[S] ( # <M> # - [O]	David Beatty, 1st Earl Beatty	55236277
+Deng Xiaoping	death_date	1997-02-19	0.9657	Low	1	[S] died on [O]	Deng Xiaoping	50525058
+Denis Auguste Affre	death_date	1848-06-27	0.9657	Low	1	[S] ( # <M> # - [O]	Denis Auguste Affre	55506955
+Edward Lear	death_date	1888-01-29	0.9657	Low	1	[S] ( # <M> # - [O]	Edward Lear	65226370
+Edward VI of England	death_date	1553-07-06	0.9657	Low	1	[S] ( # <M> # - [O]	Edward VI of England	64147898
+Elihu Yale	death_date	1721-07-08	0.9657	Low	1	[S] died on [O]	Elihu Yale	63982568
+Francisco Franco	death_date	1975-11-20	0.9657	Low	1	[S] died on [O]	Francisco Franco	72524412
+Frederick Augustus Abel	death_date	1902-09-06	0.9657	Low	1	[S] ( # <M> # - [O]	Frederick Augustus Abel	73011202
+Frederick I, Margrave of Brandenburg-Ansbach	death_date	1536-04-04	0.9657	Low	1	[S] ( # <M> # - [O]	Frederick I, Margrave of Brandenburg-Ansbach	74274442
+George Edward Moore	death_date	1958-10-24	0.9657	Low	1	[S] died on [O]	George Edward Moore	75595894
+George Eliot	death_date	1880-12-22	0.9657	Low	1	[S] ( # <M> # - [O]	George Eliot	82184214
+George Fox	death_date	1691-01-13	0.9657	Low	1	[S] died on [O]	George Fox	82813402
+Gerard Hengeveld	death_date	2001	0.9657	Low	1	[S] died on [O]	Gerard Hengeveld	80806615
+Graham Chapman	death_date	1989-10-04	0.9657	Low	1	[S] ( # <M> # - [O]	Graham Chapman	81951063
+Harry Secombe	death_date	2001-04-11	0.9657	Low	1	[S] ( # <M> # - [O]	Harry Secombe	89568803
+Henry VIII of England	death_date	1547-01-28	0.9657	Low	1	[S] ( # <M> # - [O]	Henry VIII of England	90612004
+Hermann Hesse	death_date	1962-08-09	0.9657	Low	1	[S] ( # <M> # - [O]	Hermann Hesse	85538534
+Ira Gershwin	death_date	1983-08-17	0.9657	Low	1	[S] ( # <M> # - [O]	Ira Gershwin	99352650
+Isaac Asimov	death_date	1992-04-06	0.9657	Low	1	[S] died on [O]	Isaac Asimov	93008529
+Isaac Bashevis Singer	death_date	1991-07-24	0.9657	Low	1	[S] died on [O]	Isaac Bashevis Singer	99451604
+Isabella d'Este	death_date	1539-02-13	0.9657	Low	1	[S] ( # <M> # - [O]	Isabella d'Este	98779804
+FM-2030	death_date	2000-07-08	0.9657	Low	1	[S] ( <M> # , # - [O]	FM-2030	67844451
+Agathon	death_year	400 BC	0.9656	Low	1	[S] ( c . # - [O]	Agathon	7773073
+Ariel Sharon	death_year	2000	0.9654	Low	1	[S] died in [O]	Ariel Sharon	15791384
+Edmund Husserl	death_date	1938-04-26	0.9654	Low	1	[S] ( <M> # # - [O]	Edmund Husserl	59509141
+ABBA	death_date	1983	0.9652	Low	1	^ [S] ( # - [O] )	ABBA	3583782
+Abel Tasman	death_date	1659-10-10	0.9652	Low	1	^ [S] ( # - [O] )	Abel Tasman	10510132
+Albert Frederick	death_date	1618	0.9652	Low	1	^ [S] ( # - [O] )	Albert Frederick	17497046
+Alfred Lawson	death_date	1954	0.9652	Low	1	^ [S] ( # - [O] )	Alfred Lawson	6237511
+Alger of Liège	death_date	1131	0.9652	Low	1	^ [S] ( # - [O] )	Alger of Liège	8354576
+Alp Arslan	death_date	1072-12-15	0.9652	Low	1	^ [S] ( # - [O] )	Alp Arslan	3397868
+Alphonse I of Toulouse	death_date	1148	0.9652	Low	1	^ [S] ( # - [O] )	Alphonse I of Toulouse	9625593
+Amalric II of Jerusalem	death_date	1205-04-01	0.9652	Low	1	^ [S] ( # - [O] )	Amalric II of Jerusalem	9601534
+Ambrosius Bosschaert	death_date	1621	0.9652	Low	1	^ [S] ( # - [O] )	Ambrosius Bosschaert	13789755
+Andrea Andreani	death_date	1623	0.9652	Low	1	^ [S] ( # - [O] )	Andrea Andreani	8836125
+Andreas Aagesen	death_date	1879	0.9652	Low	1	^ [S] ( # - [O] )	Andreas Aagesen	13172190
+Andronicus II	death_date	1332-02-13	0.9652	Low	1	^ [S] ( # - [O] )	Andronicus II	8856586
+Arthur J. Stone	death_date	1938	0.9652	Low	1	^ [S] ( # - [O] )	Arthur J. Stone	14811714
+Arthur William a Beckett	death_date	1909-01-14	0.9652	Low	1	^ [S] ( # - [O] )	Arthur William a Beckett	14730174
+Bernardino Ochino	death_date	1564	0.9652	Low	1	^ [S] ( # - [O] )	Bernardino Ochino	23677314
+Carolyn Beug	death_date	2001-09-11	0.9652	Low	1	^ [S] ( # - [O] )	Carolyn Beug	39238341
+Charles d'Abancourt	death_date	1792	0.9652	Low	1	^ [S] ( # - [O] )	Charles d'Abancourt	44578822
+Christine de Pizan	death_date	1430	0.9652	Low	1	^ [S] ( # - [O] )	Christine de Pizan	47042058
+Christopher Báthory	death_date	1581	0.9652	Low	1	^ [S] ( # - [O] )	Christopher Báthory	41280888
+Clement Martyn Doke	death_date	1980	0.9652	Low	1	^ [S] ( # - [O] )	Clement Martyn Doke	39221740
+Constans	death_date	0350-01-18	0.9652	Low	1	^ [S] ( # - [O] )	Constans	42035715
+Cyrus Griffin	death_date	1810-12-14	0.9652	Low	1	^ [S] ( # - [O] )	Cyrus Griffin	44653474
+Diego de Almagro	death_date	1538	0.9652	Low	1	^ [S] ( # - [O] )	Diego de Almagro	51818778
+Dunstan	death_date	0988-05-19	0.9652	Low	1	^ [S] ( # - [O] )	Dunstan	55944250
+Edward Waring	death_date	1798-08-15	0.9652	Low	1	^ [S] ( # - [O] )	Edward Waring	60906279
+Elias Boudinot	death_date	1821	0.9652	Low	1	^ [S] ( # - [O] )	Elias Boudinot	63537020
+Ennius	death_date	169 BC	0.9652	Low	1	^ [S] ( # - [O] )	Ennius	61531675
+Fergus McDuck	death_date	1902	0.9652	Low	1	^ [S] ( # - [O] )	Fergus McDuck	73653282
+Firmin Abauzit	death_date	1767	0.9652	Low	1	^ [S] ( # - [O] )	Firmin Abauzit	72951799
+Francesco I Sforza	death_date	1466	0.9652	Low	1	^ [S] ( # - [O] )	Francesco I Sforza	73312388
+Francis of Assisi	death_date	1226-10-04	0.9652	Low	1	^ [S] ( # - [O] )	Francis of Assisi	73401235
+Francis van Aarssens	death_date	1641	0.9652	Low	1	^ [S] ( # - [O] )	Francis van Aarssens	72476941
+Félix Guattari	death_date	1992	0.9652	Low	1	^ [S] ( # - [O] )	Félix Guattari	69599366
+Galeazzo Alessi	death_date	1572-12-30	0.9652	Low	1	^ [S] ( # - [O] )	Galeazzo Alessi	78976423
+Gallienus	death_date	0268	0.9652	Low	1	^ [S] ( # - [O] )	Gallienus	80167298
+Gerard Hengeveld	death_date	2001-10-28	0.9652	Low	1	^ [S] ( # - [O] )	Gerard Hengeveld	80806047
+Gil Alvarez De Albornoz	death_date	1367	0.9652	Low	1	^ [S] ( # - [O] )	Gil Alvarez De Albornoz	78967453
+Gilbert Arthur a Beckett	death_date	1891-10-15	0.9652	Low	1	^ [S] ( # - [O] )	Gilbert Arthur a Beckett	81130513
+Gilbert Cesbron	death_date	1979	0.9652	Low	1	^ [S] ( # - [O] )	Gilbert Cesbron	77804834
+Giordano Bruno	death_date	1600	0.9652	Low	1	^ [S] ( # - [O] )	Giordano Bruno	81598026
+Gregorio Allegri	death_date	1652-02-07	0.9652	Low	1	^ [S] ( # - [O] )	Gregorio Allegri	79126379
+Henry Home, Lord Kames	death_date	1782-12-27	0.9652	Low	1	^ [S] ( # - [O] )	Henry Home, Lord Kames	89777632
+Henry Laurens	death_date	1792	0.9652	Low	1	^ [S] ( # - [O] )	Henry Laurens	91337975
+Henry Middleton	death_date	1784-06-13	0.9652	Low	1	^ [S] ( # - [O] )	Henry Middleton	91325888
+Herman Charles Bosman	death_date	1951-10-14	0.9652	Low	1	^ [S] ( # - [O] )	Herman Charles Bosman	92165254
+Hermann Ebbinghaus	death_date	1909	0.9652	Low	1	^ [S] ( # - [O] )	Hermann Ebbinghaus	86344814
+Hilaire Rouelle	death_date	1779	0.9652	Low	1	^ [S] ( # - [O] )	Hilaire Rouelle	87418646
+Hugh Binning	death_date	1653	0.9652	Low	1	^ [S] ( # - [O] )	Hugh Binning	89776454
+Isaac Klein	death_date	1979	0.9652	Low	1	^ [S] ( # - [O] )	Isaac Klein	98519082
+Isidore of Seville	death_date	0636-04-04	0.9652	Low	1	^ [S] ( # - [O] )	Isidore of Seville	99432779
+Absalon	birth_year	1128	0.9651	Low	1	[S] ( c . [O]	Absalon	9610535
+Aed of Scotland	birth_year	0840	0.9651	Low	1	[S] ( c . [O]	Aed of Scotland	14595726
+Agathon	birth_year	0448	0.9651	Low	1	[S] ( c . [O]	Agathon	7773073
+Alcuin	birth_year	0735	0.9651	Low	1	[S] ( c . [O]	Alcuin	6967782
+Andronicus III	birth_year	1296	0.9651	Low	1	[S] ( c . [O]	Andronicus III	8853997
+Claudius Aelianus	birth_year	0175	0.9651	Low	1	[S] ( c . [O]	Claudius Aelianus	44615257
+Ethelred the Unready	birth_year	0968	0.9651	Low	1	[S] ( c . [O]	Ethelred the Unready	63168959
+Boston Corbett	death_date	1894	0.9649	Low	1	^ [S] ( # - [O]	Boston Corbett	27876757
+Columbanus	death_date	0615-11-21	0.9649	Low	1	^ [S] ( # - [O]	Columbanus	40101398
+Isaac Ambrose	death_date	1663-01-20	0.9649	Low	1	^ [S] ( # - [O]	Isaac Ambrose	95914829
+Adam Carolla	birth_date	1964-05-27	0.9497	Low	1	[S] ( born [O] in	Adam Carolla	14790692
+Albert Pike	birth_date	1809-12-29	0.9497	Low	1	[S] ( born [O] in	Albert Pike	13059018
+Amy Grant	birth_date	1960-11-25	0.9497	Low	1	[S] ( born [O] in	Amy Grant	14718379
+Aria Giovanni	birth_date	1977-11-03	0.9497	Low	1	[S] ( born [O] in	Aria Giovanni	14896784
+Bernie Federko	birth_date	1956-05-12	0.9497	Low	1	[S] ( born [O] in	Bernie Federko	22014126
+Bjarne Stroustrup	birth_date	1950-12-30	0.9497	Low	1	[S] ( born [O] in	Bjarne Stroustrup	19851551
+Bob Costas	birth_date	1952-03-22	0.9497	Low	1	[S] ( born [O] in	Bob Costas	29151828
+Bobby Knight	birth_date	1940-10-25	0.9497	Low	1	[S] ( born [O] in	Bobby Knight	29006787
+Brian De Palma	birth_date	1940-09-11	0.9497	Low	1	[S] ( born [O] in	Brian De Palma	23838794
+Bud Selig	birth_date	1934-07-30	0.9497	Low	1	[S] ( born [O] in	Bud Selig	27169607
+Bud Spencer	birth_date	1929-10-31	0.9497	Low	1	[S] ( born [O] in	Bud Spencer	20799650
+Calista Flockhart	birth_date	1964-11-11	0.9497	Low	1	[S] ( born [O] in	Calista Flockhart	46381705
+Carlos Valderrama (soccer player)	birth_date	1961-09-02	0.9497	Low	1	[S] ( born [O] in	Carlos Valderrama (soccer player)	42912517
+Christopher Alexander	birth_date	1936-10-04	0.9497	Low	1	[S] ( born [O] in	Christopher Alexander	46984276
+Christopher Guest	birth_date	1948-02-05	0.9497	Low	1	[S] ( born [O] in	Christopher Guest	44447983
+Chuck Yeager	birth_date	1923-02-13	0.9497	Low	1	[S] ( born [O] in	Chuck Yeager	38228800
+Dan Simmons	birth_date	1948-04-04	0.9497	Low	1	[S] ( born [O] in	Dan Simmons	55501181
+Dave Brubeck	birth_date	1920-12-06	0.9497	Low	1	[S] ( born [O] in	Dave Brubeck	50247255
+David Cronenberg	birth_date	1943-03-15	0.9497	Low	1	[S] ( born [O] in	David Cronenberg	48324002
+Dean Koontz	birth_date	1945-07-09	0.9497	Low	1	[S] ( born [O] in	Dean Koontz	55664194
+Desmond Morris	birth_date	1928-01-24	0.9497	Low	1	[S] ( born [O] in	Desmond Morris	50395641
+Dino Zoff	birth_date	1942-02-28	0.9497	Low	1	[S] ( born [O] in	Dino Zoff	50092795
+Douglas Engelbart	birth_date	1925-01-30	0.9497	Low	1	[S] ( born [O] in	Douglas Engelbart	49556770
+Drew Barrymore	birth_date	1975-02-22	0.9497	Low	1	[S] ( born [O] in	Drew Barrymore	48250915
+Dwight Schultz	birth_date	1947-11-24	0.9497	Low	1	[S] ( born [O] in	Dwight Schultz	52350065
+Forrest J. Ackerman	birth_date	1916-11-24	0.9497	Low	1	[S] ( born [O] in	Forrest J. Ackerman	73991299
+Francis Fukuyama	birth_date	1952-10-27	0.9497	Low	1	[S] ( born [O] in	Francis Fukuyama	70303027
+Franco Baresi	birth_date	1960-05-08	0.9497	Low	1	[S] ( born [O] in	Franco Baresi	67768137
+Fred Singer	birth_date	1924-09-27	0.9497	Low	1	[S] ( born [O] in	Fred Singer	73979060
+Fridtjof Nansen	birth_date	1861-10-10	0.9497	Low	1	[S] ( born [O] in	Fridtjof Nansen	74469759
+Garth Brooks	birth_date	1962-02-07	0.9497	Low	1	[S] ( born [O] in	Garth Brooks	77198387
+Gary Busey	birth_date	1944-06-29	0.9497	Low	1	[S] ( born [O] in	Gary Busey	81994174
+Gary Gygax	birth_date	1938-07-27	0.9497	Low	1	[S] ( born [O] in	Gary Gygax	80995751
+Henry Kissinger	birth_date	1923-05-27	0.9497	Low	1	[S] ( born [O] in	Henry Kissinger	87072135
+Ice T	birth_date	1958-02-16	0.9497	Low	1	[S] ( born [O] in	Ice T	94147866
+A. A. Milne	birth_date	1882-01-18	0.9497	Low	1	^ [S] ( [O] -	A. A. Milne	4031799
+A. E. Housman	birth_date	1859-03-26	0.9497	Low	1	^ [S] ( [O] -	A. E. Housman	17311153
+ABBA	birth_date	1972	0.9497	Low	1	^ [S] ( [O] -	ABBA	3583782
+Aaliyah	birth_date	1979-01-16	0.9497	Low	1	^ [S] ( [O] -	Aaliyah	11613451
+Abel Tasman	birth_date	1603	0.9497	Low	1	^ [S] ( [O] -	Abel Tasman	10510132
+Abner Doubleday	birth_date	1819-06-26	0.9497	Low	1	^ [S] ( [O] -	Abner Doubleday	5120964
+Abu Zubaydah	birth_date	1971-03-12	0.9497	Low	1	^ [S] ( [O] -	Abu Zubaydah	16848069
+Ada Lovelace	birth_date	1815-12-10	0.9497	Low	1	^ [S] ( [O] -	Ada Lovelace	4194268
+Adam Sedgwick	birth_date	1785-03-22	0.9497	Low	1	^ [S] ( [O] -	Adam Sedgwick	1704041
+Adam Weishaupt	birth_date	1748-02-06	0.9497	Low	1	^ [S] ( [O] -	Adam Weishaupt	11085060
+Adolph Wilhelm Hermann Kolbe	birth_date	1818-09-27	0.9497	Low	1	^ [S] ( [O] -	Adolph Wilhelm Hermann Kolbe	9306265
+Aeschylus	birth_date	525 BC	0.9497	Low	1	^ [S] ( [O] -	Aeschylus	10769078
+Agathocles	birth_date	361 BC	0.9497	Low	1	^ [S] ( [O] -	Agathocles	9395557
+Agner Krarup Erlang	birth_date	1878-01-01	0.9497	Low	1	^ [S] ( [O] -	Agner Krarup Erlang	15829334
+Al Capone	birth_date	1899-01-17	0.9497	Low	1	^ [S] ( [O] -	Al Capone	17393346
+Al Capp	birth_date	1909-09-28	0.9497	Low	1	^ [S] ( [O] -	Al Capp	16312556
+Alan Jay Lerner	birth_date	1918-08-31	0.9497	Low	1	^ [S] ( [O] -	Alan Jay Lerner	16308442
+Alan Turing	birth_date	1912-06-23	0.9497	Low	1	^ [S] ( [O] -	Alan Turing	5689371
+Alban Berg	birth_date	1885-02-09	0.9497	Low	1	^ [S] ( [O] -	Alban Berg	13384339
+Albert Einstein	birth_date	1879-03-14	0.9497	Low	1	^ [S] ( [O] -	Albert Einstein	1984995
+Albert Frederick	birth_date	1553	0.9497	Low	1	^ [S] ( [O] -	Albert Frederick	17497046
+Albert Sidney Johnston	birth_date	1803-02-02	0.9497	Low	1	^ [S] ( [O] -	Albert Sidney Johnston	1855468
+Albert of Prussia	birth_date	1490-05-16	0.9497	Low	1	^ [S] ( [O] -	Albert of Prussia	7572070
+Albert, Duke of Saxony	birth_date	1443-01-27	0.9497	Low	1	^ [S] ( [O] -	Albert, Duke of Saxony	17653868
+Alberto Giacometti	birth_date	1901-10-10	0.9497	Low	1	^ [S] ( [O] -	Alberto Giacometti	13592463
+Albrecht Dürer	birth_date	1471-05-21	0.9497	Low	1	^ [S] ( [O] -	Albrecht Dürer	13330296
+Aldous Huxley	birth_date	1894-07-26	0.9497	Low	1	^ [S] ( [O] -	Aldous Huxley	1243970
+Alessandro Scarlatti	birth_date	1660-05-02	0.9497	Low	1	^ [S] ( [O] -	Alessandro Scarlatti	13028904
+Alexander Emanuel Agassiz	birth_date	1835-12-17	0.9497	Low	1	^ [S] ( [O] -	Alexander Emanuel Agassiz	7767289
+Alexander II of Scotland	birth_date	1198-08-24	0.9497	Low	1	^ [S] ( [O] -	Alexander II of Scotland	8011677
+Alexander Severus	birth_date	0208-10-01	0.9497	Low	1	^ [S] ( [O] -	Alexander Severus	8030466
+Alexis Carrel	birth_date	1873-06-28	0.9497	Low	1	^ [S] ( [O] -	Alexis Carrel	4822889
+Alexius II Comnenus	birth_date	1169-09-10	0.9497	Low	1	^ [S] ( [O] -	Alexius II Comnenus	8072987
+Alfons Maria Jakob	birth_date	1884-07-02	0.9497	Low	1	^ [S] ( [O] -	Alfons Maria Jakob	3716007
+Alfonso Leng	birth_date	1894-02-11	0.9497	Low	1	^ [S] ( [O] -	Alfonso Leng	12899453
+Alfonso XII of Spain	birth_date	1857-11-28	0.9497	Low	1	^ [S] ( [O] -	Alfonso XII of Spain	8505711
+Alfonso XIII of Spain	birth_date	1886-05-17	0.9497	Low	1	^ [S] ( [O] -	Alfonso XIII of Spain	8512250
+Alfred Ayer	birth_date	1910-10-29	0.9497	Low	1	^ [S] ( [O] -	Alfred Ayer	10745993
+Alfred Jarry	birth_date	1873-09-08	0.9497	Low	1	^ [S] ( [O] -	Alfred Jarry	9575199
+Alfred Lawson	birth_date	1869	0.9497	Low	1	^ [S] ( [O] -	Alfred Lawson	6237511
+Alger of Liège	birth_date	1055	0.9497	Low	1	^ [S] ( [O] -	Alger of Liège	8354576
+Algernon Swinburne	birth_date	1837-04-05	0.9497	Low	1	^ [S] ( [O] -	Algernon Swinburne	6231720
+Allan Dwan	birth_date	1885-04-03	0.9497	Low	1	^ [S] ( [O] -	Allan Dwan	451634
+Alp Arslan	birth_date	1029	0.9497	Low	1	^ [S] ( [O] -	Alp Arslan	3397868
+Alphonse I of Toulouse	birth_date	1103	0.9497	Low	1	^ [S] ( [O] -	Alphonse I of Toulouse	9625593
+Alphonse of Toulouse	birth_date	1220-11-11	0.9497	Low	1	^ [S] ( [O] -	Alphonse of Toulouse	9621509
+Alvar Aalto	birth_date	1898-02-03	0.9497	Low	1	^ [S] ( [O] -	Alvar Aalto	10664777
+Amalric II of Jerusalem	birth_date	1145	0.9497	Low	1	^ [S] ( [O] -	Amalric II of Jerusalem	9601534
+Ambrose Bierce	birth_date	1842-06-24	0.9497	Low	1	^ [S] ( [O] -	Ambrose Bierce	4808483
+Ambrosius Bosschaert	birth_date	1573	0.9497	Low	1	^ [S] ( [O] -	Ambrosius Bosschaert	13789755
+Amos Bronson Alcott	birth_date	1799-11-29	0.9497	Low	1	^ [S] ( [O] -	Amos Bronson Alcott	6817320
+Anatole France	birth_date	1844-04-16	0.9497	Low	1	^ [S] ( [O] -	Anatole France	4862629
+Anders Celsius	birth_date	1701-11-27	0.9497	Low	1	^ [S] ( [O] -	Anders Celsius	14787780
+Andrea Andreani	birth_date	1540	0.9497	Low	1	^ [S] ( [O] -	Andrea Andreani	8836125
+Andreas Aagesen	birth_date	1826	0.9497	Low	1	^ [S] ( [O] -	Andreas Aagesen	13172190
+Andronicus II	birth_date	1260	0.9497	Low	1	^ [S] ( [O] -	Andronicus II	8856586
+André Gide	birth_date	1869-11-22	0.9497	Low	1	^ [S] ( [O] -	André Gide	4867079
+André Weil	birth_date	1906-05-06	0.9497	Low	1	^ [S] ( [O] -	André Weil	10753978
+Andy Warhol	birth_date	1928-08-06	0.9497	Low	1	^ [S] ( [O] -	Andy Warhol	3345219
+Anne Brontë	birth_date	1820-01-17	0.9497	Low	1	^ [S] ( [O] -	Anne Brontë	10791380
+Antoine Thomson d'Abbadie	birth_date	1810-01-03	0.9497	Low	1	^ [S] ( [O] -	Antoine Thomson d'Abbadie	14251649
+Anton Drexler	birth_date	1884-06-13	0.9497	Low	1	^ [S] ( [O] -	Anton Drexler	11669581
+Antoni Gaudí	birth_date	1852-06-25	0.9497	Low	1	^ [S] ( [O] -	Antoni Gaudí	12645984
+Antonio Agliardi	birth_date	1832-09-04	0.9497	Low	1	^ [S] ( [O] -	Antonio Agliardi	7784808
+Antonio Canova	birth_date	1757-11-01	0.9497	Low	1	^ [S] ( [O] -	Antonio Canova	10992006
+Antonio Vivaldi	birth_date	1678-03-04	0.9497	Low	1	^ [S] ( [O] -	Antonio Vivaldi	7081101
+Arthur Aikin	birth_date	1773-05-19	0.9497	Low	1	^ [S] ( [O] -	Arthur Aikin	7831428
+Arthur Conan Doyle	birth_date	1859-05-22	0.9497	Low	1	^ [S] ( [O] -	Arthur Conan Doyle	3987075
+Arthur J. Stone	birth_date	1847	0.9497	Low	1	^ [S] ( [O] -	Arthur J. Stone	14811714
+Arthur Miller	birth_date	1915-10-17	0.9497	Low	1	^ [S] ( [O] -	Arthur Miller	12749919
+Arthur Schopenhauer	birth_date	1788-02-22	0.9497	Low	1	^ [S] ( [O] -	Arthur Schopenhauer	1765360
+Arthur St. Clair	birth_date	1734-03-23	0.9497	Low	1	^ [S] ( [O] -	Arthur St. Clair	14392509
+Arthur William a Beckett	birth_date	1844	0.9497	Low	1	^ [S] ( [O] -	Arthur William a Beckett	14730174
+August Derleth	birth_date	1909-02-24	0.9497	Low	1	^ [S] ( [O] -	August Derleth	4208617
+August Horch	birth_date	1868-10-12	0.9497	Low	1	^ [S] ( [O] -	August Horch	10839605
+August Wilhelm Ambros	birth_date	1816-11-17	0.9497	Low	1	^ [S] ( [O] -	August Wilhelm Ambros	8607731
+Auguste Rodin	birth_date	1840-11-12	0.9497	Low	1	^ [S] ( [O] -	Auguste Rodin	10996854
+Augustus De Morgan	birth_date	1806-06-27	0.9497	Low	1	^ [S] ( [O] -	Augustus De Morgan	7283435
+Avery Hopwood	birth_date	1882-05-28	0.9497	Low	1	^ [S] ( [O] -	Avery Hopwood	12917938
+Babrak Karmal	birth_date	1929-01-06	0.9497	Low	1	^ [S] ( [O] -	Babrak Karmal	26201560
+Barbara Olson	birth_date	1955-12-27	0.9497	Low	1	^ [S] ( [O] -	Barbara Olson	23623081
+Barry Goldwater	birth_date	1909-01-01	0.9497	Low	1	^ [S] ( [O] -	Barry Goldwater	28531031
+Baruch Spinoza	birth_date	1632-11-24	0.9497	Low	1	^ [S] ( [O] -	Baruch Spinoza	18583656
+Basil Liddell Hart	birth_date	1895-10-31	0.9497	Low	1	^ [S] ( [O] -	Basil Liddell Hart	18841237
+Benjamin Tucker	birth_date	1854-04-17	0.9497	Low	1	^ [S] ( [O] -	Benjamin Tucker	27949033
+Benjamin Whorf	birth_date	1897-04-24	0.9497	Low	1	^ [S] ( [O] -	Benjamin Whorf	18067336
+Bernardino Ochino	birth_date	1487	0.9497	Low	1	^ [S] ( [O] -	Bernardino Ochino	23677314
+Bert Bell	birth_date	1895-02-25	0.9497	Low	1	^ [S] ( [O] -	Bert Bell	29146432
+Berthe Morisot	birth_date	1841-01-14	0.9497	Low	1	^ [S] ( [O] -	Berthe Morisot	24056347
+Bertolt Brecht	birth_date	1898-02-10	0.9497	Low	1	^ [S] ( [O] -	Bertolt Brecht	20315686
+Bertrand Andrieu	birth_date	1761-11-04	0.9497	Low	1	^ [S] ( [O] -	Bertrand Andrieu	22919045
+Bill Bixby	birth_date	1934-01-22	0.9497	Low	1	^ [S] ( [O] -	Bill Bixby	29521744
+Bing Crosby	birth_date	1903-05-03	0.9497	Low	1	^ [S] ( [O] -	Bing Crosby	22311962
+Blind Willie McTell	birth_date	1901-05-05	0.9497	Low	1	^ [S] ( [O] -	Blind Willie McTell	26876113
+Bob Wills	birth_date	1905-03-06	0.9497	Low	1	^ [S] ( [O] -	Bob Wills	28757465
+Boss Tweed	birth_date	1823-04-03	0.9497	Low	1	^ [S] ( [O] -	Boss Tweed	27862615
+Boston Corbett	birth_date	1832	0.9497	Low	1	^ [S] ( [O] -	Boston Corbett	27876757
+Bram Stoker	birth_date	1847-11-08	0.9497	Low	1	^ [S] ( [O] -	Bram Stoker	22134024
+Brion Gysin	birth_date	1916-01-19	0.9497	Low	1	^ [S] ( [O] -	Brion Gysin	23605804
+Brownie McGhee	birth_date	1915-11-30	0.9497	Low	1	^ [S] ( [O] -	Brownie McGhee	28235710
+Buckminster Fuller	birth_date	1895-07-12	0.9497	Low	1	^ [S] ( [O] -	Buckminster Fuller	22473342
+Burrhus Frederic Skinner	birth_date	1904-03-20	0.9497	Low	1	^ [S] ( [O] -	Burrhus Frederic Skinner	28984920
+Burt Lancaster	birth_date	1913-11-02	0.9497	Low	1	^ [S] ( [O] -	Burt Lancaster	26815564
+Béla Bartók	birth_date	1881-03-25	0.9497	Low	1	^ [S] ( [O] -	Béla Bartók	26683628
+C. L. Moore	birth_date	1911-01-24	0.9497	Low	1	^ [S] ( [O] -	C. L. Moore	47553813
+C. Northcote Parkinson	birth_date	1909-07-30	0.9497	Low	1	^ [S] ( [O] -	C. Northcote Parkinson	33590821
+Caitlin Clarke	birth_date	1952-05-03	0.9497	Low	1	^ [S] ( [O] -	Caitlin Clarke	43783474
+Camille Pissarro	birth_date	1830-07-10	0.9497	Low	1	^ [S] ( [O] -	Camille Pissarro	45813234
+Caravaggio	birth_date	1571-09-29	0.9497	Low	1	^ [S] ( [O] -	Caravaggio	43658203
+Carl Barks	birth_date	1901-03-27	0.9497	Low	1	^ [S] ( [O] -	Carl Barks	45311622
+Carl Meinhof	birth_date	1857-07-23	0.9497	Low	1	^ [S] ( [O] -	Carl Meinhof	39224287
+Carl Menger	birth_date	1840-02-28	0.9497	Low	1	^ [S] ( [O] -	Carl Menger	38734762
+Carl Rogers	birth_date	1902-01-08	0.9497	Low	1	^ [S] ( [O] -	Carl Rogers	46522989
+Carl Sagan	birth_date	1934-11-09	0.9497	Low	1	^ [S] ( [O] -	Carl Sagan	42505316
+Carl von Clausewitz	birth_date	1780-06-01	0.9497	Low	1	^ [S] ( [O] -	Carl von Clausewitz	37631833
+Carlo Collodi	birth_date	1826-11-24	0.9497	Low	1	^ [S] ( [O] -	Carlo Collodi	45824940
+Carlo Goldoni	birth_date	1707-02-25	0.9497	Low	1	^ [S] ( [O] -	Carlo Goldoni	35333026
+Carolyn Beug	birth_date	1953	0.9497	Low	1	^ [S] ( [O] -	Carolyn Beug	39238341
+Caspar David Friedrich	birth_date	1774-09-05	0.9497	Low	1	^ [S] ( [O] -	Caspar David Friedrich	33935173
+Catherine of Aragon	birth_date	1485-12-16	0.9497	Low	1	^ [S] ( [O] -	Catherine of Aragon	43314925
+Cecil B. DeMille	birth_date	1881-08-12	0.9497	Low	1	^ [S] ( [O] -	Cecil B. DeMille	38195582
+Cecilia Beaux	birth_date	1855-05-01	0.9497	Low	1	^ [S] ( [O] -	Cecilia Beaux	42931985
+Cem Karaca	birth_date	1945-03-19	0.9497	Low	1	^ [S] ( [O] -	Cem Karaca	46376955
+Charles Alston	birth_date	1907-11-28	0.9497	Low	1	^ [S] ( [O] -	Charles Alston	43258515
+Charles Baudelaire	birth_date	1821-04-09	0.9497	Low	1	^ [S] ( [O] -	Charles Baudelaire	35398178
+Charles Darwin	birth_date	1809-02-12	0.9497	Low	1	^ [S] ( [O] -	Charles Darwin	30680153
+Charles Dickens	birth_date	1812-02-07	0.9497	Low	1	^ [S] ( [O] -	Charles Dickens	35911383
+Charles F. Hockett	birth_date	1916-01-17	0.9497	Low	1	^ [S] ( [O] -	Charles F. Hockett	47096145
+Charles Goren	birth_date	1901-03-04	0.9497	Low	1	^ [S] ( [O] -	Charles Goren	82510703
+Charles I of England	birth_date	1600-11-19	0.9497	Low	1	^ [S] ( [O] -	Charles I of England	45739716
+Charles Lyell	birth_date	1797-11-14	0.9497	Low	1	^ [S] ( [O] -	Charles Lyell	45986892
+Charles Messier	birth_date	1730-06-26	0.9497	Low	1	^ [S] ( [O] -	Charles Messier	44829742
+Charles Mingus	birth_date	1922-04-22	0.9497	Low	1	^ [S] ( [O] -	Charles Mingus	47201025
+Charles Proteus Steinmetz	birth_date	1865-04-09	0.9497	Low	1	^ [S] ( [O] -	Charles Proteus Steinmetz	39739384
+Charles Robert Malden	birth_date	1797-08-09	0.9497	Low	1	^ [S] ( [O] -	Charles Robert Malden	37717954
+Charles d'Abancourt	birth_date	1758	0.9497	Low	1	^ [S] ( [O] -	Charles d'Abancourt	44578822
+Charlotte Brontë	birth_date	1816-04-21	0.9497	Low	1	^ [S] ( [O] -	Charlotte Brontë	40278190
+Chet Atkins	birth_date	1924-06-20	0.9497	Low	1	^ [S] ( [O] -	Chet Atkins	47790523
+Chiang Kai-shek	birth_date	1887-10-31	0.9497	Low	1	^ [S] ( [O] -	Chiang Kai-shek	42795691
+Christiaan Barnard	birth_date	1922-11-08	0.9497	Low	1	^ [S] ( [O] -	Christiaan Barnard	43645495
+Christian Goldbach	birth_date	1690-03-18	0.9497	Low	1	^ [S] ( [O] -	Christian Goldbach	38925629
+Christine de Pizan	birth_date	1364	0.9497	Low	1	^ [S] ( [O] -	Christine de Pizan	47042058
+Christoph Ludwig Agricola	birth_date	1667-11-05	0.9497	Low	1	^ [S] ( [O] -	Christoph Ludwig Agricola	38086738
+Christopher Báthory	birth_date	1530	0.9497	Low	1	^ [S] ( [O] -	Christopher Báthory	41280888
+Chuck Jones	birth_date	1912-09-21	0.9497	Low	1	^ [S] ( [O] -	Chuck Jones	47225556
+Clarence Brown	birth_date	1890-05-10	0.9497	Low	1	^ [S] ( [O] -	Clarence Brown	47102673
+Claude Elwood Shannon	birth_date	1916-04-30	0.9497	Low	1	^ [S] ( [O] -	Claude Elwood Shannon	34379986
+Claude Louis Berthollet	birth_date	1748-12-09	0.9497	Low	1	^ [S] ( [O] -	Claude Louis Berthollet	47917332
+Clement Martyn Doke	birth_date	1893	0.9497	Low	1	^ [S] ( [O] -	Clement Martyn Doke	39221740
+Clyde Tombaugh	birth_date	1906-02-04	0.9497	Low	1	^ [S] ( [O] -	Clyde Tombaugh	41265457
+Coco Chanel	birth_date	1883-08-19	0.9497	Low	1	^ [S] ( [O] -	Coco Chanel	77805723
+Colin Kapp	birth_date	1928	0.9497	Low	1	^ [S] ( [O] -	Colin Kapp	43311892
+Columbanus	birth_date	0543	0.9497	Low	1	^ [S] ( [O] -	Columbanus	40101398
+Constans	birth_date	0320	0.9497	Low	1	^ [S] ( [O] -	Constans	42035715
+Constantin Brancusi	birth_date	1876-02-19	0.9497	Low	1	^ [S] ( [O] -	Constantin Brancusi	40571557
+Constantine II (emperor)	birth_date	0317-02	0.9497	Low	1	^ [S] ( [O] -	Constantine II (emperor)	44721531
+Corrado Gini	birth_date	1884-05-23	0.9497	Low	1	^ [S] ( [O] -	Corrado Gini	44835198
+Cotton Mather	birth_date	1663-02-12	0.9497	Low	1	^ [S] ( [O] -	Cotton Mather	44124899
+Crystal Eastman	birth_date	1881-06-25	0.9497	Low	1	^ [S] ( [O] -	Crystal Eastman	46979646
+Cy Young	birth_date	1867-03-29	0.9497	Low	1	^ [S] ( [O] -	Cy Young	42668697
+Cydney Grossman	birth_date	1909	0.9497	Low	1	^ [S] ( [O] -	Cydney Grossman	47970412
+Cyril M. Kornbluth	birth_date	1923-07-23	0.9497	Low	1	^ [S] ( [O] -	Cyril M. Kornbluth	47538231
+Cyrus Griffin	birth_date	1749	0.9497	Low	1	^ [S] ( [O] -	Cyrus Griffin	44653474
+Dalton Trumbo	birth_date	1905-12-09	0.9497	Low	1	^ [S] ( [O] -	Dalton Trumbo	48561501
+Dana Plato	birth_date	1964-11-07	0.9497	Low	1	^ [S] ( [O] -	Dana Plato	56396494
+Danny Kaye	birth_date	1913-01-18	0.9497	Low	1	^ [S] ( [O] -	Danny Kaye	56164077
+Dave Thomas	birth_date	1932-07-02	0.9497	Low	1	^ [S] ( [O] -	Dave Thomas	56688152
+David Angell	birth_date	1946-04-10	0.9497	Low	1	^ [S] ( [O] -	David Angell	52437440
+David Beatty, 1st Earl Beatty	birth_date	1871-01-17	0.9497	Low	1	^ [S] ( [O] -	David Beatty, 1st Earl Beatty	55236277
+David Hayes Agnew	birth_date	1818-11-24	0.9497	Low	1	^ [S] ( [O] -	David Hayes Agnew	52099424
+David Hume	birth_date	1711-04-26	0.9497	Low	1	^ [S] ( [O] -	David Hume	48518115
+David Janssen	birth_date	1931-03-27	0.9497	Low	1	^ [S] ( [O] -	David Janssen	51651905
+David Rice Atchison	birth_date	1807-08-11	0.9497	Low	1	^ [S] ( [O] -	David Rice Atchison	54129597
+David Thompson (explorer)	birth_date	1770-04-30	0.9497	Low	1	^ [S] ( [O] -	David Thompson (explorer)	49182383
+Denis Diderot	birth_date	1713-10-05	0.9497	Low	1	^ [S] ( [O] -	Denis Diderot	50413352
+Diego de Almagro	birth_date	1475	0.9497	Low	1	^ [S] ( [O] -	Diego de Almagro	51818778
+Django Reinhardt	birth_date	1910-01-23	0.9497	Low	1	^ [S] ( [O] -	Django Reinhardt	56380025
+Don Tennant	birth_date	1922-11-23	0.9497	Low	1	^ [S] ( [O] -	Don Tennant	56821553
+Donald A. Wollheim	birth_date	1914-10-01	0.9497	Low	1	^ [S] ( [O] -	Donald A. Wollheim	55313336
+Donald Campbell	birth_date	1921-03-23	0.9497	Low	1	^ [S] ( [O] -	Donald Campbell	56988176
+Dr. Seuss	birth_date	1904-03-02	0.9497	Low	1	^ [S] ( [O] -	Dr. Seuss	55423768
+Duke Kahanamoku	birth_date	1890-08-24	0.9497	Low	1	^ [S] ( [O] -	Duke Kahanamoku	56777620
+Dunstan	birth_date	0909	0.9497	Low	1	^ [S] ( [O] -	Dunstan	55944250
+Dwight L. Moody	birth_date	1837-02-05	0.9497	Low	1	^ [S] ( [O] -	Dwight L. Moody	52517592
+E. B. White	birth_date	1899-07-11	0.9497	Low	1	^ [S] ( [O] -	E. B. White	61165801
+E. E. Cummings	birth_date	1894-10-14	0.9497	Low	1	^ [S] ( [O] -	E. E. Cummings	59964462
+E. H. Shepard	birth_date	1879-12-10	0.9497	Low	1	^ [S] ( [O] -	E. H. Shepard	64184744
+E. P. Thompson	birth_date	1924-02-03	0.9497	Low	1	^ [S] ( [O] -	E. P. Thompson	59321373
+E.T.A. Hoffmann	birth_date	1776-01-24	0.9497	Low	1	^ [S] ( [O] -	E.T.A. Hoffmann	63639338
+Ed Sullivan	birth_date	1901-09-28	0.9497	Low	1	^ [S] ( [O] -	Ed Sullivan	62265928
+Ed Wood, Jr.	birth_date	1924-10-10	0.9497	Low	1	^ [S] ( [O] -	Ed Wood, Jr.	65609190
+Edgar Allan Poe	birth_date	1809-01-19	0.9497	Low	1	^ [S] ( [O] -	Edgar Allan Poe	59669079
+Edgar Rice Burroughs	birth_date	1875-09-01	0.9497	Low	1	^ [S] ( [O] -	Edgar Rice Burroughs	60484166
+Edmund Burke	birth_date	1729-01-12	0.9497	Low	1	^ [S] ( [O] -	Edmund Burke	62817647
+Edmund Husserl	birth_date	1859-04-08	0.9497	Low	1	^ [S] ( [O] -	Edmund Husserl	59509141
+Edvard Grieg	birth_date	1843-06-15	0.9497	Low	1	^ [S] ( [O] -	Edvard Grieg	59455574
+Edward Bulwer-Lytton, 1st Baron Lytton	birth_date	1803-05-25	0.9497	Low	1	^ [S] ( [O] -	Edward Bulwer-Lytton, 1st Baron Lytton	65121240
+Edward Lear	birth_date	1812-05-12	0.9497	Low	1	^ [S] ( [O] -	Edward Lear	65226370
+Edward Marlborough FitzGerald	birth_date	1809-03-31	0.9497	Low	1	^ [S] ( [O] -	Edward Marlborough FitzGerald	59620404
+Edward VI of England	birth_date	1537-10-12	0.9497	Low	1	^ [S] ( [O] -	Edward VI of England	64147898
+Edward Waring	birth_date	1736	0.9497	Low	1	^ [S] ( [O] -	Edward Waring	60906279
+Edward de Vere, 17th Earl of Oxford	birth_date	1550-04-12	0.9497	Low	1	^ [S] ( [O] -	Edward de Vere, 17th Earl of Oxford	63594057
+Edwin Armstrong	birth_date	1890-12-18	0.9497	Low	1	^ [S] ( [O] -	Edwin Armstrong	64518532
+Edwin Austin Abbey	birth_date	1852-04-01	0.9497	Low	1	^ [S] ( [O] -	Edwin Austin Abbey	60734304
+Elbridge Gerry	birth_date	1744-07-17	0.9497	Low	1	^ [S] ( [O] -	Elbridge Gerry	64406327
+Eleanor Roosevelt	birth_date	1884-10-11	0.9497	Low	1	^ [S] ( [O] -	Eleanor Roosevelt	60914371
+Eli Whitney	birth_date	1765-12-08	0.9497	Low	1	^ [S] ( [O] -	Eli Whitney	61006226
+Elias Boudinot	birth_date	1740	0.9497	Low	1	^ [S] ( [O] -	Elias Boudinot	63537020
+Emanuel Leutze	birth_date	1816-05-24	0.9497	Low	1	^ [S] ( [O] -	Emanuel Leutze	60647680
+Emil Kraepelin	birth_date	1856-02-15	0.9497	Low	1	^ [S] ( [O] -	Emil Kraepelin	62638275
+Emil Theodor Kocher	birth_date	1841-08-25	0.9497	Low	1	^ [S] ( [O] -	Emil Theodor Kocher	65353763
+Emma Abbott	birth_date	1850-12-09	0.9497	Low	1	^ [S] ( [O] -	Emma Abbott	63437535
+Enid Blyton	birth_date	1897-08-11	0.9497	Low	1	^ [S] ( [O] -	Enid Blyton	64212444
+Ennius	birth_date	0239	0.9497	Low	1	^ [S] ( [O] -	Ennius	61531675
+Erasmus Darwin	birth_date	1731-12-12	0.9497	Low	1	^ [S] ( [O] -	Erasmus Darwin	57913955
+Erasmus Reinhold	birth_date	1511-10-22	0.9497	Low	1	^ [S] ( [O] -	Erasmus Reinhold	63278452
+Eric Cheney	birth_date	1924-01-05	0.9497	Low	1	^ [S] ( [O] -	Eric Cheney	65104061
+Eric Hoffer	birth_date	1902-07-25	0.9497	Low	1	^ [S] ( [O] -	Eric Hoffer	59832131
+Ernest Hemingway	birth_date	1899-07-21	0.9497	Low	1	^ [S] ( [O] -	Ernest Hemingway	58890833
+Ernest Thayer	birth_date	1863-08-14	0.9497	Low	1	^ [S] ( [O] -	Ernest Thayer	60852080
+Ernst Haeckel	birth_date	1834-02-16	0.9497	Low	1	^ [S] ( [O] -	Ernst Haeckel	60557954
+Ernst Kaltenbrunner	birth_date	1903-10-04	0.9497	Low	1	^ [S] ( [O] -	Ernst Kaltenbrunner	63628129
+Erwin Schrödinger	birth_date	1887-08-12	0.9497	Low	1	^ [S] ( [O] -	Erwin Schrödinger	62253949
+Ethan Allen	birth_date	1738-01-21	0.9497	Low	1	^ [S] ( [O] -	Ethan Allen	58192923
+Eugène Viollet-le-Duc	birth_date	1814-01-27	0.9497	Low	1	^ [S] ( [O] -	Eugène Viollet-le-Duc	60497285
+Eusebius Amort	birth_date	1692-11-15	0.9497	Low	1	^ [S] ( [O] -	Eusebius Amort	60700826
+Eva Braun	birth_date	1912-02-06	0.9497	Low	1	^ [S] ( [O] -	Eva Braun	60891536
+Eve Arden	birth_date	1908-04-30	0.9497	Low	1	^ [S] ( [O] -	Eve Arden	65234286
+F. Matthias Alexander	birth_date	1869-01-20	0.9497	Low	1	^ [S] ( [O] -	F. Matthias Alexander	71117074
+F. Scott Fitzgerald	birth_date	1896-09-24	0.9497	Low	1	^ [S] ( [O] -	F. Scott Fitzgerald	69238506
+Fay Wray	birth_date	1907-09-15	0.9497	Low	1	^ [S] ( [O] -	Fay Wray	68525586
+Federico Fellini	birth_date	1920-01-20	0.9497	Low	1	^ [S] ( [O] -	Federico Fellini	74245853
+Felix Bloch	birth_date	1905-10-23	0.9497	Low	1	^ [S] ( [O] -	Felix Bloch	68132514
+Felix Hausdorff	birth_date	1868-11-08	0.9497	Low	1	^ [S] ( [O] -	Felix Hausdorff	68760377
+Ferdinand de Saussure	birth_date	1857-11-26	0.9497	Low	1	^ [S] ( [O] -	Ferdinand de Saussure	69266865
+Fergus McDuck	birth_date	1835	0.9497	Low	1	^ [S] ( [O] -	Fergus McDuck	73653282
+Fiorello H. LaGuardia	birth_date	1882-12-11	0.9497	Low	1	^ [S] ( [O] -	Fiorello H. LaGuardia	72128593
+Firmin Abauzit	birth_date	1679	0.9497	Low	1	^ [S] ( [O] -	Firmin Abauzit	72951799
+Francesco I Sforza	birth_date	1401	0.9497	Low	1	^ [S] ( [O] -	Francesco I Sforza	73312388
+Francis Hopkinson	birth_date	1737-10-02	0.9497	Low	1	^ [S] ( [O] -	Francis Hopkinson	69096840
+Francis Scott Key	birth_date	1779-08-01	0.9497	Low	1	^ [S] ( [O] -	Francis Scott Key	68416645
+Francis of Assisi	birth_date	1182	0.9497	Low	1	^ [S] ( [O] -	Francis of Assisi	73401235
+Francis van Aarssens	birth_date	1572	0.9497	Low	1	^ [S] ( [O] -	Francis van Aarssens	72476941
+Francisco Goya	birth_date	1746-03-30	0.9497	Low	1	^ [S] ( [O] -	Francisco Goya	67828841
+Frank Capra	birth_date	1897-05-18	0.9497	Low	1	^ [S] ( [O] -	Frank Capra	71852734
+Frank Herbert	birth_date	1920-10-08	0.9497	Low	1	^ [S] ( [O] -	Frank Herbert	67686162
+Frank Lloyd Wright	birth_date	1867-06-08	0.9497	Low	1	^ [S] ( [O] -	Frank Lloyd Wright	66500088
+Frank Zappa	birth_date	1940-12-21	0.9497	Low	1	^ [S] ( [O] -	Frank Zappa	66387771
+Franklin Schaffner	birth_date	1920-05-30	0.9497	Low	1	^ [S] ( [O] -	Franklin Schaffner	73793870
+Frans Eemil Sillanpää	birth_date	1888-09-16	0.9497	Low	1	^ [S] ( [O] -	Frans Eemil Sillanpää	71205340
+Franz Boas	birth_date	1858-07-09	0.9497	Low	1	^ [S] ( [O] -	Franz Boas	73691326
+Franz Bopp	birth_date	1791-09-14	0.9497	Low	1	^ [S] ( [O] -	Franz Bopp	73761833
+Franz Mesmer	birth_date	1734-05-23	0.9497	Low	1	^ [S] ( [O] -	Franz Mesmer	74363628
+Franz Schmidt	birth_date	1874-12-22	0.9497	Low	1	^ [S] ( [O] -	Franz Schmidt	74163796
+Freddy Heineken	birth_date	1923-11-04	0.9497	Low	1	^ [S] ( [O] -	Freddy Heineken	73919676
+Frederick Augustus Abel	birth_date	1827-07-17	0.9497	Low	1	^ [S] ( [O] -	Frederick Augustus Abel	73011202
+Frederick Soddy	birth_date	1877-09-02	0.9497	Low	1	^ [S] ( [O] -	Frederick Soddy	74231533
+Friedrich August Kekulé von Stradonitz	birth_date	1829-09-07	0.9497	Low	1	^ [S] ( [O] -	Friedrich August Kekulé von Stradonitz	72537079
+Friedrich Bessel	birth_date	1784-07-22	0.9497	Low	1	^ [S] ( [O] -	Friedrich Bessel	73081748
+Fritz Lang	birth_date	1890-12-05	0.9497	Low	1	^ [S] ( [O] -	Fritz Lang	73348632
+Fritz Leiber	birth_date	1910-12-24	0.9497	Low	1	^ [S] ( [O] -	Fritz Leiber	67861362
+Frédéric Bastiat	birth_date	1801-06-30	0.9497	Low	1	^ [S] ( [O] -	Frédéric Bastiat	71017264
+Frédéric Mistral	birth_date	1830-09-08	0.9497	Low	1	^ [S] ( [O] -	Frédéric Mistral	72579896
+Félix Guattari	birth_date	1930	0.9497	Low	1	^ [S] ( [O] -	Félix Guattari	69599366
+Galeazzo Alessi	birth_date	1512	0.9497	Low	1	^ [S] ( [O] -	Galeazzo Alessi	78976423
+Gallienus	birth_date	0218	0.9497	Low	1	^ [S] ( [O] -	Gallienus	80167298
+Gary Kildall	birth_date	1942-05-19	0.9497	Low	1	^ [S] ( [O] -	Gary Kildall	80545387
+Gary Powers	birth_date	1929-08-17	0.9497	Low	1	^ [S] ( [O] -	Gary Powers	81188357
+Georg Philipp Telemann	birth_date	1681-03-14	0.9497	Low	1	^ [S] ( [O] -	Georg Philipp Telemann	82227882
+George Abbot (Archbishop of Canterbury)	birth_date	1562-10-19	0.9497	Low	1	^ [S] ( [O] -	George Abbot (Archbishop of Canterbury)	14275708
+George Bernard Shaw	birth_date	1856-07-26	0.9497	Low	1	^ [S] ( [O] -	George Bernard Shaw	81029207
+George Cukor	birth_date	1899-07-07	0.9497	Low	1	^ [S] ( [O] -	George Cukor	80647329
+George Dantzig	birth_date	1914-11-08	0.9497	Low	1	^ [S] ( [O] -	George Dantzig	82590274
+George Fox	birth_date	1624-07	0.9497	Low	1	^ [S] ( [O] -	George Fox	82789658
+George Gershwin	birth_date	1898-09-26	0.9497	Low	1	^ [S] ( [O] -	George Gershwin	82242387
+George Orwell	birth_date	1903-06-25	0.9497	Low	1	^ [S] ( [O] -	George Orwell	75087066
+George Peppard	birth_date	1928-10-01	0.9497	Low	1	^ [S] ( [O] -	George Peppard	79249003
+George Pólya	birth_date	1887-12-13	0.9497	Low	1	^ [S] ( [O] -	George Pólya	81536285
+George Robert Aberigh-Mackay	birth_date	1848-07-25	0.9497	Low	1	^ [S] ( [O] -	George Robert Aberigh-Mackay	81158927
+George S. Kaufman	birth_date	1889-11-16	0.9497	Low	1	^ [S] ( [O] -	George S. Kaufman	81881428
+George Stephenson	birth_date	1781-06-09	0.9497	Low	1	^ [S] ( [O] -	George Stephenson	79538759
+George Vancouver	birth_date	1757-06-22	0.9497	Low	1	^ [S] ( [O] -	George Vancouver	81113816
+George Whipple	birth_date	1878-08-28	0.9497	Low	1	^ [S] ( [O] -	George Whipple	77269703
+Georges Braque	birth_date	1882-05-13	0.9497	Low	1	^ [S] ( [O] -	Georges Braque	77801625
+Gerald Gardner	birth_date	1884-06-13	0.9497	Low	1	^ [S] ( [O] -	Gerald Gardner	80778939
+Gerard Hengeveld	birth_date	1910	0.9497	Low	1	^ [S] ( [O] -	Gerard Hengeveld	80806047
+Gerard Manley Hopkins	birth_date	1844-07-28	0.9497	Low	1	^ [S] ( [O] -	Gerard Manley Hopkins	79227672
+Gia Carangi	birth_date	1960-01-29	0.9497	Low	1	^ [S] ( [O] -	Gia Carangi	80621132
+Giacomo Puccini	birth_date	1858-12-22	0.9497	Low	1	^ [S] ( [O] -	Giacomo Puccini	80636789
+Gil Alvarez De Albornoz	birth_date	1310	0.9497	Low	1	^ [S] ( [O] -	Gil Alvarez De Albornoz	78967453
+Gilbert Arthur a Beckett	birth_date	1837	0.9497	Low	1	^ [S] ( [O] -	Gilbert Arthur a Beckett	81130513
+Gilbert Cesbron	birth_date	1913	0.9497	Low	1	^ [S] ( [O] -	Gilbert Cesbron	77804834
+Gilbert N. Lewis	birth_date	1875-10-23	0.9497	Low	1	^ [S] ( [O] -	Gilbert N. Lewis	81887490
+Gilles Deleuze	birth_date	1925-01-18	0.9497	Low	1	^ [S] ( [O] -	Gilles Deleuze	79408517
+Gioacchino Rossini	birth_date	1792-02-29	0.9497	Low	1	^ [S] ( [O] -	Gioacchino Rossini	78439323
+Giordano Bruno	birth_date	1548	0.9497	Low	1	^ [S] ( [O] -	Giordano Bruno	81598026
+Giosuè Carducci	birth_date	1835-07-27	0.9497	Low	1	^ [S] ( [O] -	Giosuè Carducci	82019362
+Giovanni Aldini	birth_date	1762-04-10	0.9497	Low	1	^ [S] ( [O] -	Giovanni Aldini	78970698
+Giovanni Boccaccio	birth_date	1313-06-16	0.9497	Low	1	^ [S] ( [O] -	Giovanni Boccaccio	81542809
+Giuseppe Verdi	birth_date	1813-10-10	0.9497	Low	1	^ [S] ( [O] -	Giuseppe Verdi	81555267
+Glenn T. Seaborg	birth_date	1912-04-19	0.9497	Low	1	^ [S] ( [O] -	Glenn T. Seaborg	82627503
+Graham Chapman	birth_date	1941-01-08	0.9497	Low	1	^ [S] ( [O] -	Graham Chapman	81951063
+Gram Parsons	birth_date	1946-11-05	0.9497	Low	1	^ [S] ( [O] -	Gram Parsons	81765839
+Grazia Deledda	birth_date	1871-09-27	0.9497	Low	1	^ [S] ( [O] -	Grazia Deledda	82622760
+Gregor Mendel	birth_date	1822-07-20	0.9497	Low	1	^ [S] ( [O] -	Gregor Mendel	79460268
+Gregorio Allegri	birth_date	1582	0.9497	Low	1	^ [S] ( [O] -	Gregorio Allegri	79126379
+Gustav Kirchhoff	birth_date	1824-03-12	0.9497	Low	1	^ [S] ( [O] -	Gustav Kirchhoff	77893614
+Gustav Klimt	birth_date	1862-07-14	0.9497	Low	1	^ [S] ( [O] -	Gustav Klimt	78497686
+Gustave Eiffel	birth_date	1832-12-15	0.9497	Low	1	^ [S] ( [O] -	Gustave Eiffel	77232565
+Gustave Flaubert	birth_date	1821-12-12	0.9497	Low	1	^ [S] ( [O] -	Gustave Flaubert	77700440
+Gustave de Molinari	birth_date	1819-03-03	0.9497	Low	1	^ [S] ( [O] -	Gustave de Molinari	80390878
+Guy Fawkes	birth_date	1570-04-13	0.9497	Low	1	^ [S] ( [O] -	Guy Fawkes	80305522
+H. G. Wells	birth_date	1866-09-21	0.9497	Low	1	^ [S] ( [O] -	H. G. Wells	84609307
+Hafizullah Amin	birth_date	1929-08-01	0.9497	Low	1	^ [S] ( [O] -	Hafizullah Amin	91152164
+Hal Clement	birth_date	1922-05-30	0.9497	Low	1	^ [S] ( [O] -	Hal Clement	88515153
+Hannibal Hamlin	birth_date	1809-08-27	0.9497	Low	1	^ [S] ( [O] -	Hannibal Hamlin	89178953
+Hans Gerhard Creutzfeldt	birth_date	1885-06-02	0.9497	Low	1	^ [S] ( [O] -	Hans Gerhard Creutzfeldt	84682344
+Hans-Georg Gadamer	birth_date	1900-02-11	0.9497	Low	1	^ [S] ( [O] -	Hans-Georg Gadamer	89233847
+Hansie Cronje	birth_date	1969-09-25	0.9497	Low	1	^ [S] ( [O] -	Hansie Cronje	89047584
+Harold Eugene Edgerton	birth_date	1903-04-06	0.9497	Low	1	^ [S] ( [O] -	Harold Eugene Edgerton	92612137
+Harry Secombe	birth_date	1921-09-08	0.9497	Low	1	^ [S] ( [O] -	Harry Secombe	89568803
+Heinrich Abeken	birth_date	1809-08-19	0.9497	Low	1	^ [S] ( [O] -	Heinrich Abeken	90780146
+Heinrich Rudolf Hertz	birth_date	1857-02-22	0.9497	Low	1	^ [S] ( [O] -	Heinrich Rudolf Hertz	84421282
+Heinrich Schliemann	birth_date	1822-01-06	0.9497	Low	1	^ [S] ( [O] -	Heinrich Schliemann	86098360
+Helene Kröller-Müller	birth_date	1869-02-11	0.9497	Low	1	^ [S] ( [O] -	Helene Kröller-Müller	89232408
+Henri Bergson	birth_date	1859-10-18	0.9497	Low	1	^ [S] ( [O] -	Henri Bergson	85154616
+Henrik Ibsen	birth_date	1828-03-20	0.9497	Low	1	^ [S] ( [O] -	Henrik Ibsen	91010942
+Henry Fielding	birth_date	1707-04-22	0.9497	Low	1	^ [S] ( [O] -	Henry Fielding	85324581
+Henry Ford	birth_date	1863-07-30	0.9497	Low	1	^ [S] ( [O] -	Henry Ford	83927614
+Henry Home, Lord Kames	birth_date	1696	0.9497	Low	1	^ [S] ( [O] -	Henry Home, Lord Kames	89777632
+Henry J. Heinz	birth_date	1844-10-11	0.9497	Low	1	^ [S] ( [O] -	Henry J. Heinz	88323782
+Henry Laurens	birth_date	1724	0.9497	Low	1	^ [S] ( [O] -	Henry Laurens	91337975
+Henry Mayhew	birth_date	1812-11-25	0.9497	Low	1	^ [S] ( [O] -	Henry Mayhew	83265855
+Henry Middleton	birth_date	1717	0.9497	Low	1	^ [S] ( [O] -	Henry Middleton	91325888
+Henry Moseley	birth_date	1887-11-23	0.9497	Low	1	^ [S] ( [O] -	Henry Moseley	92568937
+Henry Purcell	birth_date	1659-09-10	0.9497	Low	1	^ [S] ( [O] -	Henry Purcell	90355998
+Henry VIII of England	birth_date	1491-06-28	0.9497	Low	1	^ [S] ( [O] -	Henry VIII of England	90612004
+Herbert Marcuse	birth_date	1898-07-19	0.9497	Low	1	^ [S] ( [O] -	Herbert Marcuse	87306713
+Herbert Simon	birth_date	1916-06-15	0.9497	Low	1	^ [S] ( [O] -	Herbert Simon	90798872
+Herman Charles Bosman	birth_date	1905	0.9497	Low	1	^ [S] ( [O] -	Herman Charles Bosman	92165254
+Herman Hollerith	birth_date	1860-02-29	0.9497	Low	1	^ [S] ( [O] -	Herman Hollerith	89120352
+Herman Melville	birth_date	1819-08-01	0.9497	Low	1	^ [S] ( [O] -	Herman Melville	86043828
+Hermann Ebbinghaus	birth_date	1850	0.9497	Low	1	^ [S] ( [O] -	Hermann Ebbinghaus	86344814
+Hermann Hesse	birth_date	1877-07-02	0.9497	Low	1	^ [S] ( [O] -	Hermann Hesse	85538534
+Hilaire Rouelle	birth_date	1718	0.9497	Low	1	^ [S] ( [O] -	Hilaire Rouelle	87418646
+Honorius (emperor)	birth_date	0384-09-09	0.9497	Low	1	^ [S] ( [O] -	Honorius (emperor)	69099866
+Howard Carter	birth_date	1874-05-09	0.9497	Low	1	^ [S] ( [O] -	Howard Carter	85914776
+Hugh Binning	birth_date	1627	0.9497	Low	1	^ [S] ( [O] -	Hugh Binning	89776454
+Hugo Gernsback	birth_date	1884-08-16	0.9497	Low	1	^ [S] ( [O] -	Hugo Gernsback	86187335
+Hunter S. Thompson	birth_date	1937-07-18	0.9497	Low	1	^ [S] ( [O] -	Hunter S. Thompson	91631726
+Immanuel Kant	birth_date	1724-04-22	0.9497	Low	1	^ [S] ( [O] -	Immanuel Kant	93548314
+Ira Gershwin	birth_date	1896-12-06	0.9497	Low	1	^ [S] ( [O] -	Ira Gershwin	99352650
+Isaac Albéniz	birth_date	1860-05-29	0.9497	Low	1	^ [S] ( [O] -	Isaac Albéniz	97733762
+Isaac Ambrose	birth_date	1604	0.9497	Low	1	^ [S] ( [O] -	Isaac Ambrose	95914829
+Isaac Klein	birth_date	1905	0.9497	Low	1	^ [S] ( [O] -	Isaac Klein	98519082
+Isaac Stern	birth_date	1920-07-21	0.9497	Low	1	^ [S] ( [O] -	Isaac Stern	99520320
+Isambard Kingdom Brunel	birth_date	1806-04-09	0.9497	Low	1	^ [S] ( [O] -	Isambard Kingdom Brunel	95542557
+Isidore of Seville	birth_date	0560	0.9497	Low	1	^ [S] ( [O] -	Isidore of Seville	99432779
+Italo Calvino	birth_date	1923-10-15	0.9497	Low	1	^ [S] ( [O] -	Italo Calvino	95967252
+Ivar Aasen	birth_date	1813-08-05	0.9497	Low	1	^ [S] ( [O] -	Ivar Aasen	97811879
+Jacques-Louis David	birth_date	1748-08-30	0.9497	Low	1	^ [S] ( [O] -	Jacques-Louis David	56522487
+Jean-Baptiste-Siméon Chardin	birth_date	1699-11-02	0.9497	Low	1	^ [S] ( [O] -	Jean-Baptiste-Siméon Chardin	43699766
+Johann Gottlieb Fichte	birth_date	1762-05-19	0.9497	Low	1	^ [S] ( [O] -	Johann Gottlieb Fichte	76019492
+John Ray	birth_date	1627-11-29	0.9497	Low	1	^ [S] ( [O] -	John Ray	99773912
+Lewis Carroll	birth_date	1832-01-27	0.9497	Low	1	^ [S] ( [O] -	Lewis Carroll	31620529
+Marie Louise Élisabeth Vigée-Lebrun	birth_date	1755-04-16	0.9497	Low	1	^ [S] ( [O] -	Marie Louise Élisabeth Vigée-Lebrun	62272546
+Robert Koch	birth_date	1843-12-11	0.9497	Low	1	^ [S] ( [O] -	Robert Koch	86867102
+The Amazing Criswell	birth_date	1907-08-18	0.9497	Low	1	^ [S] ( [O] -	The Amazing Criswell	48131121
+W. Heath Robinson	birth_date	1872-05-31	0.9497	Low	1	^ [S] ( [O] -	W. Heath Robinson	88962185
+Édouard Manet	birth_date	1832-01-23	0.9497	Low	1	^ [S] ( [O] -	Édouard Manet	60224209
+Évariste Galois	birth_date	1811-10-25	0.9497	Low	1	^ [S] ( [O] -	Évariste Galois	61523691
+İsmet İnönü	birth_date	1884-09-24	0.9497	Low	1	^ [S] ( [O] -	İsmet İnönü	93449568
+Albertus Magnus	birth_date	1193	0.9495	Low	1	^ [S] ( [O]	Albertus Magnus	7878318
+Alexis Korner	birth_date	1928-04-19	0.9495	Low	1	^ [S] ( [O]	Alexis Korner	12606817
+Amerigo Vespucci	birth_date	1454-03-09	0.9495	Low	1	^ [S] ( [O]	Amerigo Vespucci	10983796
+Amr Diab	birth_date	1961-10-11	0.9495	Low	1	^ [S] ( [O]	Amr Diab	15644114
+Andreas Schlüter	birth_date	1660-05-20	0.9495	Low	1	^ [S] ( [O]	Andreas Schlüter	15265582
+Anselm of Canterbury	birth_date	1033	0.9495	Low	1	^ [S] ( [O]	Anselm of Canterbury	12050954
+Arcadius	birth_date	0377	0.9495	Low	1	^ [S] ( [O]	Arcadius	11901969
+Aristide Maillol	birth_date	1861-04-08	0.9495	Low	1	^ [S] ( [O]	Aristide Maillol	10989771
+Arthur Koestler	birth_date	1905-09-05	0.9495	Low	1	^ [S] ( [O]	Arthur Koestler	1717516
+Bayezid II	birth_date	1447	0.9495	Low	1	^ [S] ( [O]	Bayezid II	24095082
+Charlemagne	birth_date	0742	0.9495	Low	1	^ [S] ( [O]	Charlemagne	31325912
+Christian Doppler	birth_date	1803-11-29	0.9495	Low	1	^ [S] ( [O]	Christian Doppler	44049467
+Christopher Columbus	birth_date	1451-10-30	0.9495	Low	1	^ [S] ( [O]	Christopher Columbus	33663834
+Claudio Monteverdi	birth_date	1567-05-15	0.9495	Low	1	^ [S] ( [O]	Claudio Monteverdi	38460132
+Constantin von Tischendorf	birth_date	1815-01-18	0.9495	Low	1	^ [S] ( [O]	Constantin von Tischendorf	38298268
+Constantine II of Scotland	birth_date	0874	0.9495	Low	1	^ [S] ( [O]	Constantine II of Scotland	44723432
+Daniel Defoe	birth_date	1660	0.9495	Low	1	^ [S] ( [O]	Daniel Defoe	50367753
+David Hilbert	birth_date	1862-01-23	0.9495	Low	1	^ [S] ( [O]	David Hilbert	51348946
+Diocletian	birth_date	0245	0.9495	Low	1	^ [S] ( [O]	Diocletian	53557615
+Edward Gibbon	birth_date	1737-04-27	0.9495	Low	1	^ [S] ( [O]	Edward Gibbon	64483133
+Elizabeth Garrett Anderson	birth_date	1836-06-09	0.9495	Low	1	^ [S] ( [O]	Elizabeth Garrett Anderson	60708051
+Ernst Mayr	birth_date	1904-07-05	0.9495	Low	1	^ [S] ( [O]	Ernst Mayr	57263681
+Ettore Ximenes	birth_date	1855-04-11	0.9495	Low	1	^ [S] ( [O]	Ettore Ximenes	62693087
+Ezra Abbot	birth_date	1819-04-28	0.9495	Low	1	^ [S] ( [O]	Ezra Abbot	63430163
+Filippo Tommaso Marinetti	birth_date	1876-12-22	0.9495	Low	1	^ [S] ( [O]	Filippo Tommaso Marinetti	74359678
+Fred Hoyle	birth_date	1915-06-24	0.9495	Low	1	^ [S] ( [O]	Fred Hoyle	68857040
+Friedrich Hayek	birth_date	1899-05-08	0.9495	Low	1	^ [S] ( [O]	Friedrich Hayek	73431188
+Georg Cantor	birth_date	1845-03-03	0.9495	Low	1	^ [S] ( [O]	Georg Cantor	77074635
+Giuseppe Peano	birth_date	1858-08-27	0.9495	Low	1	^ [S] ( [O]	Giuseppe Peano	82164098
+Greg Egan	birth_date	1961-08-20	0.9495	Low	1	^ [S] ( [O]	Greg Egan	80299378
+Henry Bordeaux	birth_date	1870-01-25	0.9495	Low	1	^ [S] ( [O]	Henry Bordeaux	85323312
+Henry Chadwick	birth_date	1824-10-05	0.9495	Low	1	^ [S] ( [O]	Henry Chadwick	92419440
+Irving Langmuir	birth_date	1881-01-31	0.9495	Low	1	^ [S] ( [O]	Irving Langmuir	98615409
+Adrian Lamo	birth_date	1981	0.9491	Low	1	^ [S] ( born [O]	Adrian Lamo	16295947
+Al Gore	birth_date	1948-03-31	0.9491	Low	1	^ [S] ( born [O]	Al Gore	1082824
+Alain Connes	birth_date	1947-04-01	0.9491	Low	1	^ [S] ( born [O]	Alain Connes	448731
+Alan Alda	birth_date	1936-01-28	0.9491	Low	1	^ [S] ( born [O]	Alan Alda	2426288
+Alan Cox	birth_date	1968	0.9491	Low	1	^ [S] ( born [O]	Alan Cox	9301840
+Alan Moore	birth_date	1953-11-18	0.9491	Low	1	^ [S] ( born [O]	Alan Moore	13074536
+Alan Parsons	birth_date	1949-12-20	0.9491	Low	1	^ [S] ( born [O]	Alan Parsons	6334148
+Albert Brooks	birth_date	1947-07-22	0.9491	Low	1	^ [S] ( born [O]	Albert Brooks	16628081
+Alfonso Arau	birth_date	1932-01-11	0.9491	Low	1	^ [S] ( born [O]	Alfonso Arau	5917461
+Alvin Toffler	birth_date	1928-10-03	0.9491	Low	1	^ [S] ( born [O]	Alvin Toffler	4089793
+Andrew Tridgell	birth_date	1967-02-28	0.9491	Low	1	^ [S] ( born [O]	Andrew Tridgell	11218689
+Andrew Wiles	birth_date	1953-04-11	0.9491	Low	1	^ [S] ( born [O]	Andrew Wiles	10783409
+Anita Hill	birth_date	1956-07-30	0.9491	Low	1	^ [S] ( born [O]	Anita Hill	12788430
+Ann Widdecombe	birth_date	1947-10-04	0.9491	Low	1	^ [S] ( born [O]	Ann Widdecombe	13520854
+Anne Rice	birth_date	1941-10-04	0.9491	Low	1	^ [S] ( born [O]	Anne Rice	5103388
+Ardal O'Hanlon	birth_date	1965-10-08	0.9491	Low	1	^ [S] ( born [O]	Ardal O'Hanlon	13291281
+Arlo Guthrie	birth_date	1947-07-10	0.9491	Low	1	^ [S] ( born [O]	Arlo Guthrie	17665383
+Arne Kaijser	birth_date	1950	0.9491	Low	1	^ [S] ( born [O]	Arne Kaijser	3977575
+Arthur Laurents	birth_date	1918-07-14	0.9491	Low	1	^ [S] ( born [O]	Arthur Laurents	16226509
+Atle Selberg	birth_date	1917-06-17	0.9491	Low	1	^ [S] ( born [O]	Atle Selberg	10766143
+Ben Bova	birth_date	1932-11-08	0.9491	Low	1	^ [S] ( born [O]	Ben Bova	29590476
+Benoît Mandelbrot	birth_date	1924-11-20	0.9491	Low	1	^ [S] ( born [O]	Benoît Mandelbrot	22200377
+Bill Bryson	birth_date	1951-12-08	0.9491	Low	1	^ [S] ( born [O]	Bill Bryson	29921243
+Bill Joy	birth_date	1954	0.9491	Low	1	^ [S] ( born [O]	Bill Joy	21675150
+Bill Walsh (football coach)	birth_date	1931-11-30	0.9491	Low	1	^ [S] ( born [O]	Bill Walsh (football coach)	23428174
+Bille August	birth_date	1948-11-09	0.9491	Low	1	^ [S] ( born [O]	Bille August	20559016
+Billy Crystal	birth_date	1947-03-14	0.9491	Low	1	^ [S] ( born [O]	Billy Crystal	27503200
+Björn Ulvaeus	birth_date	1945-04-25	0.9491	Low	1	^ [S] ( born [O]	Björn Ulvaeus	20123247
+Bjørn Lomborg	birth_date	1965-01-06	0.9491	Low	1	^ [S] ( born [O]	Bjørn Lomborg	29681993
+Blythe Danner	birth_date	1943-02-03	0.9491	Low	1	^ [S] ( born [O]	Blythe Danner	22991640
+Bo Diddley	birth_date	1928-12-30	0.9491	Low	1	^ [S] ( born [O]	Bo Diddley	29773704
+Bob Carr	birth_date	1947-09-28	0.9491	Low	1	^ [S] ( born [O]	Bob Carr	27430017
+Brian Boitano	birth_date	1963-10-22	0.9491	Low	1	^ [S] ( born [O]	Brian Boitano	27390982
+Brian Lara	birth_date	1969-05-02	0.9491	Low	1	^ [S] ( born [O]	Brian Lara	25319165
+Brooke Burke	birth_date	1971-09-08	0.9491	Low	1	^ [S] ( born [O]	Brooke Burke	18303370
+Carmen Electra	birth_date	1972-04-20	0.9491	Low	1	^ [S] ( born [O]	Carmen Electra	30086899
+Chaim Topol	birth_date	1935-09-09	0.9491	Low	1	^ [S] ( born [O]	Chaim Topol	46695441
+Charlize Theron	birth_date	1975-08-07	0.9491	Low	1	^ [S] ( born [O]	Charlize Theron	29981451
+Chris Marker	birth_date	1921-07-29	0.9491	Low	1	^ [S] ( born [O]	Chris Marker	41794923
+Chris Morris (satirist)	birth_date	1962-06-15	0.9491	Low	1	^ [S] ( born [O]	Chris Morris (satirist)	32068772
+Chris Sarandon	birth_date	1942-07-24	0.9491	Low	1	^ [S] ( born [O]	Chris Sarandon	44445526
+Clarence Thomas	birth_date	1948-06-23	0.9491	Low	1	^ [S] ( born [O]	Clarence Thomas	42767111
+Claude Piron	birth_date	1931	0.9491	Low	1	^ [S] ( born [O]	Claude Piron	47596312
+Clive Anderson	birth_date	1952-12-10	0.9491	Low	1	^ [S] ( born [O]	Clive Anderson	45924419
+Clive Barker	birth_date	1952-10-05	0.9491	Low	1	^ [S] ( born [O]	Clive Barker	46618822
+Craig Venter	birth_date	1946-10-14	0.9491	Low	1	^ [S] ( born [O]	Craig Venter	46516880
+Dale Earnhardt	birth_date	1951-04-29	0.9491	Low	1	^ [S] ( born [O]	Dale Earnhardt	48333550
+Dan Bricklin	birth_date	1951-07-16	0.9491	Low	1	^ [S] ( born [O]	Dan Bricklin	54157554
+Dana Rohrabacher	birth_date	1947-06-21	0.9491	Low	1	^ [S] ( born [O]	Dana Rohrabacher	55916304
+Daniel Dennett	birth_date	1942-03-28	0.9491	Low	1	^ [S] ( born [O]	Daniel Dennett	54696672
+Daniel Ortega	birth_date	1945-11-11	0.9491	Low	1	^ [S] ( born [O]	Daniel Ortega	54775178
+Danny Elfman	birth_date	1953-05-29	0.9491	Low	1	^ [S] ( born [O]	Danny Elfman	52039864
+Dave Barry	birth_date	1947-07-03	0.9491	Low	1	^ [S] ( born [O]	Dave Barry	52377147
+David Deutsch	birth_date	1953	0.9491	Low	1	^ [S] ( born [O]	David Deutsch	54550866
+David Fincher	birth_date	1962-05-10	0.9491	Low	1	^ [S] ( born [O]	David Fincher	49519486
+David Lynch	birth_date	1946-01-20	0.9491	Low	1	^ [S] ( born [O]	David Lynch	48293985
+David Mamet	birth_date	1947-11-30	0.9491	Low	1	^ [S] ( born [O]	David Mamet	51669367
+Delroy Lindo	birth_date	1952-11-18	0.9491	Low	1	^ [S] ( born [O]	Delroy Lindo	51648624
+Denis Leary	birth_date	1957-08-18	0.9491	Low	1	^ [S] ( born [O]	Denis Leary	55510527
+Dennis Ritchie	birth_date	1941-09-09	0.9491	Low	1	^ [S] ( born [O]	Dennis Ritchie	50645183
+Derek Walcott	birth_date	1930-01-23	0.9491	Low	1	^ [S] ( born [O]	Derek Walcott	55838215
+Dolly Parton	birth_date	1946-01-19	0.9491	Low	1	^ [S] ( born [O]	Dolly Parton	54460119
+Donald Knuth	birth_date	1938-01-10	0.9491	Low	1	^ [S] ( born [O]	Donald Knuth	49774229
+Donald Rumsfeld	birth_date	1932-07-09	0.9491	Low	1	^ [S] ( born [O]	Donald Rumsfeld	53891907
+Doris Day	birth_date	1924-04-03	0.9491	Low	1	^ [S] ( born [O]	Doris Day	51320237
+Douglas Coupland	birth_date	1961-12-30	0.9491	Low	1	^ [S] ( born [O]	Douglas Coupland	49504593
+Edmund Stoiber	birth_date	1941-09-28	0.9491	Low	1	^ [S] ( born [O]	Edmund Stoiber	59208619
+Eli Wallach	birth_date	1915-12-07	0.9491	Low	1	^ [S] ( born [O]	Eli Wallach	65409774
+Ellen van Langen	birth_date	1966-02-09	0.9491	Low	1	^ [S] ( born [O]	Ellen van Langen	65111051
+Elvis Costello	birth_date	1954-08-25	0.9491	Low	1	^ [S] ( born [O]	Elvis Costello	65506001
+Emin Boztepe	birth_date	1962	0.9491	Low	1	^ [S] ( born [O]	Emin Boztepe	64331029
+Ennio Morricone	birth_date	1928-11-10	0.9491	Low	1	^ [S] ( born [O]	Ennio Morricone	64300588
+Enrico Bombieri	birth_date	1940-11-26	0.9491	Low	1	^ [S] ( born [O]	Enrico Bombieri	65375050
+Eric S. Raymond	birth_date	1957-12-04	0.9491	Low	1	^ [S] ( born [O]	Eric S. Raymond	59084210
+Erin Brockovich	birth_date	1960-06-22	0.9491	Low	1	^ [S] ( born [O]	Erin Brockovich	61445278
+Errol Morris	birth_date	1948-02-05	0.9491	Low	1	^ [S] ( born [O]	Errol Morris	58172521
+Francis Ford Coppola	birth_date	1939-04-07	0.9491	Low	1	^ [S] ( born [O]	Francis Ford Coppola	65775994
+Fred Brooks	birth_date	1931-04-19	0.9491	Low	1	^ [S] ( born [O]	Fred Brooks	73455756
+Fred Savage	birth_date	1976-07-09	0.9491	Low	1	^ [S] ( born [O]	Fred Savage	72861158
+Frederik Pohl	birth_date	1919-11-26	0.9491	Low	1	^ [S] ( born [O]	Frederik Pohl	73983702
+Freeman Dyson	birth_date	1923-12-15	0.9491	Low	1	^ [S] ( born [O]	Freeman Dyson	72033578
+Gabriel Fahrenheit	birth_date	1686-05-24	0.9491	Low	1	^ [S] ( born [O]	Gabriel Fahrenheit	54136496
+Gabriel García Márquez	birth_date	1928-03-06	0.9491	Low	1	^ [S] ( born [O]	Gabriel García Márquez	78630238
+Garry Trudeau	birth_date	1948-07-21	0.9491	Low	1	^ [S] ( born [O]	Garry Trudeau	78104904
+Gary Coleman	birth_date	1968-02-08	0.9491	Low	1	^ [S] ( born [O]	Gary Coleman	77189263
+Gary Snyder	birth_date	1930-05-08	0.9491	Low	1	^ [S] ( born [O]	Gary Snyder	80321998
+Gavin MacLeod	birth_date	1930-02-28	0.9491	Low	1	^ [S] ( born [O]	Gavin MacLeod	80784765
+Gene Hackman	birth_date	1930-01-30	0.9491	Low	1	^ [S] ( born [O]	Gene Hackman	79451672
+Geoff Ryman	birth_date	1951	0.9491	Low	1	^ [S] ( born [O]	Geoff Ryman	82616413
+George Lucas	birth_date	1944-05-14	0.9491	Low	1	^ [S] ( born [O]	George Lucas	74649280
+Goran Bregović	birth_date	1950-03-22	0.9491	Low	1	^ [S] ( born [O]	Goran Bregović	77719689
+Gordon Michael Woolvett	birth_date	1970-06-12	0.9491	Low	1	^ [S] ( born [O]	Gordon Michael Woolvett	82147928
+Gregory Chaitin	birth_date	1947	0.9491	Low	1	^ [S] ( born [O]	Gregory Chaitin	77714341
+Grigory Barenblatt	birth_date	1927-07-10	0.9491	Low	1	^ [S] ( born [O]	Grigory Barenblatt	81452855
+Gro Harlem Brundtland	birth_date	1939-04-20	0.9491	Low	1	^ [S] ( born [O]	Gro Harlem Brundtland	82870033
+Halle Berry	birth_date	1966-08-14	0.9491	Low	1	^ [S] ( born [O]	Halle Berry	86847073
+Hans-Dietrich Genscher	birth_date	1927-03-21	0.9491	Low	1	^ [S] ( born [O]	Hans-Dietrich Genscher	86533105
+Harry Connick, Jr.	birth_date	1967-09-11	0.9491	Low	1	^ [S] ( born [O]	Harry Connick, Jr.	86957092
+Harry Shearer	birth_date	1943-12-23	0.9491	Low	1	^ [S] ( born [O]	Harry Shearer	91693906
+Heather Fargo	birth_date	1952-12-12	0.9491	Low	1	^ [S] ( born [O]	Heather Fargo	92433010
+Henri Chopin	birth_date	1922	0.9491	Low	1	^ [S] ( born [O]	Henri Chopin	87067070
+Horace Engdahl	birth_date	1948-12-30	0.9491	Low	1	^ [S] ( born [O]	Horace Engdahl	84464981
+Hugh Hefner	birth_date	1926-04-09	0.9491	Low	1	^ [S] ( born [O]	Hugh Hefner	91142606
+Hugo de Garis	birth_date	1947	0.9491	Low	1	^ [S] ( born [O]	Hugo de Garis	85591785
+Hunter Scott	birth_date	1985-06-09	0.9491	Low	1	^ [S] ( born [O]	Hunter Scott	86778705
+Joshua Jackson	birth_date	1978-06-11	0.9491	Low	1	^ [S] ( born [O]	Joshua Jackson	99764198
+Hadrian	birth_place	Italica	0.9490	Low	2	^ [S] was born in [O] ,	Hadrian	86019411
+Abd-el-latif	birth_date	1162	0.9488	Low	1	[S] ( [O] -	Abd-el-latif	14547968
+Adelaide of Italy	birth_date	0931	0.9488	Low	1	[S] ( [O] -	Adelaide of Italy	13937396
+Adolf Eichmann	birth_date	1906-03-19	0.9488	Low	1	[S] ( [O] -	Adolf Eichmann	4272462
+Adolphe Sax	birth_date	1814-11-06	0.9488	Low	1	[S] ( [O] -	Adolphe Sax	16876120
+Albert the Warlike	birth_date	1522-03-28	0.9488	Low	1	[S] ( [O] -	Albert the Warlike	7555821
+Aleister Crowley	birth_date	1875-10-12	0.9488	Low	1	[S] ( [O] -	Aleister Crowley	5431057
+Alexander Fleming	birth_date	1881-08-06	0.9488	Low	1	[S] ( [O] -	Alexander Fleming	9942134
+Alfonso III of Aragon	birth_date	1265	0.9488	Low	1	[S] ( [O] -	Alfonso III of Aragon	8533028
+Alphege	birth_date	0954	0.9488	Low	1	[S] ( [O] -	Alphege	11314684
+Anton Diabelli	birth_date	1781-09-06	0.9488	Low	1	[S] ( [O] -	Anton Diabelli	12784583
+Arnold Mathew	birth_date	1852	0.9488	Low	1	[S] ( [O] -	Arnold Mathew	8788340
+Arthur Phillip	birth_date	1738-10-11	0.9488	Low	1	[S] ( [O] -	Arthur Phillip	14079583
+Barney Bubbles	birth_date	1942	0.9488	Low	1	[S] ( [O] -	Barney Bubbles	29305058
+Beatrix Potter	birth_date	1866-07-28	0.9488	Low	1	[S] ( [O] -	Beatrix Potter	26332458
+Bela Lugosi	birth_date	1882-10-20	0.9488	Low	1	[S] ( [O] -	Bela Lugosi	29785982
+Blind Lemon Jefferson	birth_date	1893-09	0.9488	Low	1	[S] ( [O] -	Blind Lemon Jefferson	27104731
+C. S. Forester	birth_date	1899-08-27	0.9488	Low	1	[S] ( [O] -	C. S. Forester	35128668
+Charles Edward Jones	birth_date	1952-11-08	0.9488	Low	1	[S] ( [O] -	Charles Edward Jones	39785632
+Charles Williams	birth_date	1886-09-20	0.9488	Low	1	[S] ( [O] -	Charles Williams	40286569
+Clarence Johnson	birth_date	1910-02-27	0.9488	Low	1	[S] ( [O] -	Clarence Johnson	47330662
+Claude Monet	birth_date	1840-11-14	0.9488	Low	1	[S] ( [O] -	Claude Monet	40383730
+Colette	birth_date	1873-01-28	0.9488	Low	1	[S] ( [O] -	Colette	43243059
+Constantine I of Scotland	birth_date	0836	0.9488	Low	1	[S] ( [O] -	Constantine I of Scotland	44718760
+Cordwainer Smith	birth_date	1913-07-11	0.9488	Low	1	[S] ( [O] -	Cordwainer Smith	44129958
+D. W. Griffith	birth_date	1875-01-22	0.9488	Low	1	[S] ( [O] -	D. W. Griffith	48262769
+David A. Huffman	birth_date	1925-08-09	0.9488	Low	1	[S] ( [O] -	David A. Huffman	55823892
+Denis Auguste Affre	birth_date	1793-09-27	0.9488	Low	1	[S] ( [O] -	Denis Auguste Affre	55506955
+Donald Dewar	birth_date	1937-08-21	0.9488	Low	1	[S] ( [O] -	Donald Dewar	55213154
+FM-2030	birth_date	1930-10-15	0.9488	Low	1	[S] ( [O] -	FM-2030	67844451
+Felix Wankel	birth_date	1902-08-13	0.9488	Low	1	[S] ( [O] -	Felix Wankel	71759750
+Frances Abington	birth_date	1737	0.9488	Low	1	[S] ( [O] -	Frances Abington	73259050
+Francis II, Holy Roman Emperor	birth_date	1768-02-12	0.9488	Low	1	[S] ( [O] -	Francis II, Holy Roman Emperor	73002904
+Frederick I, Margrave of Brandenburg-Ansbach	birth_date	1460-05-08	0.9488	Low	1	[S] ( [O] -	Frederick I, Margrave of Brandenburg-Ansbach	74274442
+Frédéric Bazille	birth_date	1841-12-06	0.9488	Low	1	[S] ( [O] -	Frédéric Bazille	72419906
+Gaspard-Gustave Coriolis	birth_date	1792-05-21	0.9488	Low	1	[S] ( [O] -	Gaspard-Gustave Coriolis	82641427
+Georg Agricola	birth_date	1490-03-24	0.9488	Low	1	[S] ( [O] -	Georg Agricola	78947272
+George Eliot	birth_date	1819-11-22	0.9488	Low	1	[S] ( [O] -	George Eliot	82184214
+George Gordon, 1st Earl of Aberdeen	birth_date	1637-10-06	0.9488	Low	1	[S] ( [O] -	George Gordon, 1st Earl of Aberdeen	81139340
+Gerolamo Cardano	birth_date	1501-09-24	0.9488	Low	1	[S] ( [O] -	Gerolamo Cardano	82710246
+Grace Hopper	birth_date	1906-12-09	0.9488	Low	1	[S] ( [O] -	Grace Hopper	79595255
+Gregory Nazianzus	birth_date	0329	0.9488	Low	1	[S] ( [O] -	Gregory Nazianzus	82875158
+Groucho Marx	birth_date	1890-10-02	0.9488	Low	1	[S] ( [O] -	Groucho Marx	78506706
+Hannes Bok	birth_date	1914-07-02	0.9488	Low	1	[S] ( [O] -	Hannes Bok	85461722
+Huldrych Zwingli	birth_date	1484-01-01	0.9488	Low	1	[S] ( [O] -	Huldrych Zwingli	85713405
+Isabella d'Este	birth_date	1474-05-18	0.9488	Low	1	[S] ( [O] -	Isabella d'Este	98779804
+Hipparchus (astronomer)	birth_place	Nicaea	0.9485	Low	2	[S] was born in [O]	Hipparchus (astronomer)	85658263
+Adin Steinsaltz	birth_date	1937	0.9485	Low	1	[S] ( born [O]	Adin Steinsaltz	17293889
+Andrew S. Tanenbaum	birth_date	1944	0.9485	Low	1	[S] ( born [O]	Andrew S. Tanenbaum	16821688
+Anthony Hopkins	birth_date	1968	0.9485	Low	1	[S] ( born [O]	Anthony Hopkins	13281633
+Barbara and Jenna Bush	birth_date	1981-11-25	0.9485	Low	1	[S] ( born [O]	Barbara and Jenna Bush	22710095
+Bruce Sterling	birth_date	1954-04-14	0.9485	Low	1	[S] ( born [O]	Bruce Sterling	20782151
+Catherine Coleman	birth_date	1960-12-14	0.9485	Low	1	[S] ( born [O]	Catherine Coleman	34814626
+Charles C. Krulak	birth_date	1942-03-04	0.9485	Low	1	[S] ( born [O]	Charles C. Krulak	47729489
+Gordon Brown	birth_date	1951-02-20	0.9485	Low	1	[S] ( born [O]	Gordon Brown	82332601
+Harrison Schmitt	birth_date	1935-07-03	0.9485	Low	1	[S] ( born [O]	Harrison Schmitt	87396974
+Ingmar Bergman	birth_date	1945	0.9485	Low	1	[S] ( born [O]	Ingmar Bergman	93490660
+Isaac Bonewits	birth_date	1949-10-01	0.9485	Low	1	[S] ( born [O]	Isaac Bonewits	96937534
+Abraham Joshua Heschel	birth_date	1907-01-11	0.9479	Low	1	[S] ( [O]	Abraham Joshua Heschel	15396778
+Alfred Russel Wallace	birth_date	1889	0.9479	Low	1	[S] ( [O]	Alfred Russel Wallace	7457155
+Fra Bartolommeo	birth_date	1472-03-28	0.9479	Low	1	[S] ( [O]	Fra Bartolommeo	72416087
+Alban Berg	birth_place	Vienna	0.9335	Low	1	^ [S] was born in [O] ,	Alban Berg	13384891
+Algernon Swinburne	birth_place	London	0.9335	Low	1	^ [S] was born in [O] ,	Algernon Swinburne	6232059
+Amr Diab	birth_place	Port Said	0.9335	Low	1	^ [S] was born in [O] ,	Amr Diab	15644304
+Anaïs Nin	birth_place	Neuilly	0.9335	Low	1	^ [S] was born in [O] ,	Anaïs Nin	15665075
+André Gide	birth_place	Paris	0.9335	Low	1	^ [S] was born in [O] ,	André Gide	4868318
+Angus McDuck	birth_place	Glasgow	0.9335	Low	1	^ [S] was born in [O] ,	Angus McDuck	16488504
+Anita Hill	birth_place	Lone Tree	0.9335	Low	1	^ [S] was born in [O] ,	Anita Hill	12788799
+Anton Chekhov	birth_place	Taganrog	0.9335	Low	1	^ [S] was born in [O] ,	Anton Chekhov	13635901
+Atle Selberg	birth_place	Langesund	0.9335	Low	1	^ [S] was born in [O] ,	Atle Selberg	10766400
+Björn Ulvaeus	birth_place	Gothenburg	0.9335	Low	1	^ [S] was born in [O] ,	Björn Ulvaeus	20123393
+Carl Sagan	birth_place	Brooklyn	0.9335	Low	1	^ [S] was born in [O] ,	Carl Sagan	42506094
+Chaim Topol	birth_place	Tel Aviv	0.9335	Low	1	^ [S] was born in [O] ,	Chaim Topol	46695634
+Charles Edward Jones	birth_place	Clinton	0.9335	Low	1	^ [S] was born in [O] ,	Charles Edward Jones	39785878
+Charles Goren	birth_place	Philadelphia	0.9335	Low	1	^ [S] was born in [O] ,	Charles Goren	82510878
+Charles Messier	birth_place	Badonviller	0.9335	Low	1	^ [S] was born in [O] ,	Charles Messier	44830155
+Christopher Guest	birth_place	New York City	0.9335	Low	1	^ [S] was born in [O] ,	Christopher Guest	44449893
+Claude Louis Berthollet	birth_place	Talloires	0.9335	Low	1	^ [S] was born in [O] ,	Claude Louis Berthollet	47917453
+Claude Monet	birth_place	Paris	0.9335	Low	1	^ [S] was born in [O] ,	Claude Monet	40384127
+Clyde Tombaugh	birth_place	Streator	0.9335	Low	1	^ [S] was born in [O] ,	Clyde Tombaugh	41265656
+Colin Dexter	birth_place	Stamford	0.9335	Low	1	^ [S] was born in [O] ,	Colin Dexter	34326903
+Colin Powell	birth_place	The Bronx	0.9335	Low	1	^ [S] was born in [O] ,	Colin Powell	43513349
+Cyrus Griffin	birth_place	Farnham	0.9335	Low	1	^ [S] was born in [O] ,	Cyrus Griffin	44653871
+Dave Barry	birth_place	Armonk	0.9335	Low	1	^ [S] was born in [O] ,	Dave Barry	52377412
+David Beckham	birth_place	Leytonstone	0.9335	Low	1	^ [S] was born in [O] ,	David Beckham	53784610
+Edvard Grieg	birth_place	Bergen	0.9335	Low	1	^ [S] was born in [O] ,	Edvard Grieg	59455972
+Edward Gibbon	birth_place	Putney	0.9335	Low	1	^ [S] was born in [O] ,	Edward Gibbon	64483558
+Edward Sapir	birth_place	Lauenburg	0.9335	Low	1	^ [S] was born in [O] ,	Edward Sapir	58108682
+Eli Wallach	birth_place	Brooklyn	0.9335	Low	1	^ [S] was born in [O] ,	Eli Wallach	65409945
+Emanuel Leutze	birth_place	Schwäbisch Gmünd	0.9335	Low	1	^ [S] was born in [O] ,	Emanuel Leutze	60647680
+Enver Hoxha	birth_place	Gjirokastër	0.9335	Low	1	^ [S] was born in [O] ,	Enver Hoxha	64343749
+Eric Hoffer	birth_place	New York City	0.9335	Low	1	^ [S] was born in [O] ,	Eric Hoffer	59832585
+Ernest Thayer	birth_place	Lawrence	0.9335	Low	1	^ [S] was born in [O] ,	Ernest Thayer	60852256
+Eugene Wigner	birth_place	Budapest	0.9335	Low	1	^ [S] was born in [O] ,	Eugene Wigner	63263305
+Felix Wankel	birth_place	Lahr	0.9335	Low	1	^ [S] was born in [O] ,	Felix Wankel	71759905
+Francisco Franco	birth_place	Ferrol	0.9335	Low	1	^ [S] was born in [O] ,	Francisco Franco	72501740
+Franz Boas	birth_place	Minden	0.9335	Low	1	^ [S] was born in [O] ,	Franz Boas	73691787
+Frederick Soddy	birth_place	Eastbourne	0.9335	Low	1	^ [S] was born in [O] ,	Frederick Soddy	74231683
+Frédéric Bastiat	birth_place	Bayonne	0.9335	Low	1	^ [S] was born in [O] ,	Frédéric Bastiat	71017494
+Frédéric Mistral	birth_place	Maillane	0.9335	Low	1	^ [S] was born in [O] ,	Frédéric Mistral	72580345
+Geoff Hurst	birth_place	Ashton-under-Lyne	0.9335	Low	1	^ [S] was born in [O] ,	Geoff Hurst	79133429
+Gerard Manley Hopkins	birth_place	Stratford	0.9335	Low	1	^ [S] was born in [O] ,	Gerard Manley Hopkins	79227868
+Gnaeus Julius Agricola	birth_place	Frejus	0.9335	Low	1	^ [S] was born in [O] ,	Gnaeus Julius Agricola	78461629
+Goran Bregović	birth_place	Sarajevo	0.9335	Low	1	^ [S] was born in [O] ,	Goran Bregović	77719831
+Gustav Kirchhoff	birth_place	Kaliningrad	0.9335	Low	1	^ [S] was born in [O] ,	Gustav Kirchhoff	77894103
+Hans Christian Andersen	birth_place	Odense	0.9335	Low	1	^ [S] was born in [O] ,	Hans Christian Andersen	85398872
+Heinrich Rudolf Hertz	birth_place	Hamburg	0.9335	Low	1	^ [S] was born in [O] ,	Heinrich Rudolf Hertz	84421602
+Hernán Cortés	birth_place	Medellín	0.9335	Low	1	^ [S] was born in [O] ,	Hernán Cortés	89412963
+Hideki Tojo	birth_place	Tokyo	0.9335	Low	1	^ [S] was born in [O] ,	Hideki Tojo	83813729
+Horace Engdahl	birth_place	Karlskrona	0.9335	Low	1	^ [S] was born in [O] ,	Horace Engdahl	84465166
+Hugh Hefner	birth_place	Chicago	0.9335	Low	1	^ [S] was born in [O] ,	Hugh Hefner	91142873
+Huldrych Zwingli	birth_place	Wildhaus	0.9335	Low	1	^ [S] was born in [O] ,	Huldrych Zwingli	85713866
+Irving Langmuir	birth_place	Brooklyn	0.9335	Low	1	^ [S] was born in [O] ,	Irving Langmuir	98615943
+Izabella Scorupco	birth_place	Białystok	0.9335	Low	1	^ [S] was born in [O] ,	Izabella Scorupco	93058898
+Robert Koch	birth_place	Clausthal	0.9335	Low	1	^ [S] was born in [O] ,	Robert Koch	86867656
+Camille Pissarro	birth_place	Charlotte Amalie	0.9335	Low	1	[S] was born in [O] ,	Camille Pissarro	45813362
+Franklin Schaffner	birth_place	Tokyo	0.9335	Low	1	[S] was born in [O] ,	Franklin Schaffner	73794011
+Abu Bakr	birth_place	Mecca	0.9332	Low	1	[S] was born in [O]	Abu Bakr	8665922
+Adolph Wilhelm Hermann Kolbe	birth_place	Elliehausen	0.9332	Low	1	[S] was born in [O]	Adolph Wilhelm Hermann Kolbe	9306387
+Adolphe Sax	birth_place	Dinant	0.9332	Low	1	[S] was born in [O]	Adolphe Sax	16876344
+Alan Ayckbourn	birth_place	London	0.9332	Low	1	[S] was born in [O]	Alan Ayckbourn	10414898
+Ansgar	birth_place	Amiens	0.9332	Low	1	[S] was born in [O]	Ansgar	14006070
+Antonio Canova	birth_place	Possagno	0.9332	Low	1	[S] was born in [O]	Antonio Canova	10992389
+Arthur Phillip	birth_place	London	0.9332	Low	1	[S] was born in [O]	Arthur Phillip	14080017
+Boris Pasternak	birth_place	Moscow	0.9332	Low	1	[S] was born in [O]	Boris Pasternak	27736869
+Boston Corbett	birth_place	England	0.9332	Low	1	[S] was born in [O]	Boston Corbett	27876958
+Brigitte Bardot	birth_place	Paris	0.9332	Low	1	[S] was born in [O]	Brigitte Bardot	20827191
+Charles Baudelaire	birth_place	Paris	0.9332	Low	1	[S] was born in [O]	Charles Baudelaire	35398432
+Chris Morris (satirist)	birth_place	Cambridgeshire	0.9332	Low	1	[S] was born in [O]	Chris Morris (satirist)	32068926
+Christian Doppler	birth_place	Salzburg	0.9332	Low	1	[S] was born in [O]	Christian Doppler	44049829
+Cyril M. Kornbluth	birth_place	New York City	0.9332	Low	1	[S] was born in [O]	Cyril M. Kornbluth	47538231
+Domitian	birth_place	Rome	0.9332	Low	1	[S] was born in [O]	Domitian	53640799
+Edmund Stoiber	birth_place	Oberaudorf	0.9332	Low	1	[S] was born in [O]	Edmund Stoiber	59209114
+Ernst Mayr	birth_place	Kempten	0.9332	Low	1	[S] was born in [O]	Ernst Mayr	57265442
+Euripides	birth_place	Salamis	0.9332	Low	1	[S] was born in [O]	Euripides	61483455
+Franz Schmidt	birth_place	Bratislava	0.9332	Low	1	[S] was born in [O]	Franz Schmidt	74163946
+Freddy Heineken	birth_place	Amsterdam	0.9332	Low	1	[S] was born in [O]	Freddy Heineken	73919676
+Frederick William, Elector of Brandenburg	birth_place	Berlin	0.9332	Low	1	[S] was born in [O]	Frederick William, Elector of Brandenburg	72379992
+Friedrich Hayek	birth_place	Vienna	0.9332	Low	1	[S] was born in [O]	Friedrich Hayek	73431989
+Frédéric Chopin	birth_place	Żelazowa Wola	0.9332	Low	1	[S] was born in [O]	Frédéric Chopin	67448288
+Gautama Buddha	birth_place	Lumbini	0.9332	Low	1	[S] was born in [O]	Gautama Buddha	18504902
+Georg Wilhelm Friedrich Hegel	birth_place	Stuttgart	0.9332	Low	1	[S] was born in [O]	Georg Wilhelm Friedrich Hegel	79640255
+Gilles Deleuze	birth_place	Paris	0.9332	Low	1	[S] was born in [O]	Gilles Deleuze	79409491
+Gordon Brown	birth_place	Glasgow	0.9332	Low	1	[S] was born in [O]	Gordon Brown	82333597
+Henry Kissinger	birth_place	Fürth	0.9332	Low	1	[S] was born in [O]	Henry Kissinger	87074884
+Herbert Marcuse	birth_place	Berlin	0.9332	Low	1	[S] was born in [O]	Herbert Marcuse	87307011
+Herman Melville	birth_place	New York City	0.9332	Low	1	[S] was born in [O]	Herman Melville	86044246
+Édouard Manet	birth_place	Paris	0.9332	Low	1	[S] was born in [O]	Édouard Manet	60224519
+Alan Baker	birth_place	London	0.9331	Low	1	[P] was born in [O]	Alan Baker	15395206
+Alexander Emanuel Agassiz	birth_place	Neuchâtel	0.9331	Low	1	[P] was born in [O]	Alexander Emanuel Agassiz	7767470
+Alfonso Leng	birth_place	Santiago	0.9331	Low	1	[P] was born in [O]	Alfonso Leng	12899453
+Amanda Hesser	birth_place	Doylestown	0.9331	Low	1	[P] was born in [O]	Amanda Hesser	15472481
+Anatole France	birth_place	Paris	0.9331	Low	1	[P] was born in [O]	Anatole France	4862629
+Andrew S. Tanenbaum	birth_place	New York City	0.9331	Low	1	[P] was born in [O]	Andrew S. Tanenbaum	16822144
+August Horch	birth_place	Winningen	0.9331	Low	1	[P] was born in [O]	August Horch	10839877
+Brian Kernighan	birth_place	Toronto	0.9331	Low	1	[P] was born in [O]	Brian Kernighan	22576828
+Claude Lévi-Strauss	birth_place	Brussels	0.9331	Low	1	[P] was born in [O]	Claude Lévi-Strauss	37826320
+Constantius II	birth_place	Sirmium	0.9331	Low	1	[P] was born in [O]	Constantius II	42031887
+Czesław Miłosz	birth_place	Šeteniai	0.9331	Low	1	[P] was born in [O]	Czesław Miłosz	40320864
+Diedrich Hermann Westermann	birth_place	Baden	0.9331	Low	1	[P] was born in [O]	Diedrich Hermann Westermann	52440783
+Downy O'Drake	birth_place	Ireland	0.9331	Low	1	[P] was born in [O]	Downy O'Drake	56391300
+Eden Phillpotts	birth_place	India	0.9331	Low	1	[P] was born in [O]	Eden Phillpotts	60907721
+Edward Mitchell Bannister	birth_place	St Andrews	0.9331	Low	1	[P] was born in [O]	Edward Mitchell Bannister	62634821
+Fergus McDuck	birth_place	Glasgow	0.9331	Low	1	[P] was born in [O]	Fergus McDuck	73653282
+François d'Aguilon	birth_place	Brussels	0.9331	Low	1	[P] was born in [O]	François d'Aguilon	68829639
+Friedrich August Kekulé von Stradonitz	birth_place	Darmstadt	0.9331	Low	1	[P] was born in [O]	Friedrich August Kekulé von Stradonitz	72537252
+Friedrich Bessel	birth_place	Minden	0.9331	Low	1	[P] was born in [O]	Friedrich Bessel	73081748
+Friedrich Wöhler	birth_place	Eschersheim	0.9331	Low	1	[P] was born in [O]	Friedrich Wöhler	67010932
+Geoff Ryman	birth_place	Canada	0.9331	Low	1	[P] was born in [O]	Geoff Ryman	82616413
+Gerard David	birth_place	Oudewater	0.9331	Low	1	[P] was born in [O]	Gerard David	80868058
+Gro Harlem Brundtland	birth_place	Bærum	0.9331	Low	1	[P] was born in [O]	Gro Harlem Brundtland	82870251
+Gustave Eiffel	birth_place	Dijon	0.9331	Low	1	[P] was born in [O]	Gustave Eiffel	77233219
+Gustavus Adolphus of Sweden	birth_place	Stockholm	0.9331	Low	1	[P] was born in [O]	Gustavus Adolphus of Sweden	80123173
+Hans Gerhard Creutzfeldt	birth_place	Harburg	0.9331	Low	1	[P] was born in [O]	Hans Gerhard Creutzfeldt	84682344
+Harold Holt	birth_place	Sydney	0.9331	Low	1	[P] was born in [O]	Harold Holt	88156046
+Henri Bergson	birth_place	Paris	0.9331	Low	1	[P] was born in [O]	Henri Bergson	85154848
+Horace Walpole, 4th Earl of Orford	birth_place	London	0.9331	Low	1	[P] was born in [O]	Horace Walpole, 4th Earl of Orford	84460264
+Joshua Jackson	birth_place	Vancouver	0.9331	Low	1	[P] was born in [O]	Joshua Jackson	99764198
+Marie Louise Élisabeth Vigée-Lebrun	birth_place	Paris	0.9331	Low	1	[P] was born in [O]	Marie Louise Élisabeth Vigée-Lebrun	62272719
+Tsarevich Alexei Petrovich of Russia	birth_place	Moscow	0.9331	Low	1	[P] was born in [O]	Tsarevich Alexei Petrovich of Russia	8084031
+İsmet İnönü	birth_place	İzmir	0.9331	Low	1	[P] was born in [O]	İsmet İnönü	93449773
+Adolph Wilhelm Hermann Kolbe	death_place	Leipzig	0.9111	Low	1	[P] died in [O]	Adolph Wilhelm Hermann Kolbe	9308149
+Alaric I	death_place	Cosenza	0.9111	Low	1	[P] died in [O]	Alaric I	7871687
+Allan Dwan	death_place	Los Angeles	0.9111	Low	1	[P] died in [O]	Allan Dwan	453873
+Amos Bronson Alcott	death_place	Boston	0.9111	Low	1	[P] died in [O]	Amos Bronson Alcott	6823847
+Antonio Agliardi	death_place	Rome	0.9111	Low	1	[P] died in [O]	Antonio Agliardi	7786425
+Arthur Aikin	death_place	London	0.9111	Low	1	[P] died in [O]	Arthur Aikin	7832165
+Arthur William a Beckett	death_place	London	0.9111	Low	1	[P] died in [O]	Arthur William a Beckett	14730174
+Aurangzeb	death_place	Ahmednagar	0.9111	Low	1	[P] died in [O]	Aurangzeb	13559827
+Babrak Karmal	death_place	Moscow	0.9111	Low	1	[P] died in [O]	Babrak Karmal	26201874
+Claude Louis Berthollet	death_place	Arcueil	0.9111	Low	1	[P] died in [O]	Claude Louis Berthollet	47918057
+Claudio Monteverdi	death_place	Venice	0.9111	Low	1	[P] died in [O]	Claudio Monteverdi	38467621
+Damon Runyon	death_place	New York City	0.9111	Low	1	[P] died in [O]	Damon Runyon	56816412
+Edgar Allan Poe	death_place	Baltimore	0.9111	Low	1	[P] died in [O]	Edgar Allan Poe	59679717
+Edgar Rice Burroughs	death_place	Encino	0.9111	Low	1	[P] died in [O]	Edgar Rice Burroughs	60487956
+Emanuel Leutze	death_place	Washington	0.9111	Low	1	[P] died in [O]	Emanuel Leutze	60649785
+Eugène Viollet-le-Duc	death_place	Lausanne	0.9111	Low	1	[P] died in [O]	Eugène Viollet-le-Duc	60500833
+Fiorello H. LaGuardia	death_place	New York City	0.9111	Low	1	[P] died in [O]	Fiorello H. LaGuardia	72133730
+Francis Hopkinson	death_place	Philadelphia	0.9111	Low	1	[P] died in [O]	Francis Hopkinson	69098489
+François d'Aguilon	death_place	Antwerp	0.9111	Low	1	[P] died in [O]	François d'Aguilon	68829639
+Frederick Soddy	death_place	Brighton	0.9111	Low	1	[P] died in [O]	Frederick Soddy	74234737
+George S. Kaufman	death_place	New York City	0.9111	Low	1	[P] died in [O]	George S. Kaufman	81886293
+Gian Lorenzo Bernini	death_place	Rome	0.9111	Low	1	[P] died in [O]	Gian Lorenzo Bernini	79883106
+Gustav Klimt	death_place	Vienna	0.9111	Low	1	[P] died in [O]	Gustav Klimt	78499871
+Henry Bruce, 1st Baron Aberdare	death_place	London	0.9111	Low	1	[P] died in [O]	Henry Bruce, 1st Baron Aberdare	90788045
+Henry Fielding	death_place	Lisbon	0.9111	Low	1	[P] died in [O]	Henry Fielding	85328092
+Howard Carter	death_place	England	0.9111	Low	1	[P] died in [O]	Howard Carter	85918065
+Hugo Gernsback	death_place	New York City	0.9111	Low	1	[P] died in [O]	Hugo Gernsback	86187561
+Ivar Aasen	death_place	Christiania	0.9111	Low	1	[P] died in [O]	Ivar Aasen	97814931
+Robert Koch	death_place	Baden-Baden	0.9111	Low	1	[P] died in [O]	Robert Koch	86871229
+Édouard Manet	death_place	Paris	0.9111	Low	1	[P] died in [O]	Édouard Manet	60236563
+Chad	language	arabic	0.8559	Low	1	[S] ( [O]	Chad	32738718
+Chad	language	Arabic	0.8559	Low	1	[S] ( [O]	Chad	32738718
+Antonio Salieri	birth_date	1750-08-18	0.7404	Low	1	^ [S] ( [O] -	Antonio Salieri	12404990
+Douglas Adams	birth_date	1952-03-11	0.7404	Low	1	^ [S] ( [O] -	Douglas Adams	49689005
+Giulio Alberoni	birth_date	1664-05-30	0.7397	Low	1	^ [S] ( [O]	Giulio Alberoni	78958770
+Arthur C. Clarke	birth_date	1917-12-16	0.7381	Low	1	^ [S] ( born [O]	Arthur C. Clarke	3636569
+William Kidd	birth_date	1654-01-22	0.7368	Low	1	[S] ( [O] -	William Kidd	44148298
+Gilbert and Sullivan	birth_year	1836	0.7358	Low	1	[S] ( [O] -	Gilbert and Sullivan	81904101
+Gilbert and Sullivan	birth_year	1842	0.7358	Low	1	[S] ( [O] -	Gilbert and Sullivan	81904101
+Auguste and Louis Lumière	birth_date	1862-10-19	0.7334	Low	1	[S] ( [O]	Auguste and Louis Lumière	11122045
+Auguste and Louis Lumière	birth_date	1864-10-05	0.7334	Low	1	[S] ( [O]	Auguste and Louis Lumière	11122045
+Charles Peirce	birth_date	1885	0.7334	Low	1	[S] ( [O]	Charles Peirce	37937477
+Alessandro Allori	birth_date	1535-05-31	0.7310	Low	1	^ [S] ( [O] -	Alessandro Allori	8380367
+Charles Ancillon	birth_date	1659-07-28	0.7310	Low	1	^ [S] ( [O] -	Charles Ancillon	38412146
+Ford Madox Brown	birth_date	1821-04-16	0.7310	Low	1	^ [S] ( [O] -	Ford Madox Brown	72421805
+Ertegun brothers	birth_date	1917	0.7309	Low	1	[S] ( [O] -	Ertegun brothers	64526852
+Abu Zubaydah	birth_year	1971	0.7302	Low	1	^ [S] ( [O]	Abu Zubaydah	16848069
+Chester A. Arthur	birth_year	1829	0.7302	Low	1	^ [S] ( [O]	Chester A. Arthur	38310536
+Ernest Thayer	birth_year	1863	0.7302	Low	1	^ [S] ( [O]	Ernest Thayer	60852080
+Damon Runyon	death_year	1946	0.7301	Low	1	^ [S] ( <M> # , # - [O] )	Damon Runyon	56810759
+Ernest Hemingway	death_year	1961	0.7301	Low	1	^ [S] ( <M> # , # - [O] )	Ernest Hemingway	58890833
+Alexander Mackenzie	death_year	1852	0.7299	Low	1	[S] ( <M> # , # - [O] )	Alexander Mackenzie	5829021
+Arthur St. Clair	death_year	1736	0.7299	Low	1	^ [S] ( <M> # , # - [O]	Arthur St. Clair	14392509
+Andreas Aagesen	death_year	1879	0.7292	Low	1	^ [S] ( # - [O] )	Andreas Aagesen	13172190
+Bob Dylan	birth_place	Duluth	0.7283	Low	1	^ [S] was born in [O] ,	Bob Dylan	17881910
+Charles Farrar Browne	birth_place	Waterford	0.7283	Low	1	^ [S] was born in [O] ,	Charles Farrar Browne	39567907
+Dan Bricklin	birth_place	Philadelphia	0.7283	Low	1	^ [S] was born in [O] ,	Dan Bricklin	54157801
+Errol Morris	birth_place	Hewlett	0.7283	Low	1	^ [S] was born in [O] ,	Errol Morris	58172865
+Gene Hackman	birth_place	San Bernardino	0.7283	Low	1	^ [S] was born in [O] ,	Gene Hackman	79451823
+Gilbert N. Lewis	birth_place	Weymouth	0.7283	Low	1	^ [S] was born in [O] ,	Gilbert N. Lewis	81887668
+Bing Crosby	birth_place	Tacoma	0.7282	Low	1	[S] was born in [O] ,	Bing Crosby	22313586
+Gary Snyder	birth_place	San Francisco	0.7282	Low	1	[S] was born in [O] ,	Gary Snyder	80322868
+Isaac Ambrose	death_year	1663	0.7280	Low	1	^ [S] ( # - [O]	Isaac Ambrose	95914829
+Anthony Hopkins	birth_year	1968	0.7279	Low	1	[S] ( born [O]	Anthony Hopkins	13281633
+Desi Arnaz	birth_year	1951	0.7279	Low	1	[S] ( born [O]	Desi Arnaz	54744085
+Dwight D. Eisenhower	birth_year	1922	0.7279	Low	1	[S] ( born [O]	Dwight D. Eisenhower	50274210
+Ingmar Bergman	birth_year	1945	0.7279	Low	1	[S] ( born [O]	Ingmar Bergman	93490660
+Alessandro Allori	birth_year	1577	0.7274	Low	1	[S] ( [O] -	Alessandro Allori	8381054
+Alexander Mackenzie	birth_year	1826	0.7274	Low	1	[S] ( [O] -	Alexander Mackenzie	5829021
+Anthony Eden	birth_year	1930	0.7274	Low	1	[S] ( [O] -	Anthony Eden	4849857
+Bill Watterson	birth_year	1932	0.7274	Low	1	[S] ( [O] -	Bill Watterson	22504027
+Charles Ancillon	birth_year	1617	0.7274	Low	1	[S] ( [O] -	Charles Ancillon	38412146
+Clement Attlee	birth_year	1927	0.7274	Low	1	[S] ( [O] -	Clement Attlee	35089363
+Diego Maradona	birth_year	1895	0.7274	Low	1	[S] ( [O] -	Diego Maradona	52721438
+Ford Madox Brown	birth_year	1855	0.7274	Low	1	[S] ( [O] -	Ford Madox Brown	72423865
+Franz Kafka	birth_year	1852	0.7274	Low	1	[S] ( [O] -	Franz Kafka	67774372
+George Washington	birth_year	1708	0.7274	Low	1	[S] ( [O] -	George Washington	75705803
+Hans Christian Ørsted	birth_year	1778	0.7274	Low	1	[S] ( [O] -	Hans Christian Ørsted	84413004
+Gilbert and Sullivan	birth_date	1836	0.7274	Low	1	[S] ( [O] -	Gilbert and Sullivan	81904101
+Gilbert and Sullivan	birth_date	1842	0.7274	Low	1	[S] ( [O] -	Gilbert and Sullivan	81904101
+Avery Hopwood	birth_place	Cleveland	0.7273	Low	1	[P] was born in [O]	Avery Hopwood	12918259
+Avery Hopwood	birth_place	Cleveland, Ohio	0.7273	Low	1	[P] was born in [O]	Avery Hopwood	12918259
+Cecilia Beaux	birth_place	Philadelphia	0.7273	Low	1	[P] was born in [O]	Cecilia Beaux	42932165
+Cecilia Beaux	birth_place	Philadelphia, Pennsylvania	0.7273	Low	1	[P] was born in [O]	Cecilia Beaux	42932165
+Edna St. Vincent Millay	birth_place	Rockland	0.7273	Low	1	[P] was born in [O]	Edna St. Vincent Millay	61544209
+Edna St. Vincent Millay	birth_place	Rockland, Maine	0.7273	Low	1	[P] was born in [O]	Edna St. Vincent Millay	61544209
+Hannes Bok	birth_place	Duluth	0.7273	Low	1	[P] was born in [O]	Hannes Bok	85462193
+Hannes Bok	birth_place	Duluth, Minnesota	0.7273	Low	1	[P] was born in [O]	Hannes Bok	85462193
+Bertrand Russell	death_year	1878	0.7262	Low	1	[S] died in [O]	Bertrand Russell	23346321
+Ertegun brothers	birth_date	1923	0.7261	Low	1	[S] ( born [O]	Ertegun brothers	64526852
+Glenn T. Seaborg	birth_place	Ishpeming	0.7256	Low	1	[S] was born in [O] ,	Glenn T. Seaborg	82627970
+Glenn T. Seaborg	birth_place	Ishpeming, Michigan	0.7256	Low	1	[S] was born in [O] ,	Glenn T. Seaborg	82627970
+Al Gore	birth_place	Washington	0.7254	Low	1	^ [S] was born in [O] ,	Al Gore	1084739
+Al Gore	birth_place	Washington, D.C.	0.7254	Low	1	^ [S] was born in [O] ,	Al Gore	1084739
+E. E. Cummings	birth_place	Cambridge	0.7254	Low	1	^ [S] was born in [O] ,	E. E. Cummings	59980679
+E. E. Cummings	birth_place	Cambridge, Massachusetts	0.7254	Low	1	^ [S] was born in [O] ,	E. E. Cummings	59980679
+Alfred Russel Wallace	birth_year	1889	0.7249	Low	1	[S] ( [O]	Alfred Russel Wallace	7457155
+Arthur C. Clarke	birth_year	2001	0.7249	Low	1	[S] ( [O]	Arthur C. Clarke	3656072
+Enya	birth_year	1987	0.7249	Low	1	[S] ( [O]	Enya	59224561
+Giulio Alberoni	birth_year	1739	0.7249	Low	1	[S] ( [O]	Giulio Alberoni	78963433
+Bing Crosby	birth_place	Tacoma, Washington	0.7245	Low	1	[S] was born in [O]	Bing Crosby	22313586
+Gary Snyder	birth_place	San Francisco, California	0.7245	Low	1	[S] was born in [O]	Gary Snyder	80322868
+Bob Dylan	birth_place	Duluth, Minnesota	0.7242	Low	1	[S] was born in [O]	Bob Dylan	17881910
+Charles Farrar Browne	birth_place	Waterford, Maine	0.7242	Low	1	[S] was born in [O]	Charles Farrar Browne	39567907
+Dan Bricklin	birth_place	Philadelphia, Pennsylvania	0.7242	Low	1	[S] was born in [O]	Dan Bricklin	54157801
+Errol Morris	birth_place	Hewlett, New York	0.7242	Low	1	[S] was born in [O]	Errol Morris	58172865
+Gene Hackman	birth_place	San Bernardino, California	0.7242	Low	1	[S] was born in [O]	Gene Hackman	79451823
+Gilbert N. Lewis	birth_place	Weymouth, Massachusetts	0.7242	Low	1	[S] was born in [O]	Gilbert N. Lewis	81887668
+Arthur C. Clarke	birth_date	2001	0.7203	Low	1	[S] ( [O]	Arthur C. Clarke	3656072
+Alessandro Allori	birth_date	1577	0.7177	Low	1	[S] ( [O] -	Alessandro Allori	8381054
+Charles Ancillon	birth_date	1617	0.7177	Low	1	[S] ( [O] -	Charles Ancillon	38412146
+Ford Madox Brown	birth_date	1855	0.7177	Low	1	[S] ( [O] -	Ford Madox Brown	72423865
+Giulio Alberoni	birth_date	1739	0.7159	Low	1	[S] ( [O]	Giulio Alberoni	78963433
+Baldassare Castiglione	death_place	Toledo	0.7149	Low	1	[P] died in [O]	Baldassare Castiglione	28564714
+Baldassare Castiglione	death_place	Toledo, Spain	0.7149	Low	1	[P] died in [O]	Baldassare Castiglione	28564714
+Hannibal Hamlin	death_place	Bangor	0.7149	Low	1	[P] died in [O]	Hannibal Hamlin	89182422
+Hannibal Hamlin	death_place	Bangor, Maine	0.7149	Low	1	[P] died in [O]	Hannibal Hamlin	89182422
+George Benson	birth_date	1943-03-22	0.7141	Low	1	^ [S] ( born [O]	George Benson	81443413
+Anthony Eden	birth_date	1930	0.7127	Low	1	[S] ( [O] -	Anthony Eden	4849857
+Bill Watterson	birth_date	1932	0.7127	Low	1	[S] ( [O] -	Bill Watterson	22504027
+Clement Attlee	birth_date	1927	0.7127	Low	1	[S] ( [O] -	Clement Attlee	35089363
+Diego Maradona	birth_date	1895	0.7127	Low	1	[S] ( [O] -	Diego Maradona	52721438
+Franz Kafka	birth_date	1852	0.7127	Low	1	[S] ( [O] -	Franz Kafka	67774372
+Hans Christian Ørsted	birth_date	1778	0.7127	Low	1	[S] ( [O] -	Hans Christian Ørsted	84413004
+Desi Arnaz	birth_date	1951	0.7113	Low	1	[S] ( born [O]	Desi Arnaz	54744085
+Dwight D. Eisenhower	birth_date	1922	0.7113	Low	1	[S] ( born [O]	Dwight D. Eisenhower	50274210
+Albert Pike	birth_place	Boston	0.7095	Low	1	^ [S] was born in [O] ,	Albert Pike	13059493
+Anthony Eden	birth_place	Durham	0.7095	Low	1	^ [S] was born in [O] ,	Anthony Eden	4840809
+Calista Flockhart	birth_place	Freeport	0.7095	Low	1	^ [S] was born in [O] ,	Calista Flockhart	46381982
+Carl Rogers	birth_place	Oak Park	0.7095	Low	1	^ [S] was born in [O] ,	Carl Rogers	46523668
+Charles Babbage	birth_place	England	0.7095	Low	1	^ [S] was born in [O] ,	Charles Babbage	34420796
+Charles Robert Malden	birth_place	Putney	0.7095	Low	1	^ [S] was born in [O] ,	Charles Robert Malden	37718308
+Eric Clapton	birth_place	Ripley	0.7095	Low	1	^ [S] was born in [O] ,	Eric Clapton	62985805
+Francis Drake	birth_place	Tavistock	0.7095	Low	1	^ [S] was born in [O] ,	Francis Drake	72664396
+Garrison Keillor	birth_place	Anoka	0.7095	Low	1	^ [S] was born in [O] ,	Garrison Keillor	80605037
+Georg Philipp Telemann	birth_place	Magdeburg	0.7095	Low	1	^ [S] was born in [O] ,	Georg Philipp Telemann	82229056
+George Peppard	birth_place	Detroit	0.7095	Low	1	^ [S] was born in [O] ,	George Peppard	79249574
+George Stephenson	birth_place	Wylam	0.7095	Low	1	^ [S] was born in [O] ,	George Stephenson	79539392
+George Vancouver	birth_place	King's Lynn	0.7095	Low	1	^ [S] was born in [O] ,	George Vancouver	81114287
+Henry Moseley	birth_place	Weymouth	0.7095	Low	1	^ [S] was born in [O] ,	Henry Moseley	92569202
+Hermann Göring	birth_place	Rosenheim	0.7095	Low	1	^ [S] was born in [O] ,	Hermann Göring	84863477
+Ian McKellen	birth_place	Burnley	0.7095	Low	1	^ [S] was born in [O] ,	Ian McKellen	98241923
+Aria Giovanni	birth_place	Los Angeles	0.7094	Low	1	[S] was born in [O] ,	Aria Giovanni	14897096
+Enya	birth_date	1987	0.7091	Low	1	[S] ( [O]	Enya	59224561
+Barry Goldwater	birth_place	Phoenix	0.7083	Low	1	[S] was born in [O]	Barry Goldwater	28532522
+Christine de Pizan	birth_place	Venice	0.7083	Low	1	[S] was born in [O]	Christine de Pizan	47043006
+Fiorello H. LaGuardia	birth_place	The Bronx	0.7083	Low	1	[S] was born in [O]	Fiorello H. LaGuardia	72129095
+Baldassare Castiglione	birth_place	Casatico	0.7082	Low	1	[P] was born in [O]	Baldassare Castiglione	28557542
+Colette	birth_place	Saint-Sauveur-en-Puisaye	0.7082	Low	1	[P] was born in [O]	Colette	43243224
+David Thompson (explorer)	birth_place	London	0.7082	Low	1	[P] was born in [O]	David Thompson (explorer)	49182383
+Dirk Benedict	birth_place	Helena	0.7082	Low	1	[P] was born in [O]	Dirk Benedict	54509364
+Hank Greenberg	birth_place	New York City	0.7082	Low	1	[P] was born in [O]	Hank Greenberg	86088727
+Herbert Simon	birth_place	Milwaukee	0.7082	Low	1	[P] was born in [O]	Herbert Simon	90799700
+Humphrey Bogart	death_place	Hollywood	0.6893	Low	1	[P] died in [O]	Humphrey Bogart	89678986
+Humphry Davy	birth_place	Penzance	0.6485	Low	2	[S] was born in [O]	Humphry Davy	91947698
+Damon Runyon	birth_date	1884-10-04	0.6067	Low	1	^ [S] ( [O] -	Damon Runyon	56810759
+Barış Manço	birth_year	1976	0.6003	Low	1	[S] ( [O]	Barış Manço	28771943
+Barış Manço	birth_year	1980	0.6003	Low	1	[S] ( [O]	Barış Manço	28772381
+Barış Manço	birth_year	1992	0.6003	Low	1	[S] ( [O]	Barış Manço	28775219
+Barış Manço	birth_date	1976	0.5980	Low	1	[S] ( [O]	Barış Manço	28771943
+Barış Manço	birth_date	1980	0.5980	Low	1	[S] ( [O]	Barış Manço	28772381
+Barış Manço	birth_date	1992	0.5980	Low	1	[S] ( [O]	Barış Manço	28775219
+Edvard Munch	birth_date	1863-12-12	0.5942	Low	1	^ [S] ( [O] -	Edvard Munch	61376203
+Edwin Abbott Abbott	birth_date	1838-12-20	0.5942	Low	1	^ [S] ( [O] -	Edwin Abbott Abbott	63433409
+William Kidd	birth_year	1654	0.5933	Low	1	[S] ( [O] -	William Kidd	44148298
+Charles Peirce	birth_year	1885	0.5902	Low	1	[S] ( [O]	Charles Peirce	37937477
+Damon Runyon	birth_year	1940	0.5902	Low	1	[S] ( [O]	Damon Runyon	56817066
+Edwin Abbott Abbott	birth_year	1806	0.5889	Low	1	[S] ( [O] -	Edwin Abbott Abbott	63433409
+Edwin Abbott Abbott	birth_year	1808	0.5889	Low	1	[S] ( [O] -	Edwin Abbott Abbott	63433409
+Franklin Pierce	birth_year	1839	0.5889	Low	1	[S] ( [O] -	Franklin Pierce	68911975
+Franklin Pierce	birth_year	1841	0.5889	Low	1	[S] ( [O] -	Franklin Pierce	68911975
+Frank Sinatra	birth_year	1940	0.5886	Low	1	[S] ( born [O]	Frank Sinatra	70111290
+Frank Sinatra	birth_year	1948	0.5886	Low	1	[S] ( born [O]	Frank Sinatra	70111290
+Damon Runyon	birth_date	1940	0.5852	Low	1	[S] ( [O]	Damon Runyon	56817066
+Alexander Mackenzie	death_date	1852-01-04	0.5845	Low	1	[S] ( <M> # , # - [O] )	Alexander Mackenzie	5829021
+Carl Barks	birth_place	Merrill	0.5844	Low	1	^ [S] was born in [O] ,	Carl Barks	45312173
+Dana Plato	birth_place	Maywood	0.5844	Low	1	^ [S] was born in [O] ,	Dana Plato	56396494
+Denis Leary	birth_place	Worcester	0.5844	Low	1	^ [S] was born in [O] ,	Denis Leary	55510759
+E. B. White	birth_place	Mount Vernon	0.5844	Low	1	^ [S] was born in [O] ,	E. B. White	61166162
+George Lucas	birth_place	Modesto	0.5844	Low	1	^ [S] was born in [O] ,	George Lucas	74649611
+Edwin Abbott Abbott	birth_date	1806	0.5834	Low	1	[S] ( [O] -	Edwin Abbott Abbott	63433409
+Edwin Abbott Abbott	birth_date	1808	0.5834	Low	1	[S] ( [O] -	Edwin Abbott Abbott	63433409
+E. O. Wilson	birth_place	Birmingham	0.5830	Low	1	[P] was born in [O]	E. O. Wilson	64506580
+E. O. Wilson	birth_place	Birmingham, Alabama	0.5830	Low	1	[P] was born in [O]	E. O. Wilson	64506580
+Gary Powers	birth_place	Jenkins	0.5830	Low	1	[P] was born in [O]	Gary Powers	81188622
+Gary Powers	birth_place	Jenkins, Kentucky	0.5830	Low	1	[P] was born in [O]	Gary Powers	81188622
+Albert Sidney Johnston	birth_place	Washington	0.5827	Low	1	^ [S] was born in [O] ,	Albert Sidney Johnston	1855907
+Charles Darwin	birth_place	Shrewsbury	0.5825	Low	1	^ [S] was born in [O] ,	Charles Darwin	30682650
+Charles Darwin	birth_place	Shrewsbury, Shropshire	0.5825	Low	1	^ [S] was born in [O] ,	Charles Darwin	30682650
+Chet Atkins	birth_place	Luttrell	0.5825	Low	1	^ [S] was born in [O] ,	Chet Atkins	47791203
+Chet Atkins	birth_place	Luttrell, Tennessee	0.5825	Low	1	^ [S] was born in [O] ,	Chet Atkins	47791203
+Chuck Jones	birth_place	Spokane	0.5825	Low	1	^ [S] was born in [O] ,	Chuck Jones	47226431
+Chuck Jones	birth_place	Spokane, Washington	0.5825	Low	1	^ [S] was born in [O] ,	Chuck Jones	47226431
+Clarence Thomas	birth_place	Pin Point	0.5825	Low	1	^ [S] was born in [O] ,	Clarence Thomas	42767842
+Clarence Thomas	birth_place	Pin Point, Georgia	0.5825	Low	1	^ [S] was born in [O] ,	Clarence Thomas	42767842
+Albert Sidney Johnston	birth_place	Kentucky	0.5823	Low	1	[S] was born in [O] ,	Albert Sidney Johnston	1855907
+Carl Barks	birth_place	Merrill, Oregon	0.5810	Low	1	[S] was born in [O]	Carl Barks	45312173
+Dana Plato	birth_place	Maywood, California	0.5810	Low	1	[S] was born in [O]	Dana Plato	56396494
+Denis Leary	birth_place	Worcester, Massachusetts	0.5810	Low	1	[S] was born in [O]	Denis Leary	55510759
+E. B. White	birth_place	Mount Vernon, New York	0.5810	Low	1	[S] was born in [O]	E. B. White	61166162
+George Lucas	birth_place	Modesto, California	0.5810	Low	1	[S] was born in [O]	George Lucas	74649611
+Frank Sinatra	birth_date	1940-06-08	0.5807	Low	1	[S] ( born [O]	Frank Sinatra	70111290
+Frank Sinatra	birth_date	1948-06-20	0.5807	Low	1	[S] ( born [O]	Frank Sinatra	70111290
+Franklin Pierce	birth_date	1839	0.5801	Low	1	[S] ( [O] -	Franklin Pierce	68911975
+Franklin Pierce	birth_date	1841	0.5801	Low	1	[S] ( [O] -	Franklin Pierce	68911975
+Charles Mingus	birth_place	Nogales	0.5722	Low	1	^ [S] was born in [O] ,	Charles Mingus	47203435
+Ethan Allen	birth_place	Litchfield	0.5722	Low	1	^ [S] was born in [O] ,	Ethan Allen	58193244
+Alexander Mackenzie	birth_date	1826-10-21	0.5707	Low	1	[S] ( [O] -	Alexander Mackenzie	5829021
+George Washington	birth_date	1708	0.5707	Low	1	[S] ( [O] -	George Washington	75705803
+Augustin Louis Cauchy	birth_date	1789-08-21	0.5005	Low	1	^ [S] ( [O] -	Augustin Louis Cauchy	9402880

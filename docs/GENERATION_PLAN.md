@@ -1848,3 +1848,33 @@ The MCMC sampler (session 3) can use the learned mix as its energy.
 - `lm/structure/` (`wip/k5-structure`, `sample --k5-struct`).
 
 K5's default output is byte-identical after the merges: all 250 dev prompts, checked in the cloud.
+
+### 13.37 A new generator: plan → skeleton → fill → gate (2026-11-05; Odin's PC)
+
+**Odin:** "My idea is a Chain of Thought generating multiple sentences and let K5 gate it. Also … skip the text form and go straight to combinations or permutations of the statistical encoding and gate them for a speed increase … process it before decoding." And: "Do all. … we can include all those experts from before."
+
+**Why.** §13.31–13.36 showed that choosing among K5's sentences cannot fix K5. Its next word depends on four words only, and it has no plan. This generator writes the content first and uses K5 only as the fluency judge. That is the one thing K5 is measured good at: it picks the real sentence over its own drafts 93% of the time.
+
+**The steps** (everything searches over codes; only the winner becomes text):
+1. **Plan (the chain of thought).**
+   - Find the prompt's main entity.
+   - Take its facts from CyphaLM's fact store (`bench/fact_store/`, grown over clean enwik9 by session A).
+   - Build several plans as ordered tuples of fact IDs, and score their orders with the entity grid, the transitions expert and topic fit. Integer lookups only.
+2. **Skeleton.**
+   - For each planned fact, take sentence skeletons in K5's 256 word classes, mined from real sentences that express that relation (F2's frames and patterns).
+   - Score them with the class 5-gram and the rhythm expert. Thousands per fact are cheap.
+3. **Fill.** K5 writes the words into the best skeletons on word IDs, with the fact's words fixed (constrained beam search).
+4. **Gate.** All the experts from before score the filled candidates, with the learned meta-mixer joining them: K5, class sequence, topic, entity grid, relations, reference, time, transitions, rhythm, novelty, MBR consensus. The winner is decoded to text.
+
+**Fallback.** For prompts whose entity has no facts, the plan uses co-occurring entities and the relation counts of the structure experts. Coverage is reported.
+
+**Sessions:**
+- **A:** grow the fact store with `pattern_learn` over clean enwik9 past enwik8, with GEN-A and SCRIBE overlap removed (K5_SCALE's list). Branch `wip/fact-store-scale`.
+- **B:** the generator. Branch `wip/k5-planner`.
+
+**Judging:**
+- SCRIBE v2 and v3.1;
+- then blind Claude raters in a **pairwise forced choice** ("which of these two reads better?") against today's K5. §13.36 showed the 1–10 scale sits at its floor for K5's variants;
+- fact precision against the store;
+- copy cap and copy share;
+- test read once, only for an adopted arm.
