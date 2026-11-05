@@ -1979,3 +1979,39 @@ Nobody touches `native/tools/trie_stream_train.cpp` or `scripts/run_train.sh`.
 - **Not adopted. No test read.**
 - Predictions: F1 fill time −30% **miss** (+2.6%); F1 SCRIBE within ±0.02 **hit**; F1 raters about even **miss** (worse); F2 at P1's time **miss** (+89% fill, +2% overall); raters prefer F2 **miss** (even).
 - The saving left on the table is elsewhere: a forced name token needs only its own probability, and a fact's 8 skeletons share their first distribution. Neither is built.
+
+### 13.41 More speed: compiler, pipelining, Boolean minimisation, GPU, SIMD (registered 2026-11-05, before any run; Odin's PC)
+
+**Odin:** "Keep looking. Come up with more. Try optimisation techniques, do it in boolean and run expresso on it, variable elimination on the gpu stuff like that. Go crazy on it."
+
+**Hardware:** Xeon Gold 6242 (AVX-512), RTX 3090 (24 GB, CUDA 12.4 and 13), GCC 13, Clang 18.
+
+**Wave 2 (now), five jobs; none touches the files of M1, M2 or M4 (§13.40) while those run:**
+
+| Job | Branch | What | Exact? |
+|---|---|---|---|
+| O1 compiler | `wip/opt-build` | profile-guided optimisation, link-time optimisation, `-march=native` (AVX-512) with `-ffp-contract=off` so no fused multiply-add changes a sum; a CMake option, off by default | exact |
+| O2 pipeline | `wip/opt-pipeline` | in `context8k` the text is known in advance and the experts learn from the true bytes, not from the mixer, so each expert can run ahead in its own thread and hand its predictions to the mixer through a bounded queue | exact |
+| O3 Boolean | `wip/opt-boolean` | find the Boolean decisions in hot loops (context selectors for weight sets and SSE, the answer gate, expert on/off gating, K5's filters), write their truth tables, minimise them with Espresso, and replace branch trees with the minimal form or a packed table; bit tricks (bitsets, popcount) where they fit | exact |
+| O4 GPU | `wip/opt-gpu` | profile the offline jobs (structure statistics, LDA, the planner's skeleton mining and gate training, SCRIBE scoring) and port the one with the most parallel work to CUDA on the 3090 | integer outputs exact; floating outputs within 1e-9 relative, and every downstream GEN file and SCRIBE table identical |
+| O5 SIMD/cache | `wip/opt-simd` | the byte LSTM on AVX-512, vectorised across output units so each unit's sum keeps its order; prefetching the online n-gram expert's hash buckets one byte ahead | exact |
+
+**Wave 3 (after M1 and M2 land), registered now:**
+- **O6 lazy exact nucleus** (`word_kn.hpp`): K5 never builds its 32,000-word distribution. Words with no higher-order count are ranked by the unigram order times the back-off weight, so the nucleus is a merge of the few seen words with a pre-sorted list, stopped at 0.8. Exact; K5 sampling time down at least 50%.
+- **O7 Huffman binarisation** (`full_mixer.hpp`): code each byte as a path in a Huffman tree of byte frequencies, so the bitwise mix makes about 4.6 binary decisions per text byte instead of 8. This changes the numbers. Kept if `context8k_bpc` is no worse than +0.002 and time falls at least 20%.
+- **O8 SIMD across weight sets** (`meta_mixer.hpp`): the 14 × 5 weight sets are independent mixers doing the same operations, so one AVX-512 lane per set keeps each set's order. Exact; meta-mix time down at least 50%.
+
+**Rules** (as §13.40): exact means `cmp` of whole outputs, old binary against new. The checks are:
+- `context8k` on the small setup (`--train 1048576 --sample 1179648`), default plus `--no-meta-mix` and `--no-full-mix`;
+- the planner's and `--no-k5-plan`'s dev GEN files;
+- SCRIBE's dev report where a job touches it;
+- for wave-2 jobs that touch `context8k`, one full default run (`context8k_bpc` 1.4962 must reproduce).
+
+Timings only from old and new started together on the same thread count. A job that cannot stay exact reports a failure, not a looser check. Never `native/tools/trie_stream_train.cpp` or `scripts/run_train.sh`.
+
+**Predictions:**
+- O1: exact; `context8k` time down at least 10%; K5 sampling down at least 10%.
+- O2: exact; `context8k` full-run wall time down at least 30% (bounded by the slowest expert, the LSTM).
+- O3: exact; small: under 3% time. The hot paths are arithmetic, not logic. Reports how many Boolean functions it found and their minimised sizes.
+- O4: the ported job at least 5× faster.
+- O5: exact; the LSTM stage down at least 40%; the n-gram stage down at least 10%.
