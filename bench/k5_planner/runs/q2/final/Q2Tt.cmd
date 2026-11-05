@@ -1,0 +1,1 @@
+Q2Tt /home/odin/q2_src /home/odin/build_q2 --k5-plan-typed bench/k5_planner/model/slots_e9t.txt --k5-plan-typed-fit log --k5-plan-typed-tau 1 --k5-plan-model bench/k5_planner/model/plan_q2.model
