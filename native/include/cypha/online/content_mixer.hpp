@@ -15,11 +15,14 @@
 /// The online final layer (OnlineFinal, --online-final): one gated linear mixer over Inputs probabilities of the true
 /// byte (the experts and the chain stages, the chain last), a weight set chosen by the caller's context, learned online
 /// by exponentiated gradient on log loss. Another expert joins as one more input.
+///
+/// The stages' and the final layer's exponentiated gradient is mix_core.hpp's (EgLambdas, EgSets; MERGE_MIXERS.md).
 
 #include "cypha/lm/byte_kn.hpp"
 #include "cypha/lm/class_context.hpp"
 #include "cypha/lm/copy_expert.hpp"
 #include "cypha/lm/doc_cache.hpp"
+#include "cypha/online/mix_core.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -90,24 +93,17 @@ inline const std::vector<double>* g_step_mult = nullptr;
 // One stage by exponentiated gradient at step eta over cur (see online_mix); lam gets the last weights when given.
 inline void eg_stage(const std::vector<double>& pe, const std::vector<int>& bk, int nb, std::vector<double>& cur,
                      double eta, const std::vector<char>& dead, std::vector<double>* lam) {
-    std::vector<double> we(static_cast<std::size_t>(nb), 0.05), wc(static_cast<std::size_t>(nb), 0.95);
+    mix::EgLambdas st;
+    st.init(nb, eta);
     for (std::size_t k = 0; k < cur.size(); ++k) {
         const std::size_t b = static_cast<std::size_t>(bk[k]);
         if (dead[b]) continue;  // lambda 0: cur stays
-        const double prev = cur[k], l = we[b], p = l * pe[k] + (1 - l) * prev;
+        const double prev = cur[k], p = mix::lerp(st.lam(b), pe[k], prev);
         cur[k] = p;
-        const double pp = std::max(p, 1e-300);
-        const double et = g_step_mult ? eta * (*g_step_mult)[k] : eta;
-        double e = we[b] * std::exp(et * std::min(pe[k] / pp, 30.0)), c = wc[b] * std::exp(et * std::min(prev / pp, 30.0));
-        double z = e + c;
-        e = std::max(e / z, 1e-4);
-        c = std::max(c / z, 1e-4);
-        z = e + c;
-        we[b] = e / z;
-        wc[b] = c / z;
+        st.learn(b, pe[k], prev, p, g_step_mult ? eta * (*g_step_mult)[k] : eta);
     }
     if (lam)
-        for (std::size_t b = 0; b < lam->size(); ++b) (*lam)[b] = dead[b] ? 0.0 : we[b];
+        for (std::size_t b = 0; b < lam->size(); ++b) (*lam)[b] = dead[b] ? 0.0 : st.lam(b);
 }
 
 inline std::vector<double> online_mix(const std::vector<double>& pe, const std::vector<int>& bk, int nb,
@@ -140,8 +136,7 @@ inline std::vector<double> mix_into(const std::vector<double>& pe, const std::ve
     fit_lambdas(pe, cur, bk, half, nb, lam.data());
     if (copy_m >= 0) cyphalm::copy_clip(lam.data(), copy_m);
     for (std::size_t k = 0; k < cur.size(); ++k) {
-        const double l = lam[static_cast<std::size_t>(bk[k])];
-        cur[k] = l * pe[k] + (1 - l) * cur[k];
+        cur[k] = mix::lerp(lam[static_cast<std::size_t>(bk[k])], pe[k], cur[k]);
     }
     return lam;
 }
@@ -193,7 +188,7 @@ inline void bkn_mix(const cyphalm::bkn::ByteKN& kn, const double* lkn, bool repl
         return;
     }
     const double l = lkn[d == 0 ? 0 : (d - 1) * 3 + band];
-    for (int s = 0; s < 256; ++s) P[s] = l * Pk[s] + (1 - l) * P[s];
+    for (int s = 0; s < 256; ++s) P[s] = mix::lerp(l, Pk[s], P[s]);
 }
 // GEN-C: each part's next-byte distribution over the holdout (one stream from the train end, reset at "<page>"),
 // its lambdas fit on k < half over cur, cur mixed with it, in DocTopic's part order. The read: bits a byte on
@@ -300,7 +295,7 @@ inline void mix_doc_into(const cyphalm::DocTopic& dt, const std::uint8_t* data, 
     for (int q = 0; q < cyphalm::DocTopic::kParts; ++q) {
         if (!on[q]) continue;
         fit_lambdas(pe[q], cur, bk[q], h, cyphalm::DocTopic::kBuckets, lam[q]);
-        for (std::size_t k = 0; k < h; ++k) cur[k] = lam[q][bk[q][k]] * pe[q][k] + (1 - lam[q][bk[q][k]]) * cur[k];
+        for (std::size_t k = 0; k < h; ++k) cur[k] = mix::lerp(lam[q][bk[q][k]], pe[q][k], cur[k]);
         std::vector<double>().swap(pe[q]);
         std::vector<int>().swap(bk[q]);
     }
@@ -310,7 +305,7 @@ inline void mix_doc_into(const cyphalm::DocTopic& dt, const std::uint8_t* data, 
             if (on[q]) {
                 double P[256];
                 const int b = st.predict(q, P);
-                cur[k] = lam[q][b] * P[data[train + k]] + (1 - lam[q][b]) * cur[k];
+                cur[k] = mix::lerp(lam[q][b], P[data[train + k]], cur[k]);
             }
         st.feed(data[train + k]);
     }
@@ -321,40 +316,17 @@ inline void mix_doc_into(const cyphalm::DocTopic& dt, const std::uint8_t* data, 
 /// class, 80 sets, as gate24 gates by a small context), learned online by exponentiated gradient on log loss, every set
 /// starting at the chain. predict gives the mixture's probability of the true byte from the inputs' probabilities q
 /// (each at least 1e-9); update takes one step on -log p. Another expert joins as one more input (Inputs + 1).
-class OnlineFinal {
+/// sets weight sets of `inputs` weights each; every set starts at the chain (the last input), the others at 0.01.
+class OnlineFinal : public mix::EgSets {
  public:
-    /// sets weight sets of `inputs` weights each; every set starts at the chain (the last input), the others at 0.01.
-    OnlineFinal(int sets, int inputs) : n_(inputs), w_(static_cast<std::size_t>(sets) * inputs, 0.01 / (1.0 + 0.01 * (inputs - 1))) {
-        for (int g = 0; g < sets; ++g) w_[static_cast<std::size_t>(g) * inputs + (inputs - 1)] = 1.0 / (1.0 + 0.01 * (inputs - 1));
-    }
-
-    /// The previous byte's class for a gate: 0 space, 1 letter, 2 digit, 3 markup ([]{}<>|&=), 4 other.
-    static int byte_class(unsigned char pb) {
-        return std::isspace(pb) ? 0 : std::isalpha(pb) ? 1 : std::isdigit(pb) ? 2
-               : std::strchr("[]{}<>|&=", pb) && pb ? 3 : 4;
-    }
-
-    double predict(int set, const double* q) const {
-        const double* w = &w_[static_cast<std::size_t>(set) * n_];
-        double p = 0;
-        for (int j = 0; j < n_; ++j) p += w[j] * q[j];
-        return p;
-    }
-
+    using EgSets::EgSets;
+    /// The previous byte's class for a gate (mix::byte_class).
+    static int byte_class(unsigned char pb) { return mix::byte_class(pb); }
+    double predict(int set, const double* q) const { return EgSets::predict(set, [q](int j) { return q[j]; }); }
     /// mult scales the step (context8k --doc-boost); 1 is the step as before.
     void update(int set, const double* q, double p, double mult = 1.0) {
-        double* w = &w_[static_cast<std::size_t>(set) * n_];
-        const double eta = mult == 1.0 ? 0.05 : 0.05 * mult;
-        double z = 0;
-        for (int j = 0; j < n_; ++j) z += (w[j] *= std::exp(eta * std::min(q[j] / std::max(p, 1e-300), 30.0)));
-        double z2 = 0;
-        for (int j = 0; j < n_; ++j) z2 += (w[j] = std::max(w[j] / z, 1e-7));
-        for (int j = 0; j < n_; ++j) w[j] /= z2;
+        learn(set, [q](int j) { return q[j]; }, p, mult == 1.0 ? 0.05 : 0.05 * mult);
     }
-
- private:
-    int n_;
-    std::vector<double> w_;
 };
 
 }  // namespace cypha::online
