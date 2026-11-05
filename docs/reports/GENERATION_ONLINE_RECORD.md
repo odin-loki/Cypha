@@ -153,4 +153,7 @@ Odin: "Make another two metrics with different maths that complement each other 
 | Topic, entity grid, MBR, MCMC as writers (§13.34) | Odin's PC + cloud raters | **Done**: none reads better than K5; topic rescaling stuffs words (readers −0.22 / −0.42) |
 | SCRIBE v3 paper, Zenodo version 2.0 | cloud | **Written**: `paper/scribe/`; upload waits on Odin (v1.0 DOI, "New version") |
 
+| Fact store over enwik9 (§13.38 A) | Odin's PC | **Done**: dev coverage 43 → 51 of 250 → [FACT_STORE_SCALE.md](FACT_STORE_SCALE.md) |
+| Planner: plan → skeleton → fill → gate (§13.37–13.38 B) | Odin's PC + blind raters | **Done**: raters prefer it to K5, 0.635 [0.575, 0.700] of wins; test SCRIBE v2 0.561; `--k5-plan`, off by default → [K5_PLANNER.md](K5_PLANNER.md) |
+
 This record is updated as those land.

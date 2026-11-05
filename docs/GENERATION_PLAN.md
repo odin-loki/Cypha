@@ -1908,3 +1908,16 @@ K5's default output is byte-identical after the merges: all 250 dev prompts, che
   - SCRIBE v2 dev: P1 within ±0.05 of K5 (SCRIBE rewards K5's local fluency); v3.1 P1 above K5;
   - pairwise: P1 beats K5 (win share above 0.6, interval excluding 0.5) on prompts with facts; overall P1 wins above 0.5 with the interval excluding it only if coverage reaches 30%;
   - P2 below P1 in pairwise share.
+
+**§13.38 results** (2026-11-05; reports [FACT_STORE_SCALE](reports/FACT_STORE_SCALE.md), [K5_PLANNER](reports/K5_PLANNER.md)):
+- **A. Fact store.** `pattern_learn` over enwik9 [1e8, end), with 71,676 overlap pages skipped whole (about half the prose), added 54,629 text seeds and 10,455 prose facts (mostly birth and death dates): `bench/fact_store/e9_aug/`. Coverage of the 250 dev prompts rose from **43 (0.172 [0.130, 0.224]) to 51 (0.204 [0.159, 0.258])**; the intervals overlap.
+  - Predictions: before about 30, **miss** (43); after at least 75, **miss** (51); Wikidata precision **not scorable as registered** (no `wd_values.tsv` on the PC; the enwik9 run used text seeds only). Unregistered, beside it: cross-validated pattern precision 0.973 (enwik9) against 0.971 for an enwik8 text-only control.
+- **B. Planner** (`sample --k5-plan STORE --k5-plan-model M --k5-plan-gate full|k5`, code in `lm/planner/`, on main). With the flag off, output is byte-identical on all 250 dev prompts.
+  - Paths on dev: main entity 50, co-occurring entities 43, plain K5 157 (63%).
+  - Dev, seed 0: SCRIBE v2 K5 0.498, P1 0.532, P2 0.527; v3.1 K5 0.483, P1 0.537, P2 0.539; copy32 0.038 / 0.038 / 0.039; no 13-word copies.
+  - **Blind pairwise reading** (4 raters, 50 prompts; packets and key committed first, f5c3f89): **P1 0.635 [0.575, 0.700]** of wins against K5, rater pairs 0.66 and 0.61; P2 the same, 0.635 [0.575, 0.700]. On the 15 rated prompts where the planner's text differs from K5's, it wins 0.95 [0.85, 1.00]; the other 35 are plain K5 on both sides and tie.
+  - **By the rule, P1 and P2 read better than K5. P1 is adopted**, still off by default (Odin decides defaults).
+  - **The one test read** (P1, GEN-A test, 250 prompts): SCRIBE v2 **0.561 [0.532, 0.590]** (K5's test read 0.524), v3.1 0.551 [0.529, 0.574], copy32 0.036, no 13-word copies.
+  - Predictions: byte-identical **hit**; fact precision ≥ 0.8 **hit but hollow** (1.0 by construction: every stated fact is a store fact); copy32 no higher than K5 **hit**; v2 within ±0.05 **hit** (+0.034); v3.1 above K5 **hit**; pairwise P1 above 0.6 on prompts with facts **hit** (0.95); overall win with the interval excluding 0.5 only if coverage reached 30% **miss in the good direction** (it wins at 20%); P2 below P1 **miss** (equal).
+- **What is weak:** the raters prefer the planner because its first one or two sentences stay on the prompt's subject, then K5 drifts as before. K5's fill around the fact words is often false or meaningless ("He was born in Gothenburg University, Gothenburg Municipality."). The co-occurring path can invent dates. 63% of prompts still get plain K5. The gate learns from only 415 training items, and the K5-only gate (P2) does as well, so the meta-mixer's part is not shown.
+- **Next:** better fills (constrain the slot's class to the fact's type, so a place stays a place), the relations-pattern fallback, more coverage, and writing past the facts.

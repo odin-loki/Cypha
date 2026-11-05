@@ -87,3 +87,9 @@ Wall time covers sampling and both SCRIBE runs. Sampling alone: K5 120 s on 6 th
 
 - GEN files: `bench/k5_planner/{K5_base_s0, P1_e9_s0, P2_e9_s0, P1_f2r_s0, P2_f2r_s0}.gen.txt`.
 - Runs: `bench/k5_planner/runs/` (summaries, per-prompt plan logs, skeleton banks, gate models, mine and train output).
+
+## Blind reading and the test read (added by the lead session, 2026-11-05)
+
+- **Pairwise blind raters** (§13.38 rule; packets `bench/blind/planner_pair/`, committed before the ratings): P1 wins **0.635 [0.575, 0.700]** against K5, rater pairs 0.66 and 0.61. P2 is the same. Where the planner's text differs from K5's (15 of 50 prompts), it wins 0.95 [0.85, 1.00]; the rest are plain K5 on both sides and tie.
+- **P1 reads better than K5 by the rule and is adopted**, still off by default.
+- **Test read, once** (P1, `bench/k5_planner/test_read/`): SCRIBE v2 0.561 [0.532, 0.590] (K5 0.524), v3.1 0.551 [0.529, 0.574], copy32 0.036.
