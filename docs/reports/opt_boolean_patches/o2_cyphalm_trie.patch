@@ -1,0 +1,25 @@
+diff --git a/native/tools/lm/cyphalm_trie.cpp b/native/tools/lm/cyphalm_trie.cpp
+index 808bd80..1985e14 100644
+--- a/native/tools/lm/cyphalm_trie.cpp
++++ b/native/tools/lm/cyphalm_trie.cpp
+@@ -295,6 +295,7 @@
+ #include "cypha/online/meta_mixer.hpp"  // META_MIXING.md: context8k --meta-mix
+ #include "cypha/online/online_ngram.hpp"
+ 
++#include <bit>
+ #include <cctype>
+ #include <chrono>
+ #include <ctime>
+@@ -874,8 +875,10 @@ int cmd_probe(const Args& a) {
+ 
+ // ---------------------------------------------------------------- context8k
+ 
+-int len_bucket(int n) { return n < 4 ? 0 : n < 8 ? 1 : n < 16 ? 2 : n < 32 ? 3 : n < 64 ? 4 : n < 128 ? 5 : 6; }
+-int count_bucket(std::uint64_t t) { return t <= 1 ? 0 : t <= 3 ? 1 : t <= 15 ? 2 : 3; }
++// O3 (docs/reports/OPT_BOOLEAN.md): the chains of compares as bit tricks. The length's bucket is its bit width less 2,
++// between 0 and 6; the count's is the number of the thresholds 1, 3, 15 it passes.
++int len_bucket(int n) { return n < 4 ? 0 : std::min(6, static_cast<int>(std::bit_width(static_cast<unsigned>(n))) - 2); }
++int count_bucket(std::uint64_t t) { return (t > 1) + (t > 3) + (t > 15); }
+ int bucket(int n, std::uint64_t t) { return len_bucket(n) * 4 + count_bucket(t); }
+ constexpr int kBuckets = 28;
+ 

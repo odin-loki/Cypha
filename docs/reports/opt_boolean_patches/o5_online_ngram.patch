@@ -1,0 +1,55 @@
+diff --git a/native/include/cypha/online/online_ngram.hpp b/native/include/cypha/online/online_ngram.hpp
+index a85f76d..8380bc3 100644
+--- a/native/include/cypha/online/online_ngram.hpp
++++ b/native/include/cypha/online/online_ngram.hpp
+@@ -14,6 +14,7 @@
+ #pragma once
+ 
+ #include <algorithm>
++#include <bit>
+ #include <cmath>
+ #include <cstdint>
+ #include <cstdlib>
+@@ -158,8 +159,7 @@ public:
+         for (unsigned c0 = 1; c0 < 256; ++c0) {
+             if (c0 + kAhead < 256)
+                 for (int q = 0; q < O_; ++q) prefetch(q, slot(q, c0 + kAhead));
+-            int j = 0;
+-            while ((c0 >> (j + 1)) != 0) ++j;  // the bit position: floor(log2(c0))
++            const int j = static_cast<int>(std::bit_width(c0)) - 1;  // the bit position: floor(log2(c0)); O3: no loop
+             int seen = 0;
+             for (int q = 0; q < O_; ++q) {
+                 const std::size_t key = slot(q, c0);
+@@ -183,8 +183,13 @@ public:
+             unsigned c0 = 1;
+             for (int j = 0; j < 8; ++j) {
+                 const unsigned bit = (y >> (7 - j)) & 1u;
+-                pm *= bit ? pn[c0] : 1 - pn[c0];
+-                for (int q = 0; q < O_; ++q) Po[q * 256 + y] *= bit ? pq[q][c0] : 1 - pq[q][c0];
++                // O3: bit ? p : 1 - p, picked from a pair by the bit (the same doubles, no branch)
++                const double tn[2] = {1 - pn[c0], pn[c0]};
++                pm *= tn[bit];
++                for (int q = 0; q < O_; ++q) {
++                    const double tq[2] = {1 - pq[q][c0], pq[q][c0]};
++                    Po[q * 256 + y] *= tq[bit];
++                }
+                 c0 = (c0 << 1) | bit;
+             }
+             P[y] = pm;
+@@ -226,11 +231,12 @@ private:
+         return static_cast<std::uint8_t>((v >> 56) | 1u);
+     }
+     std::uint8_t check(int q, unsigned c0) const { return check_of(hh_[static_cast<std::size_t>(q)], c0); }
++    // O3: without a branch (a slot taken over is unpredictable): the counts are kept when the check matches, else 0.
+     static void claim(Slot& sl, std::uint8_t c) {
+-        if (sl.ck != c) {
+-            sl.ck = c;
+-            sl.n1 = sl.n = 0;
+-        }
++        const auto keep = static_cast<std::uint16_t>(0u - static_cast<unsigned>(sl.ck == c));
++        sl.n1 = static_cast<std::uint16_t>(sl.n1 & keep);
++        sl.n = static_cast<std::uint16_t>(sl.n & keep);
++        sl.ck = c;
+     }
+     void count(Slot& sl, unsigned bit) const {
+         std::uint16_t c1 = sl.n1, c = sl.n;

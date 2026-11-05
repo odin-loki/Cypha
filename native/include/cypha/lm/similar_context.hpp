@@ -62,6 +62,51 @@
 
 namespace cypha::cyphalm {
 
+// O3 (GENERATION_PLAN §13.41; docs/reports/OPT_BOOLEAN.md): cand[0, k) as std::partial_sort by (dot down, then slot up)
+// leaves it: the k first in that order, sorted. The order is total (pairs equal in both parts are equal), so the k first
+// are one list whatever the method. Each pair becomes one 64-bit key, larger first, so the two-part compare
+// (a > b || (a == b && c < d), already a minimal sum of products) is one compare. The k largest keys are kept in a sorted
+// buffer: a key not above the buffer's least is passed over, which after the first few is nearly always, so that branch
+// is predictable; a key that gets in finds its place by counting the larger keys, without branches. std::partial_sort's
+// heap branched on every sift and missed about one branch in four in context8k.
+inline void similar_top_k(std::vector<std::pair<int, std::uint32_t>>& cand, std::size_t k) {
+    if (k == 0) return;
+    const auto key = [](const std::pair<int, std::uint32_t>& x) {
+        return (static_cast<std::uint64_t>(static_cast<std::uint32_t>(x.first) ^ 0x80000000u) << 32) |
+               static_cast<std::uint64_t>(0xffffffffu - x.second);
+    };
+    thread_local std::vector<std::uint64_t> buf;
+    buf.assign(k, 0);
+    std::size_t m = 0;
+    for (const auto& x : cand) {
+        const std::uint64_t v = key(x);
+        if (m == k && v <= buf[k - 1]) continue;
+        std::size_t pos = 0;
+        for (std::size_t j = 0; j < m; ++j) pos += buf[j] > v ? 1 : 0;
+        for (std::size_t j = m < k ? m : k - 1; j > pos; --j) buf[j] = buf[j - 1];
+        buf[pos] = v;
+        m += m < k ? 1 : 0;
+    }
+    for (std::size_t j = 0; j < k; ++j)
+        cand[j] = {static_cast<int>(static_cast<std::uint32_t>(buf[j] >> 32) ^ 0x80000000u),
+                   0xffffffffu - static_cast<std::uint32_t>(buf[j] & 0xffffffffu)};
+}
+
+// O3: std::upper_bound(a.begin(), a.end(), x) - a.begin() for a sorted a, by a binary search with no branch on the
+// data (Khuong and Morin's form): the step is taken by adding 0 or half, so the search makes the same number of steps
+// for every x. context8k's merged neighbours looked up their list this way 32 times a byte, missing a branch in six.
+inline std::size_t upper_index(const std::vector<std::uint32_t>& a, std::uint32_t x) {
+    if (a.empty()) return 0;
+    const std::uint32_t* base = a.data();
+    std::size_t n = a.size();
+    while (n > 1) {
+        const std::size_t half = n / 2;
+        base += base[half] <= x ? half : 0;
+        n -= half;
+    }
+    return static_cast<std::size_t>(base - a.data()) + (*base <= x ? 1 : 0);
+}
+
 class SimilarContext {
  public:
     struct Params {
@@ -615,11 +660,13 @@ class SimilarContext {
         return hit;
     }
 
+    // O3 (docs/reports/OPT_BOOLEAN.md): each chain of compares (x < 0.5 ? 0 : x < 0.65 ? 1 : ...) is the count of the
+    // thresholds x is not below, so the levels are sums of compare results; equal for every value, NaN included.
     static int bucket(const Hit& h) {
         if (h.live == 0) return 0;
-        const int sb = h.top < 0.5 ? 0 : h.top < 0.65 ? 1 : h.top < 0.8 ? 2 : h.top < 0.9 ? 3 : 4;
-        const int ab = h.agree < 0.5 ? 0 : h.agree < 0.8 ? 1 : h.agree < 0.99 ? 2 : 3;
-        const int lb = h.live == 1 ? 0 : h.live < 8 ? 1 : 2;
+        const int sb = !(h.top < 0.5) + !(h.top < 0.65) + !(h.top < 0.8) + !(h.top < 0.9);
+        const int ab = !(h.agree < 0.5) + !(h.agree < 0.8) + !(h.agree < 0.99);
+        const int lb = (h.live != 1) + !(h.live < 8);
         return 1 + ((sb * 4 + ab) * 3 + lb) * 2 + (h.word > 0);
     }
 
@@ -895,8 +942,7 @@ class SimilarContext {
                 }
         }
         const std::size_t k = std::min<std::size_t>(cand.size(), static_cast<std::size_t>(p_.k));
-        std::partial_sort(cand.begin(), cand.begin() + static_cast<std::ptrdiff_t>(k), cand.end(),
-                          [](auto& x, auto& y) { return x.first > y.first || (x.first == y.first && x.second < y.second); });
+        similar_top_k(cand, k);  // O3: as std::partial_sort by (cosine down, slot up) leaves cand[0, k)
         for (std::size_t j = 0; j < k; ++j) {
             const float sim = static_cast<float>(cand[j].first / (127.0 * 127.0));
             if (sim < p_.min_sim) break;
@@ -908,7 +954,7 @@ class SimilarContext {
                     owner = static_cast<std::size_t>(start_[L + 1] - start_[L]) + i;
                     p.push_back(on_pos_[L][i]);
                 } else {
-                    L = static_cast<std::size_t>(std::upper_bound(start_.begin(), start_.end(), cand[j].second) - start_.begin()) - 1;
+                    L = upper_index(start_, cand[j].second) - 1;  // O3: std::upper_bound's index, without branches
                     owner = cand[j].second - start_[L];
                     p.push_back(cand[j].second);
                 }

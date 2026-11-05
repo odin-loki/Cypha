@@ -132,8 +132,10 @@ class ClassContext {
         return hit;
     }
 
+    // O3 (docs/reports/OPT_BOOLEAN.md): the count's level (total <= 1 ? 0 : <= 3 ? 1 : <= 15 ? 2 : 3) as a sum of
+    // compare results.
     static int bucket(const Hit& h) {
-        const int cb = h.total <= 1 ? 0 : h.total <= 3 ? 1 : h.total <= 15 ? 2 : 3;
+        const int cb = (h.total > 1) + (h.total > 3) + (h.total > 15);
         return h.order * 4 + cb;
     }
 
