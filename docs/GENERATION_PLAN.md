@@ -2070,3 +2070,34 @@ Timings only from old and new started together on the same thread count. A job t
 - Q2: slot type errors down at least 50%. One smoothing place helps (most likely S1 or S2); the raters prefer Q2 to P1.
 - Q3: the raters prefer Q3 to P1 on the long reading (win share above 0.6); about even on the 460-character reading.
 - The combination: the raters prefer it to P1 (above 0.6), and test SCRIBE v2 at least 0.561.
+
+### 13.43 Tuned, but not pinned: settings that wander around their optimum (registered 2026-11-05, before any run; Odin's PC)
+
+**Odin:** "After you have tuned the experts set them to that but dont pin them to it. Set them an optimal amount back and let the model teter to and fro from optimal to noise so that it learns and we get beneficial stochastics."
+
+**The method (job T1b, after T1, M2 and O5 land; new header `online/hyper_adapt.hpp`, hooks in each expert and mixer):**
+- **Which settings:** only the continuous ones, which can change while the model runs: learning rates, count limits, SSE and mixing rates, and temperatures. Table sizes and orders stay fixed.
+- **Start:** each setting starts "an optimal amount back" from T1's tuned value θ*, a fraction *b* of the way toward the old default. *b* is chosen on the 1 MB tuning slice from {0, 0.1, 0.25, 0.5}.
+- **To and fro:** each setting follows a mean-reverting random walk around its centre (an Ornstein–Uhlenbeck process). It wobbles by about σ and is pulled back at rate κ. σ is set per setting from T1's sensitivity curve (how fast bits per byte rise as the setting leaves θ*). The noise never anneals to zero.
+- **Learning where to sit:** the centre itself moves by the loss's gradient with respect to the setting. For learning rates this is hypergradient descent (Baydin et al. 2018). For the others it is a one-sided finite difference on the recent loss.
+- **Fixed seed per run.**
+
+**Arms** (full `context8k`, three seeds each):
+- A0: T1's tuned values, fixed;
+- A1: start backed off, centre adapts, no noise;
+- A2: start backed off, noise around a fixed θ*, no adaptation;
+- A3: start backed off, centre adapts, with noise (Odin's version).
+
+**Rule:**
+- An arm is kept if its mean `context8k_bpc` over the three seeds is below A0's by more than the spread of its seeds (max − min), and time rises at most 10%.
+- A3 must also beat A1 by the same margin for the noise to count as "beneficial stochastics".
+- Answers (`qa`) must not get worse.
+
+**Predictions:**
+- A2 (noise alone) within ±0.002 of A0: noise around a true optimum usually costs a little.
+- A1 and A3 below A0 by 0.003 to 0.01, mostly late in the text, where the best settings drift.
+- A3 against A1: within ±0.002. The noise helps only if the best setting moves faster than the gradient can follow.
+
+**T1 adds now (flags only, no code):** a sensitivity curve for each tuned setting on the 1 MB slice, bits per byte at θ* × {0.5, 0.7, 0.85, 1.15, 1.4, 2}. This gives σ and *b*.
+
+**For writing (T2, later):** the same idea for K5's and the planner's continuous settings (nucleus, gate temperature, smoothing amounts), judged by the blind raters.
