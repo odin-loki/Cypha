@@ -165,4 +165,105 @@ score = wf·z(fluency) + wp·z(pmi) + mbr·z(chrF consensus) + eg·z(grid) + lda
 
 ## Results
 
-(Added after the reads.)
+All on GEN-A dev, 250 prompts. v2 and v3.1 are the pooled rows with 95% intervals. S3.1 and M3.1 are SURPRISE 3.1 and MATCH 3.1. D_S and D_C are SCRIBE v2's sentence-form and coherence distances (human 0.00 and 0.38). bpb is K5's bits per byte on the human continuations (with the arm's rescaling, where it has one). Wall is per 250 prompts at `K5_THREADS` 6 (seed 0) or 3 (seed runs), with the PC's load average at 25–95 from other sessions, so times are rough. Every arm's peak RAM was 0.50–0.51 GB, and 0.90 GB with the 330 MB helpers.
+
+### Seed 0, every arm
+
+| Arm | v2 | v3.1 | S3.1 | M3.1 | D_S | D_C | copy32 | v13 | bpb | Wall |
+|---|---|---|---|---|---:|---:|---:|---:|---:|---|
+| B0 K5 default | 0.498 [0.471, 0.527] | 0.483 [0.466, 0.501] | 0.554 | 0.464 | 0.66 | 3.41 | 0.0380 | 0 | 1.5323 | 2:48 |
+| B1 gate off | 0.444 [0.412, 0.475] | 0.463 [0.445, 0.480] | 0.579 | 0.447 | 0.88 | 4.15 | 0.0557 | 0 | 1.5323 | 1:34 |
+| M1 consensus alone | 0.441 [0.404, 0.478] | 0.459 [0.434, 0.482] | 0.593 | 0.460 | 2.54 | 3.27 | 0.0564 | 0 | 1.5323 | 2:01 |
+| M2 pmi + consensus | 0.476 [0.440, 0.511] | 0.470 [0.448, 0.492] | 0.578 | 0.452 | 1.70 | 3.28 | 0.0477 | 0 | 1.5323 | 2:57 |
+| M3 gate 16, pmi + consensus | 0.548 [0.512, 0.586] | 0.488 [0.466, 0.510] | 0.561 | 0.455 | 1.29 | 2.79 | 0.0481 | 0 | 1.5323 | 4:26 |
+| M4 8 whole drafts (gated) | 0.515 [0.487, 0.544] | 0.456 [0.440, 0.474] | 0.498 | 0.433 | 0.55 | 3.24 | 0.0469 | 0 | 1.5323 | 18:17 |
+| M5 8 whole drafts (no gate) | 0.439 [0.411, 0.468] | 0.445 [0.429, 0.462] | 0.531 | 0.434 | 0.67 | 4.08 | 0.0535 | 0 | 1.5323 | 3:52 |
+| E1 pmi + grid, full | 0.483 [0.461, 0.507] | 0.475 [0.462, 0.489] | 0.526 | 0.476 | 0.69 | 3.39 | 0.0366 | 0 | 1.5323 | 6:06 |
+| E2 pmi + grid, cont | 0.490 [0.462, 0.517] | 0.471 [0.455, 0.487] | 0.539 | 0.450 | 0.70 | 3.44 | 0.0374 | 0 | 1.5323 | 3:45 |
+| E3 pmi + grid full ×2 | 0.449 [0.427, 0.471] | 0.450 [0.437, 0.462] | 0.506 | 0.459 | 0.78 | 3.67 | 0.0366 | 0 | 1.5323 | 4:46 |
+| E4 = E1, grid from 330 MB | 0.482 [0.461, 0.507] | 0.475 [0.462, 0.489] | 0.526 | 0.477 | 0.69 | 3.40 | 0.0366 | 0 | 1.5323 | 3:53 |
+| T1 rescale B 0.5 | 0.550 [0.521, 0.580] | 0.503 [0.486, 0.520] | 0.552 | 0.482 | 0.62 | 2.94 | 0.0383 | 0 | 1.5182 | 6:47 |
+| T2 rescale B 1 | 0.609 [0.576, 0.644] | 0.567 [0.549, 0.586] | 0.618 | 0.544 | 0.71 | 2.38 | 0.0531 | 0 | 1.5170 | 9:05 |
+| T2b rescale B 1.5 | 0.708 [0.674, 0.741] | 0.670 [0.648, 0.691] | 0.737 | 0.613 | 0.68 | 1.54 | 0.0605 | 0 | 1.5358 | 3:09 |
+| T2c rescale B 2 | 0.758 [0.724, 0.791] | 0.712 [0.690, 0.733] | 0.793 | 0.649 | 1.11 | 0.85 | 0.0534 | 0 | 1.5858 | 3:06 |
+| T3 pmi + topic term | 0.504 [0.478, 0.532] | 0.483 [0.466, 0.500] | 0.547 | 0.466 | 0.64 | 3.34 | 0.0445 | 0 | 1.5323 | 4:36 |
+| T4 topic term alone | 0.422 [0.395, 0.448] | 0.461 [0.448, 0.476] | 0.572 | 0.454 | 0.68 | 4.21 | 0.0449 | 0 | 1.5323 | 3:29 |
+| T5 B 2, 200 topics | 0.720 [0.686, 0.754] | 0.713 [0.692, 0.735] | 0.800 | 0.675 | 1.05 | 1.19 | 0.0511 | 0 | 1.5511 | 5:21 (incl. LDA build) |
+| T5_1 B 1, 200 topics | 0.548 [0.514, 0.581] | 0.546 [0.526, 0.564] | 0.627 | 0.536 | 0.86 | 2.95 | 0.0476 | 0 | 1.5141 | 3:26 |
+| T6a B 2, LDA 30 MB | 0.750 [0.716, 0.786] | **0.716** [0.695, 0.737] | 0.797 | 0.673 | 1.44 | 0.69 | 0.0522 | 0 | 1.5613 | 2:51 |
+| T6a_1 B 1, LDA 30 MB | 0.654 [0.623, 0.689] | 0.590 [0.569, 0.611] | 0.632 | 0.548 | 0.87 | 1.80 | 0.0545 | 0 | 1.4999 | 3:10 |
+| T6b B 2, LDA 100 MB | 0.758 [0.719, 0.798] | 0.716 [0.693, 0.739] | 0.792 | 0.677 | 1.69 | 0.42 | 0.0518 | 0 | 1.5544 | 2:54 |
+| T6b_1 B 1, LDA 100 MB | 0.674 [0.644, 0.706] | 0.592 [0.574, 0.610] | 0.624 | 0.541 | 0.57 | 1.83 | 0.0524 | 0 | 1.4931 | 2:59 |
+| T6c B 2, LDA 330 MB | 0.761 [0.723, 0.796] | 0.706 [0.683, 0.729] | 0.776 | 0.666 | 1.68 | 0.48 | 0.0547 | 0 | 1.5378 | 3:20 |
+| T6c_1 B 1, LDA 330 MB | 0.641 [0.610, 0.673] | 0.586 [0.566, 0.606] | 0.630 | 0.548 | 0.91 | 1.83 | 0.0459 | 0 | **1.4876** | 4:13 |
+| X1 meta base/gate/eg/topic ×2 | 0.553 [0.524, 0.584] | 0.506 [0.486, 0.527] | 0.541 | 0.490 | 0.52 | 2.98 | 0.0516 | 0 | | 16:01 |
+| X2 meta gate/eg/topic ×4 | 0.711 [0.676, 0.745] | 0.660 [0.637, 0.683] | 0.703 | 0.628 | 0.90 | 1.38 | 0.0490 | 0 | | 25:57 |
+
+Notes:
+- The B 2 arms' D_C (0.42–0.85) is near human text's 0.38. Their D_S (1.05–1.69) is the worst of any arm.
+- MBR's choices in the pools: X1 kept gate 100, eg 66, base 42, topic 42; X2 kept topic 174, gate 48, eg 28.
+- The helpers' builds: the grid takes 0.3 s (7 MB) to 18 s (330 MB, 8 threads). LDA with 100 topics and 200 exact sweeps takes 31–60 s (7 MB), 195 s (30 MB), 1,031 s (100 MB) and 3,051 s (330 MB, 25.7 M content tokens); then it is cached (1 s to load). 200 topics on 7 MB take about 2 min.
+- With 8 AD-LDA threads, 7 MB trained in 23 s, but its word log-likelihood was −3.33 M against −3.17 M exact (2 threads: −3.26 M). So every model here is exact.
+
+### The stuffing check (amendment 2; reported, does not decide)
+
+| | content-word share | K5's bits per byte on the text (no gate, no rescaling) |
+|---|---:|---:|
+| human continuations | 0.428 | — |
+| B0 | 0.304 | 1.135 |
+| B1, M1, M2, M3 | 0.312–0.323 | 1.097–1.134 |
+| E1, E2, E3 | 0.277–0.303 | 1.131–1.138 |
+| T1, T3, T4 | 0.297–0.305 | 1.133–1.135 |
+| T2, T5_1, T6a_1, T6b_1, T6c_1 (B 1) | 0.319–0.332 | 1.127–1.143 |
+| T2b (B 1.5) | 0.378 | 1.124 |
+| T2c, T5, T6a, T6b, T6c (B 2) | 0.408–0.482 | 1.147–1.167 |
+| X1 / X2 | 0.325 / 0.414 | 1.109 / 1.130 |
+
+- K5 writes fewer content words than people (0.30 against 0.43). B 1 adds few (0.32–0.33). B 2 brings the share to the human level, or past it with the bigger LDAs (0.46–0.48).
+- K5's own bits barely separate the arms. Its grammar is weak in every arm, so this half of the check does not discriminate.
+
+### Four seeds (1000–4000)
+
+SEEDS_TABLE
+
+### What it means
+
+- **Topic rescaling is the only helper that moves the judges, and it moves them a lot.** v3.1 rises with B: 0.483 → 0.503 (0.5), 0.567 (1), 0.670 (1.5), 0.712 (2). v2 rises from 0.498 to 0.758. It holds over 4 seeds with disjoint ranges, and copying stays inside the bound.
+- **But at B 1.5–2 it is partly stuffing.**
+  - The text strings the prompt's topic words together, and grammar breaks: D_S doubles, and samples read like "Agassi played baseball team posted the Braves won their team won seven cardinals".
+  - K5's bits on human continuations rise past B0's at B 2 (1.586 with 7 MB LDA). The model no longer predicts real text better.
+  - SCRIBE v2 and v3.1 do not catch it. This is the "stuffing at a lower rate" gap that SCRIBE_V31.md lists.
+- **At B 1 it is a genuinely better model.**
+  - K5's bits on human continuations fall from 1.532 to 1.517 (7 MB LDA), 1.500 (30 MB), 1.493 (100 MB) and 1.488 (330 MB, −0.045, −2.9%). This is the largest bit gain any K5 helper has made except the word cache, and unlike the cache it raises SCRIBE (v3.1 +0.08 to +0.11).
+  - **More text helps LDA at B 1:** v3.1 0.567 (7 MB), 0.590 (30 MB), 0.592 (100 MB), 0.586 (330 MB). The bits fall the whole way. At B 2 the size does not matter (0.706–0.716).
+  - 200 topics: no better than 100.
+- **The topic term in the gate does nothing** (T3 = B0). Choosing among K5's 8 candidates by topic is weaker than steering every word. T4 (topic without pmi) is worse.
+- **The entity grid does not help**, in either form, at either weight, from 7 or 330 MB (v3.1 0.450–0.475). The grid learned from 330 MB has nearly the same transitions (P(S | −S) 0.043 against 0.039), and the same output to three digits. Its local coherence prefers sentences with few new entities, and K5's candidates differ in noise more than in structure.
+- **MBR does not help.**
+  - Sentence consensus alone (M1) breaks sentence form (D_S 2.54). It prefers the candidate that shares the most characters with the others, often a fragment.
+  - Whole-draft MBR (M4, M5) lowers v3.1, so consensus is not the gate's substitute.
+  - M3's small rise (0.488 at seed 0) comes with the gate at 16. Its seeds are below.
+- **Meta mixing lands between its variants** (X2 0.660, X1 0.506). MBR favours the most typical draft, and topic drafts are not typical, so the pool loses the topic arm's gain. This misses P4.
+- **Predictions:**
+  - P1 hit: MBR lowered or did not raise v3.1.
+  - P2 missed: the cont form of the grid did not help.
+  - P3 missed in size and direction: rescaling at B 1 raised v3.1 by +0.08, not less than 0.01; B 1–2 was not punished by SURPRISE; LDA size mattered at B 1.
+  - P4 missed.
+  - P5 missed on the judges: an arm passes rules 1–3. Whether a reader agrees (2 → 6 of 10) is for the raters.
+  - P6 hit except the time of the 330 MB LDA (51 min, once).
+
+### Decision
+
+- **No arm becomes K5's default yet.**
+  - Rules 1–3 hold for topic rescaling at B 1, 1.5 and 2 (and for the B 2 pick, T6a, see the seeds).
+  - Rule 4, the blind raters, is the cloud session's.
+  - **The GEN-A test split was not read.**
+- **What I recommend to the raters:**
+  - B0 against T2 or T6a_1/T6c_1 (B 1, the better model by bits) and T2c/T6a (B 2, the SCRIBE pick, partly stuffing).
+  - If B 1 wins with the raters and B 2 does not, adopt B 1 with LDA from 30–330 MB (the bits favour 330 MB; v3.1 is flat from 30 MB).
+- **For SCRIBE:** B 2's samples are a natural stuffing attack that v3.1 passes at 0.71. They belong in SCRIBE's attack battery.
+
+### Files
+
+- Every arm's dev GEN file: `bench/k5_discourse/LABEL.gen.txt` (seed 0: the labels above; seeds: `LABEL_sN.gen.txt`).
+- Full outputs (sample logs, SCRIBE v2 and v3.1 reports, times): `/mnt/d/cypha_llm/disc/out/` on Odin's PC. Model caches: `/mnt/d/cypha_llm/disc/cache/`.
