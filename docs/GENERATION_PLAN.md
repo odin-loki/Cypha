@@ -2250,3 +2250,8 @@ Every branch first merges `origin/main` (M1 and M2 are exact, so P1 and every ba
 - **The one test read** (GEN-A test, 250 prompts): SCRIBE v2 **0.631 [0.595, 0.665]**, v3.1 0.592 [0.566, 0.619], copy32 0.041, no 13-word copies. For comparison: P1t 0.537, K5 0.524.
 - **Prediction** test SCRIBE v2 at least 0.561: **hit** (0.631).
 - **SCRIBE rewards topic words** (§13.34), so its rise is not the evidence. The evidence is the blind raters: Q3 against P1t 0.590 [0.540, 0.640], and P1t against K5 0.610.
+
+**Q1 and Q2 merged as flags, off by default** (2026-11-06; branch `wip/merge-q1q2`, from `wip/plan-facts` and `wip/plan-fill`):
+- Main now holds Q1's flags (`--k5-plan-find 2`, `--k5-plan-fallback pattern`, `--k5-plan-filter`), its store `e9_v2`, `bench/fact_filter/` and `scripts/fs_*`, and Q2's (`--k5-plan-typed`, `--k5-plan-typed-fit`, `--k5-plan-typed-tau`, `--k5-plan-s1`–`s4`, `lm/planner/slots.hpp`, `plan_q2.model`, `slots_e9t.txt`), so they can be combined later. The default store `e9_text` and the default discourse planner are unchanged.
+- **Checks** (`cmp` on all 250 dev prompts, MODEL line aside, 4 threads): the default equals Q3t's dev GEN file; `--k5-plan-discourse off` equals P1t's; `--no-k5-plan` equals K5's (`K5_base`); Q1's flags equal `Q1_e9v2`; Q2's flags with `--k5-plan-discourse off` equal `Q2_typed_s1s3`. Dev SCRIBE v2: 0.606, 0.511, 0.498, 0.520, 0.511. Selftests pass: `cyphalm_trie`, `scribe` (120/120), `k5_planner` (with the Q2 checks), `cypha_report_card` (29/29).
+- Q1's and Q2's flags act on the single-step writer: with the default store, Q2 needs `--k5-plan-discourse off`; Q1 names its store, so the discourse writer stays off.
