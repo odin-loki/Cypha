@@ -1,0 +1,27 @@
+# GENERATION_PLAN §13.40 M3 (docs/reports/MERGE_FILL.md): sample's stderr lines, 250 dev prompts, seed 0,
+# four runs started together on K5_THREADS=2 each (OLD: ~/build_lead, the binary before the change).
+## OLD
+k5: generated 150000 bytes in 246.2 s on 2 threads (1641.5 us per byte, 10.24 ms per word)
+k5: the gate kept 1785 sentences of 12036 candidates
+Elapsed (wall clock) time (h:mm:ss or m:ss): 4:28.81
+Maximum resident set size (kbytes): 757640
+## P1
+k5: generated 150000 bytes in 252.6 s on 2 threads (1684.3 us per byte, 10.51 ms per word)
+k5: the gate kept 1785 sentences of 12036 candidates
+k5-plan: fill beam (beam 4): 2037 fills in 15.73 thread-s (7.721 ms each), 130298 K5 distributions; planner fact steps 20.42 thread-s over 93 prompts
+Elapsed (wall clock) time (h:mm:ss or m:ss): 5:08.85
+Maximum resident set size (kbytes): 756684
+## F1
+k5-plan: fill dba, beam 4
+k5: generated 150000 bytes in 250.4 s on 2 threads (1669.0 us per byte, 10.64 ms per word)
+k5: the gate kept 1791 sentences of 12031 candidates
+k5-plan: fill dba (beam 4): 2037 fills in 16.14 thread-s (7.924 ms each), 136785 K5 distributions; planner fact steps 20.83 thread-s over 93 prompts
+Elapsed (wall clock) time (h:mm:ss or m:ss): 5:06.70
+Maximum resident set size (kbytes): 756904
+## F2
+k5-plan: fill dba, beam 8
+k5: generated 150000 bytes in 258.0 s on 2 threads (1720.2 us per byte, 10.79 ms per word)
+k5: the gate kept 1781 sentences of 12019 candidates
+k5-plan: fill dba (beam 8): 2037 fills in 29.73 thread-s (14.596 ms each), 258956 K5 distributions; planner fact steps 34.39 thread-s over 93 prompts
+Elapsed (wall clock) time (h:mm:ss or m:ss): 5:12.50
+Maximum resident set size (kbytes): 757664

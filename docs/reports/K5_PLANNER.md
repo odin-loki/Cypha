@@ -97,3 +97,10 @@ Wall time covers sampling and both SCRIBE runs. Sampling alone: K5 120 s on 6 th
 ## On by default (2026-11-05, GENERATION_PLAN §13.39)
 
 `sample --k5` now uses the planner (P1); `--no-k5-plan` is K5 alone. The model and skeleton bank are in `bench/k5_planner/model/`. The default's dev samples equal P1's, and `--no-k5-plan` equals the old K5, on all 250 dev prompts.
+
+## The text-only store (2026-11-06, GENERATION_PLAN §13.46)
+
+- The store behind §13.38's results (`e9_aug`) held 17,907 Wikidata seeds. The planner stated them as facts, and `--plan-drop` never dropped them, since all had byte offset 0. So those results were partly built on facts CyphaLM did not read.
+- The default store is now `e9_text`, the same store without them.
+- **P1t against K5, blind pairwise:** 0.610 [0.560, 0.670].
+- **Test SCRIBE v2:** 0.537 [0.505, 0.564] (P1: 0.561; K5: 0.524).

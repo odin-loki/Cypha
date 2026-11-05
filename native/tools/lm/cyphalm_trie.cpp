@@ -2091,6 +2091,8 @@ int cmd_sample(const Args& a) {
         std::string k5_struct;      // K5_STRUCTURE.md: --k5-struct MODEL, --k5-struct-temp T
         double k5_struct_temp = 0;
         std::string k5_plan, k5_plan_model, k5_plan_gate = "full";  // K5_PLANNER.md: --k5-plan STOREDIR ...
+        std::string k5_plan_fill = "beam";  // MERGE_FILL.md: --k5-plan-fill beam|dba, --k5-plan-beam N
+        int k5_plan_beam = 0;
         for (const auto& [k, v] : a.k5_opts) {  // K5_UPGRADES.md
             std::string err;
             if (k == "--k5-struct") {
@@ -2103,6 +2105,11 @@ int cmd_sample(const Args& a) {
             }
             if (k == "--k5-plan" || k == "--k5-plan-model" || k == "--k5-plan-gate") {  // K5_PLANNER.md
                 (k == "--k5-plan" ? k5_plan : k == "--k5-plan-model" ? k5_plan_model : k5_plan_gate) = v;
+                continue;
+            }
+            if (k == "--k5-plan-fill" || k == "--k5-plan-beam") {  // MERGE_FILL.md: the fill's search
+                if (k == "--k5-plan-fill") k5_plan_fill = v;
+                else k5_plan_beam = std::atoi(v.c_str());
                 continue;
             }
             if (k.rfind("--k5-mcmc", 0) == 0 ? !cypha::cyphalm::wkn::mcmc::apply_flag(k, v, mp, err)
@@ -2122,7 +2129,7 @@ int cmd_sample(const Args& a) {
         if (k5_plan.empty() && k5_struct.empty() && !a.no_k5_plan) {  // §13.39: the planner is on by default
             const char* es = std::getenv("CYPHA_K5_PLAN_STORE");
             const char* em = std::getenv("CYPHA_K5_PLAN_MODEL");
-            const std::string ds = es ? es : "bench/fact_store/e9_aug";
+            const std::string ds = es ? es : "bench/fact_store/e9_text";  // §13.46: text-only
             const std::string dm = em ? em : "bench/k5_planner/model/plan_e9.model";
             if (std::ifstream(ds + "/seeds.tsv") && std::ifstream(dm)) {
                 k5_plan = ds;
@@ -2147,7 +2154,7 @@ int cmd_sample(const Args& a) {
                 drops.push_back({std::strtoull(a.plan_drop.substr(0, c).c_str(), nullptr, 10), std::strtoull(a.plan_drop.substr(c + 1).c_str(), nullptr, 10)});
             }
             std::string err;
-            if (!cypha::cyphalm::planner::apply_plan_flags(k5_plan, k5_plan_model, k5_plan_gate, drops, base, err)) {
+            if (!cypha::cyphalm::planner::apply_plan_flags(k5_plan, k5_plan_model, k5_plan_gate, drops, base, err, k5_plan_fill, k5_plan_beam)) {
                 std::cerr << "--k5-plan: " << err << "\n";
                 return 2;
             }

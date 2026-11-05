@@ -29,6 +29,8 @@
 #include <stdexcept>
 #include <vector>
 
+#include "cypha/lm/count_index.hpp"  // the Kneser-Ney core shared with K5 (GENERATION_PLAN §13.40 M1)
+
 namespace cypha::cyphalm::bkn {
 
 inline std::uint64_t splitmix(std::uint64_t x) {
@@ -69,10 +71,12 @@ class ByteKN {
     const Order& table(int k) const { return ord_.at(static_cast<std::size_t>(k)); }
 
     // part: the most entries a part of a group and a slice of a part hold (BKN2); the tables do not depend on it.
+    // CYPHA_BKN_COUNTS=index counts from one suffix array instead (build_index; the same tables).
     void build(const std::uint8_t* t, std::size_t n, int K, const Prune& pr = Prune{}, std::uint32_t part = kPart) {
         if (K < 1 || K > 32) throw std::runtime_error("ByteKN: order must be in 1..32");
         if (n > 0xffffffffULL) throw std::runtime_error("ByteKN: text over 4 GiB");
         if (part == 0) throw std::runtime_error("ByteKN: the part size must be positive");
+        if (const char* e = std::getenv("CYPHA_BKN_COUNTS"); e && std::string(e) == "index") return build_index(t, n, K, pr);
         K_ = K;
         ord_.assign(static_cast<std::size_t>(K) + 1, Order{});
         // Positions grouped by the byte before them: group b holds every i >= 1 with t[i - 1] == b. Groups of at most
@@ -137,6 +141,7 @@ class ByteKN {
             o.key.reserve(keep_ctx), o.off.reserve(keep_ctx + 1), o.gamma.reserve(keep_ctx), o.band.reserve(keep_ctx);
             o.sym.reserve(keep_child), o.val.reserve(keep_child);
             // Pass 2: values, gamma and pruning, part by part (in key order), straight into the packed arrays.
+            std::vector<std::uint32_t> cs;
             for (int g = 0; g < groups; ++g) {
                 o.group[g] = static_cast<std::uint32_t>(o.key.size());
                 for (std::uint32_t p = 0, P = parts(k, g); p < P; ++p) {
@@ -145,32 +150,103 @@ class ByteKN {
                         std::size_t b = a;
                         std::uint64_t s = 0;
                         while (b < v.size() && v[b].ctx == v[a].ctx) s += v[b++].c;
-                        if (s >= use.min_ctx) {
-                            const double nn = static_cast<double>(s);
-                            double gm = 0;
-                            const std::uint32_t first = static_cast<std::uint32_t>(o.sym.size());
-                            for (std::size_t j = a; j < b; ++j) {
-                                const std::uint32_t x = v[j].c;
-                                const double D = o.D[std::min<std::uint32_t>(x, 3)];
-                                gm += D;
-                                const double val = std::max(static_cast<double>(x) - D, 0.0);
-                                if (use.drop_singletons && x == 1) {
-                                    gm += val;  // its value moves into gamma
-                                    continue;
-                                }
-                                o.sym.push_back(static_cast<std::uint8_t>(v[j].sym));
-                                o.val.push_back(static_cast<float>(val / nn));
-                            }
-                            o.key.push_back(v[a].ctx);
-                            o.off.push_back(first);
-                            o.gamma.push_back(static_cast<float>(gm / nn));
-                            o.band.push_back(static_cast<std::uint8_t>(s < 4 ? 0 : s < 64 ? 1 : 2));
-                        }
+                        if (s >= use.min_ctx) add_context(o, v[a].ctx, v.data() + a, b - a, s, use.drop_singletons, cs);
                         a = b;
                     }
                 }
             }
             for (int g = groups; g <= 256; ++g) o.group[g] = static_cast<std::uint32_t>(o.key.size());
+            o.off.push_back(static_cast<std::uint32_t>(o.sym.size()));
+            o.key.shrink_to_fit(), o.off.shrink_to_fit(), o.gamma.shrink_to_fit(), o.band.shrink_to_fit();
+            o.sym.shrink_to_fit(), o.val.shrink_to_fit();
+        }
+    }
+
+    // The same tables, counted from one suffix array over the text (lm/count_index.hpp; GENERATION_PLAN §13.40 M1):
+    // at the top order n(c w) is the occurrences of c w; below it, the distinct bytes before the occurrences of c w that
+    // have one (N1+(. c w)); at order 1 below the top, the distinct bytes before w. The contexts are then put in the
+    // tables' order (by last byte, then key) and go through the same Kneser-Ney core and pruning.
+    void build_index(const std::uint8_t* t, std::size_t n, int K, const Prune& pr = Prune{}) {
+        if (K < 1 || K > 32) throw std::runtime_error("ByteKN: order must be in 1..32");
+        K_ = K;
+        ord_.assign(static_cast<std::size_t>(K) + 1, Order{});
+        cidx::CountIndex<std::uint8_t> x;
+        x.build(std::vector<std::uint8_t>(t, t + n), 256);
+        std::vector<std::uint8_t> lcp(n, 0);
+        for (std::size_t i = 1; i < n; ++i) lcp[i] = static_cast<std::uint8_t>(x.lcp(i, static_cast<std::size_t>(K)));
+        cidx::Distinct seen(256);
+        // An entry's count over ranks [a, b), the occurrences of c w: all of them at the top order, else the distinct
+        // bytes before those that have one.
+        const auto count = [&](std::size_t a, std::size_t b, bool top) -> std::uint32_t {
+            if (top) return static_cast<std::uint32_t>(b - a);
+            seen.next();
+            std::uint32_t c = 0;
+            for (std::size_t q = a; q < b; ++q) {
+                const std::size_t p = x.sa(q);
+                if (p >= 1 && seen.add(t[p - 1])) ++c;
+            }
+            return c;
+        };
+        struct Rec {
+            std::uint64_t key, s;
+            std::uint32_t off, m;
+            std::uint8_t g;
+        };
+        std::vector<Rec> rec;
+        std::vector<Pair> ch;
+        std::vector<std::uint32_t> cs;
+        for (int k = 1; k <= K; ++k) {
+            Order& o = ord_[static_cast<std::size_t>(k)];
+            const Prune use = k >= pr.from_order ? pr : Prune{};
+            const bool top = k == K;
+            rec.clear(), ch.clear();
+            if (k == 1) {
+                std::uint64_t s = 0;
+                for (unsigned w = 0; w < 256; ++w) {
+                    const auto r = x.first(static_cast<std::uint8_t>(w));
+                    const std::uint32_t c = count(r.lo, r.hi, top);
+                    if (c) ch.push_back({0, w, c}), s += c;
+                }
+                if (!ch.empty()) rec.push_back({kEmptyCtx, s, 0, static_cast<std::uint32_t>(ch.size()), 0});
+            } else {
+                const auto L = static_cast<std::size_t>(k - 1);
+                for (std::size_t i = 0; i < n;) {
+                    std::size_t j = i + 1;
+                    while (j < n && lcp[j] >= L) ++j;
+                    if (!x.has(i, L - 1)) {
+                        i = j;
+                        continue;
+                    }
+                    const auto r = x.longer({static_cast<std::uint32_t>(i), static_cast<std::uint32_t>(j)}, L);
+                    const auto off = static_cast<std::uint32_t>(ch.size());
+                    std::uint64_t s = 0;
+                    for (std::size_t a = r.lo; a < r.hi;) {
+                        std::size_t b = a + 1;
+                        while (b < r.hi && lcp[b] > L) ++b;
+                        const std::uint32_t c = count(a, b, top);
+                        if (c) ch.push_back({0, x.at(a, L), c}), s += c;
+                        a = b;
+                    }
+                    if (ch.size() > off) {
+                        std::uint64_t key = kEmptyCtx;
+                        for (std::size_t d = 1; d <= L; ++d) key = step(key, x.at(i, L - d));
+                        rec.push_back({key, s, off, static_cast<std::uint32_t>(ch.size() - off), x.at(i, L - 1)});
+                    }
+                    i = j;
+                }
+            }
+            for (const Pair& e : ch)
+                if (e.c <= 4) ++o.nc[e.c];
+            o.ctx_before = rec.size(), o.child_before = ch.size();
+            set_discounts(o);
+            std::sort(rec.begin(), rec.end(), [](const Rec& a, const Rec& b) { return a.g != b.g ? a.g < b.g : a.key < b.key; });
+            std::size_t q = 0;
+            for (int g = 0; g < 256; ++g) {
+                o.group[g] = static_cast<std::uint32_t>(o.key.size());
+                for (; q < rec.size() && rec[q].g == g; ++q)
+                    if (rec[q].s >= use.min_ctx) add_context(o, rec[q].key, ch.data() + rec[q].off, rec[q].m, rec[q].s, use.drop_singletons, cs);
+            }
+            o.group[256] = static_cast<std::uint32_t>(o.key.size());
             o.off.push_back(static_cast<std::uint32_t>(o.sym.size()));
             o.key.shrink_to_fit(), o.off.shrink_to_fit(), o.gamma.shrink_to_fit(), o.band.shrink_to_fit();
             o.sym.shrink_to_fit(), o.val.shrink_to_fit();
@@ -337,15 +413,11 @@ class ByteKN {
         return c;
     }
 
-    // Chen & Goodman's discounts from the count of counts, each clamped to [0, j] (as token_model.hpp).
+    // Chen & Goodman's discounts from the count of counts, each clamped to [0, j] (as token_model.hpp): the shared core.
     static void set_discounts(Order& o) {
-        const double n1 = static_cast<double>(o.nc[1]), n2 = static_cast<double>(o.nc[2]), n3 = static_cast<double>(o.nc[3]),
-                     n4 = static_cast<double>(o.nc[4]);
-        const double Y = (n1 + 2 * n2) > 0 ? n1 / (n1 + 2 * n2) : 0.5;
-        o.D[1] = n1 > 0 ? 1 - 2 * Y * n2 / n1 : 0.5;
-        o.D[2] = n2 > 0 ? 2 - 3 * Y * n3 / n2 : 1.0;
-        o.D[3] = n3 > 0 ? 3 - 4 * Y * n4 / n3 : 1.5;
-        for (int j = 1; j <= 3; ++j) o.D[j] = std::clamp(o.D[j], 0.0, static_cast<double>(j));
+        const double nc[5] = {0, static_cast<double>(o.nc[1]), static_cast<double>(o.nc[2]), static_cast<double>(o.nc[3]),
+                              static_cast<double>(o.nc[4])};
+        kn::discounts(nc, o.D, kn::Zero::bkn);
     }
 
     static constexpr std::uint32_t kNone = 0xffffffffu;
@@ -373,6 +445,21 @@ class ByteKN {
         std::uint64_t ctx;
         std::uint32_t sym, c;
     };
+    // One context (children e[0, m), by byte; s = n(c)) into the packed arrays: values and gamma from the shared
+    // Kneser-Ney core (kn::context; singletons dropped into gamma when asked).
+    static void add_context(Order& o, std::uint64_t key, const Pair* e, std::size_t m, std::uint64_t s, bool drop, std::vector<std::uint32_t>& cs) {
+        cs.resize(m);
+        for (std::size_t j = 0; j < m; ++j) cs[j] = e[j].c;
+        const auto first = static_cast<std::uint32_t>(o.sym.size());
+        const double gm = kn::context(cs.data(), m, o.D, drop, [&](std::size_t j, double val) {
+            o.sym.push_back(static_cast<std::uint8_t>(e[j].sym));
+            o.val.push_back(static_cast<float>(val));
+        });
+        o.key.push_back(key);
+        o.off.push_back(first);
+        o.gamma.push_back(static_cast<float>(gm));
+        o.band.push_back(static_cast<std::uint8_t>(s < 4 ? 0 : s < 64 ? 1 : 2));
+    }
     // The (context, byte, count) triples of order k, group g, part p of P, sorted by (context, byte): raw counts at the
     // top order, continuation counts (distinct left extensions) below it. Part p holds the contexts whose key lies in
     // the p-th of P equal key ranges, so parts in order give the group's contexts in key order, none split.
