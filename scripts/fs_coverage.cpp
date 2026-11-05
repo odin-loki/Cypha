@@ -8,6 +8,14 @@
 // a GEN-A prompts file). Prints two counts with Wilson 95% intervals:
 //   planned: the plan is not empty (sample's "plan coverage", GEN-E's coverage);
 //   entity:  some candidate the finder lists has at least one fact in the store (frames or not).
+//
+// PLAN_FACTS (docs/reports/PLAN_FACTS.md, GENERATION_PLAN §13.42 Q1): the planner's own paths, without K5.
+//   fs_coverage STOREDIR PROMPTS.tsv --planner SKELBANK [--find 1|2] [--filter PARAMS|on] [--stats S10.stats]
+//               [--plan-drop LO:HI] [--holdout LO:HI] [--list OUT.tsv]
+// loads the store as `sample --k5-plan` does (planner::FactStore, with the same flags) and runs make_plan's main-entity
+// rule (writer.hpp: the candidates in order, the first that is a subject with a fact of a bank relation with at most
+// 2 values; up to 4 facts). With --stats it also runs the relations-pattern fallback (fallback.hpp) and the
+// co-occurring one on the rest. Prints each path's count with Wilson 95% intervals and the facts per main plan.
 // Build: g++ -std=c++20 -O2 -I native/include scripts/fs_coverage.cpp -o fs_coverage
 // Author: Odin Loch
 #include <cmath>
@@ -19,8 +27,12 @@
 #include <tuple>
 
 #include "cypha/lm/content_plan.hpp"
+#include "cypha/lm/planner/fallback.hpp"
+#include "cypha/lm/planner/facts.hpp"
+#include "cypha/lm/planner/skeleton.hpp"
 
 using cypha::cyphalm::ContentPlanStore;
+namespace pln = cypha::cyphalm::planner;
 
 namespace {
 std::vector<std::string> split(const std::string& s, char d) {
@@ -96,20 +108,123 @@ bool range(const std::string& s, std::size_t& lo, std::size_t& hi) {
 }
 }  // namespace
 
+// PLAN_FACTS: the planner's paths (see the header).
+int planner_paths(const std::string& dir, const std::string& prompts, const std::string& bank_path, const std::string& stats_path,
+                  const std::vector<std::pair<std::size_t, std::size_t>>& drops, const std::string& list) {
+    pln::FactStore fs;
+    pln::SkelBank bank;
+    std::string err;
+    if (!fs.load(dir, drops, err) || !bank.load(bank_path, err)) {
+        std::cerr << err << "\n";
+        return 1;
+    }
+    cypha::cyphalm::structure::Stats stats;
+    const bool fb = !stats_path.empty();
+    if (fb && !stats.load(stats_path, err)) {
+        std::cerr << err << "\n";
+        return 1;
+    }
+    std::ifstream in(prompts);
+    std::string line;
+    std::getline(in, line);
+    std::ofstream lo_out;
+    if (!list.empty()) lo_out.open(list);
+    int n = 0, n_main = 0, n_pat = 0, n_cooc = 0;
+    std::size_t facts_main = 0, facts_pat = 0;
+    std::map<std::string, int> rel_main;
+    while (std::getline(in, line)) {
+        const auto f = split(line, '\t');
+        if (f.size() < 4) continue;
+        const std::string p = unescape_tsv(f[2]);
+        ++n;
+        const auto cands = fs.candidates(p, fb ? &stats : nullptr);
+        std::string path = "k5", ent = "-", facts;
+        for (const auto& c : cands) {
+            const std::uint32_t e = fs.find_main(c);
+            if (e == ~0u) continue;
+            std::map<std::uint32_t, std::vector<std::uint32_t>> by;
+            for (const auto fi : fs.of_subj(e))
+                if (bank.of(fs.rel(fs.fact(fi).rel))) by[fs.fact(fi).rel].push_back(fi);
+            std::vector<std::uint32_t> pick;
+            for (const auto& [r, v] : by) {
+                std::set<std::uint32_t> vals;
+                for (const auto fi : v) vals.insert(fs.fact(fi).val);
+                if (vals.size() <= 2) pick.push_back(v[0]);
+            }
+            if (pick.empty()) continue;
+            path = "main", ent = fs.ent(e) + (c == fs.ent(e) ? "" : " <- " + c);
+            facts_main += std::min<std::size_t>(pick.size(), 4);
+            for (const auto fi : pick) {
+                ++rel_main[fs.rel(fs.fact(fi).rel)];
+                facts += (facts.empty() ? "" : "|") + fs.rel(fs.fact(fi).rel) + "=" + fs.ent(fs.fact(fi).val);
+            }
+            break;
+        }
+        if (path == "k5" && fb && pln::fact_options().fallback == "pattern") {
+            const auto pk = pln::typed_fallback(fs, bank, stats, cands, p);
+            if (!pk.facts.empty()) {
+                path = "pattern" + std::to_string(pk.tier), ent = fs.ent(pk.ent), facts_pat += pk.facts.size(), ++n_pat;
+                for (const auto fi : pk.facts)
+                    facts += (facts.empty() ? "" : "|") + fs.ent(fs.fact(fi).subj) + ":" + fs.rel(fs.fact(fi).rel) + "=" + fs.ent(fs.fact(fi).val);
+            }
+        }
+        if (path == "k5") {  // make_plan's co-occurring fallback
+            for (const auto& c : cands) {
+                const std::uint32_t e = fs.find(c);
+                if (e == ~0u) continue;
+                for (const auto fi : fs.of_val(e))
+                    if (bank.of(fs.rel(fs.fact(fi).rel))) path = "cooc";
+                if (path == "cooc") break;
+            }
+            n_cooc += path == "cooc";
+        }
+        n_main += path == "main";
+        if (lo_out) lo_out << f[0] << '\t' << path << '\t' << ent << '\t' << facts << '\n';
+    }
+    double a, b;
+    std::printf("planner store %s: %zu facts (%zu dropped, %zu filtered), %zu subjects, %zu aliases; find %d, filter %s\n", dir.c_str(), fs.size(),
+                fs.dropped(), fs.filtered(), fs.subjects(), fs.aliases(), fs.options().find, fs.options().filter.empty() ? "off" : fs.options().filter.c_str());
+    wilson(n_main, n, a, b);
+    std::printf("main    %d of %d = %.3f [%.3f, %.3f]; facts per main plan %.2f\n", n_main, n, double(n_main) / n, a, b,
+                n_main ? double(facts_main) / n_main : 0.0);
+    if (fb) {
+        wilson(n_pat, n, a, b);
+        std::printf("pattern %d of %d = %.3f [%.3f, %.3f]; facts per plan %.2f\n", n_pat, n, double(n_pat) / n, a, b, n_pat ? double(facts_pat) / n_pat : 0.0);
+    }
+    wilson(n_cooc, n, a, b);
+    std::printf("cooc    %d of %d = %.3f [%.3f, %.3f]\n", n_cooc, n, double(n_cooc) / n, a, b);
+    std::printf("k5      %d of %d\n", n - n_main - n_pat - n_cooc, n);
+    std::printf("main-plan relations:");
+    for (const auto& [r, k] : rel_main) std::printf(" %s %d", r.c_str(), k);
+    std::printf("\n");
+    return 0;
+}
+
 int main(int argc, char** argv) {
     if (argc < 3) {
-        std::cerr << "usage: fs_coverage STOREDIR[,RAWFRAMES] PROMPTS.tsv [--plan-drop LO:HI] [--holdout LO:HI] [--list OUT]\n";
+        std::cerr << "usage: fs_coverage STOREDIR[,RAWFRAMES] PROMPTS.tsv [--plan-drop LO:HI] [--holdout LO:HI] [--list OUT]\n"
+                     "       fs_coverage STOREDIR PROMPTS.tsv --planner SKELBANK [--find 1|2] [--filter PARAMS|on] [--stats FILE] [...]\n";
         return 2;
     }
     std::size_t lo = 7'340'032, hi = 8'388'608, lo2 = 0, hi2 = 0;
-    std::string list;
+    std::string list, bank, stats;
     for (int i = 3; i + 1 < argc; i += 2) {
         const std::string a = argv[i];
         if (a == "--plan-drop" && range(argv[i + 1], lo2, hi2)) continue;
         if (a == "--holdout" && range(argv[i + 1], lo, hi)) continue;
         if (a == "--list") { list = argv[i + 1]; continue; }
+        if (a == "--planner") { bank = argv[i + 1]; continue; }
+        if (a == "--stats") { stats = argv[i + 1]; continue; }
+        if (a == "--find") { pln::fact_options().find = std::atoi(argv[i + 1]); continue; }
+        if (a == "--filter") { pln::fact_options().filter = argv[i + 1]; continue; }
+        if (a == "--fallback") { pln::fact_options().fallback = argv[i + 1]; continue; }
         std::cerr << "bad option " << a << "\n";
         return 2;
+    }
+    if (!bank.empty()) {
+        std::vector<std::pair<std::size_t, std::size_t>> drops = {{lo, hi}};
+        if (hi2 > lo2) drops.push_back({lo2, hi2});
+        return planner_paths(argv[1], argv[2], bank, stats, drops, list);
     }
     const std::string spec = argv[1];
     const std::size_t comma = spec.find(',');

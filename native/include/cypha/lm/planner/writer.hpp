@@ -21,6 +21,7 @@
 ///
 /// Author: Odin Loch
 
+#include "cypha/lm/planner/fallback.hpp"  // PLAN_FACTS: --k5-plan-fallback pattern
 #include "cypha/lm/planner/facts.hpp"
 #include "cypha/lm/planner/skeleton.hpp"
 #include "cypha/lm/structure/experts.hpp"
@@ -488,7 +489,7 @@ struct Plan {
 inline Plan make_plan(const Model& md, const wkn::K5& m, std::string_view prompt, const std::vector<double>& assoc) {
     Plan pl;
     const auto& fs = md.fs;
-    const auto cands = CPS::candidates(std::string(prompt));
+    const auto cands = fs.candidates(prompt, &md.stats);  // PLAN_FACTS: CPS::candidates unless --k5-plan-find 2
     const auto fit = [&](std::uint32_t fi) {
         double t = 0;
         const auto& vt = fs.ent_tok(fs.fact(fi).val);
@@ -497,7 +498,7 @@ inline Plan make_plan(const Model& md, const wkn::K5& m, std::string_view prompt
     };
     // main entity
     for (const auto& c : cands) {
-        const std::uint32_t e = fs.find(c);
+        const std::uint32_t e = fs.find_main(c);  // PLAN_FACTS: fs.find(c) unless --k5-plan-find 2
         if (e == ~0u) continue;
         std::map<std::uint32_t, std::vector<std::uint32_t>> by;
         for (const auto fi : fs.of_subj(e))
@@ -537,6 +538,13 @@ inline Plan make_plan(const Model& md, const wkn::K5& m, std::string_view prompt
         } while (std::next_permutation(pick.begin(), pick.end()));
         pl.path = "main", pl.ent = e, pl.facts = best;
         return pl;
+    }
+    if (fs.options().fallback == "pattern") {  // PLAN_FACTS: the relations-pattern fallback (fallback.hpp)
+        const auto fb = typed_fallback(fs, md.bank, md.stats, cands, prompt);
+        if (!fb.facts.empty()) {
+            pl.path = "pattern", pl.ent = fb.ent, pl.facts = fb.facts, pl.orders = 1;
+            return pl;
+        }
     }
     // co-occurring entities: facts whose value is a prompt entity, one per subject
     std::set<std::uint32_t> subj;
@@ -718,6 +726,12 @@ inline bool apply_plan_flags(const std::string& store, const std::string& model,
     o.structure = std::make_shared<Writer>(md);
     o.structure_desc = "plan:" + store + "," + model + ",gate=" + gate;
     if (md->fill_dba || beam > 0) o.structure_desc += ",fill=" + fill + ",beam=" + std::to_string(md->beam);  // MERGE_FILL.md
+    if (const auto& q = md->fs.options(); q.find != 1 || !q.filter.empty() || q.fallback != "cooc") {  // PLAN_FACTS.md
+        std::fprintf(stderr, "k5-plan: find %d (%zu aliases), filter %s (%zu facts left out), fallback %s\n", q.find, md->fs.aliases(),
+                     q.filter.empty() ? "off" : q.filter.c_str(), md->fs.filtered(), q.fallback.c_str());
+        for (const auto& [r, n] : md->fs.filter_reasons()) std::fprintf(stderr, "k5-plan: filter %s %zu\n", r.c_str(), n);
+        o.structure_desc += ",find=" + std::to_string(q.find) + (q.filter.empty() ? "" : ",filter=" + q.filter) + ",fallback=" + q.fallback;
+    }
     return true;
 }
 

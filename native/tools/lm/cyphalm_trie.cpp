@@ -2112,6 +2112,17 @@ int cmd_sample(const Args& a) {
                 else k5_plan_beam = std::atoi(v.c_str());
                 continue;
             }
+            if (k == "--k5-plan-find" || k == "--k5-plan-filter" || k == "--k5-plan-fallback") {  // PLAN_FACTS.md (facts.hpp)
+                auto& q = cypha::cyphalm::planner::fact_options();
+                if (k == "--k5-plan-find") q.find = std::atoi(v.c_str());
+                else if (k == "--k5-plan-filter") q.filter = v == "off" ? std::string() : v;
+                else q.fallback = v;
+                if ((q.find != 1 && q.find != 2) || (q.fallback != "cooc" && q.fallback != "pattern")) {
+                    std::cerr << "--k5-plan-find takes 1 or 2, --k5-plan-fallback cooc or pattern\n";
+                    return 2;
+                }
+                continue;
+            }
             if (k.rfind("--k5-mcmc", 0) == 0 ? !cypha::cyphalm::wkn::mcmc::apply_flag(k, v, mp, err)
                                               : !cypha::cyphalm::wkn::apply_flag(k, v, base, err)) {
                 std::cerr << err << "\n";

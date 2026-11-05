@@ -1,0 +1,301 @@
+n	subject	relation	value	source	template	pattern	P	n_evidence	n_rows	byte_offset	half
+1	Mustique	is_a	private island	lead	lead		1	1	1	919287241	choose
+2	Brigham Young	successor	Alfred Cumming	infobox	succession box		1	1	1	29910141	measure
+3	Roone Arledge	death_year	2002	f2		[S] ( <M> # , # - [O]	0.9657	1	2	630091596	choose
+4	Artturi Ilmari Virtanen	birth_place	Helsinki	category	category		1	1	1	667167317	measure
+5	List of British blues musicians	nationality	Blues	category	category		1	1	1	698624241	choose
+6	Johann Adolph Hasse	nationality	Baroque	category	category		1	1	1	780187840	choose
+7	Soltau-Fallingbostel	capital	Bad Fallingbostel	infobox	infobox german district		1	1	1	614605472	choose
+8	Anchovy	family	Engraulidae	infobox	taxobox		1	1	1	826108407	choose
+9	Dekker's algorithm	is_a	algorithm	lead	lead		1	1	1	232612791	choose
+10	Hans Christian Andersen (film)	is_a	musical film	lead	lead		1	1	1	391744328	measure
+11	Charles Barrois	death_year	1939	f2		[S] ( <M> # , # - [O]	0.9657	1	2	644725242	choose
+12	Wild Cat	family	Felidae	infobox	taxobox		1	1	1	898222974	choose
+13	David Hartley (philosopher)	death_year	1757	f2		[S] ( <M> # , # - [O]	0.9657	1	2	684718947	choose
+14	Eucosmodon	class	Mammal	infobox	taxobox		1	1	1	781582468	measure
+15	Ganges and Indus River Dolphin	class	Mammal	infobox	taxobox		1	1	1	894929161	choose
+16	Thomas Tollemache	birth_place	Suffolk	category	category		1	1	1	592396685	measure
+17	Thomas Gore Browne	successor	Edward Hay Drummond Hay	infobox	succession box		1	1	1	893237007	choose
+18	Mornington Crescent (game)	is_a	game	f2		^ [S] is a [O]	0.9107	1	1	299795580	choose
+19	David Weinberger	birth_year	1950	category	category		1	1	1	51242269	measure
+20	Begijnendijk	located_in	Flemish Brabant	category	category		1	1	1	638405267	choose
+21	Submatrix	is_a	matrix	lead	lead		1	1	1	765684461	measure
+22	Paolo Soleri	birth_year	1919	f2		^ [S] ( [O]	0.9598	1	2	307725308	measure
+23	Andrea del Verrocchio	nationality	Italian	category	category		1	1	2	781975428	choose
+24	Pope Stephen V	death_year	817	infobox	infobox pope		1	1	2	157762971	measure
+25	Whizzer	creator	Al Avison	infobox	superherobox		1	1	1	904586194	choose
+26	Charles Moose	birth_place	Maryland	category	category		1	1	1	542926621	choose
+27	Nord-Aurdal	located_in	Norway	category	category		1	1	1	695654144	choose
+28	Wrench	is_a	tool	f2		or [S] is a [O]	0.9116	1	1	827015860	measure
+29	Oswald Spengler	occupation	philosopher	category	category		1	1	1	145807181	measure
+30	Aria Giovanni	birth_year	1977	category	category		1	1	1	14900331	measure
+31	Zante currant	is_a	variety	f2		[S] is a [O] of	0.9143	1	1	715234448	measure
+32	Frank Davey	nationality	Canadian	category	category		1	1	1	869716643	choose
+33	Hayley Wickenheiser	birth_year	1978	f2		^ [S] ( born [O]	0.9606	1	2	251509361	measure
+34	Louison Bobet	successor	Stan Ockers	infobox	succession box		1	1	1	926707621	measure
+35	Taniquetil	located_in	Middle-earth	category	category		1	1	1	854405260	measure
+36	Mountain Meadows, Utah	is_a	area	f2		[S] is an [O] in	0.9156	1	1	459051591	choose
+37	Pink-footed Goose	order	Anseriformes	infobox	taxobox		1	1	1	746681673	measure
+38	Rælingen	language	Norwegian language	infobox	infobox kommune		1	1	1	695414577	choose
+39	Pope John III	successor	Pope Benedict I	infobox	infobox pope		1	1	2	346079604	measure
+40	Luo Guanzhong	nationality	Historical	category	category		1	1	1	898958189	measure
+41	Firmin Abauzit	birth_year	1679	f2		^ [S] ( [O]	0.9611	1	2	72951799	measure
+42	Mil Máscaras	birth_year	1942	infobox	infobox wrestler		1	1	2	944617592	measure
+43	Omsk Oblast	is_a	federal subject	lead	lead		1	1	1	416237756	choose
+44	Marlboro College	founded	1946	infobox	infobox university		1	1	1	375105674	choose
+45	Colonel Sanders	birth_place	Indiana	category	category		1	1	1	235840713	choose
+46	Nørre Aaby	is_a	town	f2		^ [S] is a [O] in	0.9163	1	1	597502472	measure
+47	Duk Koo Kim	death_year	1982	category	category		1	1	1	700176544	measure
+48	Dorothy Parker	nationality	American	category	category		1	1	1	54810357	measure
+49	Mark O. Barton	is_a	spree killer	lead	lead		1	1	1	779767038	measure
+50	Elbridge Gerry	successor	David Cobb	infobox	usrep succession box		1	1	1	64409794	measure
+51	Norman Panama	birth_year	1914	category	category		1	1	1	699567615	measure
+52	Ludacris	birth_place	Illinois	category	category		1	1	1	642509123	choose
+53	Emma, Lady Hamilton	birth_place	Cheshire	category	category		1	1	1	842704878	choose
+54	Henry Parry Liddon	death_year	1890	f2		[S] ( <M> # , # - [O]	0.9657	1	2	777085273	measure
+55	Friedrich Wöhler	is_a	chemist	lead	lead		1	1	1	67010705	measure
+56	Bugsy Siegel	is_a	gangster	lead	lead		1	1	1	612444247	choose
+57	Mistinguett	occupation	actor	category	category		1	1	1	338865692	choose
+58	Höganäs Municipality	capital	Höganäs	infobox	infobox kommun		1	1	1	554171319	choose
+59	Thermoception	is_a	sense	lead	lead		1	1	1	841707961	measure
+60	L. L. Zamenhof	is_a	eye doctor	lead	lead		1	1	1	115912748	choose
+61	Jean Salmon Macrin	occupation	poet	category	category		1	1	1	971855330	choose
+62	Countdown to Extinction	is_a	album	lead	lead		1	1	1	335286646	choose
+63	Louis Malle	birth_year	1932	f2		^ [S] ( [O]	0.9598	1	2	968361712	measure
+64	Nanbu Shutaro	nationality	Japanese	category	category		1	1	1	716666954	measure
+65	Herman Dooyeweerd	birth_year	1894	f2		^ [S] ( [O]	0.9598	1	2	745121329	measure
+66	Kristi Yamaguchi	birth_year	1971	f2		^ [S] ( born [O]	0.9606	1	2	111036117	measure
+67	SKU	is_a	three-letter acronym	lead	lead		1	1	1	910674898	choose
+68	George Caleb Bingham	death_year	1879	f2		[S] ( <M> # , # - [O]	0.9657	1	2	832292017	measure
+69	Dolly Parton	occupation	musician	category	category		1	1	1	54501670	measure
+70	Exa	is_a	prefix	lead	lead		1	1	1	757405488	measure
+71	Claus von Amsberg	is_a	diplomat	lead	lead		1	1	1	452615396	measure
+72	Charles Edward Jones	is_a	computer programmer	lead	lead		1	1	1	39785632	measure
+73	Rudolf Minger	birth_place	Bern	category	category		1	1	1	836976330	choose
+74	Ozaki Koyo	death_year	1903	category	category		1	1	1	716700889	choose
+75	Detroit Red Wings	owner	Mike Ilitch	infobox	nhl team infobox		1	1	1	54926075	measure
+76	Karl Friedrich Abel	birth_year	1723	f2		^ [S] ( [O]	0.9598	1	2	108658268	measure
+77	Høyanger	language	Norwegian Nynorsk	infobox	infobox kommune		1	1	1	696580984	measure
+78	Björk	occupation	singer	category	category		1	1	1	18725082	measure
+79	Charles Horman	death_year	1973	f2		[S] ( <M> # , # - [O]	0.9657	1	2	923211546	measure
+80	Robert Guiscard	death_year	1085	category	category		1	1	1	637228619	choose
+81	Walter Reuther	successor	Leonard Woodcock	infobox	succession box		1	1	1	937035022	choose
+82	Screaming Lord Sutch	occupation	politician	category	category		1	1	1	186763918	measure
+83	Jean Metzinger	nationality	Modern	category	category		1	1	1	975487738	measure
+84	European Democrats	is_a	conservative	lead	lead		1	1	1	61800032	choose
+85	Kävlinge Municipality	located_in	Sweden	category	category		1	1	1	554188855	choose
+86	Paul-Emile Janson	nationality	Belgian	category	category		1	1	1	650245881	measure
+87	Westland Welkin	is_a	heavy fighter	lead	lead		1	1	1	685666337	choose
+88	Kukarka	located_in	Russia	category	category		1	1	1	423041271	choose
+89	Peter Christopherson	birth_year	1955	f2		[S] ( born [O]	0.96	1	2	972362787	measure
+90	Perpetual war	is_a	war	lead	lead		1	1	1	715105016	choose
+91	Skinship	is_a	wasei-eigo	lead	lead		1	1	1	942503033	choose
+92	Apollo 4	is_a	unmanned flight	lead	lead		1	1	1	818993339	measure
+93	V (TV series)	country	USA	infobox	infobox television		1	1	1	760316569	measure
+94	Michael Walker (headmaster)	is_a	teacher	lead	lead		1	1	1	950838108	choose
+95	Creosote bush	class	Magnoliopsida	infobox	taxobox		1	1	1	314495672	choose
+96	Norma (opera)	composer	Vincenzo Bellini	category	category		1	1	1	698612783	choose
+97	Laarbeek	is_a	municipality	lead	lead		1	1	1	512145663	choose
+98	Luigi Alamanni	occupation	poet	category	category		1	1	1	115493627	choose
+99	Lerdo	located_in	Durango	category	category		1	1	1	802715298	choose
+100	Buddha Yodfa Chulaloke	death_year	1809	f2		[P] died on [O] ,	0.9658	1	2	757034160	measure
+101	Dorothy Lamour	birth_place	Louisiana	category	category		1	1	1	807586537	measure
+102	Elephant	class	Mammal	infobox	taxobox		1	1	1	57736345	measure
+103	Carl Barks	death_year	2000	f2		^ [S] ( <M> # , # - [O]	0.9659	1	2	45311622	measure
+104	Alessio Baldovinetti	nationality	Renaissance	category	category		1	1	1	596662131	measure
+105	Alphaeus Philemon Cole	is_a	artist	lead	lead		1	1	1	771912416	measure
+106	Gosford Park	is_a	film	lead	lead		1	1	1	591592826	choose
+107	Betty Williams (Northern Ireland)	birth_place	Belfast	category	category		1	1	1	941213893	choose
+108	Porsche 914	predecessor	Porsche 912	table	table		1	1	1	236024345	measure
+109	Willis O'Brien	death_year	1962	f2		[S] ( <M> # , # - [O]	0.9657	1	2	358802813	measure
+110	George Constantinescu	nationality	Romanian	category	category		1	1	3	994477466	measure
+111	Mistinguett	death_year	1956	f2		[S] ( <M> # , # - [O]	0.9657	1	2	338861728	measure
+112	Antonio Maria Gaspare Sacchini	death_year	1786	f2		[S] ( <M> # , # - [O]	0.9657	1	2	796562627	choose
+113	Diaphragm pump	is_a	positive displacement pump	lead	lead		1	1	1	829751337	choose
+114	Ted Demme	is_a	film director	lead	lead		1	1	1	256033375	choose
+115	Martin Agricola	is_a	composer	lead	lead		1	1	1	126928681	choose
+116	Pentacosmodon	family	Microcosmodontidae	infobox	taxobox		1	1	1	783763538	measure
+117	Pagh (Star Trek)	is_a	starship	lead	lead		1	1	1	848096824	measure
+118	Minister of State	is_a	title	f2		[S] is a [O] of	0.9321	2	1	854796458	choose
+119	Muztagh Tower	located_in	Pakistan	category	category		1	1	1	825553397	measure
+120	Valcour Island	is_a	island	lead	lead		1	1	1	397202892	choose
+121	Namsskogan	located_in	Norway	category	category		1	1	1	696756787	choose
+122	James G. Watt	predecessor	Cecil D. Andrus	infobox	succession box		1	1	1	969121095	choose
+123	Tombaatar	is_a	mammal	f2		^ [S] is a [O]	0.8251	1	1	772347874	measure
+124	Linux From Scratch	is_a	name	f2		[S] ) is the [O] of	0.9133	1	1	734342699	measure
+125	Agostino Carracci	nationality	Italian	category	category		1	1	1	13961033	choose
+126	Clark Blaise	nationality	Canadian	category	category		1	1	1	858557787	measure
+127	Tony Hillerman	occupation	writer	category	category		1	1	1	937095604	choose
+128	Biggin Hill	located_in	London	category	category		1	1	1	435373518	measure
+129	Orlando Letelier	death_year	1976	category	category		1	1	1	145915590	measure
+130	Marty	is_a	film	lead	lead		1	1	1	257381550	measure
+131	Fortaleza	located_in	Ceará	category	category		1	1	1	70058013	measure
+132	B*Witched	genre	Pop	infobox	infobox band		1	1	1	430839647	choose
+133	Asiatic Dowitcher	order	Charadriiformes	infobox	taxobox		1	1	1	981845885	choose
+134	Linköping University	founded	1969	infobox	infobox university		1	1	1	659274108	choose
+135	François Viète	nationality	French	category	category		1	1	1	969360974	choose
+136	Hemanta Kumar Mukhopadhyay	occupation	singer	category	category		1	1	1	330006271	choose
+137	Bulbul	order	Passeriformes	infobox	taxobox		1	1	1	622725464	choose
+138	John McMurtry	nationality	Canadian	category	category		1	1	2	977606464	choose
+139	Tokunaga Shinichi	birth_year	1973	category	category		1	1	1	716662643	measure
+140	To Die For	language	English	infobox	infobox film		1	1	1	918587698	measure
+141	Andres Bonifacio	birth_place	Manila	category	category		1	1	1	664896305	measure
+142	Baldwin II of Jerusalem	death_year	1131	category	category		1	1	1	868070175	choose
+143	Randy Stonehill	occupation	musician	category	category		1	1	1	425291547	measure
+144	Dmitri Shostakovich	death_year	1975	category	category		1	1	1	52981037	measure
+145	Bahá'u'lláh	death_year	1892	category	category		1	1	1	550677341	choose
+146	Willem Drees	occupation	politician	category	category		1	1	1	447527692	choose
+147	John Dalton (scientist)	occupation	chemist	category	category		1	1	1	264638141	choose
+148	Killdeer	class	bird	infobox	taxobox		1	1	1	909285955	measure
+149	Serapion of Antioch	predecessor	Saint Maximus of Antioch	infobox	succession box		1	1	1	999970796	choose
+150	Tony Robinson	is_a	actor	lead	lead		1	1	1	324914767	choose
+151	Hoogstraten	is_a	municipality	lead	lead		1	1	1	634231619	choose
+152	Karl Wallenda	birth_year	1905	f2		^ [S] ( [O]	0.9598	1	2	919265178	choose
+153	Lanao del Sur	is_a	province	lead	lead		1	1	1	943347782	measure
+154	HNLMS Abraham Crijnssen	is_a	minesweeper	lead	lead		1	1	1	745718664	measure
+155	Jules Michelet	nationality	French	category	category		1	1	1	955983014	choose
+156	Robert Bellarmine	death_year	1621	category	category		1	1	1	29078320	choose
+157	Chûn Castle	is_a	hillfort	lead	lead		1	1	1	967610890	choose
+158	Colin Maclaurin	occupation	mathematician	category	category		1	1	1	48095101	choose
+159	International Herald Tribune	founded	1887	infobox	infobox newspaper		1	1	1	654782974	measure
+160	Analogue switch	is_a	standard	f2		the [S] is a [O]	0.8303	1	1	863998737	choose
+161	British Columbia Social Credit Party	location	#101 - 8091 Granville Avenue	infobox	infobox canada political party		1	1	1	966234051	measure
+162	Marble sculpture	is_a	art	lead	lead		1	1	1	660382533	measure
+163	Neisseria gonorrhoeae	is_a	species	f2		^ [S] is a [O] of	0.9148	1	1	341126580	measure
+164	Giovanni Battista Piranesi	birth_year	1720	category	category		1	1	1	648821794	measure
+165	Epictetus	occupation	philosopher	category	category		1	1	1	65225428	measure
+166	Øvre Eiker	language	Norwegian Bokmål	infobox	infobox kommune		1	1	1	695876834	measure
+167	El Misti	is_a	volcano	lead	lead		1	1	1	943255954	choose
+168	Pope Dionysius	successor	Pope Felix I	infobox	infobox pope		1	1	2	299230794	choose
+169	Duff Hart-Davis	occupation	journalist	category	category		1	1	1	601622235	choose
+170	Charles F. Hockett	death_year	2000	f2		^ [S] ( <M> # , # - [O]	0.9659	1	2	47096145	measure
+171	John Craig	nationality	Scottish	category	category		1	1	2	728991784	measure
+172	Columbia Record	is_a	newspaper	lead	lead		1	1	1	854095376	choose
+173	Cowpox	is_a	disease	lead	lead		1	1	1	296905182	choose
+174	Hægebostad	capital	Tingvatn	infobox	infobox kommune		1	1	1	695791707	choose
+175	Toni Schumacher	birth_year	1938	f2		^ [S] ( born [O]	0.9606	1	2	195517233	measure
+176	Lower Glenelg National Park	founded	1969	infobox	infobox protected area of australia		1	1	1	457352250	choose
+177	Bollnäs Municipality	is_a	station	f2		^ [S] is a [O]	0.7561	1	1	557956610	choose
+178	KOffice	is_a	office suite	lead	lead		1	1	1	111492099	choose
+179	Rena Mero	is_a	model	lead	lead		1	1	1	982245981	choose
+180	Brett Gurewitz	birth_year	1962	category	category		1	1	1	782986015	choose
+181	Miguel Hernández	birth_year	1910	f2		[S] ( [O] -	0.9592	1	2	435106533	choose
+182	Adolf Freiherr Knigge	death_year	1796	f2		[S] ( <M> # , # - [O]	0.9657	1	2	708878596	choose
+183	Alessandro Scarlatti	occupation	composer	category	category		1	1	3	13036057	measure
+184	Ginger	class	Liliopsida	infobox	taxobox		1	1	1	313160995	choose
+185	Rabaul	located_in	Papua New Guinea	category	category		1	1	1	964244934	choose
+186	Ukiyoe Taro	occupation	writer	category	category		1	1	1	716672919	measure
+187	Ella Maillart	birth_place	Geneva	category	category		1	1	1	744234072	choose
+188	John Blow	birth_year	1649	f2		^ [S] ( [O]	0.9598	1	2	655176299	measure
+189	Coil	is_a	series	lead	lead		1	1	1	45731819	choose
+190	Rasmus Bartholin	nationality	Danish	category	category		1	1	1	439293835	measure
+191	Deadly Weapons	is_a	melodrama	lead	lead		1	1	1	842974177	choose
+192	Stan (song)	is_a	single	lead	lead		1	1	1	850904360	choose
+193	Confucius	nationality	Chinese	category	category		1	1	1	35543229	measure
+194	Luna 8	is_a	unmanned space mission	lead	lead		1	1	1	449758588	measure
+195	Gyaltsab Je	death_year	1432	category	category		1	1	1	458322108	measure
+196	Bob Mills (comedian)	birth_year	1957	f2		^ [S] ( born [O]	0.9606	1	2	597911192	choose
+197	Funafuti	located_in	Oceania	category	category		1	1	1	290262782	measure
+198	Jørn Utzon	occupation	architect	category	category		1	1	1	234943994	choose
+199	London Borough of Haringey	located_in	London	category	category		1	1	1	436399885	choose
+200	Hillel ben Naphtali Zevi	is_a	rabbi	lead	lead		1	1	1	981163649	measure
+201	Matthew Carter	birth_year	1937	f2		^ [S] ( born [O]	0.7467	1	2	751590531	choose
+202	The Cat Who Walks Through Walls	is_a	novel	lead	lead		1	1	1	307585816	measure
+203	Short-finned eel	order	Anguilliformes	infobox	taxobox		1	1	1	833033347	measure
+204	The Egyptian	director	Michael Curtiz	category	category		1	1	1	875969477	measure
+205	Lost in Space	is_a	science	f2		^ [S] is a [O]	0.8415	1	1	612086057	measure
+206	Laura Ashley	death_year	1985	category	category		1	1	1	446344281	choose
+207	Manos Hadjidakis	nationality	Greek	category	category		1	1	1	629550144	measure
+208	Consensual crime	is_a	public order crime	lead	lead		1	1	1	294814521	choose
+209	Drexel University	location	Philadelphia	infobox	infobox university		1	1	1	51005178	choose
+210	Route 53 (New Jersey)	is_a	state highway	f2		^ [S] is a [O] in	0.8507	1	1	474125259	choose
+211	Guillaume Delisle	death_year	1726	f2		[S] ( <M> # , # - [O]	0.9657	1	2	791319217	choose
+212	Gender feminism	is_a	phrase	f2		^ [S] is a [O]	0.9107	1	1	716122675	choose
+213	Colubrid	is_a	snake	lead	lead		1	1	1	840339228	measure
+214	Clinical neurophysiology	is_a	medical	f2		^ [S] is a [O]	0.8415	1	1	304311400	measure
+215	Liriope (genus)	class	monocotyledon	infobox	taxobox		1	1	1	979130013	choose
+216	Joseph Frederick Wallet DesBarres	occupation	politician	category	category		1	1	1	651154615	choose
+217	Frank Murkowski	birth_place	Seattle, Washington	infobox	infobox governor		1	1	1	910311183	measure
+218	Rurouni Kenshin	publisher	Canada United States VIZ Media	infobox	infobox animanga/manga		1	1	1	767841254	measure
+219	Mitta Mitta River	is_a	tributary	lead	lead		1	1	1	411041256	choose
+220	Iona (band)	genre	Progressive	infobox	infobox band		1	1	1	450690026	choose
+221	Gooik	located_in	Flemish Brabant	category	category		1	1	1	636019257	choose
+222	Nicolaus von Amsdorf	occupation	theologian	category	category		1	1	1	138558331	measure
+223	Friedrich Hoffmann	birth_year	1660	f2		^ [S] ( [O]	0.9598	1	2	786230604	choose
+224	Charmeleon	is_a	fictional character	lead	lead		1	1	1	920197786	choose
+225	Rebecca De Mornay	nationality	Film	category	category		1	1	1	261016715	choose
+226	Prince Joachim of Denmark	birth_year	1969	category	category		1	1	1	929510407	choose
+227	Vanilla Fudge	is_a	rock band	lead	lead		1	1	1	649663480	choose
+228	Stoumont	is_a	municipality	lead	lead		1	1	1	690562299	choose
+229	Demetrius I of Macedon	birth_year	337	category	category		1	1	1	408187650	measure
+230	Pythonidae	order	Squamata	infobox	taxobox		1	1	1	150375147	measure
+231	Mick Burrs	occupation	poet	category	category		1	1	1	865649617	measure
+232	Hugh Paddick	nationality	English	category	category		1	1	1	428665866	choose
+233	Pope Sixtus I	death_year	125	category	category		1	1	1	157454139	measure
+234	Var River	is_a	river	lead	lead		1	1	1	407314930	choose
+235	Martin Frobisher	birth_place	Yorkshire	category	category		1	1	1	375901059	choose
+236	Nahum Tate	death_year	1715	category	category		1	1	1	951035946	measure
+237	Kimura-gumo	class	Arachnida	infobox	taxobox		1	1	1	353455998	choose
+238	Francisco Goya	is_a	painter	lead	lead		1	1	1	67828841	measure
+239	Franz Mertens	is_a	mathematician	lead	lead		1	1	1	254696950	measure
+240	Franklin D. Roosevelt	predecessor	Herbert Hoover	infobox	infobox president		1	1	2	68622190	choose
+241	Hulshout	is_a	municipality	lead	lead		1	1	1	634232900	choose
+242	Specification and Design Language	is_a	specification language	lead	lead		1	1	1	190086002	choose
+243	Dakotamys	is_a	genus	lead	lead		1	1	1	768609602	measure
+244	Plottigat	nationality	Fictional	category	category		1	1	1	377782769	measure
+245	Leftfield	genre	Breakbeat	infobox	infobox band		1	1	1	671474414	choose
+246	Salzach	is_a	river	f2		[S] is a [O] in	0.9162	1	1	731750457	measure
+247	Alan Titchmarsh	nationality	English	category	category		1	1	1	953940294	measure
+248	William Wilde	occupation	historian	category	category		1	1	1	682040951	measure
+249	Erin Mouré	occupation	poet	category	category		1	1	1	929016403	measure
+250	ELLE	is_a	magazine	lead	lead		1	1	1	586739687	choose
+251	Jean Richard	death_year	2001	category	category		1	1	1	106442084	measure
+252	Ciudad Real	is_a	city	f2		^ [S] is a [O] in	0.9163	1	1	950657516	choose
+253	Lisa Marie Varon	occupation	actor	category	category		1	1	2	959566640	choose
+254	Tiresias	is_a	prophet	lead	lead		1	1	1	395028824	measure
+255	Century Media Records	is_a	record label	lead	lead		1	1	1	998445277	choose
+256	Donald Wolfit	nationality	English	category	category		1	1	1	693421462	measure
+257	Dionysius I of Syracuse	birth_year	432	category	category		1	1	1	643258975	choose
+258	Walker Percy	nationality	Catholic	category	category		1	1	1	322671540	choose
+259	Holt, Norfolk	located_in	Norfolk	category	category		1	1	1	460179096	measure
+260	Alan Alda	birth_place	New York City	category	category		1	1	1	2435244	measure
+261	Clive Chin	is_a	record producer	lead	lead		1	1	1	693406064	measure
+262	Laxå Municipality	capital	Laxå	infobox	infobox kommun2		1	1	1	558782779	choose
+263	Senjuro Hayashi	is_a	politician	lead	lead		1	1	1	685219526	choose
+264	Jorge Porcel	nationality	Argentine	category	category		1	1	1	626513356	choose
+265	Alexander Mackenzie	successor	John A. Macdonald	infobox	infobox pm		1	1	3	5825536	measure
+266	Frederick Bates	birth_year	1777	f2		^ [S] ( [O]	0.9598	1	2	979423203	measure
+267	Hochtaunuskreis	located_in	Hesse	category	category		1	1	1	763131554	measure
+268	Lake Como	is_a	lake	lead	lead		1	1	1	858927118	measure
+269	Ada programming language	is_a	structured	lead	lead		1	1	1	5898271	choose
+270	George Colman the Elder	death_year	1794	category	category		1	1	1	796477647	measure
+271	Lark	order	Passeriformes	infobox	taxobox		1	1	1	615742662	choose
+272	Ted Kulongoski	birth_place	Missouri	infobox	infobox governor		1	1	1	874849067	measure
+273	East-coast liberal	is_a	stereotype	lead	lead		1	1	1	695219939	measure
+274	Bill Bixby	nationality	Character	category	category		1	1	1	29530260	measure
+275	Discworld	is_a	series	lead	lead		1	1	1	56343178	measure
+276	Chicago school (architecture)	is_a	school	lead	lead		1	1	1	957706278	measure
+277	Oostrozebeke	is_a	municipality	lead	lead		1	1	1	628026794	measure
+278	Bos	family	Bovidae	infobox	taxobox		1	1	1	385154744	measure
+279	Dipper	class	bird	infobox	taxobox		1	1	1	389502528	measure
+280	Roskilde University	location	Roskilde	infobox	infobox danish university		1	1	1	423448358	measure
+281	Under the Pink	genre	Alternative Rock	infobox	album infobox		1	1	1	636305607	measure
+282	Candace Bushnell	birth_place	Connecticut	category	category		1	1	1	896194695	measure
+283	Daily Mail	location	Northcliffe House London	infobox	infobox newspaper		1	1	1	693173566	choose
+284	Snoqualmie River	located_in	Washington	category	category		1	1	1	885754154	choose
+285	Kvam	language	Norwegian Nynorsk	infobox	infobox kommune		1	1	1	695759576	choose
+286	Osborne Reynolds	occupation	engineer	category	category		1	1	1	991684977	measure
+287	Joseph Frederick Wallet DesBarres	nationality	Canadian	category	category		1	1	1	651154615	choose
+288	USA Today	location	7950 Jones Branch Drive	infobox	infobox newspaper		1	1	1	768000845	choose
+289	Out for Justice	language	English	infobox	infobox film		1	1	1	361674899	measure
+290	Harry Worth	is_a	actor	lead	lead		1	1	1	624579878	choose
+291	Wickham	located_in	Hampshire	category	category		1	1	1	680901862	measure
+292	Nassau, Bahamas	located_in	North America	category	category		1	1	1	141083873	measure
+293	Gerhard Johann Vossius	nationality	German	category	category		1	1	1	972092814	choose
+294	Angara	located_in	Russia	category	category		1	1	1	320492547	measure
+295	William Thomas Collings	birth_year	1824	f2		^ [S] ( [O]	0.9598	1	2	644785955	measure
+296	François de Malherbe	death_year	1628	category	category		1	1	1	658113617	choose
+297	Emperor Kazan	death_year	1008	category	category		1	1	1	65503281	measure
+298	Big Day Out	genre	Rock	infobox	infobox music festival		1	1	1	359761960	choose
+299	Nørre-Rangstrup	is_a	municipality	f2		[S] is a [O] (	0.9133	1	1	604756091	choose
+300	Muswell Hill	is_a	area	f2		[S] is an [O] in	0.9156	1	1	436036867	measure
