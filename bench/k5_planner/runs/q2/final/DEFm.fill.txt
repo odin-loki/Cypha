@@ -1,0 +1,19 @@
+stated fact sentences 179
+names intact: 149 of 179 (0.832 [0.771, 0.880])
+names side by side: 4 of 179 (0.022 [0.009, 0.056])
+slot type errors, rule 1 (any asserted position unfit): 37 of 67 checked names (0.552 [0.434, 0.665]); 33 of 179 sentences (0.184)
+slot type errors, rule 2 (no asserted position fits): 22 of 67 checked names (0.328 [0.228, 0.447]); 22 of 179 sentences (0.123)
+rule 2 errors by asserted position: located_in:S 10, birth_year:S 3, family:O 2, class:S 2, located_in:O 2, nationality:O 1, family:S 1, genre:S 1, language:S 1, death_place:O 1, birth_year:O 1, birth_place:S 1
+  Food writing (type 2) as located_in:S: Food writing is one of the most important and innovative Food and feed groups in the world .
+  Bruno Fuligni (type 2) as class:S, family:O: The term became the subject of the high - stationed french - language family Bruno Fuligni in 2004 .
+  Solaris Operating Environment (type 7) as nationality:O: This are also known as a movie of the Solaris Operating Environment film Unix .
+  Paul Klee (type 0) as located_in:S: Paul Klee is located in Bern in Asia , Europe , and began up with a similar role in writing cultures .
+  Jennifer Knapp (type 2) as located_in:S: Jennifer Knapp is one of the most important and innovative Christian and feed groups in the world .
+  Karl Weyprecht (type 2) as located_in:S: Karl Weyprecht is one of the most important and innovative Earth and orbit groups in the world .
+  Georg von Neumayer (type 2) as located_in:S: Georg von Neumayer is one of Europe's most popular and influential Earth and orbit books in the war .
+  Edmond Halley (type 3) as birth_year:S: S . Senator John Flamsteed in 1974 and set up by King Edmond Halley .
+  Chester A. Arthur (type 10) as located_in:S: Chester A . Arthur is one of Europe's most popular and influential american and feed groups in the war .
+  Serial Experiments Lain (type 7) as located_in:O: It was built in the central Serial Experiments Lain , north of the city of Rome and south of Japan .
+  philosopher (type 8) as birth_year:S: He have been many versions of ammonia working for the events of the Greek philosopher Aristotle in the 16 th century BC .
+  id Software (type 8) as located_in:S: For the moment , the id Software has made some of the events said with a free bass system , but his own software , the Doom , was limited and 100 .
+fact sentences unlike the base's: 0 of 179 (0.000 [0.000, 0.021]); prompts with a change 0 of 77

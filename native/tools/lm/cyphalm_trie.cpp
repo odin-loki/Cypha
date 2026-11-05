@@ -2095,8 +2095,16 @@ int cmd_sample(const Args& a) {
         std::string k5_plan_fill = "beam";  // MERGE_FILL.md: --k5-plan-fill beam|dba, --k5-plan-beam N
         int k5_plan_beam = 0;
         std::string k5_plan_disc;  // PLAN_DISCOURSE.md: --k5-plan-discourse on|SPEC
+        cypha::cyphalm::planner::FillOpts k5_plan_q2;  // PLAN_FILL.md (§13.42 Q2): --k5-plan-typed FILE, --k5-plan-s1..s4
         for (const auto& [k, v] : a.k5_opts) {  // K5_UPGRADES.md
             std::string err;
+            if (cypha::cyphalm::planner::fill_flag(k, v, k5_plan_q2, err)) {  // PLAN_FILL.md
+                if (!err.empty()) {
+                    std::cerr << err << "\n";
+                    return 2;
+                }
+                continue;
+            }
             if (k == "--k5-struct") {
                 k5_struct = v;
                 continue;
@@ -2180,7 +2188,8 @@ int cmd_sample(const Args& a) {
                 drops.push_back({std::strtoull(a.plan_drop.substr(0, c).c_str(), nullptr, 10), std::strtoull(a.plan_drop.substr(c + 1).c_str(), nullptr, 10)});
             }
             std::string err;
-            if (!cypha::cyphalm::planner::apply_plan_flags(k5_plan, k5_plan_model, k5_plan_gate, drops, base, err, k5_plan_fill, k5_plan_beam)) {
+            if (!cypha::cyphalm::planner::apply_plan_flags(k5_plan, k5_plan_model, k5_plan_gate, drops, base, err, k5_plan_fill, k5_plan_beam,
+                                                           k5_plan_q2)) {
                 std::cerr << "--k5-plan: " << err << "\n";
                 return 2;
             }

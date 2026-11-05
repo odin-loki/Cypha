@@ -1,0 +1,1 @@
+S3k5 /home/odin/q2_src /home/odin/build_q2 --k5-plan-typed /mnt/d/cypha_llm/plan/q2/slots_e9_K12.txt --k5-plan-typed-fit log --k5-plan-typed-tau 1 --k5-plan-model bench/k5_planner/model/plan_q2.model --k5-plan-s3 5
