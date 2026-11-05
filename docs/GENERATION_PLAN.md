@@ -2158,3 +2158,28 @@ Timings only from old and new started together on the same thread count. A job t
 - every full `context8k` takes one shared lock (`flock ~/.cypha_full.lock`), so only one runs on the PC at a time. T1's final pair of tuned and default runs shares one turn of the lock, so the two are started together.
 
 Every branch first merges `origin/main` (M1 and M2 are exact, so P1 and every baseline are unchanged), then finishes its registered checks. The rules and predictions of §13.40–13.43 stand.
+
+### 13.46 Fix: the planner plans only from facts CyphaLM read (registered 2026-11-06, before any run; Odin: "If you know what to fix. Please do fix it.")
+
+**The fault** (found by Q1, §13.42): the default store `e9_aug` holds 17,907 Wikidata seeds (`source` = `wikidata`). They were meant only as supervision for `pattern_learn` (D4), but the planner states them as facts. That breaks rule 1: CyphaLM does every task, and its facts come from its own reading. All of them have `byte_offset` 0, so `--plan-drop` never removes them, including facts about the prompt page's own subject. 26 of P1's 50 main-entity plans rest on them alone. **§13.38's planner results (raters 0.635 against K5; test SCRIBE v2 0.561) were partly built on these facts, and are marked so.**
+
+**The fix:**
+- `bench/fact_store/e9_text/` is `e9_aug` without the Wikidata seeds.
+- Only `seeds.tsv` changes. The prose facts `facts_f2.tsv` were read from the text by F2's patterns and stay. The `--plan-drop` and the overlap guards are unchanged.
+- The default store of `sample --k5` becomes `e9_text` (arm **P1t**). The model and gate are unchanged.
+
+**The re-check:**
+- Dev, seed 0, 250 prompts:
+  - P1t's coverage by path;
+  - SCRIBE v2 and v3.1;
+  - copy32.
+- Deciding judge: pairwise blind raters, P1t against K5 (`--no-k5-plan`), the §13.38 rule, the same 50 prompts and four fresh raters, packets committed first.
+- If P1t reads better than K5, it stays the default, and GEN-A test is read once for P1t. If not, the default goes back to K5 alone until a text-only planner wins.
+
+**Q1–Q3:** their arms and baselines move to text-only stores. They are compared against P1t, not P1.
+
+**Predictions:**
+- main-entity coverage about 24 of 250 (Q1's count);
+- SCRIBE v2 within ±0.02 of P1's 0.532;
+- raters: P1t against K5 still above 0.5, but lower than P1's 0.635, since fewer prompts get a plan (about 0.58);
+- the interval may include 0.5.
