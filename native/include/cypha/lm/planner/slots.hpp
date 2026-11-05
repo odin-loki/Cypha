@@ -354,7 +354,7 @@ class SlotTypes {
             for (int s = 0; s < kShapes; ++s) o << (s ? " " : "") << shape[c * kShapes + static_cast<std::size_t>(s)];
             o << "\n";
         }
-        o.precision(5);  // counts (sums of posteriors): 5 significant digits
+        o.precision(7);  // counts (sums of posteriors): 7 significant digits
         for (int k = 0; k < kSlotOffs; ++k) {
             o << "tot " << k;
             for (const double x : tot_[k]) o << " " << x;
