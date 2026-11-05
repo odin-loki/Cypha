@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The planner's fill measures (docs/reports/PLAN_FILL.md, GENERATION_PLAN §13.42 Q2): names intact, slot type errors.
 
-  python3 -I scripts/plan_fill_measures.py PLANLOG STOREDIR TYPES [--min-sent N] [--share S] [--examples N]
+  python3 -I scripts/plan_fill_measures.py PLANLOG STOREDIR TYPES [--min-sent N] [--share S] [--examples N] [--base PLANLOG0]
 
 PLANLOG is the sample run's K5_PLAN_LOG; STOREDIR the fact store (its patterns.tsv and patterns_add.tsv); TYPES the
 prefix of k5_planner types --table (TYPES.entities.tsv, TYPES.positions.tsv). Over the stated fact sentences:
@@ -11,9 +11,15 @@ prefix of k5_planner types --table (TYPES.entities.tsv, TYPES.positions.tsv). Ov
   - names side by side: the sentence holds "S O" or "O S" (case folded; MERGE_FILL.md's measure);
   - slot type errors, from the store's own types: a store pattern of relation r (train_sentences >= --min-sent) whose
     words next to its [S] or [O] (up to 3, with a content word) stand next to a name asserts that the name fills r:S or
-    r:O. It is an error if the name does not fill that position in the store and its type (the EM type of
-    k5_planner types) holds less than --share of the position's entities. "He was born in Gothenburg University":
-    "born in" asserts birth_place:O, and almost no birth place is of the university's type.
+    r:O. A position fits the name if the name fills it in the store or its type (the EM type of k5_planner types)
+    holds at least --share of the position's entities. "He was born in Gothenburg University": "born in" asserts
+    birth_place:O, and almost no birth place is of the university's type.
+    Two rules are reported. The first (written before any Q2 arm ran) counts an error when any asserted position does
+    not fit. But the same words often come from several relations' patterns ("was born in" is also a location:S
+    pattern), so it flagged right sentences ("Carl Friedrich Gauss was born in Braunschweig"). The second counts an
+    error only when none of the asserted positions fits; it was set after reading P1's and the typed arm's examples.
+  - with --base: the stated fact sentences unlike the base run's (the same prompt's sentence at the same plan step), and
+    the prompts with any such change: how much the fills moved (whether the gate needs retraining).
 
 Measurement only; nothing here writes text. Relation cues: scripts/k5_planner_measures.py.
 
@@ -107,9 +113,21 @@ def find(sent, name):
     return -1
 
 
+def stated(log):
+    """prompt (the log's 60-byte prefix) -> its stated fact sentences, in plan order."""
+    out = {}
+    with open(log, encoding="utf-8", errors="replace") as f:
+        for line in f:
+            p = line.rstrip("\n").split("\t")
+            if not p or p[0] != "PLAN" or len(p) < 2:
+                continue
+            out[p[1]] = ["|".join(q[6:]) for q in (x.split("|") for x in p[8:]) if len(q) >= 7 and q[3] == "1"]
+    return out
+
+
 def main():
     args = sys.argv[1:]
-    opt = {"--min-sent": "10", "--share": "0.05", "--examples": "0"}
+    opt = {"--min-sent": "10", "--share": "0.05", "--examples": "0", "--base": ""}
     pos = []
     i = 0
     while i < len(args):
@@ -152,7 +170,7 @@ def main():
         return out
 
     n = intact = side = 0
-    checked = errors = sent_err = 0
+    checked = errors = sent_err = errors2 = sent_err2 = 0
     err_rel = Counter()
     examples = []
     with open(log, encoding="utf-8", errors="replace") as f:
@@ -188,7 +206,7 @@ def main():
                 if subj.lower() + " " + val.lower() in low or val.lower() + " " + subj.lower() in low:
                     side += 1
                 intact += ok
-                bad = False
+                bad = bad2 = False
                 for nm, sp in ((subj, s0), (val, o0)):
                     if sp is None or nm not in etype:
                         continue
@@ -201,22 +219,41 @@ def main():
                     if wrong:
                         errors += 1
                         bad = True
+                    if len(wrong) == len(ps):  # rule 2: no asserted position fits the name
+                        errors2 += 1
+                        bad2 = True
                         for pp in wrong:
                             err_rel[pp] += 1
                         if len(examples) < n_ex:
                             examples.append(f"{nm} (type {t}) as {', '.join(sorted(wrong))}: {' '.join(sent)}")
                 sent_err += bad
+                sent_err2 += bad2
     print(f"stated fact sentences {n}")
     lo, hi = wilson(intact, n)
     print(f"names intact: {intact} of {n} ({intact / max(n, 1):.3f} [{lo:.3f}, {hi:.3f}])")
     lo, hi = wilson(side, n)
     print(f"names side by side: {side} of {n} ({side / max(n, 1):.3f} [{lo:.3f}, {hi:.3f}])")
     lo, hi = wilson(errors, checked)
-    print(f"slot type errors: {errors} of {checked} checked names ({errors / max(checked, 1):.3f} [{lo:.3f}, {hi:.3f}]); "
-          f"{sent_err} of {n} sentences ({sent_err / max(n, 1):.3f})")
-    print("errors by asserted position: " + ", ".join(f"{r} {c}" for r, c in err_rel.most_common(12)))
+    print(f"slot type errors, rule 1 (any asserted position unfit): {errors} of {checked} checked names "
+          f"({errors / max(checked, 1):.3f} [{lo:.3f}, {hi:.3f}]); {sent_err} of {n} sentences ({sent_err / max(n, 1):.3f})")
+    lo, hi = wilson(errors2, checked)
+    print(f"slot type errors, rule 2 (no asserted position fits): {errors2} of {checked} checked names "
+          f"({errors2 / max(checked, 1):.3f} [{lo:.3f}, {hi:.3f}]); {sent_err2} of {n} sentences ({sent_err2 / max(n, 1):.3f})")
+    print("rule 2 errors by asserted position: " + ", ".join(f"{r} {c}" for r, c in err_rel.most_common(12)))
     for e in examples:
         print("  " + e)
+    if opt["--base"]:
+        a, b = stated(log), stated(opt["--base"])
+        ns = diff = pr = prd = 0
+        for k, v in a.items():
+            if not v:
+                continue
+            w = b.get(k, [])
+            d = sum(1 for i, x in enumerate(v) if i >= len(w) or w[i] != x)
+            ns, diff, pr, prd = ns + len(v), diff + d, pr + 1, prd + (d > 0 or len(w) != len(v))
+        lo, hi = wilson(diff, ns)
+        print(f"fact sentences unlike the base's: {diff} of {ns} ({diff / max(ns, 1):.3f} [{lo:.3f}, {hi:.3f}]); "
+              f"prompts with a change {prd} of {pr}")
 
 
 if __name__ == "__main__":

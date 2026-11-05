@@ -834,7 +834,8 @@ class Writer final : public wkn::StructureWriter {
 
 // cyphalm_trie: --k5-plan STOREDIR --k5-plan-model FILE [--k5-plan-gate full|k5] [--k5-plan-fill beam|dba]
 // [--k5-plan-beam N]; drops: the evidence ranges to drop. beam 0: the default (4). fo: §13.42 Q2's options
-// (--k5-plan-typed FILE, --k5-plan-typed-tau, --k5-plan-s1 [-mode], --k5-plan-s2, --k5-plan-s3, --k5-plan-s4; slots.hpp).
+// (--k5-plan-typed FILE, --k5-plan-typed-tau, --k5-plan-typed-fit, --k5-plan-s1 [-mode], --k5-plan-s2, --k5-plan-s3, --k5-plan-s4;
+// slots.hpp).
 inline bool apply_plan_flags(const std::string& store, const std::string& model, const std::string& gate,
                              const std::vector<std::pair<std::size_t, std::size_t>>& drops, wkn::Options& o, std::string& err,
                              const std::string& fill = "beam", int beam = 0, const FillOpts& fo = FillOpts{}) {
@@ -858,6 +859,7 @@ inline bool apply_plan_flags(const std::string& store, const std::string& model,
         if (!fo.typed.empty()) {
             md->types = std::make_shared<SlotTypes>();
             if (!md->types->load(fo.typed, err)) return false;
+            md->types->fit_mode = fo.typed_fit;
         }
         std::fprintf(stderr, "k5-plan: q2 %s%s\n", fo.desc().c_str(), md->types ? (", " + std::to_string(md->types->K) + " types").c_str() : "");
     }

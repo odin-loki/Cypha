@@ -8,8 +8,8 @@
 //       the gate's meta-mixer: for each real sentence in [A, B) that states a store fact, the fill of its own skeleton
 //       and fact is the target among the fills of the relation's other best skeletons (same fact, same context). The
 //       first 80% of items train, the last 20% test. The K5 fluency floor is the 5th percentile of the targets' K5 score.
-//       [--typed SLOTS] [--s1 L] [--s1-mode class|low]: the fills typed and smoothed as sample's --k5-plan-typed and
-//       --k5-plan-s1 (docs/reports/PLAN_FILL.md).
+//       [--typed SLOTS] [--typed-tau B] [--typed-fit mix|log] [--s1 L] [--s1-mode class|low]: the fills typed and
+//       smoothed as sample's --k5-plan-typed... and --k5-plan-s1... (docs/reports/PLAN_FILL.md).
 //   k5_planner types --k5 TEXT --store DIR --text CLEAN --lo A --hi B --out SLOTS [--drop LO:HI] [--types K]
 //                    [--iters N] [--restarts R] [--seed S] [--min N] [--table PREFIX]
 //       typed slots (slots.hpp, GENERATION_PLAN §13.42 Q2): the entity types by EM over the store's relation
@@ -250,12 +250,13 @@ int cmd_train(const Args& a) {
     const wkn::Options o;
     const st::Experts ex(md->stats, m, md->runs(m), &md->topics, &md->grid);
     // PLAN_FILL.md: the fills typed and smoothed as sample's (--typed, --s1, --s1-mode, --typed-tau).
-    for (const char* k : {"--typed", "--typed-tau", "--s1", "--s1-mode"})
+    for (const char* k : {"--typed", "--typed-tau", "--typed-fit", "--s1", "--s1-mode"})
         if (!a.get(k).empty() && (!pl::fill_flag(std::string("--k5-plan-") + (k + 2), a.get(k), md->fo, err) || !err.empty()))
             return std::cerr << (err.empty() ? std::string("bad ") + k : err) << "\n", 2;
     if (!md->fo.typed.empty()) {
         md->types = std::make_shared<pl::SlotTypes>();
         if (!md->types->load(md->fo.typed, err)) return std::cerr << err << "\n", 1;
+        md->types->fit_mode = md->fo.typed_fit;
         std::fprintf(stderr, "train: fills %s\n", md->fo.desc().c_str());
     }
     const pl::Filler fl(m, o, 4, 3, false, &md->fo, md->bind_types(m));
@@ -452,6 +453,19 @@ int selftest_q2(const wkn::K5& m, const std::string& txt, const std::vector<std:
     const double fq = t2.word_fit(P("Alan Smith"), p2, m.id("born")), fr = t2.word_fit(P("Paris"), p2, m.id("born"));
     if (!(fc > 0 && fp < -2 && fq > 0 && fr < -2)) return std::fprintf(stderr, "selftest q2: context fits %.2f %.2f %.2f %.2f\n", fc, fp, fq, fr), 1;
     if (std::fabs(t2.word_fit(P("Paris"), m2, m.id("born")) - ty.word_fit(P("Paris"), m2, m.id("born"))) > 1e-3) return fail("slots file round trip");
+    {  // --k5-plan-typed-fit log: the mean log ratio is never above log2 of the mixed ratio (Jensen), equal for a sure type
+        float mixp[4] = {0, 0, 0, 0};
+        mixp[type("Paris")] = 0.5f, mixp[type("Alan Smith")] = 0.5f;
+        const double mx = t2.word_fit(mixp, m2, m.id("born"));
+        t2.fit_mode = 1;
+        const double lg = t2.word_fit(mixp, m2, m.id("born")), sure = t2.word_fit(P("Paris"), m2, m.id("born"));
+        t2.fit_mode = 0;
+        if (!(lg <= mx + 1e-12 && lg < mx - 0.1 && std::fabs(sure - fc) < 0.05)) return std::fprintf(stderr, "selftest q2: log fit %.3f %.3f %.3f\n", mx, lg, sure), 1;
+        pl::FillOpts fl2;
+        std::string e2;
+        if (!pl::fill_flag("--k5-plan-typed-fit", "log", fl2, e2) || !e2.empty() || fl2.typed_fit != 1) return fail("--k5-plan-typed-fit log");
+        if (!pl::fill_flag("--k5-plan-typed-fit", "geo", fl2, e2) || e2.empty()) return fail("--k5-plan-typed-fit geo must be refused");
+    }
     // Typed fills: the right types keep the untyped fill; the names' types swapped refuse "born" after the city.
     const wkn::Options o;
     pl::FillOpts ft;

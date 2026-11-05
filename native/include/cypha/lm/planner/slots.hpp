@@ -17,7 +17,9 @@
 /// words and of the K5 classes at offsets -2, -1, +1, +2 from the name. For a name with posterior pi:
 ///   fit(pi, k, w) = log2 sum_z pi(z) (n_z(k, w) + a) / (E_z(k, w) + a),   E_z(k, w) = n(k, w) N_z(k) / N(k),
 /// the ratio of the word's count next to the type to its count if the type did not matter, smoothed by a pseudo-count a
-/// on both sides (so a word seen a few times is no evidence either way).
+/// on both sides (so a word seen a few times is no evidence either way). With --k5-plan-typed-fit log the fit is the
+/// posterior's mean of the log ratios instead, sum_z pi(z) log2 (n_z + a) / (E_z + a): a name that is most likely an
+/// organisation is not let through "born in" because it might be a town.
 ///
 /// The fill (writer.hpp, Filler) refuses a class word next to a slot when its fit for the slot's name is below -tau and
 /// goes down the class's list; the skeleton choice drops a skeleton whose class codes next to a slot fit below -tau
@@ -57,6 +59,7 @@ namespace cypha::cyphalm::planner {
 struct FillOpts {
     std::string typed;   // --k5-plan-typed FILE: typed slots (k5_planner types)
     double tau = 2.0;    // --k5-plan-typed-tau BITS: a word or skeleton fitting below -tau next to a slot is refused
+    int typed_fit = 0;   // --k5-plan-typed-fit mix|log: the fit over the name's types, log2 of the mixed ratio (0) or the mean log ratio (1)
     double s1 = 0;       // --k5-plan-s1 L: blend L of a smoother distribution into the fill's next-word distribution
     int s1_mode = 0;     // --k5-plan-s1-mode class|low: K5's class model (0) or K5 at order 3 (1)
     double s2 = 1;       // --k5-plan-s2 T: the gate's softmax temperature (each ranker's, before the second layer)
@@ -70,7 +73,7 @@ struct FillOpts {
             std::snprintf(b, sizeof b, "%s=%g", k.c_str(), v);
             d += (d.empty() ? "" : ",") + std::string(b);
         };
-        if (!typed.empty()) d += "typed=" + typed, add("tau", tau);
+        if (!typed.empty()) d += "typed=" + typed, add("tau", tau), d += typed_fit ? ",fit=log" : "";
         if (s1 > 0) add(s1_mode ? "s1low" : "s1class", s1);
         if (s2 != 1) add("s2", s2);
         if (s3 != 1) add("s3", s3);
@@ -88,7 +91,10 @@ inline bool fill_flag(const std::string& k, const std::string& v, FillOpts& f, s
     };
     if (k == "--k5-plan-typed") f.typed = v;
     else if (k == "--k5-plan-typed-tau") num(0, 64, f.tau);
-    else if (k == "--k5-plan-s1") num(0, 1, f.s1);
+    else if (k == "--k5-plan-typed-fit") {
+        if (v != "mix" && v != "log") err = k + " takes mix or log";
+        f.typed_fit = v == "log";
+    } else if (k == "--k5-plan-s1") num(0, 1, f.s1);
     else if (k == "--k5-plan-s1-mode") {
         if (v != "class" && v != "low") err = k + " takes class or low";
         f.s1_mode = v == "low";
@@ -144,6 +150,7 @@ class SlotTypes {
 
     int K = 0;
     double alpha = 2;                   // the pseudo-count of fit
+    int fit_mode = 0;                   // FillOpts::typed_fit: 0 log2 of the mixed ratio, 1 the mean log2 ratio
     std::vector<std::string> pos;       // position names, "relation:S" / "relation:O"
     std::vector<double> prior, theta;   // K; K x P
     std::size_t C = 1;                  // head classes
@@ -543,7 +550,7 @@ class SlotTypes {
         }
         return ll;
     }
-    // sum_z pi(z) (n_z + a) / (E_z + a), E_z = n N_z / N; log2.
+    // sum_z pi(z) (n_z + a) / (E_z + a), E_z = n N_z / N; log2. fit_mode 1: sum_z pi(z) log2 (n_z + a) / (E_z + a).
     double ratio(const float* pi, int k, const double* r) const {
         const double N = tot_[k][0];
         if (N <= 0 || r[0] <= 0) return 0;
@@ -551,8 +558,10 @@ class SlotTypes {
         for (int c = 0; c < K; ++c) {
             if (pi[c] <= 0) continue;
             const double E = r[0] * tot_[k][static_cast<std::size_t>(c) + 1] / N;
-            s += pi[c] * (r[static_cast<std::size_t>(c) + 1] + alpha) / (E + alpha);
+            const double q = (r[static_cast<std::size_t>(c) + 1] + alpha) / (E + alpha);
+            s += fit_mode ? pi[c] * std::log2(q) : pi[c] * q;
         }
+        if (fit_mode) return s;
         return s > 0 ? std::log2(s) : 0;
     }
 
