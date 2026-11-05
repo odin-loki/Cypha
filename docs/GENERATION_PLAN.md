@@ -2183,3 +2183,21 @@ Every branch first merges `origin/main` (M1 and M2 are exact, so P1 and every ba
 - SCRIBE v2 within ±0.02 of P1's 0.532;
 - raters: P1t against K5 still above 0.5, but lower than P1's 0.635, since fewer prompts get a plan (about 0.58);
 - the interval may include 0.5.
+
+**§13.42 Q3 result** (2026-11-06; [PLAN_DISCOURSE](reports/PLAN_DISCOURSE.md); `--k5-plan-discourse on`, off by default, byte-identical when off):
+- **What it does:** after P1's facts, the plan continues through linked entities, up to 2 hops, with a focus weight and a ban on repeating a fact. Gap 0 was chosen on the smoke runs, so no free K5 sentence between facts.
+- **Dev, text-only store, against P1t:**
+  - SCRIBE v2 0.606 [0.572, 0.642] (P1t 0.511), v3.1 0.573 (0.511);
+  - copy32 0.039;
+  - on-subject share 0.648 (0.316);
+  - facts per planned prompt 5.29 (2.32);
+  - repeated facts 4 of 407.
+- **Blind pairwise against P1t** (packets committed first, cce2ac0):
+  - **460 characters: 0.590 [0.540, 0.640]**, rater pairs 0.60 and 0.58; where the text differs (11 prompts), 0.91;
+  - **long, 1,500 characters: 0.580 [0.500, 0.680]**, rater pairs above 0.5; where it differs (7 prompts), 0.79.
+- **By the rule, Q3 reads better than P1t at 460 characters. It is adopted**, to be combined with the other winners before it becomes the default (§13.42: one test read, for the combination only). The long reading does not clear the rule: its interval touches 0.5.
+- **Predictions:** long reading above 0.6 **miss** (0.58, interval to 0.50); about even at 460 **miss**, in the good direction (0.59).
+- **What is weak:**
+  - only 77 of 250 prompts get a plan;
+  - the fill around each fact is still K5's and often false;
+  - the co-occurring path reads like a list of people.
