@@ -1806,3 +1806,20 @@ The MCMC sampler (session 3) can use the learned mix as its energy.
   - **Gain:** almost all of it comes from the wider first layer.
 - **Cost:** +5.9% wall time (3085 s against 2914 s) and +405 MB (1555 MB against 1150 MB), mostly M1's five rate copies. `m1r=0` keeps one copy for about 0.001 less gain.
 - **Running total:** 1.6979 on 1 November → **1.4962** now (−0.20 bits per byte), answers unchanged.
+
+### 13.36 Blind reading of the structure meta-mixer's writing (registered 2026-11-05, before the ratings)
+
+- **Arms**, the seed-0 dev GEN files from `wip/k5-structure`:
+  - W0, today's K5;
+  - W1, the learned mix's best pick among 8 K5 drafts;
+  - W3, the mix trained on drafts only;
+  - W5, the mix without the k5 expert;
+  - the human continuation.
+- **Raters:** the same 50 dev prompts as §13.31 and §13.34. Four new blind Claude raters, two per prompt, with no tools and no key. Five texts per prompt in random order, cut near 460 characters.
+- **Rule:** as §13.34. An arm reads better than W0 if its mean paired difference over the 50 prompts is above 0, its 95% bootstrap interval excludes 0, and both rater pairs agree on the sign.
+- **Predictions:**
+  - W0 near 2.2;
+  - W1 below W0: the mix leans on "improbable under K5", which in writing means the strangest draft;
+  - W3 about W0;
+  - W5 about W0, within ±0.2;
+  - human about 9.
