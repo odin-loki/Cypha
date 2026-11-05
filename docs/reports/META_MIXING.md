@@ -221,7 +221,7 @@ D1 and N2 ran at a lower load than MA and R1, so compare their wall times with e
 ## Risks before merging
 
 - **One 1 MiB holdout, no bootstrap interval.** The gain (−0.0089) is about 1.8 times the rule's margin. First and second half agree (−0.0099 and −0.0089).
-- **Memory: +405 MB at the peak** (1555 MB in all). M1's five rate copies are most of it. With `m1r=0`, M1Gs was 1.5180 on the first half against 1.5173 (T30 against T33 needs both), at about a fifth of M1's memory. That is a cheaper option if memory matters, but it was not read on the second half.
+- **Memory: +405 MB at the peak** (1555 MB in all). M1's five rate copies are most of it. `m1r=0` keeps one copy. On the first half it cost about 0.001 in M1Bs (T20 1.5196 against T21 1.5186). It is the cheaper option if memory matters, but it was not read on the second half.
 - **The main thread now waits less.** The meta mixers add about 180 s of bit-loop work. On a machine where the LSTM is faster, the meta mix could become the critical path.
 - **Any change to the full mix's bitwise inputs changes M1.** The hook reads A's inputs and contexts as they are. The full mix's replica checks still guard the chain. N2 (`--no-meta-mix`) guards main's lines.
 - **`sample` does not use it**, as with the full mix.
