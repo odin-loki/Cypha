@@ -1,0 +1,39 @@
+measure half: 149 facts with a majority label (11 gibberish, 138 sensible), 1 ties (0 of them flagged)
+  precision (flagged that are gibberish) 4 / 5 = 0.800 [0.376, 0.964]
+  recall (gibberish flagged)             4 / 11 = 0.364 [0.152, 0.646]
+  sensible kept                          137 / 138 = 0.993 [0.960, 0.999]
+  gibberish share of the labelled facts  11 / 149 = 0.074 [0.042, 0.127]
+choose half (seen): 149 facts with a majority label (13 gibberish, 136 sensible), 1 ties (0 of them flagged)
+  precision (flagged that are gibberish) 4 / 4 = 1.000 [0.510, 1.000]
+  recall (gibberish flagged)             4 / 13 = 0.308 [0.127, 0.576]
+  sensible kept                          136 / 136 = 1.000 [0.973, 1.000]
+  gibberish share of the labelled facts  13 / 149 = 0.087 [0.052, 0.144]
+all 300: 298 facts with a majority label (24 gibberish, 274 sensible), 2 ties (0 of them flagged)
+  precision (flagged that are gibberish) 8 / 9 = 0.889 [0.565, 0.980]
+  recall (gibberish flagged)             8 / 24 = 0.333 [0.180, 0.533]
+  sensible kept                          273 / 274 = 0.996 [0.980, 0.999]
+  gibberish share of the labelled facts  24 / 298 = 0.081 [0.055, 0.117]
+by relation (all labelled): gibberish, sensible, gibberish flagged, sensible flagged
+  birth_place     0  16   0   0
+  birth_year      0  27   0   0
+  capital         0   4   0   0
+  class           0   9   0   0
+  composer        0   1   0   0
+  country         0   1   0   0
+  creator         0   1   0   0
+  death_year      0  31   0   0
+  director        0   1   0   0
+  family          0   4   0   0
+  founded         0   4   0   0
+  genre           0   5   0   0
+  is_a           14  75   0   0
+  language        0   6   0   0
+  located_in      0  19   0   0
+  location        0   5   0   1
+  nationality     9  21   8   0
+  occupation      0  25   0   0
+  order           0   6   0   0
+  owner           0   1   0   0
+  predecessor     0   4   0   0
+  publisher       1   0   0   0
+  successor       0   8   0   0
