@@ -14,9 +14,12 @@
 ///       (exponential weights with fixed share, or a small logistic mixer); then SSE (M2As, M2Gs), mixed per bit (M2ABs).
 ///   M3  A master over the arms (Fs, As, Bs, ABs, M1s, M1Bs, M2As, M2Gs, M2ABs): Herbster-Warmuth fixed share, which
 ///       tracks the arm that is best now (M3), and a logistic mixer over the same arms (M3L).
-/// Every part learns online from the first byte; every bit is predicted before it is learned.
+/// Every part learns online from the first byte; every bit is predicted before it is learned. The mixers are
+/// mix_core.hpp's (MERGE_MIXERS.md): M1 is its LogisticMixer with float32 layer-1 weights and a second layer chosen by
+/// its own context, the masters its FixedShare.
 
 #include "cypha/online/full_mixer.hpp"
+#include "cypha/online/mix_core.hpp"
 
 #include <algorithm>
 #include <array>
@@ -35,6 +38,8 @@
 namespace cypha::online::metamix {
 
 namespace fx = cypha::online::fullmix;
+using Mixer2 = mix::LogisticMixer<float>;  // PAQ8's mixer, layer-1 weights as float32 (half the memory of A's)
+using mix::FixedShare;
 
 /// k=v,k=v (lists inside a value use ':'). Defaults are the registered ones, chosen on the holdout's first half by
 /// replay (META_MIXING.md, "Tuning"; T33). Before tuning: sel 0-10, l2 0, m1lr1 = lr1, m1r 0, m3a 1e-3, headline M3L.
@@ -53,15 +58,7 @@ struct Params {
     int m3linit = 3;                              // M3L starts at this arm of M3's list (3: ABs)
     std::string headline = "M1Gs";
     bool parse(const std::string& s) {
-        std::size_t at = 0;
-        while (at < s.size()) {
-            std::size_t c = s.find(',', at);
-            if (c == std::string::npos) c = s.size();
-            const std::string f = s.substr(at, c - at);
-            at = c + 1;
-            const std::size_t eq = f.find('=');
-            if (eq == std::string::npos) return false;
-            const std::string k = f.substr(0, eq), v = f.substr(eq + 1);
+        return mix::parse_kv(s, [&](const std::string& k, const std::string& v) {
             const double x = std::atof(v.c_str());
             if (k == "sel") sel = v;
             else if (k == "scales") scales = v;
@@ -82,8 +79,8 @@ struct Params {
             else if (k == "m3llr2") m3llr2 = x;
             else if (k == "m3linit") m3linit = static_cast<int>(x);
             else return false;
-        }
-        return true;
+            return true;
+        });
     }
     /// The settings' sense, before any run.
     bool check(std::string& err) const {
@@ -111,88 +108,6 @@ struct Params {
     }
 };
 
-/// PAQ8's mixer with a second layer whose weight set is chosen by its own context (l2_sets of them): layer-1 sets each
-/// chosen by a small context mix the stretched inputs into squash(w . x); layer 2 mixes their stretched outputs. Each
-/// layer learns from its own error: w += lr err x. Layer-1 sets start with weight 1 on init_input; layer 2 at 1/m.
-class Mixer2 {
- public:
-    Mixer2(int inputs, std::vector<int> set_sizes, int l2_sets, int init_input, double lr1, double lr2, double eps)
-        : n_(inputs), m_(static_cast<int>(set_sizes.size())), lr1_(lr1), lr2_(lr2), eps_(eps) {
-        for (int z : set_sizes) {
-            std::vector<float> w(static_cast<std::size_t>(z) * n_, 0.0f);
-            for (int c = 0; c < z; ++c) w[static_cast<std::size_t>(c) * n_ + init_input] = 1.0f;
-            w1_.push_back(std::move(w));
-        }
-        w2_.assign(static_cast<std::size_t>(l2_sets) * m_, 1.0 / m_);
-        ctx_.resize(static_cast<std::size_t>(m_));
-        p1_.resize(static_cast<std::size_t>(m_));
-        s1_.resize(static_cast<std::size_t>(m_));
-    }
-    double p(const double* x, const int* ctx, int c2) {
-        x_ = x;
-        c2_ = c2;
-        double dot2 = 0;
-        for (int k = 0; k < m_; ++k) {
-            ctx_[k] = ctx[k];
-            const float* w = &w1_[k][static_cast<std::size_t>(ctx[k]) * n_];
-            double d = 0;
-            for (int i = 0; i < n_; ++i) d += w[i] * x[i];
-            p1_[k] = fx::squash(d);
-            s1_[k] = fx::stretch_eps(p1_[k], eps_);
-            dot2 += w2_[static_cast<std::size_t>(c2) * m_ + k] * s1_[k];
-        }
-        return p2_ = fx::squash(dot2);
-    }
-    void update(int bit) {
-        for (int k = 0; k < m_; ++k) {
-            const double err = (bit - p1_[k]) * lr1_;
-            float* w = &w1_[k][static_cast<std::size_t>(ctx_[k]) * n_];
-            for (int i = 0; i < n_; ++i) w[i] += static_cast<float>(err * x_[i]);
-        }
-        const double err = (bit - p2_) * lr2_;
-        for (int k = 0; k < m_; ++k) w2_[static_cast<std::size_t>(c2_) * m_ + k] += err * s1_[k];
-    }
-    std::size_t bytes() const {
-        std::size_t b = w2_.size() * 8;
-        for (const auto& w : w1_) b += w.size() * 4;
-        return b;
-    }
-
- private:
-    int n_, m_;
-    double lr1_, lr2_, eps_;
-    std::vector<std::vector<float>> w1_;
-    std::vector<double> w2_;
-    std::vector<int> ctx_;
-    std::vector<double> p1_, s1_;
-    const double* x_ = nullptr;
-    int c2_ = 0;
-    double p2_ = 0.5;
-};
-
-/// Exponential weights over n predictors with Herbster-Warmuth fixed share: p = sum w_i p_i; then w_i *= p_i(outcome)^eta,
-/// normalise, w := (1 - a) w + a / n.
-struct FixedShare {
-    std::vector<double> w;
-    double eta = 1, a = 0;
-    void init(int n, double e, double share) {
-        w.assign(static_cast<std::size_t>(n), 1.0 / n);
-        eta = e, a = share;
-    }
-    double mix(const double* p) const {
-        double s = 0;
-        for (std::size_t i = 0; i < w.size(); ++i) s += w[i] * p[i];
-        return s;
-    }
-    /// q: each predictor's probability of what happened.
-    void update(const double* q) {
-        double z = 0;
-        for (std::size_t i = 0; i < w.size(); ++i) z += (w[i] *= std::pow(std::max(q[i], 1e-300), eta));
-        const double n = static_cast<double>(w.size());
-        for (double& v : w) v = (1 - a) * std::max(v / z, 1e-300) + a / n;
-    }
-};
-
 class MetaMixer : public fx::StepHook {
  public:
     static constexpr int kArms = 12;
@@ -216,10 +131,10 @@ class MetaMixer : public fx::StepHook {
         std::vector<int> sz;
         for (int s : sel_) sz.push_back(sizes[s]);
         const double l1 = M.m1lr1 > 0 ? M.m1lr1 : P.lr1, l2r = M.m1lr2 > 0 ? M.m1lr2 : P.lr2;
-        m1_ = std::make_unique<Mixer2>(nall_, sz, M.l2 ? 256 : 8, kAll_ - 1, l1, l2r, P.eps);
+        m1_ = std::make_unique<Mixer2>(nall_, sz, kAll_ - 1, l1, l2r, 0, P.eps, M.l2 ? 256 : 8);
         if (M.m1r)
             for (double sc : Params::list(M.scales))
-                m1r_.push_back(sc == 1.0 ? nullptr : std::make_unique<Mixer2>(nall_, sz, M.l2 ? 256 : 8, kAll_ - 1, l1 * sc, l2r * sc, P.eps));
+                m1r_.push_back(sc == 1.0 ? nullptr : std::make_unique<Mixer2>(nall_, sz, kAll_ - 1, l1 * sc, l2r * sc, 0, P.eps, M.l2 ? 256 : 8));
         m1s_ = std::make_unique<fx::Sse>(P);
         m1b_ = std::make_unique<fx::BitMixer>(2, std::vector<int>{8}, 0, P.lr1, P.lr2, 0, P.eps);
         m1g_ = std::make_unique<fx::BitMixer>(2, std::vector<int>{8}, 0, P.lr1, P.lr2, 0, P.eps);
@@ -235,7 +150,7 @@ class MetaMixer : public fx::StepHook {
             }
             const std::vector<int> sets = {256, 32 * 8, 8 * 4 * 8, 5 * 256};
             m2a_.push_back(std::make_unique<fx::BitMixer>(nall_, sets, kAll_ - 1, P.lr1 * scales_[i], P.lr2 * scales_[i], P.lr_decay, P.eps));
-            m2g_.push_back(std::make_unique<fx::GeoMix>(kAll_ + 1, 80, kAll_ - 1, P.lrb * scales_[i], P.lr_decay));
+            m2g_.push_back(std::make_unique<mix::GeoMixer>(kAll_ + 1, 80, kAll_ - 1, P.lrb * scales_[i], P.lr_decay));
         }
         const int nr = static_cast<int>(scales_.size());
         fsA_.init(nr, M.m2eta, M.m2share);
@@ -258,8 +173,8 @@ class MetaMixer : public fx::StepHook {
         lstm_at_ = lstm_at;
         (void)nb;
         (void)nL;
-        bc1_ = fx::byte_class(static_cast<unsigned char>(in.prev));
-        bc2_ = fx::byte_class(static_cast<unsigned char>(in.prev2));
+        bc1_ = mix::byte_class(static_cast<unsigned char>(in.prev));
+        bc2_ = mix::byte_class(static_cast<unsigned char>(in.prev2));
         cb_ = cyphalm::copy_bucket(in.cn);
         int lg = 0;
         for (int n = in.ig_n + 1; n > 1 && lg < 15; n >>= 1) ++lg;
@@ -274,7 +189,7 @@ class MetaMixer : public fx::StepHook {
             const double w = fsG_.w[static_cast<std::size_t>(r)];
             for (int s = 0; s < 256; ++s) PM[s] += w * Pr[s];
         }
-        fx::path_bits(PM, in.y, bitsG_);
+        mix::path_bits(PM, in.y, bitsG_);
         lpG_ = std::log2(std::max(PM[in.y], 1e-300));
         (void)bits;
     }
@@ -283,7 +198,7 @@ class MetaMixer : public fx::StepHook {
         const fx::ByteIn& in = *in_;
         const double eps = P_.eps;
         auto cl = [eps](double p) { return std::clamp(p, eps, 1 - eps); };
-        auto st = [eps](double p) { return fx::stretch_eps(p, eps); };
+        auto st = [eps](double p) { return mix::stretch_eps(p, eps); };
         (void)nxa;
         const double pFs = arm[0], pA = arm[1], pAs = arm[2], pBs = arm[5], pAB = arm[6];
         // ---- M1: the selectors' contexts
@@ -470,7 +385,7 @@ class MetaMixer : public fx::StepHook {
     std::vector<double> scales_;
     int center_ = -1;
     std::vector<std::unique_ptr<fx::BitMixer>> m2a_;
-    std::vector<std::unique_ptr<fx::GeoMix>> m2g_;
+    std::vector<std::unique_ptr<mix::GeoMixer>> m2g_;
     std::vector<std::array<double, 256>> PG_;
     FixedShare fsA_, fsG_, fs3_, fsM1_;
     double bitsG_[8] = {}, lpG_ = 0, lpGs_ = 0;

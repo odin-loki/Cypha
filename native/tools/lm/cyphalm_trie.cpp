@@ -287,6 +287,7 @@
 #include "cypha/lm/k5_mcmc.hpp"      // docs/reports/K5_MCMC.md: sample --k5 ... --k5-mcmc STEPS
 #include "cypha/lm/structure/writer.hpp"  // K5_STRUCTURE.md: sample --k5-struct
 #include "cypha/lm/planner/writer.hpp"    // K5_PLANNER.md: sample --k5-plan
+#include "cypha/lm/planner/discourse.hpp"  // PLAN_DISCOURSE.md: sample --k5-plan-discourse
 #include "cypha/eval/lci.hpp"
 #include "cypha/eval/scribe.hpp"
 #include "cypha/knowledge/unknown_signals.hpp"
@@ -2483,6 +2484,7 @@ int cmd_sample(const Args& a) {
         std::string k5_plan, k5_plan_model, k5_plan_gate = "full";  // K5_PLANNER.md: --k5-plan STOREDIR ...
         std::string k5_plan_fill = "beam";  // MERGE_FILL.md: --k5-plan-fill beam|dba, --k5-plan-beam N
         int k5_plan_beam = 0;
+        std::string k5_plan_disc;  // PLAN_DISCOURSE.md: --k5-plan-discourse on|SPEC
         for (const auto& [k, v] : a.k5_opts) {  // K5_UPGRADES.md
             std::string err;
             if (k == "--k5-struct") {
@@ -2502,6 +2504,18 @@ int cmd_sample(const Args& a) {
                 else k5_plan_beam = std::atoi(v.c_str());
                 continue;
             }
+            if (k == "--k5-plan-discourse") {  // PLAN_DISCOURSE.md: on|SPEC, the whole paragraph planned (discourse.hpp)
+                k5_plan_disc = v;
+                continue;
+            }
+            if (k == "--k5-max-words") {  // PLAN_DISCOURSE.md: the words per continuation (300) for long samples (--bytes)
+                base.max_words = std::atoi(v.c_str());
+                if (base.max_words < 1) {
+                    std::cerr << "--k5-max-words takes N >= 1\n";
+                    return 2;
+                }
+                continue;
+            }
             if (k.rfind("--k5-mcmc", 0) == 0 ? !cypha::cyphalm::wkn::mcmc::apply_flag(k, v, mp, err)
                                               : !cypha::cyphalm::wkn::apply_flag(k, v, base, err)) {
                 std::cerr << err << "\n";
@@ -2519,11 +2533,12 @@ int cmd_sample(const Args& a) {
         if (k5_plan.empty() && k5_struct.empty() && !a.no_k5_plan) {  // §13.39: the planner is on by default
             const char* es = std::getenv("CYPHA_K5_PLAN_STORE");
             const char* em = std::getenv("CYPHA_K5_PLAN_MODEL");
-            const std::string ds = es ? es : "bench/fact_store/e9_aug";
+            const std::string ds = es ? es : "bench/fact_store/e9_text";  // §13.46: text-only
             const std::string dm = em ? em : "bench/k5_planner/model/plan_e9.model";
             if (std::ifstream(ds + "/seeds.tsv") && std::ifstream(dm)) {
                 k5_plan = ds;
                 if (k5_plan_model.empty()) k5_plan_model = dm;
+                if (k5_plan_disc.empty()) k5_plan_disc = "on";  // §13.42: the discourse planner (Q3) is the default
             } else {
                 std::cerr << "k5: planner files not found (" << ds << ", " << dm
                           << "; set CYPHA_K5_PLAN_STORE and CYPHA_K5_PLAN_MODEL); writing with K5 alone\n";
@@ -2546,6 +2561,14 @@ int cmd_sample(const Args& a) {
             std::string err;
             if (!cypha::cyphalm::planner::apply_plan_flags(k5_plan, k5_plan_model, k5_plan_gate, drops, base, err, k5_plan_fill, k5_plan_beam)) {
                 std::cerr << "--k5-plan: " << err << "\n";
+                return 2;
+            }
+        }
+        if (k5_plan_disc == "off") k5_plan_disc.clear();  // §13.42: --k5-plan-discourse off gives P1t (§13.46)
+        if (!k5_plan_disc.empty()) {  // PLAN_DISCOURSE.md: the planner's writer becomes the discourse writer
+            std::string err;
+            if (!cypha::cyphalm::planner::apply_discourse_flag(k5_plan_disc, base, err)) {
+                std::cerr << err << "\n";
                 return 2;
             }
         }
@@ -7051,6 +7074,10 @@ int cmd_selftest() {
     }
     if (std::string err; !cypha::cyphalm::wkn::mcmc::self_test(err)) {  // K5_MCMC.md: the paragraph sampler
         std::cerr << "selftest: K5 MCMC (k5_mcmc.hpp) " << err << "\n";
+        return 1;
+    }
+    if (std::string err; !cypha::cyphalm::planner::discourse_self_test(err)) {  // PLAN_DISCOURSE.md
+        std::cerr << "selftest: planner discourse (discourse.hpp) " << err << "\n";
         return 1;
     }
     if (!self_test()) {

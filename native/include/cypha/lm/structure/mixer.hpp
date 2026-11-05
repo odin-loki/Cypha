@@ -6,9 +6,12 @@
 /// mixer's final layer. A weight set is chosen by a small context (PAQ): none, the sentence's index x the prompt's
 /// length, or the previous sentence's opening type. A second layer mixes several rankers' candidate distributions
 /// linearly, its weights learned by exponentiated gradient on log loss; with rankers at several learning rates it is a
-/// mixture over learning rates (MetaGrad style).
+/// mixture over learning rates (MetaGrad style). The ranker is geometric mixing over the candidates; its softmax, its
+/// gradient and EG+- are cypha/online/mix_core.hpp's, as is the second layer's step (MERGE_MIXERS.md).
 ///
 /// Author: Odin Loch
+
+#include "cypha/online/mix_core.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -56,26 +59,17 @@ class Ranker {
     void dist(const Item& it, std::vector<double>& P) const {
         const int set = it.sel[sel_];
         P.resize(static_cast<std::size_t>(it.n));
-        double mx = -1e300;
-        for (int i = 0; i < it.n; ++i) mx = std::max(mx, P[static_cast<std::size_t>(i)] = score(set, it.z.data() + static_cast<std::size_t>(i * J_)));
-        double z = 0;
-        for (double& p : P) z += (p = std::exp(p - mx));
-        for (double& p : P) p /= z;
+        for (int i = 0; i < it.n; ++i) P[static_cast<std::size_t>(i)] = score(set, it.z.data() + static_cast<std::size_t>(i * J_));
+        online::mix::softmax(P.data(), it.n, P.data());
     }
+    // EG+- on the log loss's gradient g_j = sum_i P(i) z_ij - z_real,j.
     void update(const Item& it, const std::vector<double>& P) {
-        const int set = it.sel[sel_];
-        double tot = 0;
-        for (int j = 0; j < J_; ++j) {
-            if (!mask_[static_cast<std::size_t>(j)]) continue;
-            double g = -it.z[static_cast<std::size_t>(it.target * J_ + j)];
-            for (int i = 0; i < it.n; ++i) g += P[static_cast<std::size_t>(i)] * it.z[static_cast<std::size_t>(i * J_ + j)];
-            const double e = std::clamp(eta_ * g, -30.0, 30.0);
-            wp_[idx(set, j)] *= std::exp(-e), wm_[idx(set, j)] *= std::exp(e);
-            tot += wp_[idx(set, j)] + wm_[idx(set, j)];
-        }
-        if (tot <= 0) return;
-        const double f = U_ / tot;
-        for (int j = 0; j < J_; ++j) wp_[idx(set, j)] = std::max(wp_[idx(set, j)] * f, 1e-12), wm_[idx(set, j)] = std::max(wm_[idx(set, j)] * f, 1e-12);
+        const std::size_t s0 = idx(it.sel[sel_], 0);
+        const float* z = it.z.data();
+        online::mix::eg_pm(&wp_[s0], &wm_[s0], J_, mask_.data(), eta_, U_, [&](int j) {
+            return online::mix::expect(P.data(), it.n, [&](int i) { return z[static_cast<std::size_t>(i * J_ + j)]; },
+                                       -z[static_cast<std::size_t>(it.target * J_ + j)]);
+        });
     }
     void write(std::ostream& o) const {
         o << "ranker " << sel_ << " " << eta_ << " " << U_ << " " << J_;
@@ -138,9 +132,10 @@ class MetaMixer {
         double pt = 0;
         for (std::size_t m = 0; m < r.size(); ++m) r[m].dist(it, qs[m]), pt += v[m] * qs[m][static_cast<std::size_t>(it.target)];
         pt = std::max(pt, 1e-300);
-        double z = 0;
-        for (std::size_t m = 0; m < r.size(); ++m) z += (v[m] *= std::exp(std::min(30.0, eta2 * qs[m][static_cast<std::size_t>(it.target)] / pt)));
-        for (double& x : v) x = std::max(x / z, 1e-6);
+        const double z = online::mix::reweight(v.data(), static_cast<int>(r.size()), [&](int m) {
+            return std::exp(std::min(30.0, eta2 * qs[static_cast<std::size_t>(m)][static_cast<std::size_t>(it.target)] / pt));
+        });
+        online::mix::eg_floor(v.data(), static_cast<int>(v.size()), z, 1e-6, false);  // EG, the exponent capped; no renormalising
         for (std::size_t m = 0; m < r.size(); ++m) r[m].update(it, qs[m]);
         return -std::log2(pt);
     }
