@@ -2255,3 +2255,31 @@ Every branch first merges `origin/main` (M1 and M2 are exact, so P1 and every ba
 - Main now holds Q1's flags (`--k5-plan-find 2`, `--k5-plan-fallback pattern`, `--k5-plan-filter`), its store `e9_v2`, `bench/fact_filter/` and `scripts/fs_*`, and Q2's (`--k5-plan-typed`, `--k5-plan-typed-fit`, `--k5-plan-typed-tau`, `--k5-plan-s1`–`s4`, `lm/planner/slots.hpp`, `plan_q2.model`, `slots_e9t.txt`), so they can be combined later. The default store `e9_text` and the default discourse planner are unchanged.
 - **Checks** (`cmp` on all 250 dev prompts, MODEL line aside, 4 threads): the default equals Q3t's dev GEN file; `--k5-plan-discourse off` equals P1t's; `--no-k5-plan` equals K5's (`K5_base`); Q1's flags equal `Q1_e9v2`; Q2's flags with `--k5-plan-discourse off` equal `Q2_typed_s1s3`. Dev SCRIBE v2: 0.606, 0.511, 0.498, 0.520, 0.511. Selftests pass: `cyphalm_trie`, `scribe` (120/120), `k5_planner` (with the Q2 checks), `cypha_report_card` (29/29).
 - Q1's and Q2's flags act on the single-step writer: with the default store, Q2 needs `--k5-plan-discourse off`; Q1 names its store, so the discourse writer stays off.
+
+### 13.47 Wrapped up on Odin's word (2026-11-06; "Wrap it up now. Commit and push.")
+
+**On main, verified:**
+- **Writing:** the discourse planner on the text-only store is the default (§13.42, §13.46).
+  - Blind raters prefer it to P1t (0.590), and P1t to K5 (0.610).
+  - Test SCRIBE v2 0.631 (K5 0.524).
+  - Q1 and Q2 are flags, off by default (`4b255e0`).
+- **Speed and lightness, all exact:**
+  - M1, the count index: K5's RAM −51%;
+  - M2, one mixer library;
+  - O5, LSTM AVX-512 and the n-gram: LSTM stage −56%, n-gram −45%; `context8k_bpc` 1.4962 reproduced.
+- M3 is a flag, not adopted.
+
+**Stopped mid-way.** Each job's work is committed and pushed on its own branch, unverified. None is on main.
+
+| Job | Branch | Where it stopped |
+|---|---|---|
+| T1 tune prediction | `wip/tune-predict` | best on the 1 MB slice within the RAM limit **1.7337** (default 1.7501; `--bkn 10:4:2:1`, `--ngram-cap 15`, `--ngram-lr 0.0025`, `--lstm-window 12`, more); mixers alone 1.7449. Not yet confirmed on 6 MiB (S0 default 1.5796), no final pair, no sensitivity table |
+| O1 fast build | `wip/opt-build` | CMake option and PGO script; exactness pair not finished |
+| O2 expert pipeline | `wip/opt-pipeline` | code; exactness pairs not finished |
+| O3 Boolean | `wip/opt-boolean` | own minimiser, tables, branch-free gates; not verified |
+| O6 lazy nucleus | `wip/opt-nucleus` | code in progress; not verified |
+| M4 grouped gate | `wip/merge-gate` | exactness runs not finished |
+
+- **Not started:** O7, O8 (§13.41 wave 3), T1b (§13.43), T2 (§13.42).
+- **Closed:** O4, the GPU (Odin).
+- **To resume:** check out the branch, read its report draft, finish its registered checks. Nothing goes to main until they pass.
