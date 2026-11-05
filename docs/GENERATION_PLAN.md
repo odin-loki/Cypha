@@ -1767,3 +1767,25 @@ The MCMC sampler (session 3) can use the learned mix as its energy.
   - M3 about +0.2;
   - E1b about 0;
   - human about 8.5.
+
+**§13.34 result** (2026-11-05; 4 blind raters, 50 prompts × 7 texts, 2 ratings each):
+
+| Arm | Mean (1–10) | Against B0 [95%] | Rater pairs |
+|---|---:|---:|---|
+| human | **9.04** | | |
+| M3, MBR (gate 16 + consensus) | 2.22 | +0.04 [−0.01, +0.10] | +0.08, 0.00 |
+| B0, K5 default | 2.18 | — | |
+| T2, topic B 1 | 2.18 | 0.00 [−0.06, +0.05] | 0.00, 0.00 |
+| E1b, MCMC + entity grid | 2.13 | −0.05 [−0.10, 0.00] | −0.10, 0.00 |
+| T2b, topic B 1.5 | 1.96 | **−0.22** [−0.32, −0.12] | −0.22, −0.22 |
+| T2c, topic B 2 | 1.76 | **−0.42** [−0.53, −0.32] | −0.34, −0.50 |
+
+- **No arm reads better than B0. The rule fails for all five.**
+- **Topic rescaling reads worse the harder it pushes,** while SCRIBE v2 and v3.1 both rose (v3.1: 0.483 → 0.670 → 0.712). This is the keyword-stuffing blind spot of SCRIBE_V31.md, confirmed by readers: the topic model stuffs topic words, and both SCRIBE versions reward them.
+- B0 reproduces §13.31 (2.18 against 2.09). Human text scores 9.04.
+- **Predictions:**
+  - B0 and human hit.
+  - T2 missed: 0, not +0.3 to +0.8.
+  - T2c below T2b hit.
+  - M3 (about +0.2) and E1b (about 0) roughly hit.
+- **What it means:** none of these helpers fix what readers see, sentences that don't connect. Two lines remain: the learned structure meta-mixer (§13.33), whose training signal, the real next sentence, cannot be gamed by stuffing; and a SCRIBE that catches topic stuffing.
