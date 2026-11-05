@@ -64,6 +64,38 @@ if(CYPHA_ENABLE_CUDA)
   message(STATUS "CUDA toolkit: ${CUDAToolkit_VERSION}")
 endif()
 
+# --- GENERATION_PLAN §13.41 O4 (docs/reports/OPT_GPU.md): CUDA ports of offline jobs, off by default ------------------
+# CYPHA_CUDA=ON builds the GPU paths (native/cuda/*.cu); without it every tool here builds and runs on the CPU only.
+# The overlap check (scripts/k5_overlap.cpp, K5_SCALE.md) is a target here; with CYPHA_CUDA it gains --gpu.
+option(CYPHA_CUDA "Build the CUDA paths of offline tools (k5_overlap --gpu; docs/reports/OPT_GPU.md)" OFF)
+if(CYPHA_CUDA)
+  if(MINGW)
+    message(FATAL_ERROR "CYPHA_CUDA is not supported for MinGW targets (use Linux + nvcc).")
+  endif()
+  if(NOT CYPHA_ENABLE_CUDA)
+    if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+      set(CMAKE_CUDA_ARCHITECTURES 86)  # RTX 3090 (Odin's PC); override with -DCMAKE_CUDA_ARCHITECTURES=...
+    endif()
+    enable_language(CUDA)
+    set(CMAKE_CUDA_STANDARD 20)
+    set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+    find_package(CUDAToolkit REQUIRED)
+  endif()
+  message(STATUS "CYPHA_CUDA: GPU paths on (CUDA ${CUDAToolkit_VERSION}, architectures ${CMAKE_CUDA_ARCHITECTURES})")
+endif()
+add_executable(k5_overlap ../scripts/k5_overlap.cpp)
+cypha_mingw_apply_exe_link_options(k5_overlap)
+if(CYPHA_CUDA)
+  target_sources(k5_overlap PRIVATE cuda/k5_overlap_gpu.cu)
+  target_include_directories(k5_overlap PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/cuda")
+  target_compile_definitions(k5_overlap PRIVATE CYPHA_CUDA)
+  target_link_libraries(k5_overlap PRIVATE CUDA::cudart)
+  set_target_properties(k5_overlap PROPERTIES CUDA_SEPARABLE_COMPILATION OFF)
+endif()
+add_test(NAME native_k5_overlap_selftest COMMAND "$<TARGET_FILE:k5_overlap>" selftest)
+set_tests_properties(native_k5_overlap_selftest PROPERTIES TIMEOUT 120)
+# --- end O4 block -----------------------------------------------------------------------------------------------------
+
 add_library(cypha_core STATIC
   src/core/env.cpp
   src/classify/load_cypha.cpp
