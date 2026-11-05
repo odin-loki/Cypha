@@ -103,6 +103,7 @@ Experts are added only if the data says so: an expert stays in the mix if removi
 - **W3:** the chosen mix trained with P (drafts only), argmax;
 - **W4:** W1 with 16 candidates per sentence.
 - **W5** (added 2026-11-05, before any writing run or held-out read): the chosen mix trained with R, but **without the k5 expert** (`run --drop k5`). Why: a smoke test on 2,112 boundaries from inside M (scored on themselves, so not a result) showed K5's own probability alone picks the real sentence 92% of the time, because drafts come from K5's nucleus and real sentences do not. The mix gave k5 a large negative weight. As a writer, that mix would pick K5's least probable draft. W3 (the P signal) is one guard against this; W5 is the other.
+- **W6** (added 2026-11-05, before any writing run or held-out read): the chosen mix trained with R, **without the topic expert** (`run --drop topic`). Why: §13.34's blind raters marked LDA topic rescaling down (−0.22 to −0.42) while SCRIBE v2 and v3.1 rose with it. Topic words can fool SCRIBE. If W1 beats W6 on SCRIBE but not with the raters, topic is acting as a "more topic words" knob. The topic weight and its ablation are reported in any case.
 
 Every arm's dev GEN file is saved under `bench/k5_structure/` and pushed, for the four blind Claude raters in the cloud (50 dev prompts).
 
