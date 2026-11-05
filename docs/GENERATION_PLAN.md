@@ -2143,3 +2143,18 @@ Timings only from old and new started together on the same thread count. A job t
 - Not started: O7, O8 (§13.41 wave 3), T1b (§13.43), T2 (§13.42).
 - The blind-rating keys stay out of git as plain JSON; only `key.b64` is committed.
 - **To resume a job:** check out its branch, read its report stub, and finish its registered checks. Nothing from these branches goes to main until its checks pass.
+
+### 13.45 Resuming all jobs (2026-11-06; Odin: "Do all. You pick." and "Dont use the GPU.")
+
+**Order:**
+- **Wave A, now:** Q1, Q2, Q3 (the planner's text quality first); T1 (tuning); O5 (needed by T1b).
+- **Wave B, as slots free:** O1, O2, M4, O3, O6.
+- **Wave C:** O7, O8, T1b, T2; then the combination of the planner winners, the blind raters, and one test read.
+- **O4 (GPU) is closed:** no GPU work, on Odin's word. Its branch `wip/opt-gpu` keeps the report and code.
+
+**Machine limits, after yesterday's WSL crash:**
+- at most 4 threads per run;
+- no run starts while `free -g` shows under 10 GB available;
+- every full `context8k` takes one shared lock (`flock ~/.cypha_full.lock`), so only one runs on the PC at a time. T1's final pair of tuned and default runs shares one turn of the lock, so the two are started together.
+
+Every branch first merges `origin/main` (M1 and M2 are exact, so P1 and every baseline are unchanged), then finishes its registered checks. The rules and predictions of §13.40–13.43 stand.
