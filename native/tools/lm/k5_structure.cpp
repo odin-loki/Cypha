@@ -355,6 +355,7 @@ int cmd_features(const std::map<std::string, std::string>& a) {
     std::atomic<std::size_t> next{0};
     const unsigned nth = static_cast<unsigned>(std::atoi(get(a, "--threads", "8").c_str()));
     const auto work = [&] {
+        std::string line;  // each thread its own
         for (std::size_t bi; (bi = next++) < blocks.size();) {
             std::istringstream bs(blocks[bi]);
             std::string tag;
