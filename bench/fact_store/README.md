@@ -11,3 +11,4 @@ CyphaLM's own fact store, as `pattern_learn` (F2, `native/tools/knowledge/patter
 | `patterns_raw.tsv` | F2R's raw-byte frames (`--plan DIR,patterns_raw.tsv`) | the frames that turn a fact into a phrase |
 
 Every fact carries a `byte_offset` into enwik8. The content plan drops facts whose evidence lies in the bytes a prompt comes from (`--plan-drop LO:HI`), so a plan cannot copy the continuation it is judged against.
+| `e9_aug/` | verify_f2r_aug plus F2 over enwik9 [1e8, end) with overlap pages skipped (docs/reports/FACT_STORE_SCALE.md); last column `corpus` | `sample --plan bench/fact_store/e9_aug,bench/fact_store/patterns_raw.tsv` |
