@@ -31,6 +31,7 @@
 #include <cstdio>
 #include <cstring>
 #include <fstream>
+#include <functional>
 #include <iostream>
 #include <map>
 #include <memory>
@@ -360,6 +361,22 @@ struct EgState {
     }
 };
 
+/// A read-only hook into FullMixer::step (META_MIXING.md, meta_mixer.hpp): it sees each byte's inputs and every arm's
+/// prediction of each bit before any arm learns the bit. With no hook set (the default), step is unchanged.
+struct StepHook {
+    virtual ~StepHook() = default;
+    /// After B's distribution, before the bit loop. L: the geometric mixer's log inputs (nL, nullptr: absent), g its
+    /// weight set, PB its mixture; bits: every "all" input's 8 path bits (nb inputs), lstm_at the LSTM's index (-1: none).
+    virtual void byte_begin(const ByteIn& in, const double* const* L, int nL, int g, const double* PB, const double (*bits)[8],
+                            int nb, int lstm_at) = 0;
+    /// Bit j along the true byte. xa: the bitwise mixer's nxa stretched inputs; ctx: its 4 contexts; arm: the bit's
+    /// probability of 1 from Fs, A, As, R, Rs, Bs, ABs (in that order), each before it learns.
+    virtual void bit(int j, int bit, unsigned c0, const double* xa, int nxa, const int* ctx, const double* arm) = 0;
+    /// After the geometric mixer learned y (its L is still valid), before the final layer learns.
+    virtual void byte_end(unsigned y, std::size_t k) = 0;
+    virtual void report(std::ostream&) const {}
+};
+
 class FullMixer {
  public:
     // The arms, side by side (FULL_DISTRIBUTION_MIXING.md): F the final layer's replica at the true byte (it must equal
@@ -567,6 +584,7 @@ class FullMixer {
         geo_->dist(L, g, PB);
         double bitsB[8];
         path_bits(PB, y, bitsB);
+        if (hook_) hook_->byte_begin(in, L, kAll_ + 1, g, PB, bits, kAll_, cs_.lstm ? 15 : -1);
 
         tick(4);
         // ---- bit by bit along the true byte: every arm predicts the bit, then learns it
@@ -610,6 +628,10 @@ class FullMixer {
             const double xab[2] = {stretch_eps(pAs, P_.eps), stretch_eps(pBs, P_.eps)};
             const int z0 = 0;
             const double pAB = std::clamp(abmix_->p(xab, &z0, j), P_.eps, 1 - P_.eps);
+            if (hook_) {
+                const double arm[7] = {pFs, pA, pAs, pR, pRs, pBs, pAB};
+                hook_->bit(j, bit, c0, xa, nall_, ctx, arm);
+            }
             auto lg = [bit](double p) { return std::log2(bit ? p : 1 - p); };
             lp[2] += lg(pFs);
             lp[3] += lg(pA);
@@ -639,6 +661,7 @@ class FullMixer {
         tick(5);
         // ---- learning from y: the geometric mixer, then the final layer (OnlineFinal::update)
         geo_->update(y);
+        if (hook_) hook_->byte_end(y, k);
         {
             double z = 0;
             for (int j = 0; j < nfin_; ++j) z += (w[j] *= std::exp(0.05 * std::min(q[j][y] / std::max(pf, 1e-300), 30.0)));
@@ -658,6 +681,7 @@ class FullMixer {
         return o;
     }
     void set_trie_weights(const double w[6]) { std::copy(w, w + 6, tw_); }
+    void set_hook(StepHook* h) { hook_ = h; }  // META_MIXING.md (nullptr: none, the default)
     double chain_y() const { return chain_y_; }    // the replica chain's probability of the last true byte
     double snap3_y() const { return snap3_y_; }    // ... after copy
     double bpc(int half, int arm) const { return n_[half] ? bits_[half][arm] / static_cast<double>(n_[half]) : 0; }
@@ -707,6 +731,7 @@ class FullMixer {
     double chain_y_ = 0, snap3_y_ = 0, fsum_acc_ = 0;
     double bits_[2][kArms] = {};
     std::size_t n_[2] = {0, 0};
+    StepHook* hook_ = nullptr;
 };
 
 // ------------------------------------------------------------------------------------------------ dump and replay
@@ -760,7 +785,11 @@ inline void dump_byte(std::ofstream& f, const ByteIn& in, int ngram_orders = 0) 
 }
 
 /// cyphalm_trie full-mix-replay FILE [PARAMS]: every arm over the dump; prints full_mix_arm lines.
-inline int replay(const std::string& path, const std::string& params) {
+/// hook_make (META_MIXING.md): builds a hook for the replay's mixer (nullptr: none); first_half: stop at the half, so
+/// the second half is never read (tuning).
+inline int replay(const std::string& path, const std::string& params,
+                  const std::function<StepHook*(const ChainSpec&, const Params&, std::size_t)>& hook_make = nullptr,
+                  bool first_half = false) {
     std::ifstream f(path, std::ios::binary);
     DumpHeader hd;
     std::uint32_t ngo = 0;
@@ -787,9 +816,12 @@ inline int replay(const std::string& path, const std::string& params) {
     const int nd = kDumpDists + (ngo ? 1 + static_cast<int>(ngo) : 0);
     FullMixer fm(cs, P, hd.half);
     fm.set_trie_weights(hd.tw);
+    std::unique_ptr<StepHook> hook(hook_make ? hook_make(cs, P, hd.half) : nullptr);
+    fm.set_hook(hook.get());
+    const std::uint64_t stop = first_half ? hd.half : hd.H;
     std::vector<float> fb(static_cast<std::size_t>(nd) * 256);
     std::vector<double> db(static_cast<std::size_t>(nd) * 256);
-    for (std::uint64_t k = 0; k < hd.H; ++k) {
+    for (std::uint64_t k = 0; k < stop; ++k) {
         DumpSide s;
         if (!f.read(reinterpret_cast<char*>(&s), sizeof s) ||
             !f.read(reinterpret_cast<char*>(fb.data()), static_cast<std::streamsize>(fb.size() * 4))) {
@@ -820,6 +852,7 @@ inline int replay(const std::string& path, const std::string& params) {
         if ((k + 1) % 262144 == 0) std::cerr << "replay " << (k + 1) << " bytes\n";
     }
     fm.report(std::cout);
+    if (hook) hook->report(std::cout);
     std::cout << "full_mix_state_bytes " << fm.bytes() << "\n";
     std::cerr << "full_mix profile_s " << fm.profile() << "\n";
     return 0;
