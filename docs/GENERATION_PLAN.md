@@ -1789,3 +1789,20 @@ The MCMC sampler (session 3) can use the learned mix as its energy.
   - T2c below T2b hit.
   - M3 (about +0.2) and E1b (about 0) roughly hit.
 - **What it means:** none of these helpers fix what readers see, sentences that don't connect. Two lines remain: the learned structure meta-mixer (§13.33), whose training signal, the real next sentence, cannot be gamed by stuffing; and a SCRIBE that catches topic stuffing.
+
+### 13.35 Result: meta mixing is on by default (2026-11-05; [reports/META_MIXING.md](reports/META_MIXING.md))
+
+- **What won: M1Gs.**
+  - **M1:** PAQ's second layer over 14 first-layer weight sets. Each set is chosen by its own context: A's four; order-1, order-2 and order-3 bytes; match length × copy; InfiniGram bucket × partial byte; byte classes; similar-context and Kneser–Ney buckets; a word hash.
+  - **The rest:** it runs at 5 learning rates under a fixed-share master, then SSE, then a per-bit mix with the geometric mixer from the rate mixture.
+  - Tuned on the holdout's first half only; registered (f846a4d) before any second-half read.
+- **Result:** `context8k_bpc` **1.5051 → 1.4962** (−0.0089; the rule needed 0.005), on Odin's PC.
+  - Every line before the new ones is unchanged, TALLY and GEN included.
+  - `--no-meta-mix` equals main byte for byte.
+  - The first and second halves agree (−0.0099, −0.0089).
+- **The other arms:**
+  - **Mixing over learning rates alone (M2):** small, −0.001 to −0.004. The earlier tuned rates were already near the best.
+  - **Fixed share over the arms (M3):** 1.4971. It tracks the best arm and ends slightly behind it.
+  - **Gain:** almost all of it comes from the wider first layer.
+- **Cost:** +5.9% wall time (3085 s against 2914 s) and +405 MB (1555 MB against 1150 MB), mostly M1's five rate copies. `m1r=0` keeps one copy for about 0.001 less gain.
+- **Running total:** 1.6979 on 1 November → **1.4962** now (−0.20 bits per byte), answers unchanged.
