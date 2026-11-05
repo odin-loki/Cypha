@@ -2204,3 +2204,40 @@ Every branch first merges `origin/main` (M1 and M2 are exact, so P1 and every ba
   - the gibberish filter: precision 0.80 [0.38, 0.96], recall 0.36 [0.15, 0.65], sensible kept 0.993;
   - by blind labels, 8.1% of store facts are gibberish.
   - §13.42 Q1 predictions: coverage ≥80 **miss** (62); filter removes ≥70% **miss** (36%); keeps ≥90% **hit**; about 30% gibberish **miss** (8%); raters prefer Q1 **miss** (even, against P1t).
+
+**§13.42 Q3 result** (2026-11-06; [PLAN_DISCOURSE](reports/PLAN_DISCOURSE.md); `--k5-plan-discourse on`, off by default, byte-identical when off):
+- **What it does:** after P1's facts, the plan continues through linked entities, up to 2 hops, with a focus weight and a ban on repeating a fact. Gap 0 was chosen on the smoke runs, so no free K5 sentence between facts.
+- **Dev, text-only store, against P1t:**
+  - SCRIBE v2 0.606 [0.572, 0.642] (P1t 0.511), v3.1 0.573 (0.511);
+  - copy32 0.039;
+  - on-subject share 0.648 (0.316);
+  - facts per planned prompt 5.29 (2.32);
+  - repeated facts 4 of 407.
+- **Blind pairwise against P1t** (packets committed first, cce2ac0):
+  - **460 characters: 0.590 [0.540, 0.640]**, rater pairs 0.60 and 0.58; where the text differs (11 prompts), 0.91;
+  - **long, 1,500 characters: 0.580 [0.500, 0.680]**, rater pairs above 0.5; where it differs (7 prompts), 0.79.
+- **By the rule, Q3 reads better than P1t at 460 characters. It is adopted**, to be combined with the other winners before it becomes the default (§13.42: one test read, for the combination only). The long reading does not clear the rule: its interval touches 0.5.
+- **Predictions:** long reading above 0.6 **miss** (0.58, interval to 0.50); about even at 460 **miss**, in the good direction (0.59).
+- **What is weak:**
+  - only 77 of 250 prompts get a plan;
+  - the fill around each fact is still K5's and often false;
+  - the co-occurring path reads like a list of people.
+
+**§13.42 Q2 result and the combination** (2026-11-06; [PLAN_FILL](reports/PLAN_FILL.md), branch `wip/plan-fill`; flags off by default, byte-identical when off):
+- **Typed slots** (`--k5-plan-typed`, 12 slot types fitted by EM on `e9_text`) halve slot type errors on dev by the second rule (0.33 → 0.16), and cut them 28% by the first. Smoothing in four places (S1–S4) changes little: the chosen arm Q2 is typed + S1 (K5 order 3 at 0.05) + S3 (add-5). SCRIBE v2 0.511, the same as P1t.
+- **Blind pairwise against P1t** (packets committed first, `wip/plan-fill`):
+  - **Q2T 0.510 [0.460, 0.560]**, rater pairs 0.54 and 0.48;
+  - **Q2 0.500 [0.450, 0.550]**, rater pairs 0.50 and 0.50.
+  - Only 9 of the 50 rated prompts differ from P1t. **No difference. Q2 is not adopted.**
+- **Predictions:**
+  - slot type errors down at least 50%: **hit** on the second rule, **miss** on the first (−28%);
+  - one smoothing place helps: **miss**;
+  - raters prefer Q2: **miss** (even).
+- **The combination of the winners** (§13.42): Q1 and Q2 tie P1t, so **the only winner is Q3**, and the combination is Q3 alone. It has already been rated against P1t (0.590 [0.540, 0.640]).
+- **So, following §13.42:**
+  - Q3 becomes the default: `sample --k5` turns `--k5-plan-discourse on` on with the default store, and `--k5-plan-discourse off` gives P1t back;
+  - checked by `cmp`: the default must equal Q3t's dev GEN file, and `off` must equal P1t's;
+  - then GEN-A test is read once, for this arm.
+- **Combination predictions:**
+  - raters prefer it to P1 above 0.6: **miss** (0.590 against P1t);
+  - test SCRIBE v2 at least 0.561: scored after the read.
