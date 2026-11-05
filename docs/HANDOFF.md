@@ -2,6 +2,8 @@
 
 **Odin Loch** · rewritten 2026-10-28 at the end of the second working session of the day; updated the same day for B4c, S1, RAM M10–M15, S4, S6 and A4c, and on 2026-10-29 for S7–S9, S15, A4d, M16, M17, S4b, S8d and FC0 · repo `odin-loki/Cypha` (branch `main`)
 
+> **Newest handoff (2026-11-05): [`HANDOFF_2026-11-05.md`](HANDOFF_2026-11-05.md).** It covers the week of 1–5 November (online mixing to 1.4962 bits per byte, the writing results, the new generator, and how to judge writing with blind raters) and has the kickoff prompt for the next session. Read it before this file's §3 onwards; §1–§2 here still hold.
+
 Read this first. Then read the documents in §3 for whatever you are working on. The goal, the rules and Odin's standing instructions are in §1–§2 and are not optional.
 
 ---
