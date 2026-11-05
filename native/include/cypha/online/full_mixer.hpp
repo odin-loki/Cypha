@@ -19,13 +19,15 @@
 ///   Every part learns online from the first byte; every byte (every bit) is predicted before it is learned.
 /// All arms run side by side on the same inputs; each prints its bits per byte on the holdout's first and second half.
 /// The replay (full-mix-replay) reads a dump of the inputs (context8k --full-mix-dump) and runs the same code, for tuning.
+/// The mixers' maths (the chain's and final layer's exponentiated gradient, the logistic and geometric mixers, the APMs)
+/// is mix_core.hpp's (MERGE_MIXERS.md).
 
 #include "cypha/lm/copy_expert.hpp"
+#include "cypha/online/mix_core.hpp"
 
 #include <algorithm>
 #include <array>
 #include <chrono>
-#include <cctype>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -33,12 +35,16 @@
 #include <fstream>
 #include <functional>
 #include <iostream>
-#include <map>
 #include <memory>
 #include <string>
 #include <vector>
 
 namespace cypha::online::fullmix {
+
+using mix::path_bits;
+using mix::squash;
+using mix::stretch_eps;
+using BitMixer = mix::LogisticMixer<double>;  // layer 2 by bit position (8 sets)
 
 // ------------------------------------------------------------------------------------------------ one byte's inputs
 
@@ -87,16 +93,8 @@ struct Params {
     int a2_bits = 18;         // the order-2 APM: (two previous bytes, partial byte) hashed into 2^a2_bits contexts
     std::string headline = "ABs";
     bool parse(const std::string& s) {
-        std::size_t at = 0;
-        while (at < s.size()) {
-            std::size_t c = s.find(',', at);
-            if (c == std::string::npos) c = s.size();
-            const std::string f = s.substr(at, c - at);
-            at = c + 1;
-            const std::size_t eq = f.find('=');
-            if (eq == std::string::npos) return false;
-            const std::string k = f.substr(0, eq), v = f.substr(eq + 1);
-            if (k == "headline") { headline = v; continue; }
+        return mix::parse_kv(s, [&](const std::string& k, const std::string& v) {
+            if (k == "headline") return headline = v, true;
             const double x = std::atof(v.c_str());
             if (k == "lr1") lr1 = x;
             else if (k == "lr2") lr2 = x;
@@ -108,140 +106,12 @@ struct Params {
             else if (k == "ssef") sse_final = static_cast<int>(x);
             else if (k == "a2bits") a2_bits = static_cast<int>(x);
             else return false;
-        }
-        return true;
+            return true;
+        });
     }
 };
-
-inline double squash(double x) { return 1.0 / (1.0 + std::exp(-std::clamp(x, -40.0, 40.0))); }
-inline double stretch_eps(double p, double eps) {
-    p = std::clamp(p, eps, 1.0 - eps);
-    return std::log(p / (1.0 - p));
-}
-inline int byte_class(unsigned char pb) {  // as OnlineFinal::byte_class
-    return std::isspace(pb) ? 0 : std::isalpha(pb) ? 1 : std::isdigit(pb) ? 2 : std::strchr("[]{}<>|&=", pb) && pb ? 3 : 4;
-}
 
 // ------------------------------------------------------------------------------------------------ the mixers' parts
-
-/// The probability of 1 for each of the byte's 8 bits along the true byte's path, from a distribution D (any scale):
-/// bit j's probability is the mass of the partial byte's 1-branch over the partial byte's mass. 0.5 when the partial
-/// byte has no mass.
-inline void path_bits(const double* D, unsigned y, double out[8]) {
-    unsigned lo = 0, size = 256;
-    for (int j = 0; j < 8; ++j) {
-        const unsigned h = size / 2;
-        double s0 = 0, s1 = 0;
-        for (unsigned s = lo; s < lo + h; ++s) s0 += D[s];
-        for (unsigned s = lo + h; s < lo + size; ++s) s1 += D[s];
-        out[j] = s0 + s1 > 0 ? s1 / (s0 + s1) : 0.5;
-        if ((y >> (7 - j)) & 1) lo += h;
-        size = h;
-    }
-}
-
-/// A gated logistic mixer, PAQ8's: several weight sets, each chosen by its own small context, each mixing the inputs'
-/// stretched probabilities into squash(w . x); a second layer (weights chosen by bit position) mixes their stretched
-/// outputs. Each layer-1 set learns from its own output's error, the second layer from its own: w += lr err x.
-class BitMixer {
- public:
-    BitMixer(int inputs, std::vector<int> set_sizes, int init_input, double lr1, double lr2, double decay, double eps)
-        : n_(inputs), sizes_(std::move(set_sizes)), lr1_(lr1), lr2_(lr2), decay_(decay), eps_(eps) {
-        const int m = static_cast<int>(sizes_.size());
-        for (int z : sizes_) {
-            std::vector<double> w(static_cast<std::size_t>(z) * n_, 0.0);
-            for (int c = 0; c < z; ++c) w[static_cast<std::size_t>(c) * n_ + init_input] = 1.0;
-            w1_.push_back(std::move(w));
-            t1_.emplace_back(static_cast<std::size_t>(z), 0u);
-        }
-        w2_.assign(8 * static_cast<std::size_t>(m), 1.0 / m);
-        t2_.assign(8, 0u);
-        ctx_.resize(static_cast<std::size_t>(m));
-        p1_.resize(static_cast<std::size_t>(m));
-        s1_.resize(static_cast<std::size_t>(m));
-    }
-    int inputs() const { return n_; }
-    /// x: n stretched inputs; ctx: one context per set; returns P(bit = 1).
-    double p(const double* x, const int* ctx, int bitpos) {
-        x_ = x;
-        bp_ = bitpos;
-        const std::size_t m = sizes_.size();
-        double dot2 = 0;
-        for (std::size_t k = 0; k < m; ++k) {
-            ctx_[k] = ctx[k];
-            const double* w = &w1_[k][static_cast<std::size_t>(ctx[k]) * n_];
-            double d = 0;
-            for (int i = 0; i < n_; ++i) d += w[i] * x[i];
-            p1_[k] = squash(d);
-            s1_[k] = stretch_eps(p1_[k], eps_);
-            dot2 += w2_[static_cast<std::size_t>(bitpos) * m + k] * s1_[k];
-        }
-        return p2_ = squash(dot2);
-    }
-    void update(int bit) {
-        const std::size_t m = sizes_.size();
-        for (std::size_t k = 0; k < m; ++k) {
-            unsigned& t = t1_[k][static_cast<std::size_t>(ctx_[k])];
-            const double lr = lr1_ / (1.0 + decay_ * t);
-            ++t;
-            const double err = (bit - p1_[k]) * lr;
-            double* w = &w1_[k][static_cast<std::size_t>(ctx_[k]) * n_];
-            for (int i = 0; i < n_; ++i) w[i] += err * x_[i];
-        }
-        unsigned& t = t2_[static_cast<std::size_t>(bp_)];
-        const double lr = lr2_ / (1.0 + decay_ * t);
-        ++t;
-        const double err = (bit - p2_) * lr;
-        for (std::size_t k = 0; k < m; ++k) w2_[static_cast<std::size_t>(bp_) * m + k] += err * s1_[k];
-    }
-    std::size_t bytes() const {
-        std::size_t b = w2_.size() * 8;
-        for (const auto& w : w1_) b += w.size() * 8;
-        return b;
-    }
-
- private:
-    int n_;
-    std::vector<int> sizes_;
-    double lr1_, lr2_, decay_, eps_;
-    std::vector<std::vector<double>> w1_;
-    std::vector<std::vector<unsigned>> t1_;
-    std::vector<double> w2_;
-    std::vector<unsigned> t2_;
-    std::vector<int> ctx_;
-    std::vector<double> p1_, s1_;
-    const double* x_ = nullptr;
-    int bp_ = 0;
-    double p2_ = 0.5;
-};
-
-/// An adaptive probability map (PAQ's APM): per context, 33 values over the stretched input probability in [-16, 16];
-/// the output interpolates the two nearest, and both move toward the bit by their share of the rate. Each starts as
-/// the identity.
-class Apm {
- public:
-    explicit Apm(std::size_t contexts) : t_(contexts * 33) {
-        for (std::size_t c = 0; c < contexts; ++c)
-            for (int j = 0; j < 33; ++j) t_[c * 33 + j] = static_cast<float>(squash((j - 16) * 1.0));
-    }
-    double p(double st, std::size_t ctx) {
-        const double pos = std::clamp(st, -15.999, 15.999) + 16.0;
-        const int j = static_cast<int>(pos);
-        f_ = pos - j;
-        at_ = ctx * 33 + static_cast<std::size_t>(j);
-        return t_[at_] * (1 - f_) + t_[at_ + 1] * f_;
-    }
-    void update(int bit, double rate) {
-        t_[at_] += static_cast<float>(rate * (1 - f_) * (bit - t_[at_]));
-        t_[at_ + 1] += static_cast<float>(rate * f_ * (bit - t_[at_ + 1]));
-    }
-    std::size_t bytes() const { return t_.size() * 4; }
-
- private:
-    std::vector<float> t_;
-    std::size_t at_ = 0;
-    double f_ = 0;
-};
 
 /// The SSE stage after a mixer: four APMs keyed by the partial byte (order 0), the previous byte and the partial byte
 /// (order 1), a hash of the two previous bytes and the partial byte (order 2), and InfiniGram's bucket and the partial
@@ -276,90 +146,14 @@ class Sse {
     std::size_t bytes() const { return a0_.bytes() + a1_.bytes() + a2_.bytes() + a3_.bytes() + fin_.bytes(); }
 
  private:
-    Apm a0_, a1_, a2_, a3_;
+    mix::Apm a0_, a1_, a2_, a3_;
     double rate_, eps_;
     int mode_, bits2_;
     BitMixer fin_;
     double q_[5] = {}, x_[5] = {};
 };
 
-/// Byte-level geometric mixing: p(s) proportional to exp(sum_j w_j log D_j(s)), D_j normalised with a floor; one weight
-/// vector per context set, learned by gradient on -log p(y): dw_j = -lr (E_p[log D_j] - log D_j(y)). Starts at the
-/// input init (weight 1, the rest 0).
-class GeoMix {
- public:
-    GeoMix(int inputs, int sets, int init, double lr, double decay)
-        : n_(inputs), w_(static_cast<std::size_t>(sets) * inputs, 0.0), t_(static_cast<std::size_t>(sets), 0u), lr_(lr), decay_(decay) {
-        for (int g = 0; g < sets; ++g) w_[static_cast<std::size_t>(g) * inputs + init] = 1.0;
-    }
-    /// L[j]: log D_j over 256 bytes (nullptr: the input has nothing this byte and is skipped); P gets the mixture.
-    void dist(const double* const* L, int set, double* P) {
-        set_ = set;
-        L_ = L;
-        const double* w = &w_[static_cast<std::size_t>(set) * n_];
-        double z[256];
-        std::fill(z, z + 256, 0.0);
-        for (int j = 0; j < n_; ++j)
-            if (L[j] && w[j] != 0)
-                for (int s = 0; s < 256; ++s) z[s] += w[j] * L[j][s];
-        double mx = -1e300;
-        for (int s = 0; s < 256; ++s) mx = std::max(mx, z[s]);
-        double sum = 0;
-        for (int s = 0; s < 256; ++s) sum += (P[s] = std::exp(z[s] - mx));
-        for (int s = 0; s < 256; ++s) P[s] /= sum;
-        P_ = P;
-    }
-    void update(unsigned y) {
-        double* w = &w_[static_cast<std::size_t>(set_) * n_];
-        unsigned& t = t_[static_cast<std::size_t>(set_)];
-        const double lr = lr_ / (1.0 + decay_ * t);
-        ++t;
-        for (int j = 0; j < n_; ++j) {
-            if (!L_[j]) continue;
-            double e = 0;
-            for (int s = 0; s < 256; ++s) e += P_[s] * L_[j][s];
-            w[j] -= lr * (e - L_[j][y]);
-        }
-    }
-    std::size_t bytes() const { return w_.size() * 8; }
-
- private:
-    int n_;
-    std::vector<double> w_;
-    std::vector<unsigned> t_;
-    double lr_, decay_;
-    int set_ = 0;
-    const double* const* L_ = nullptr;
-    const double* P_ = nullptr;
-};
-
 // ------------------------------------------------------------------------------------------------ the whole mixer
-
-/// One online stage of the chain by exponentiated gradient (content_mixer.hpp's eg_stage), on whole distributions.
-struct EgState {
-    std::vector<double> we, wc;
-    double eta = 0.02;
-    void init(int nb, double e) {
-        we.assign(static_cast<std::size_t>(nb), 0.05);
-        wc.assign(static_cast<std::size_t>(nb), 0.95);
-        eta = e;
-    }
-    /// cur := lambda pe + (1 - lambda) cur over all 256 bytes; then the weights learn from the true byte y, with the same
-    /// arithmetic as eg_stage, so cur[y] stays equal to the scalar chain's.
-    void apply(const double* pe, int b, double* cur, unsigned y) {
-        const std::size_t u = static_cast<std::size_t>(b);
-        const double l = we[u], prev = cur[y];
-        for (int s = 0; s < 256; ++s) cur[s] = l * pe[s] + (1 - l) * cur[s];
-        const double p = cur[y], pp = std::max(p, 1e-300);
-        double e = we[u] * std::exp(eta * std::min(pe[y] / pp, 30.0)), c = wc[u] * std::exp(eta * std::min(prev / pp, 30.0));
-        double z = e + c;
-        e = std::max(e / z, 1e-4);
-        c = std::max(c / z, 1e-4);
-        z = e + c;
-        we[u] = e / z;
-        wc[u] = c / z;
-    }
-};
 
 /// A read-only hook into FullMixer::step (META_MIXING.md, meta_mixer.hpp): it sees each byte's inputs and every arm's
 /// prediction of each bit before any arm learns the bit. With no hook set (the default), step is unchanged.
@@ -405,22 +199,21 @@ class FullMixer {
         nfin_ = 24 + (cs.lstm ? 1 : 0) + (cs.two_rates ? 2 : 0) + ng;
         kRaw_ = 16 + ng;
         kAll_ = kRaw_ + 8;
-        fw_.assign(80 * static_cast<std::size_t>(nfin_), 0.01 / (1.0 + 0.01 * (nfin_ - 1)));
-        for (int g = 0; g < 80; ++g) fw_[static_cast<std::size_t>(g) * nfin_ + (nfin_ - 1)] = 1.0 / (1.0 + 0.01 * (nfin_ - 1));
+        fin_ = mix::EgSets(80, nfin_);
         // Bitwise inputs: the "all" list (see kAll_) plus copy's adaptive input and a bias; the raw list likewise.
         nall_ = kAll_ + 2;
         nraw_ = kRaw_ + 2;
         const std::vector<int> sets = {256, 32 * 8, 8 * 4 * 8, 5 * 256};
         mixA_ = std::make_unique<BitMixer>(nall_, sets, kAll_ - 1, P.lr1, P.lr2, P.lr_decay, P.eps);  // starts at Fn
         mixR_ = std::make_unique<BitMixer>(nraw_, sets, kRawTM, P.lr1, P.lr2, P.lr_decay, P.eps);    // starts at the trie mixture
-        geo_ = std::make_unique<GeoMix>(kAll_ + 1, 80, kAll_ - 1, P.lrb, P.lr_decay);                   // + copy's one-hot
+        geo_ = std::make_unique<mix::GeoMixer>(kAll_ + 1, 80, kAll_ - 1, P.lrb, P.lr_decay);            // + copy's one-hot
         abmix_ = std::make_unique<BitMixer>(2, std::vector<int>{8}, 0, P.lr1, P.lr2, 0, P.eps);
         for (auto* s : {&sseF_, &sseA_, &sseR_, &sseB_}) *s = std::make_unique<Sse>(P);
         copy_ok_.assign(8 * 8, {1.0, 2.0});
     }
 
     std::size_t bytes() const {
-        return mixA_->bytes() + mixR_->bytes() + geo_->bytes() + sseF_->bytes() * 4 + fw_.size() * 8;
+        return mixA_->bytes() + mixR_->bytes() + geo_->bytes() + sseF_->bytes() * 4 + fin_.bytes();
     }
 
     /// One holdout byte k: every arm predicts it, is scored, then learns it.
@@ -429,7 +222,8 @@ class FullMixer {
         const unsigned y = in.y;
         static const double zero[256] = {};
         tick(0);
-        // ---- the chain on whole distributions (cyphalm_trie context8k's order; content_mixer.hpp's arithmetic)
+        // ---- the chain on whole distributions (cyphalm_trie context8k's order; content_mixer.hpp's arithmetic: each stage
+        // is lerp(lambda, pe, cur) over all 256 bytes, then the stage learns the true byte, so cur[y] equals the chain's)
         double TM[256];
         {
             double z = 0.0;  // mix_dist
@@ -450,8 +244,13 @@ class FullMixer {
         double lst[256];
         if (cs_.lstm)
             for (int s = 0; s < 256; ++s) lst[s] = std::max(in.lstm[s], 1e-12);
-        auto stage = [&](EgState* st, const double* pe, int b) {
-            for (int r = 0; r < nr_; ++r) st[r].apply(pe ? pe : zero, b, ch[r], y);
+        auto stage = [&](mix::EgLambdas* st, const double* pe, int b) {
+            if (!pe) pe = zero;
+            for (int r = 0; r < nr_; ++r) {
+                const double l = st[r].lam(static_cast<std::size_t>(b)), prev = ch[r][y];
+                for (int s = 0; s < 256; ++s) ch[r][s] = mix::lerp(l, pe[s], ch[r][s]);
+                st[r].learn(static_cast<std::size_t>(b), pe[y], prev, ch[r][y], st[r].eta);
+            }
         };
         if (cs_.kn) stage(kn_, in.kn, in.kn_b);
         stage(ig_, in.ig[4], in.ig_b);
@@ -466,7 +265,7 @@ class FullMixer {
             for (int q = 0; q < 3; ++q)
                 if (cs_.doc_on[q]) {
                     const double l = cs_.doc_lam[static_cast<std::size_t>(q * cs_.doc_buckets + in.doc_b[q])];
-                    for (int s = 0; s < 256; ++s) ch[0][s] = l * in.doc[q][s] + (1 - l) * ch[0][s];
+                    for (int s = 0; s < 256; ++s) ch[0][s] = mix::lerp(l, in.doc[q][s], ch[0][s]);
                 }
         double ngp[256];
         if (cs_.ngram_orders > 0) {  // pngram = max(P(y), 1e-12), a lambda per InfiniGram bucket, before the LSTM
@@ -518,16 +317,11 @@ class FullMixer {
         }
         for (int s = 0; s < 256; ++s) q[nq][s] = std::max(1e-9, fl(ch[0][s]));
         ++nq;
-        const int bc = byte_class(static_cast<unsigned char>(in.prev));
+        const int bc = mix::byte_class(static_cast<unsigned char>(in.prev));
         const int g = cs_.final_gate == "copy" ? cyphalm::copy_bucket(in.cn) * 10 + bc * 2 + (in.ig_n >= 16 ? 1 : 0)
                                                : std::min(in.ig_b, 15) * 5 + bc;
         double F[256];
-        double* w = &fw_[static_cast<std::size_t>(g) * nfin_];
-        for (int s = 0; s < 256; ++s) {
-            double p = 0;
-            for (int j = 0; j < nfin_; ++j) p += w[j] * q[j][s];
-            F[s] = p;
-        }
+        for (int s = 0; s < 256; ++s) F[s] = fin_.predict(g, [&](int j) { return q[j][s]; });
         const double pf = F[y];
         double fsum = 0;
         for (int s = 0; s < 256; ++s) fsum += F[s];
@@ -662,13 +456,7 @@ class FullMixer {
         // ---- learning from y: the geometric mixer, then the final layer (OnlineFinal::update)
         geo_->update(y);
         if (hook_) hook_->byte_end(y, k);
-        {
-            double z = 0;
-            for (int j = 0; j < nfin_; ++j) z += (w[j] *= std::exp(0.05 * std::min(q[j][y] / std::max(pf, 1e-300), 30.0)));
-            double z2 = 0;
-            for (int j = 0; j < nfin_; ++j) z2 += (w[j] = std::max(w[j] / z, 1e-7));
-            for (int j = 0; j < nfin_; ++j) w[j] /= z2;
-        }
+        fin_.learn(g, [&](int j) { return q[j][y]; }, pf, 0.05);
         tick(6);
     }
 
@@ -720,12 +508,12 @@ class FullMixer {
     std::size_t half_;
     int nr_ = 1, nfin_ = 0, nall_ = 0, nraw_ = 0;
     double tw_[6] = {};
-    EgState kn_[3], ig_[3], cls_[3], sim_[3], copy_[3], lstm_[3], ngram_[3];
+    mix::EgLambdas kn_[3], ig_[3], cls_[3], sim_[3], copy_[3], lstm_[3], ngram_[3];
     double snap_[4][256] = {};
-    std::vector<double> fw_;
+    mix::EgSets fin_;  // the final layer's replica (OnlineFinal's weights)
     std::vector<std::array<double, 256>> q_;
     std::unique_ptr<BitMixer> mixA_, mixR_, abmix_;
-    std::unique_ptr<GeoMix> geo_;
+    std::unique_ptr<mix::GeoMixer> geo_;
     std::unique_ptr<Sse> sseF_, sseA_, sseR_, sseB_;
     std::vector<std::array<double, 2>> copy_ok_;
     double chain_y_ = 0, snap3_y_ = 0, fsum_acc_ = 0;

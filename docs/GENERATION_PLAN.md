@@ -2015,3 +2015,146 @@ Timings only from old and new started together on the same thread count. A job t
 - O3: exact; small: under 3% time. The hot paths are arithmetic, not logic. Reports how many Boolean functions it found and their minimised sizes.
 - O4: the ported job at least 5× faster.
 - O5: exact; the LSTM stage down at least 40%; the n-gram stage down at least 10%.
+
+### 13.42 Tuning, and fixing the planner's weak points (registered 2026-11-05, before any run; Odin's PC)
+
+**Odin:** "You know what I did for cypha core that helped a lot for it was tuning it … tuned all these experts/mixers on a meg of data and kept them like that". And for the planner: "fix its weaknesses. Extract more entities/facts for it to work with. Keep it focussed but let it drift a little and long context. Filter out rubbish facts, meaning the gibberish ones. Now we have too little smoothing. Just a little smoothing in the right place." And: "Do those other things too. Do all in sub agents."
+
+**Jobs (subagents in their own worktrees; new code goes in new files where it can, to avoid clashes):**
+
+| Job | Branch | What |
+|---|---|---|
+| T1 tune prediction | `wip/tune-predict` | tune every expert's and mixer's settings on 1 MB, then keep them |
+| Q1 facts | `wip/plan-facts` | more entities and facts, the relations-pattern fallback, a filter for gibberish facts |
+| Q2 fill | `wip/plan-fill` | typed slots (a place slot takes a place, a year slot a year) and a little smoothing in the right place |
+| Q3 discourse | `wip/plan-discourse` | stay on the subject but drift a little through related entities, longer context, write past the facts |
+| T2 tune writing | later | tune K5's and the planner's settings once Q1–Q3 land |
+
+**T1 rules:**
+- Settings: those that already have flags (learning rates, table bits, orders, LSTM size and rates, `--full-mix-params`, `--meta-mix-params`, SSE rates, and so on).
+- Search: coordinate search with a few random restarts, scored by bits per byte on a 1 MB tuning slice from enwik8's training part, disjoint from `context8k`'s holdout. Where the mixers allow it, the experts' outputs are dumped once and replayed (`--full-mix-dump`, full-mix-replay).
+- Then **one** full default run of the chosen set on the standard holdout.
+- Kept if `context8k_bpc` is below 1.4962, time rises at most 20%, and peak RAM at most 20% (Odin: "big and medium wins only").
+- Answers (`qa`) must not get worse. The defaults change only after M1, M2 and O5 land, so their exactness checks are not disturbed.
+
+**Q1 rules:**
+- Leakage guards as §13.38 (overlap pages skipped whole; `--plan-drop`).
+- **Coverage:** main-entity path on the 250 dev prompts (`fs_coverage`).
+- **Gibberish filter:**
+  - built from CyphaLM's own statistics: pattern support, type checks on the object (a year is a year, a place is a known place, a name is a capitalised noun phrase), the object's shape, agreement between patterns;
+  - judged on a random sample of 300 store facts that four blind Claude raters label "sensible" or "gibberish";
+  - the filter's thresholds are chosen on half of the sample and measured on the other half.
+
+**Q2 rules:**
+- Typed slots always on in its arms.
+- Smoothing is tried in four places, each one alone and at small amounts:
+  - S1, the fill's next-word distribution (blend a little of K5's class model, or a lower order);
+  - S2, the gate's softmax (a temperature above 1);
+  - S3, the skeleton choice (add-k on skeleton counts);
+  - S4, the fact choice in the plan.
+- Chosen on dev by automatic measures: names intact, relation cue kept, type errors in slots, SCRIBE v3.1. The best one goes to the raters.
+
+**Q3 rules:**
+- The plan continues through linked entities (co-occurring and related in the store) with a focus weight, so the paragraph keeps to the subject but can move a little.
+- The fill and gate see the whole paragraph so far.
+- Judged on the usual 460-character reading and on a **long reading**: 25 dev prompts, about 1,500 characters each, pairwise against P1 (`blind_rate.py` gains a `--cut` option).
+
+**Deciding judge:** pairwise blind raters against P1 (today's default), the §13.38 rule, for each of Q1, Q2 and Q3, then for the combination of the winners. One GEN-A test read, only for the adopted combination.
+
+**Predictions:**
+- T1: `context8k_bpc` down 0.01 to 0.03; time and RAM within the limits.
+- Q1:
+  - main-entity coverage from 50 to at least 80 of 250;
+  - the filter removes at least 70% of gibberish facts and keeps at least 90% of sensible ones;
+  - the share of store facts the raters call gibberish is about 30% today.
+- Q2: slot type errors down at least 50%. One smoothing place helps (most likely S1 or S2); the raters prefer Q2 to P1.
+- Q3: the raters prefer Q3 to P1 on the long reading (win share above 0.6); about even on the 460-character reading.
+- The combination: the raters prefer it to P1 (above 0.6), and test SCRIBE v2 at least 0.561.
+
+### 13.43 Tuned, but not pinned: settings that wander around their optimum (registered 2026-11-05, before any run; Odin's PC)
+
+**Odin:** "After you have tuned the experts set them to that but dont pin them to it. Set them an optimal amount back and let the model teter to and fro from optimal to noise so that it learns and we get beneficial stochastics."
+
+**The method (job T1b, after T1, M2 and O5 land; new header `online/hyper_adapt.hpp`, hooks in each expert and mixer):**
+- **Which settings:** only the continuous ones, which can change while the model runs: learning rates, count limits, SSE and mixing rates, and temperatures. Table sizes and orders stay fixed.
+- **Start:** each setting starts "an optimal amount back" from T1's tuned value θ*, a fraction *b* of the way toward the old default. *b* is chosen on the 1 MB tuning slice from {0, 0.1, 0.25, 0.5}.
+- **To and fro:** each setting follows a mean-reverting random walk around its centre (an Ornstein–Uhlenbeck process). It wobbles by about σ and is pulled back at rate κ. σ is set per setting from T1's sensitivity curve (how fast bits per byte rise as the setting leaves θ*). The noise never anneals to zero.
+- **Learning where to sit:** the centre itself moves by the loss's gradient with respect to the setting. For learning rates this is hypergradient descent (Baydin et al. 2018). For the others it is a one-sided finite difference on the recent loss.
+- **Fixed seed per run.**
+
+**Arms** (full `context8k`, three seeds each):
+- A0: T1's tuned values, fixed;
+- A1: start backed off, centre adapts, no noise;
+- A2: start backed off, noise around a fixed θ*, no adaptation;
+- A3: start backed off, centre adapts, with noise (Odin's version).
+
+**Rule:**
+- An arm is kept if its mean `context8k_bpc` over the three seeds is below A0's by more than the spread of its seeds (max − min), and time rises at most 10%.
+- A3 must also beat A1 by the same margin for the noise to count as "beneficial stochastics".
+- Answers (`qa`) must not get worse.
+
+**Predictions:**
+- A2 (noise alone) within ±0.002 of A0: noise around a true optimum usually costs a little.
+- A1 and A3 below A0 by 0.003 to 0.01, mostly late in the text, where the best settings drift.
+- A3 against A1: within ±0.002. The noise helps only if the best setting moves faster than the gradient can follow.
+
+**T1 adds now (flags only, no code):** a sensitivity curve for each tuned setting on the 1 MB slice, bits per byte at θ* × {0.5, 0.7, 0.85, 1.15, 1.4, 2}. This gives σ and *b*.
+
+**For writing (T2, later):** the same idea for K5's and the planner's continuous settings (nucleus, gate temperature, smoothing amounts), judged by the blind raters.
+
+**§13.40 M1 result** (2026-11-05; [MERGE_COUNTS](reports/MERGE_COUNTS.md)): **exact, kept, on by default.**
+- One suffix array (`lm/count_index.hpp`, on the vendored libsais) now gives K5 its counts, the 12-word copy cap, the 13-token run check and prompt word positions. SCRIBE's MATCH uses the same index. Byte KN and word KN share one Kneser–Ney core.
+- **Same output under `cmp`:** K5 alone and the planner on 250 dev prompts (GEN, stdout, both SCRIBE reports); a harness of 20,000 contexts and 160k word probabilities; small `context8k`; the byte sampler. Also re-checked after merging with M3.
+- **K5's peak RAM 297 → 146 MB (−51%)**, the planner's 769 → 631 MB (−18%); time unchanged; code +377 lines.
+- Byte KN counted from the suffix array is exact and 5–12× faster to build, but needs 2–5× the RAM while building, so it stays behind `CYPHA_BKN_COUNTS=index`.
+- Predictions: exact **hit**; RAM −30% **hit** (−51%); time within +50% **hit**.
+
+**§13.40 M2 result** (2026-11-05; [MERGE_MIXERS](reports/MERGE_MIXERS.md)): **exact, kept.**
+- `online/mix_core.hpp` holds the shared maths: exponentiated gradient, fixed share, geometric and logistic mixing, APM. The content mixer, full mix, meta mixer and structure ranker all call it.
+- **Same output under `cmp`:** small `context8k` (default, `--no-meta-mix`, `--no-full-mix`); the planner's and `--k5-struct`'s dev GEN files; the mixer replays.
+- Code: the four mixer files −18.6%, −2.8% counting `mix_core`. Time +0.6% to +1.8% (one run each on a loaded PC); RAM unchanged.
+- Predictions: exact **hit**; code −25% **miss**; time within ±3% **hit**.
+
+### 13.44 Stopped on Odin's word (2026-11-05, about 21:30)
+
+**Odin:** "Stop what your doing and git commit and push." Then: "Dont use the GPU."
+
+**What is on main, verified:**
+- the planner on by default (§13.39);
+- M1 and M2 (§13.40), both exact;
+- M3 (not adopted).
+
+**Stopped mid-way.** Each job's work is committed and pushed on its own branch, unverified. None is on main.
+
+| Job | Branch | State when stopped |
+|---|---|---|
+| M4 grouped gate experts | `wip/merge-gate` | report started; exactness not finished |
+| O1 fast build, PGO | `wip/opt-build` | CMake option and PGO script; checks not finished |
+| O2 expert pipeline | `wip/opt-pipeline` | code; small checks in progress |
+| O3 Boolean minimisation | `wip/opt-boolean` | own minimiser, truth tables, branch-free gates, patches for other jobs' files; not verified |
+| O4 GPU port | `wip/opt-gpu` | report started; **no more GPU work** (Odin) |
+| O5 LSTM AVX-512, n-gram prefetch | `wip/opt-simd` | code; full-run checks not finished |
+| O6 lazy exact nucleus | `wip/opt-nucleus` | just started; nothing committed |
+| T1 prediction tuning | `wip/tune-predict` | search driver; small-slice screening in progress |
+| Q1 facts and gibberish filter | `wip/plan-facts` | entity aliases, fallback, fact filter, `e9_v2` store, labelling packet (raters not run) |
+| Q2 typed slots and smoothing | `wip/plan-fill` | `slots.hpp`, smoothing flags; byte-identity runs not finished |
+| Q3 discourse | `wip/plan-discourse` | `discourse.hpp`, measures; dev runs not finished |
+
+- Not started: O7, O8 (§13.41 wave 3), T1b (§13.43), T2 (§13.42).
+- The blind-rating keys stay out of git as plain JSON; only `key.b64` is committed.
+- **To resume a job:** check out its branch, read its report stub, and finish its registered checks. Nothing from these branches goes to main until its checks pass.
+
+### 13.45 Resuming all jobs (2026-11-06; Odin: "Do all. You pick." and "Dont use the GPU.")
+
+**Order:**
+- **Wave A, now:** Q1, Q2, Q3 (the planner's text quality first); T1 (tuning); O5 (needed by T1b).
+- **Wave B, as slots free:** O1, O2, M4, O3, O6.
+- **Wave C:** O7, O8, T1b, T2; then the combination of the planner winners, the blind raters, and one test read.
+- **O4 (GPU) is closed:** no GPU work, on Odin's word. Its branch `wip/opt-gpu` keeps the report and code.
+
+**Machine limits, after yesterday's WSL crash:**
+- at most 4 threads per run;
+- no run starts while `free -g` shows under 10 GB available;
+- every full `context8k` takes one shared lock (`flock ~/.cypha_full.lock`), so only one runs on the PC at a time. T1's final pair of tuned and default runs shares one turn of the lock, so the two are started together.
+
+Every branch first merges `origin/main` (M1 and M2 are exact, so P1 and every baseline are unchanged), then finishes its registered checks. The rules and predictions of §13.40–13.43 stand.
