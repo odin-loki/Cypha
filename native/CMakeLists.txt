@@ -47,12 +47,13 @@ endif()
 # CYPHA_FAST_BUILD (off by default) builds the targets in CYPHA_FAST_TARGETS with flags that keep every output byte for
 # byte (checked with cmp, old binary against new, for cyphalm_trie and scribe):
 #   -march=native (AVX-512 on Odin's PC) with -ffp-contract=off, so no fused multiply-add changes a sum (CYPHA_FAST_ARCH);
-#   -fno-math-errno; link-time optimisation (CYPHA_FAST_LTO).
-# Nothing that reorders floating point: no -ffast-math, -fassociative-math, -funsafe-math-optimizations or -mrecip.
-# CYPHA_PGO=generate|use adds profile-guided optimisation (GCC or Clang); profiles live in CYPHA_PGO_DIR (Clang reads
-# CYPHA_PGO_DIR/cypha.profdata). scripts/pgo_build.sh trains and builds it. The binaries run only on CPUs like the
-# build machine's. Applied at the end of this file, once the targets exist; nothing else changes when it is off.
-option(CYPHA_FAST_BUILD "O1: -march=native -ffp-contract=off -fno-math-errno and LTO for CYPHA_FAST_TARGETS" OFF)
+#   link-time optimisation (CYPHA_FAST_LTO): GCC -flto=4, Clang ThinLTO with lld (4 jobs).
+# Nothing that reorders floating point: no -ffast-math or any part of it (-fassociative-math, -fno-math-errno, ...), no
+# -mrecip. CYPHA_PGO=generate|use adds profile-guided optimisation (GCC or Clang); profiles live in CYPHA_PGO_DIR (Clang
+# reads CYPHA_PGO_DIR/cypha.profdata). scripts/pgo_build.sh trains and builds it. With -march=native the binaries run
+# only on CPUs like the build machine's. Applied at the end of this file, once the targets exist; nothing changes when
+# it is off.
+option(CYPHA_FAST_BUILD "O1: -march=native -ffp-contract=off and LTO for CYPHA_FAST_TARGETS" OFF)
 option(CYPHA_FAST_ARCH "O1: with CYPHA_FAST_BUILD, -march=native (always with -ffp-contract=off)" ON)
 option(CYPHA_FAST_LTO "O1: with CYPHA_FAST_BUILD, link-time optimisation" ON)
 set(CYPHA_FAST_TARGETS "cyphalm_trie;scribe" CACHE STRING "O1: targets that CYPHA_FAST_BUILD and CYPHA_PGO apply to")
@@ -63,7 +64,7 @@ if((CYPHA_FAST_BUILD OR NOT CYPHA_PGO STREQUAL "OFF") AND NOT MSVC)
   set(_cypha_fast_c "")
   set(_cypha_fast_l "")
   if(CYPHA_FAST_BUILD)
-    list(APPEND _cypha_fast_c -ffp-contract=off -fno-math-errno)
+    list(APPEND _cypha_fast_c -ffp-contract=off)
     if(CYPHA_FAST_ARCH)
       list(APPEND _cypha_fast_c -march=native)
     endif()
@@ -74,6 +75,7 @@ if((CYPHA_FAST_BUILD OR NOT CYPHA_PGO STREQUAL "OFF") AND NOT MSVC)
     list(APPEND _cypha_fast_c "-fprofile-generate=${CYPHA_PGO_DIR}" -fprofile-update=single)
   elseif(CYPHA_PGO STREQUAL "use")
     if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+      # Code the training did not run is optimised as without a profile, not for size.
       list(APPEND _cypha_fast_c "-fprofile-use=${CYPHA_PGO_DIR}" -fprofile-partial-training -fprofile-correction
            -Wno-missing-profile)
     else()
@@ -83,14 +85,15 @@ if((CYPHA_FAST_BUILD OR NOT CYPHA_PGO STREQUAL "OFF") AND NOT MSVC)
   elseif(NOT CYPHA_PGO STREQUAL "OFF")
     message(FATAL_ERROR "CYPHA_PGO must be OFF, generate or use (got '${CYPHA_PGO}')")
   endif()
-  list(APPEND _cypha_fast_l ${_cypha_fast_c})
-  if(CYPHA_FAST_BUILD AND CYPHA_FAST_LTO)
+  if(CYPHA_FAST_BUILD AND CYPHA_FAST_LTO)  # explicit flags, not CMake's IPO (whose GCC -flto=auto uses every thread)
     if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-      list(APPEND _cypha_fast_l -flto=4)  # CMake's -flto=auto would start one job per hardware thread at link time
+      list(APPEND _cypha_fast_c -flto=4 -fno-fat-lto-objects)
     elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+      list(APPEND _cypha_fast_c -flto=thin)
       list(APPEND _cypha_fast_l -fuse-ld=lld -Wl,--thinlto-jobs=4)
     endif()
   endif()
+  list(PREPEND _cypha_fast_l ${_cypha_fast_c})
   function(_cypha_fast_build_apply)
     foreach(_t IN LISTS CYPHA_FAST_TARGETS)
       if(NOT TARGET ${_t})
@@ -99,9 +102,6 @@ if((CYPHA_FAST_BUILD OR NOT CYPHA_PGO STREQUAL "OFF") AND NOT MSVC)
       endif()
       target_compile_options(${_t} PRIVATE "$<$<COMPILE_LANGUAGE:C,CXX>:${_cypha_fast_c}>")
       target_link_options(${_t} PRIVATE ${_cypha_fast_l})
-      if(CYPHA_FAST_BUILD AND CYPHA_FAST_LTO)
-        set_property(TARGET ${_t} PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
-      endif()
     endforeach()
   endfunction()
   cmake_language(DEFER CALL _cypha_fast_build_apply)
