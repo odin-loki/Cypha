@@ -46,6 +46,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <bit>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -375,6 +376,23 @@ class WordKN {
         }
         return p;
     }
+    // docs/reports/OPT_NUCLEUS.md: dist's walk without an overlay. f(gamma, ids, disc, m) gets each context it applies,
+    // order 2 up, in turn (the views last only until the next call). Returns the number of orders applied.
+    template <class F>
+    int walk(const std::uint32_t* ctx, std::size_t n, F&& f) const {
+        View v;
+        int found = 0;
+        for (int k = 2; k <= order_; ++k) {
+            const std::size_t L = static_cast<std::size_t>(k - 1);
+            if (n < L) break;
+            Key key = 0;
+            for (std::size_t i = 0; i < L; ++i) key |= Key{ctx[n - 1 - i]} << (16 * i);
+            if (!context(k, ctx, n, key, v)) break;
+            f(v.gam, v.ids, v.disc, v.m);
+            ++found;
+        }
+        return found;
+    }
     std::size_t vocab_size() const { return V_; }
     std::size_t contexts(int k) const { return lv_[k].contexts; }
     std::size_t entries(int k) const { return k <= order_ ? lv_[k].entries : 0; }
@@ -575,6 +593,8 @@ class ClassModel {
         K_ = K;
         cmass_.assign(K + 2, 0.0);  // K5_MCMC.md: each class's word mass, for prob
         for (std::size_t w = 0; w < V; ++w) cmass_[cls_[w]] += pwc_[w];
+        static std::atomic<std::uint64_t> builds{0};  // OPT_NUCLEUS.md
+        uid_ = ++builds;
     }
     // K5_MCMC.md: dist's p[w] alone.
     double prob(const std::uint32_t* ctx, std::size_t n, std::uint32_t w) const {
@@ -600,12 +620,38 @@ class ClassModel {
     }
     const std::vector<double>& loglik() const { return loglik_; }
     const std::vector<std::uint32_t>& classes() const { return cls_; }
+    // docs/reports/OPT_NUCLEUS.md: dist's parts. pc gets the class distribution after ctx (K + 2 entries); the return
+    // is dist's normaliser z = sum over w, in id order, of pc[c(w)] P(w | c(w)), so dist's p[w] is
+    // (pc[c(w)] * pwc()[w]) / z. pc and z depend only on the last two classes, so each thread keeps the z it has summed.
+    double floor_parts(const std::uint32_t* ctx, std::size_t n, double* pc) const {
+        std::uint32_t cc[2] = {0, 0};
+        const std::size_t m = std::min<std::size_t>(n, 2);
+        for (std::size_t i = 0; i < m; ++i) cc[i] = cls_[ctx[n - m + i]];
+        kn_.dist(cc, m, pc);
+        struct Cache {
+            std::uint64_t uid = 0;
+            std::unordered_map<std::uint64_t, double> z;
+        };
+        thread_local Cache cache;
+        if (cache.uid != uid_) cache.uid = uid_, cache.z.clear();
+        const std::uint64_t key = (std::uint64_t{m} << 48) | (std::uint64_t{cc[0]} << 24) | cc[1];
+        const auto [it, fresh] = cache.z.try_emplace(key, 0.0);
+        if (fresh) {
+            double z = 0;
+            for (std::size_t w = 0; w < V_; ++w) z += pc[cls_[w]] * pwc_[w];
+            it->second = z;
+        }
+        return it->second;
+    }
+    const std::vector<double>& pwc() const { return pwc_; }
+    std::size_t num_classes() const { return K_ + 2; }
 
  private:
     std::size_t V_ = 0, K_ = 0;
     std::vector<std::uint32_t> cls_;
     std::vector<double> pwc_, loglik_, cmass_;
     WordKN kn_;
+    std::uint64_t uid_ = 0;  // OPT_NUCLEUS.md: this build's number (floor_parts' cache)
 };
 
 // ---------------------------------------------------------------- bans
@@ -645,6 +691,135 @@ class RepeatBan {
                 if (lc == c && lk == k) return true;
             local_.emplace_back(k, c);
         }
+        return false;
+    }
+    // docs/reports/OPT_NUCLEUS.md: banned(pb) for many pieces after the same text. prepare reads the text once;
+    // banned(b, pb) then gives banned(pb)'s answer. The checks are the same three:
+    //   - a 12-byte window that ends inside pb at pb[j], j < 11, is the text's last 11 - j bytes and pb[0, j]. It is a
+    //     window of the text when the text holds those 11 - j bytes ending at some e, followed by pb[0, j]. With mu(e)
+    //     the longest common suffix (at most 11) of text[0, e) and the text, the least such j at e is 11 - mu(e), and
+    //     a larger j needs a longer match. So pb is banned there exactly when it starts with text[e, e + 12 - mu(e))
+    //     for some e (e + 12 - mu(e) within the text): the forbidden prefixes, kept by length;
+    //   - windows wholly inside pb (j >= 11), looked up as banned() looks them up;
+    //   - a window that repeats inside the new bytes (banned()'s local list), compared byte by byte. Two equal windows
+    //     ending at pb[j1] and pb[j2], d = j2 - j1, need tail[x] = tail[x + d] for x in [j1, 11 - d): so j1 >= A(d), the
+    //     start of the tail's longest d-periodic end, and j2 < |pb|. A piece shorter than min over d of A(d) + d + 1
+    //     (12 for a tail with no period) has no such pair.
+    // A text shorter than 11 bytes goes to banned(pb).
+    struct Batch {
+        bool on = false;
+        std::uint32_t lens = 0;                       // bit l: some forbidden prefix has l bytes
+        std::vector<unsigned __int128> pre[W + 1];    // the forbidden prefixes of l bytes (byte i in bits 8i), sorted
+        char tail[W] = {};                            // the text's last 11 bytes
+        std::size_t lmin = 0;                         // the shortest forbidden prefix (W + 1: none)
+        std::size_t local = 0;                        // the shortest piece that can repeat a window inside itself
+        // A filter: f2[h(first two bytes)] has bit l when some forbidden prefix of l >= 2 bytes starts with two bytes
+        // of that hash; one: the forbidden prefixes of one byte. Only the lengths it names are searched.
+        std::vector<std::uint16_t> f2 = std::vector<std::uint16_t>(kF2, 0);
+        std::vector<std::uint16_t> f2set;             // the entries to clear at the next prepare
+        std::uint64_t one[4] = {0, 0, 0, 0};
+        static constexpr std::size_t kF2 = 4096;
+        static std::size_t h2(unsigned char a, unsigned char c) {
+            const std::size_t v = a | std::size_t{c} << 8;
+            return (v ^ (v >> 12) ^ (v >> 5)) & (kF2 - 1);
+        }
+    };
+    void prepare(Batch& b) const {
+        const std::size_t n = text_.size();
+        b.on = n >= W;
+        b.lens = 0;
+        for (auto& v : b.pre) v.clear();
+        for (const std::uint16_t i : b.f2set) b.f2[i] = 0;
+        b.f2set.clear();
+        std::fill(b.one, b.one + 4, 0);
+        if (!b.on) return;
+        const char* t = text_.data();
+        std::memcpy(b.tail, t + n - W, W);
+        b.local = W + 1;
+        for (std::size_t d = 1; d < W; ++d) {
+            std::size_t a = W - d;  // the d-periodic end of the tail starts at a
+            while (a > 0 && b.tail[a - 1] == b.tail[a - 1 + d]) --a;
+            b.local = std::min(b.local, a + d + 1);
+        }
+        for (std::size_t e = 1; e < n; ++e) {
+            std::size_t mu = 0;
+            while (mu < W && mu < e && t[e - 1 - mu] == t[n - 1 - mu]) ++mu;
+            if (mu == 0) continue;
+            const std::size_t l = W + 1 - mu;
+            if (e + l > n) continue;
+            unsigned __int128 k = 0;
+            for (std::size_t i = 0; i < l; ++i) k |= static_cast<unsigned __int128>(static_cast<unsigned char>(t[e + i])) << (8 * i);
+            b.pre[l].push_back(k);
+            b.lens |= 1u << l;
+            const auto c0 = static_cast<unsigned char>(t[e]);
+            if (l == 1) {
+                b.one[c0 >> 6] |= std::uint64_t{1} << (c0 & 63);
+            } else {
+                const std::size_t h = Batch::h2(c0, static_cast<unsigned char>(t[e + 1]));
+                if (b.f2[h] == 0) b.f2set.push_back(static_cast<std::uint16_t>(h));
+                b.f2[h] = static_cast<std::uint16_t>(b.f2[h] | 1u << l);
+            }
+        }
+        for (auto& v : b.pre) {
+            std::sort(v.begin(), v.end());
+            v.erase(std::unique(v.begin(), v.end()), v.end());
+        }
+        b.lmin = W + 1;
+        for (std::size_t l = 1; l <= W; ++l)
+            if ((b.lens >> l) & 1) {
+                b.lmin = l;
+                break;
+            }
+    }
+    // False when no piece of L bytes starting c0 c1 can be banned after b's text (banned(b, pb) is then false): the
+    // checks banned(b, pb) makes before it reads more of the piece.
+    static bool may_ban(const Batch& b, std::size_t L, unsigned char c0, unsigned char c1) {  // without branches
+        const bool other = !b.on | (L >= b.local) | (L > W);
+        const bool one = (b.one[c0 >> 6] >> (c0 & 63)) & 1;
+        const bool two = (L >= 2) & ((b.f2[Batch::h2(c0, c1)] & ((2u << std::min(L, W)) - 1)) != 0);
+        return other | ((L >= b.lmin) & (one | two));
+    }
+    bool banned(const Batch& b, std::string_view pb) const {
+        if (!b.on) return banned(pb);
+        const std::size_t L = pb.size();
+        if (L < b.lmin && L < b.local && L <= W) return false;  // no forbidden prefix fits, no window inside pb, no repeat
+        if (L >= b.lmin) {
+            const auto c0 = static_cast<unsigned char>(pb[0]);
+            if ((b.one[c0 >> 6] >> (c0 & 63)) & 1) return true;  // a forbidden prefix of one byte
+            if (L >= 2) {
+                const std::size_t lmax = std::min(L, W);
+                std::uint32_t mask = b.f2[Batch::h2(c0, static_cast<unsigned char>(pb[1]))] & ((2u << lmax) - 1);
+                if (mask) {
+                    unsigned __int128 k = 0;
+                    for (std::size_t l = 1; mask; ++l) {
+                        k |= static_cast<unsigned __int128>(static_cast<unsigned char>(pb[l - 1])) << (8 * (l - 1));
+                        if ((mask >> l) & 1) {
+                            if (std::binary_search(b.pre[l].begin(), b.pre[l].end(), k)) return true;
+                            mask &= ~(1u << l);
+                        }
+                    }
+                }
+            }
+        }
+        for (std::size_t j = W; j < L; ++j) {
+            const Key kk = key(pb.data() + j - W);
+            const auto c = static_cast<unsigned char>(pb[j]);
+            const std::size_t hk = KeyHash{}(kk);
+            if ((seen_[(hk >> 6) & (kSeen - 1)] >> (hk & 63)) & 1) {
+                const auto it = nx_.find(kk);
+                if (it != nx_.end() && it->second.has(c)) return true;
+            }
+        }
+        if (L < b.local) return false;
+        // The window ending at pb[j] is (tail + pb)[j, j + 12).
+        const auto at = [&](std::size_t i) { return i < W ? b.tail[i] : pb[i - W]; };
+        for (std::size_t j2 = 1; j2 < L; ++j2)
+            for (std::size_t j1 = 0; j1 < j2; ++j1) {
+                if (pb[j1] != pb[j2]) continue;
+                std::size_t q = 0;
+                while (q < W && at(j1 + q) == at(j2 + q)) ++q;
+                if (q == W) return true;
+            }
         return false;
     }
 
@@ -1208,6 +1383,7 @@ class K5 {
         for (std::uint32_t w = 0; w < V; ++w) cnt_[w] = static_cast<double>(kn_.index().first(w).size());
         if (classes > 0) cm_.build(ids, V, classes);
         else cm_ = ClassModel{};
+        fast_ = std::make_unique<FastTables>();  // OPT_NUCLEUS.md: made on the first draw
         secs_ = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
     }
 
@@ -1536,7 +1712,67 @@ class K5 {
         std::vector<std::uint32_t> top, cand, kept;
         std::vector<std::string> pieces;
         std::vector<char> rb, cb;
+        // OPT_NUCLEUS.md: fast_pick's own (check mode runs both picks on one scratch).
+        struct Item {
+            std::uint64_t pb;  // p's bits (p > 0, so they order as p)
+            std::uint32_t x;
+        };
+        std::vector<double> q, qs, gs, pc, fp, frw, hm;
+        std::vector<std::uint32_t> stamp, pos, seen, ptr, fcand, fkept, hc, boff;
+        std::vector<Item> items, sorted;
+        std::uint32_t cur = 0;
+        std::vector<char> frb, fcb;
+        RepeatBan::Batch rbatch;
+        std::size_t k = 0, fk = 0;  // the nucleus' size, each pick's
     };
+    // OPT_NUCLEUS.md: each word's two pieces in one buffer (bare: at the start or after ( [ { $ or a newline; spaced:
+    // after any other word, as piece() writes them).
+    struct FastTables {
+        std::once_flag once;
+        bool ok = true;  // false if a word is too long for meta (then fast_pick is not used)
+        std::string bytes;
+        // word w: its spaced piece at bytes[off, off + len + sp), its bare piece at bytes[off + sp, off + len + sp), and
+        // the bare piece's first two bytes c0, c1 (0 past its end); packed as off | len << 32 | sp << 46 | c0 << 47 | c1 << 55.
+        std::vector<std::uint64_t> meta;
+        static std::size_t length(std::uint64_t m, bool bare) { return ((m >> 32) & 0x3FFF) + (bare ? 0 : (m >> 46) & 1); }
+        // The piece's first two bytes.
+        static unsigned char byte0(std::uint64_t m, bool bare) { return bare || !((m >> 46) & 1) ? static_cast<unsigned char>(m >> 47) : ' '; }
+        static unsigned char byte1(std::uint64_t m, bool bare) {
+            return bare || !((m >> 46) & 1) ? static_cast<unsigned char>(m >> 55) : static_cast<unsigned char>(m >> 47);
+        }
+        std::string_view piece(std::uint32_t w, bool bare) const {
+            const std::uint64_t m = meta[w];
+            const std::size_t a = static_cast<std::uint32_t>(m) + (bare ? (m >> 46) & 1 : 0);
+            return std::string_view(bytes.data() + a, length(m, bare));
+        }
+    };
+    const FastTables& fast_tables() const {
+        std::call_once(fast_->once, [&] {
+            FastTables& f = *fast_;
+            const std::size_t V = vocab_.size();
+            f.meta.resize(V);
+            for (std::size_t w = 0; w < V; ++w) {
+                const std::string& t = vocab_[w];
+                const std::string sp = piece(t, "x", true);  // " " + the word, or the word
+                const std::uint64_t n = t.size(), s = sp.size() - n;
+                const std::uint64_t c0 = n > 0 ? static_cast<unsigned char>(t[0]) : 0, c1 = n > 1 ? static_cast<unsigned char>(t[1]) : 0;
+                if (n >= 0x4000 || f.bytes.size() + sp.size() >= (std::uint64_t{1} << 32)) f.ok = false;
+                f.meta[w] = f.bytes.size() | n << 32 | s << 46 | c0 << 47 | c1 << 55;
+                f.bytes += sp;
+            }
+        });
+        return *fast_;
+    }
+    // OPT_NUCLEUS.md: CYPHA_K5_NUCLEUS=full draws every word by full_pick; =check draws by both and stops at the
+    // first difference. Read once.
+    static int nucleus_mode() {
+        static const int m = [] {
+            const char* e = std::getenv("CYPHA_K5_NUCLEUS");
+            const std::string v = e ? e : "";
+            return v == "full" ? 1 : v == "check" ? 2 : 0;
+        }();
+        return m;
+    }
     // K5_DISCOURSE.md: the sentence gate with z-scored terms. K candidates per sentence from the same state and the same
     // streams as the default gate; each term is z-scored over the K candidates, then
     //   score = wf z(fluency) + wp z(pmi) + mbr_sent_w z(mbr) + eg_w z(entity grid) + lda_w z(topic) - wm markup.
@@ -1613,11 +1849,31 @@ class K5 {
     // word's probability under the model before temperature, <unk> and <s> removed (the gate's fluency).
     std::uint32_t step_word(State& s, std::mt19937_64& rng, std::uint64_t salt, const Options& o, GenStats& g, ByteScorer* bs,
                             Scratch& sc, double* lp) const {
+        ++g.steps;
+        ++s.step;
+        std::uint32_t w = 0;
+        std::string str;
+        const int mode = nucleus_mode();
+        if (mode == 2 && fast_applies(s, o)) {
+            check_pick(s, rng, salt, o, g, bs, sc, lp, w, str);
+        } else if (mode == 1 || !fast_applies(s, o) || !fast_pick(s, rng, salt, o, g, bs, sc, lp, w, str)) {
+            full_pick(s, rng, salt, o, g, bs, sc, lp, w, str);
+        }
+        s.out += str;
+        s.rep.add(str);
+        if (bs) bs->advance(str);
+        learn(s, w, o);
+        s.prev = vocab_[w];
+        s.has_prev = true;
+        return w;
+    }
+    // step_word's choice, as generate_one makes it: the whole distribution, sorted. w gets the word, str its piece.
+    void full_pick(const State& s, std::mt19937_64& rng, std::uint64_t salt, const Options& o, GenStats& g, ByteScorer* bs,
+                   Scratch& sc, double* lp, std::uint32_t& w, std::string& str) const {
         const std::size_t V = vocab_.size();
         std::vector<double>& p = sc.p;
         std::vector<std::uint32_t>&top = sc.top, &cand = sc.cand, &kept = sc.kept;
-        ++g.steps;
-        ++s.step;
+        p.resize(V);
         model_dist(s, o, p.data(), sc.tmp);
         if (lp && o.temperature != 1.0) sc.pre = p;
         if (o.temperature != 1.0)
@@ -1686,8 +1942,9 @@ class K5 {
         }
         g.cap_banned += ncap;
         g.cap_steps += ncap > 0;
-        std::uint32_t w = 0;
-        std::string str;
+        w = 0;
+        str.clear();
+        sc.k = 0;
         if (!any_cap_ok) {  // the cap removed every candidate: the most probable word anywhere that it allows
             ++g.cap_outside;
             top.resize(V);
@@ -1765,6 +2022,7 @@ class K5 {
             }
             w = cand[kept[j]];
             str = std::move(pieces[kept[j]]);
+            sc.k = k;
         }
         if (lp) {
             if (o.temperature != 1.0) {
@@ -1774,14 +2032,402 @@ class K5 {
                 *lp = std::log2(std::max(p[w], 1e-300));
             }
         }
-        s.out += str;
-        s.rep.add(str);
-        if (bs) bs->advance(str);
-        learn(s, w, o);
-        s.prev = vocab_[w];
-        s.has_prev = true;
-        return w;
     }
+
+    // docs/reports/OPT_NUCLEUS.md (GENERATION_PLAN §13.41, O6): the same choice as full_pick, without sorting the
+    // vocabulary. It applies to K5's own walk (no dynamic counts, no cache, no class mix, no topic factor) at
+    // temperature 1.
+    bool fast_applies(const State& s, const Options& o) const {
+        return fast_ && o.temperature == 1.0 && o.dyn <= 0 && o.cache_w <= 0 && o.cache_w2 <= 0 && !(cm_.on() && o.class_mode != 1) && !s.topic_mult;
+    }
+    // q[x] for x in [2, V): the floor times the walk's gammas g[0..ng), rounded after each product as dist rounds it.
+    template <bool On, int NG>
+    static void fill_unseen_n(double* q, std::size_t V, const double* pc, const std::uint32_t* cls, const double* pwc, double zc,
+                              const double* p1, const double* g) {
+        double gg[NG + 1] = {};
+        for (int k = 0; k < NG; ++k) gg[k] = g[k];
+        for (std::size_t x = 2; x < V; ++x) {
+            double v;
+            if constexpr (On) v = (pc[cls[x]] * pwc[x]) / zc;
+            else v = p1[x];
+            for (int k = 0; k < NG; ++k) v *= gg[k];
+            q[x] = v;
+        }
+    }
+    template <bool On>
+    static void fill_unseen(double* q, std::size_t V, const double* pc, const std::uint32_t* cls, const double* pwc, double zc,
+                            const double* p1, const double* g, std::size_t ng) {
+        switch (ng) {
+            case 0: return fill_unseen_n<On, 0>(q, V, pc, cls, pwc, zc, p1, g);
+            case 1: return fill_unseen_n<On, 1>(q, V, pc, cls, pwc, zc, p1, g);
+            case 2: return fill_unseen_n<On, 2>(q, V, pc, cls, pwc, zc, p1, g);
+            case 3: return fill_unseen_n<On, 3>(q, V, pc, cls, pwc, zc, p1, g);
+            case 4: return fill_unseen_n<On, 4>(q, V, pc, cls, pwc, zc, p1, g);
+            case 5: return fill_unseen_n<On, 5>(q, V, pc, cls, pwc, zc, p1, g);
+            case 6: return fill_unseen_n<On, 6>(q, V, pc, cls, pwc, zc, p1, g);
+            default:
+                for (std::size_t x = 2; x < V; ++x) {
+                    double v;
+                    if constexpr (On) v = (pc[cls[x]] * pwc[x]) / zc;
+                    else v = p1[x];
+                    for (std::size_t k = 0; k < ng; ++k) v *= g[k];
+                    q[x] = v;
+                }
+        }
+    }
+    // The maths. After the walk's contexts (orders 2 to k*, gammas g2..gk*), a word w that none of them holds has
+    // q(w) = (((b(w) g2) g3) ...) gk*, b(w) the floor (the class floor (pc[c(w)] P(w | c(w))) / zc, or order 1), each
+    // product rounded as dist rounds it. The words a context holds (the seen words) get the walk's sums, word by word,
+    // in dist's order. Then:
+    //   1. z, the sum of q over the vocabulary in id order (<unk> and <s> as 0), as step_word sums it; p(w) = q(w) / z.
+    //      This sum needs every word once, in order: it is the one pass over the vocabulary that stays. Beside it, the
+    //      mass and number of words in each band of q (its top 14 bits: exponent and 2 bits of mantissa).
+    //   2. the candidates are a prefix of the vocabulary in full_pick's order (p descending, then the salted hash; the
+    //      hash is a bijection, so it never ties). From the top band down, the first band b where the mass reaches
+    //      cand_mass z (with a margin of 1e-9 for the order of the sums) or the count reaches cand_max gives a bound
+    //      t = the least q in b. Every word with q >= t (1 - 2^-40) is taken; a word below that has p < fl(t / z), and
+    //      every word with p >= fl(t / z) is taken. Those are sorted (by bands of p, then exactly), and the cut is made
+    //      among them as full_pick makes it: cum += p, word by word, until cum >= cand_mass or cand_max words;
+    //   3. the bans, the nucleus and the draw exactly as full_pick, on the same candidates in the same order.
+    // Returns false, having changed nothing, when the cut is not reached above fl(t / z), the bound would take a word
+    // of q 0, or the cap leaves no candidate; full_pick then makes the choice.
+    bool fast_pick(const State& s, std::mt19937_64& rng, std::uint64_t salt, const Options& o, GenStats& g, ByteScorer* bs,
+                   Scratch& sc, double* lp, std::uint32_t& w, std::string& str) const {
+        const std::size_t V = vocab_.size();
+        const FastTables& ft = fast_tables();
+        if (!ft.ok) return false;
+        // The floor.
+        const bool on = cm_.on();
+        double zc = 1;
+        if (on) {
+            sc.pc.resize(cm_.num_classes());
+            zc = cm_.floor_parts(s.ctx.data(), s.ctx.size(), sc.pc.data());
+        }
+        const double* pc = sc.pc.data();
+        const std::uint32_t* cls = on ? cm_.classes().data() : nullptr;
+        const double* pwc = on ? cm_.pwc().data() : nullptr;
+        const double* p1 = kn_.p1().data();
+        const auto base = [&](std::uint32_t x) { return on ? (pc[cls[x]] * pwc[x]) / zc : p1[x]; };
+        // The walk: the seen words' values, order by order, as dist applies them.
+        std::vector<double>&q = sc.q, &qs = sc.qs, &gs = sc.gs;
+        std::vector<std::uint32_t>&stamp = sc.stamp, &pos = sc.pos, &seen = sc.seen;
+        q.resize(V);
+        stamp.resize(V, 0);
+        pos.resize(V);
+        if (++sc.cur == 0) std::fill(stamp.begin(), stamp.end(), 0), sc.cur = 1;
+        const std::uint32_t cur = sc.cur;
+        seen.clear(), qs.clear(), gs.clear();
+        kn_.walk(s.ctx.data(), s.ctx.size(), [&](double gam, const std::uint16_t* ids, const double* disc, std::size_t m) {
+            if (gs.empty()) {  // the first order: every entry is new (a context's entries are distinct)
+                gs.push_back(gam);
+                seen.resize(m), qs.resize(m);
+                for (std::size_t e = 0; e < m; ++e) {
+                    const std::uint32_t x = ids[e];
+                    stamp[x] = cur;
+                    pos[x] = static_cast<std::uint32_t>(e);
+                    seen[e] = x;
+                    qs[e] = base(x) * gam;
+                }
+                for (std::size_t e = 0; e < m; ++e) qs[e] += disc[e];  // a second loop, as dist adds (no fused multiply-add)
+                return;
+            }
+            for (double& v : qs) v *= gam;
+            gs.push_back(gam);
+            for (std::size_t e = 0; e < m; ++e) {
+                const std::uint32_t x = ids[e];
+                if (stamp[x] != cur) {
+                    stamp[x] = cur;
+                    pos[x] = static_cast<std::uint32_t>(seen.size());
+                    seen.push_back(x);
+                    double v = base(x);
+                    for (const double gk : gs) v *= gk;
+                    qs.push_back(v);
+                }
+                qs[pos[x]] += disc[e];
+            }
+        });
+        // 1. q over the vocabulary and z, in id order: every word's chain (vectorised; each lane rounds as dist
+        // does), the seen words' values over them, then the sum, word by word.
+        double* qq = q.data();
+        if (on) fill_unseen<true>(qq, V, pc, cls, pwc, zc, p1, gs.data(), gs.size());
+        else fill_unseen<false>(qq, V, pc, cls, pwc, zc, p1, gs.data(), gs.size());
+        for (std::size_t i = 0; i < seen.size(); ++i) qq[seen[i]] = qs[i];
+        qq[kUnk] = qq[kBos] = 0;
+        constexpr int kBandShift = 50;  // a band: the top 14 bits of a q >= 0
+        constexpr std::size_t kBands = std::size_t{1} << (63 - kBandShift);
+        std::vector<double>& hm = sc.hm;
+        std::vector<std::uint32_t>& hc = sc.hc;
+        hm.assign(kBands, 0.0);
+        hc.assign(kBands, 0);
+        double z = 0;
+        for (std::size_t x = 2; x < V; ++x) {
+            const double v = qq[x];
+            z += v;
+            const std::size_t b = static_cast<std::size_t>(std::bit_cast<std::uint64_t>(v) >> kBandShift);
+            hm[b] += v;
+            ++hc[b];
+        }
+        // 2. The candidates: the bound, the words above it, sorted, and the cut.
+        const std::size_t mc = std::min(o.cand_max, V - 2);
+        const double need = o.cand_mass * z * (1 + 1e-9);
+        std::size_t b = kBands;
+        {
+            double acc = 0;
+            std::size_t cnt = 0;
+            while (b-- > 0) {
+                acc += hm[b], cnt += hc[b];
+                if (acc >= need || cnt >= mc) break;
+            }
+        }
+        if (b == 0 || b >= kBands) return false;  // the bound would take words of q 0 (or every word): full_pick
+        const double t = std::bit_cast<double>(static_cast<std::uint64_t>(b) << kBandShift);
+        const double tb = t * (1 - 0x1p-40), plim = t / z;
+        std::vector<std::uint32_t>& tk = sc.ptr;  // the words taken
+        tk.resize(V);
+        std::size_t nt = 0;
+        for (std::uint32_t x = 2; x < V; ++x) {
+            tk[nt] = x;
+            nt += qq[x] >= tb;
+        }
+        // Sort: by bands of p (its top 20 bits), descending, then within a band by p descending and the hash.
+        using Item = Scratch::Item;
+        std::vector<Item>& it = sc.items;
+        it.clear();
+        for (std::size_t i = 0; i < nt; ++i) {
+            const std::uint32_t x = tk[i];
+            const double p = qq[x] / z;
+            if (p >= plim) it.push_back({std::bit_cast<std::uint64_t>(p), x});
+        }
+        constexpr int kSortShift = 44;
+        const std::uint64_t top = std::bit_cast<std::uint64_t>(1.0) >> kSortShift, lo = std::bit_cast<std::uint64_t>(plim) >> kSortShift;
+        const auto before = [salt](const Item& a, const Item& c) {
+            return a.pb != c.pb ? a.pb > c.pb : mix64(a.x ^ salt) < mix64(c.x ^ salt);
+        };
+        std::vector<Item>& srt = sc.sorted;
+        if (top >= lo && top - lo < 16384) {
+            const std::size_t nbk = static_cast<std::size_t>(top - lo) + 1;
+            std::vector<std::uint32_t>& off = sc.boff;
+            off.assign(nbk + 1, 0);
+            const auto bk = [&](const Item& a) { return static_cast<std::size_t>(top - std::min(top, a.pb >> kSortShift)); };
+            for (const Item& a : it) ++off[bk(a) + 1];
+            for (std::size_t i = 0; i < nbk; ++i) off[i + 1] += off[i];
+            srt.resize(it.size());
+            for (const Item& a : it) srt[off[bk(a)]++] = a;
+            for (std::size_t i = 0, a = 0; i < nbk; ++i) {  // off[i] is now band i's end
+                const std::size_t e = off[i];
+                if (e - a > 32) {
+                    std::sort(srt.begin() + static_cast<std::ptrdiff_t>(a), srt.begin() + static_cast<std::ptrdiff_t>(e), before);
+                } else {
+                    for (std::size_t j = a + 1; j < e; ++j)  // insertion sort
+                        for (std::size_t k = j; k > a && before(srt[k], srt[k - 1]); --k) std::swap(srt[k], srt[k - 1]);
+                }
+                a = e;
+            }
+        } else {
+            srt = it;
+            std::sort(srt.begin(), srt.end(), before);
+        }
+        std::vector<std::uint32_t>& cand = sc.fcand;
+        std::vector<double>& cp = sc.fp;
+        cand.clear(), cp.clear();
+        double cum = 0;
+        bool cut = false;
+        for (const Item& a : srt) {
+            const double p = std::bit_cast<double>(a.pb);
+            cand.push_back(a.x);
+            cp.push_back(p);
+            cum += p;
+            if (cum >= o.cand_mass || cand.size() == mc) {
+                cut = true;
+                break;
+            }
+        }
+        if (!cut) return false;  // the bound was too high (not seen in practice): full_pick
+        // 3. Bans, as full_pick.
+        const std::size_t nc = cand.size();
+        std::vector<char>&rb = sc.frb, &cb = sc.fcb;
+        rb.assign(nc, 0);
+        cb.assign(nc, 0);
+        const std::string& pv = s.prev;
+        const bool after = !s.has_prev || pv == "\n" || pv == "(" || pv == "[" || pv == "{" || pv == "$";  // bare, as piece()
+        const auto pieces = [&](std::size_t i) { return ft.piece(cand[i], after); };
+        s.rep.prepare(sc.rbatch);
+        const NgramSet cs = cap_set();
+        NgramSet::Index::Range hp;
+        const bool capped = o.cap && cs.prefix(s.ctx, hp);
+        std::size_t ncap = 0, nrep = 0;
+        bool any_kept = false, any_cap_ok = false;
+        const std::uint64_t* meta = ft.meta.data();
+        const auto rep_banned = [&](std::size_t i) {
+            const std::uint64_t md = meta[cand[i]];
+            return RepeatBan::may_ban(sc.rbatch, FastTables::length(md, after), FastTables::byte0(md, after), FastTables::byte1(md, after)) &&
+                   s.rep.banned(sc.rbatch, pieces(i));
+        };
+        if (!capped) {  // the usual case: no word completes a copied run
+            for (std::size_t i = 0; i < nc; ++i) {
+                if (i + 16 < nc) __builtin_prefetch(meta + cand[i + 16]);
+                rb[i] = rep_banned(i);
+                nrep += static_cast<unsigned char>(rb[i]);
+            }
+            any_cap_ok = nc > 0;
+            any_kept = nrep < nc;
+        } else {
+            for (std::size_t i = 0; i < nc; ++i) {
+                cb[i] = cs.completes(hp, cand[i]);
+                rb[i] = rep_banned(i);
+                ncap += cb[i];
+                nrep += rb[i] && !cb[i];
+                any_cap_ok = any_cap_ok || !cb[i];
+                any_kept = any_kept || (!rb[i] && !cb[i]);
+            }
+        }
+        if (!any_cap_ok) return false;  // the cap left no candidate: full_pick looks outside them
+        g.rep_banned += nrep;
+        g.cap_banned += ncap;
+        g.cap_steps += ncap > 0;
+        if (!any_kept) {
+            ++g.rep_lifted;
+            std::fill(rb.begin(), rb.end(), 0);
+        }
+        std::vector<std::uint32_t>& kept = sc.fkept;
+        kept.clear();
+        double zk = 0;
+        for (std::size_t i = 0; i < nc; ++i)
+            if (!rb[i] && !cb[i]) kept.push_back(static_cast<std::uint32_t>(i)), zk += cp[i];
+        std::size_t k = 0;
+        double c2 = 0;
+        while (k < kept.size()) {
+            c2 += cp[kept[k]] / zk;
+            ++k;
+            if (c2 >= o.nucleus) break;
+        }
+        if (ncap > 0) {
+            double zu = 0, cu = 0;
+            for (std::size_t i = 0; i < nc; ++i)
+                if (!rb[i]) zu += cp[i];
+            for (std::size_t i = 0; i < nc; ++i) {
+                if (rb[i]) continue;
+                if (cb[i]) {
+                    ++g.cap_mass_steps;
+                    break;
+                }
+                cu += cp[i] / zu;
+                if (cu >= o.nucleus) break;
+            }
+        }
+        double zn = 0;
+        for (std::size_t i = 0; i < k; ++i) zn += cp[kept[i]];
+        std::vector<double>& rw = sc.frw;
+        rw.resize(k);
+        for (std::size_t i = 0; i < k; ++i) rw[i] = cp[kept[i]] / zn;
+        if (bs && k > 1) {
+            std::vector<double> lb(k);
+            double mx = -1e300;
+            for (std::size_t i = 0; i < k; ++i) {
+                lb[i] = bs->score(pieces(kept[i]));
+                if (o.scorer_mode == 3) lb[i] -= bs->prior(pieces(kept[i]));
+                mx = std::max(mx, lb[i]);
+            }
+            double zb = 0, zr = 0;
+            for (std::size_t i = 0; i < k; ++i) zb += std::exp2(lb[i] - mx);
+            for (std::size_t i = 0; i < k; ++i) {
+                const double pb = std::exp2(lb[i] - mx) / zb;
+                rw[i] = o.scorer_mode == 3 ? std::exp2(std::log2(std::max(rw[i], 1e-300)) + o.scorer_w * (lb[i] - mx))
+                      : o.scorer_mode == 2 ? (1 - o.scorer_w) * rw[i] + o.scorer_w * pb
+                                           : std::exp2((1 - o.scorer_w) * std::log2(std::max(rw[i], 1e-300)) +
+                                                       o.scorer_w * std::log2(std::max(pb, 1e-300)));
+                zr += rw[i];
+            }
+            for (double& x : rw) x /= zr;
+        }
+        const double u = static_cast<double>(rng() >> 11) * 0x1.0p-53;
+        std::size_t j = 0;
+        double cdf = 0;
+        for (; j + 1 < k; ++j) {
+            cdf += rw[j];
+            if (cdf > u) break;
+        }
+        w = cand[kept[j]];
+        str.assign(pieces(kept[j]));
+        sc.fk = k;
+        if (lp) *lp = std::log2(std::max(cp[kept[j]], 1e-300));
+        return true;
+    }
+    // CYPHA_K5_NUCLEUS=check: both picks from the same state and the same stream; any difference in the candidates
+    // (words, order, p bit for bit), the nucleus, the word, its piece, lp or the counts stops the run.
+    void check_pick(const State& s, std::mt19937_64& rng, std::uint64_t salt, const Options& o, GenStats& g, ByteScorer* bs,
+                    Scratch& sc, double* lp, std::uint32_t& w, std::string& str) const {
+        bool fast = false;
+        if (!both_picks(s, rng, salt, o, g, bs, sc, lp, w, str, fast)) {
+            std::fprintf(stderr, "k5 nucleus check: the picks differ at step %d (word %u, nucleus %zu / %zu, candidates %zu / %zu)\n",
+                         s.step, w, sc.k, sc.fk, sc.cand.size(), sc.fcand.size());
+            std::abort();
+        }
+        thread_local std::size_t n_fast = 0, n_all = 0;
+        ++n_all, n_fast += fast;
+        if ((n_all & 0xFFFF) == 0) std::fprintf(stderr, "k5 nucleus check: %zu steps the same (%zu by both picks)\n", n_all, n_fast);
+    }
+    // Both picks from s with the same stream; w, str, lp, g and rng as full_pick leaves them. fast: fast_pick made its
+    // choice. False when it differs from full_pick's.
+    bool both_picks(const State& s, std::mt19937_64& rng, std::uint64_t salt, const Options& o, GenStats& g, ByteScorer* bs,
+                    Scratch& sc, double* lp, std::uint32_t& w, std::string& str, bool& fast) const {
+        std::mt19937_64 r2 = rng;
+        GenStats g1, g2;
+        double l1 = 0, l2 = 0;
+        std::uint32_t w2 = 0;
+        std::string s2;
+        full_pick(s, rng, salt, o, g1, bs, sc, lp ? &l1 : nullptr, w, str);
+        fast = fast_pick(s, r2, salt, o, g2, bs, sc, lp ? &l2 : nullptr, w2, s2);
+        bool same = true;
+        if (fast) {
+            same = w == w2 && str == s2 && rng == r2 && sc.k == sc.fk && sc.cand.size() == sc.fcand.size() &&
+                   std::memcmp(&l1, &l2, sizeof l1) == 0 && g1.rep_banned == g2.rep_banned && g1.cap_banned == g2.cap_banned &&
+                   g1.cap_steps == g2.cap_steps && g1.cap_mass_steps == g2.cap_mass_steps && g1.rep_lifted == g2.rep_lifted &&
+                   g1.cap_outside == g2.cap_outside;
+            for (std::size_t i = 0; same && i < sc.cand.size(); ++i)
+                same = sc.cand[i] == sc.fcand[i] && std::memcmp(&sc.p[sc.cand[i]], &sc.fp[i], sizeof(double)) == 0 &&
+                       sc.rb[i] == sc.frb[i] && sc.cb[i] == sc.fcb[i];
+        }
+        g.add(g1);
+        if (lp) *lp = l1;
+        return same;
+    }
+
+ public:
+    // OPT_NUCLEUS.md: writes up to steps words after prompt, each chosen by full_pick and by fast_pick from the same
+    // state and stream (the text follows full_pick). False, with err, at the first difference; both counts the steps at
+    // which fast_pick made a choice, all the steps compared.
+    bool check_nucleus(std::string_view prompt, std::uint64_t seed, const Options& o, int steps, std::size_t& both, std::size_t& all,
+                       std::string& err) const {
+        if (vocab_.size() <= 2) return true;
+        State s = start(prompt, o);
+        if (!fast_applies(s, o)) return true;
+        Scratch sc;
+        sc.p.resize(vocab_.size());
+        std::mt19937_64 rng(seed);
+        GenStats g;
+        for (int t = 0; t < steps; ++t) {
+            const std::uint64_t salt = mix64(seed ^ mix64(static_cast<std::uint64_t>(s.step) + 0x5EED));
+            ++s.step;
+            std::uint32_t w = 0;
+            std::string str;
+            double lp = 0;
+            bool fast = false;
+            if (!both_picks(s, rng, salt, o, g, nullptr, sc, &lp, w, str, fast)) {
+                err = "nucleus: fast_pick differs from full_pick after \"" + std::string(prompt) + "\", step " + std::to_string(t);
+                return false;
+            }
+            both += fast, ++all;
+            s.out += str;
+            s.rep.add(str);
+            learn(s, w, o);
+            s.prev = vocab_[w];
+            s.has_prev = true;
+        }
+        return true;
+    }
+
+ private:
 
     std::vector<std::string> vocab_;
     std::unordered_map<std::string, std::uint32_t> tid_;
@@ -1793,6 +2439,7 @@ class K5 {
     // fuzzy_bake.py has_run's 13-token windows (the verbatim measure), a view on the suffix array.
     NgramSet run13() const { return NgramSet(&kn_.index(), 13, hs13_.get()); }
     std::unique_ptr<NgramSet::Hashes> hs13_, hscap_;  // the hash calls' windows, made on first use
+    std::unique_ptr<FastTables> fast_;                // OPT_NUCLEUS.md: fast_pick's tables, made on first use
     std::vector<double> cnt_;
     int cap_ = 12;
     std::size_t docs_ = 0, tokens_ = 0, unk_ = 0;
@@ -2258,6 +2905,59 @@ inline bool self_test(std::string& err) {
         for (const double x : as) mx = std::max(mx, x);
         if (!(mx > 0)) {
             err = "prompt association";
+            return false;
+        }
+    }
+    {  // docs/reports/OPT_NUCLEUS.md: the repeat ban's batch check gives banned()'s answers; fast_pick makes full_pick's choice.
+        std::mt19937_64 r(23);
+        const char al[] = "ab e.";  // a small alphabet, so windows repeat often
+        std::size_t nb = 0, nall = 0;
+        for (int t = 0; t < 4000; ++t) {
+            std::string tx;
+            const std::size_t n = r() % 90;
+            for (std::size_t i = 0; i < n; ++i) tx += al[r() % (t % 2 ? 5 : 3)];
+            RepeatBan rb(tx.substr(0, n / 2));
+            rb.add(tx.substr(n / 2));
+            RepeatBan::Batch b;
+            rb.prepare(b);
+            for (int k = 0; k < 24; ++k) {
+                std::string pc;
+                const std::size_t L = 1 + r() % 30;
+                if (k % 3 == 0 && n > 0) {  // a piece of the text, perhaps changed
+                    const std::size_t a = r() % n;
+                    pc = tx.substr(a, L);
+                    if (k % 2) pc[r() % pc.size()] = al[r() % 5];
+                } else {
+                    for (std::size_t i = 0; i < L; ++i) pc += al[r() % (k % 2 ? 2 : 5)];
+                }
+                const bool want = rb.banned(pc);
+                nb += want, ++nall;
+                if (rb.banned(b, pc) != want) {
+                    err = "repeat ban: the batch check differs from banned() (text \"" + tx + "\", piece \"" + pc + "\")";
+                    return false;
+                }
+            }
+        }
+        if (nb == 0 || nb == nall) {
+            err = "repeat ban: the batch test bans every piece or none";
+            return false;
+        }
+        K5 mc;
+        mc.build(text, 12, kOrder, 8);
+        std::vector<Options> os(5, k5_v1());
+        os[1] = Options{};
+        os[2].cand_max = 5;
+        os[3].cand_mass = 1.0, os[3].nucleus = 0.5;
+        os[4].nucleus = 1.0, os[4].cap = false;
+        std::size_t both = 0, all = 0;
+        for (const K5* mm : {&m, &mc})
+            for (const Options& oo : os)
+                for (const char* c : ctxs)
+                    for (std::uint64_t sd = 0; sd < 3; ++sd)
+                        if (!mm->check_nucleus(c, 100 + sd, oo, 120, both, all, err)) return false;
+        // fast_pick declines where z is 0 (the toy text puts all of some contexts' mass on <s>, which is zeroed).
+        if (both * 4 < all * 3) {
+            err = "nucleus: fast_pick chose at only " + std::to_string(both) + " of " + std::to_string(all) + " steps";
             return false;
         }
     }
