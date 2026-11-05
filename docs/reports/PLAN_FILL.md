@@ -172,6 +172,6 @@ Each rater reads 50 pairs. Q2T's and Q2's texts differ from P1t's on 9 of the 50
 - Code: `native/include/cypha/lm/planner/slots.hpp`; `writer.hpp` (`Filler`, `Model::best_skeletons`, `candidates`, `dist_temp`, `apply_plan_flags`); `skeleton.hpp` (S4); `native/tools/lm/cyphalm_trie.cpp` (flag lines); `native/tools/lm/k5_planner.cpp` (`types`, train's `--typed…`/`--s1…`, `selftest_q2`); `scripts/plan_fill_measures.py`.
 - Models: `bench/k5_planner/model/slots_e9t.txt` (the slot types on `e9_text`), `bench/k5_planner/model/plan_q2.model` (the gate on typed fills).
 - GEN files: `bench/k5_planner/Q2T_typed_s0.gen.txt`, `bench/k5_planner/Q2_typed_s1s3_s0.gen.txt` (P1t: `bench/k5_planner/P1t_s0.gen.txt`).
-- Runs: `bench/k5_planner/runs/q2/` — the type reports and tables for both stores, training output, the choice rule, and per-arm summaries, measures and planner counters (`screen/`, `final/`; plan logs for P1t, Q2T and Q2).
+- Runs: `bench/k5_planner/runs/q2/` — the type reports and tables for both stores, training output, the choice rule, and per-arm summaries, measures and planner counters (`screen/`, `final/`; the plan logs of P1t, Q2T and Q2 as `final/*.plan.tsv`).
 - Packets: `bench/blind/q2_pair/`.
 - Full outputs (GEN, plan logs, SCRIBE): `/mnt/d/cypha_llm/plan/q2/dev2/` (first store) and `/mnt/d/cypha_llm/plan/q2/dev_t/` (final), on Odin's PC.
