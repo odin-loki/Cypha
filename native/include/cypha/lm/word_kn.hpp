@@ -57,6 +57,7 @@
 #include <iostream>
 #include <iterator>
 #include <memory>
+#include <mutex>
 #include <random>
 #include <string>
 #include <string_view>
@@ -64,6 +65,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "cypha/lm/count_index.hpp"  // GENERATION_PLAN §13.40 M1: K5's counts and copy cap
 #include "cypha/lm/entity_grid.hpp"  // K5_DISCOURSE.md
 #include "cypha/lm/lda.hpp"          // K5_DISCOURSE.md
 #include "cypha/lm/mbr.hpp"          // K5_DISCOURSE.md
@@ -219,57 +221,101 @@ class Overlay {
     std::unordered_map<Key, Ctx, KeyHasher> m_[kMaxOrder + 1];
 };
 
+// The counts come from one suffix array over the id stream (lm/count_index.hpp; GENERATION_PLAN §13.40, M1): the
+// entries of order k are the k-grams that end at position order - 1 or later, as the old tables (which counted each
+// order's distinct left extensions of the order above's entries) had them:
+//   - top order: n(c w), the occurrences of c w;
+//   - order k below it: the distinct words x before c w over its occurrences that start at order - k or later;
+//   - order 1: the distinct words before w over its occurrences at order - 1 or later.
+// Contexts seen at least `keep` times are kept as tables (as before: values, gamma, n(c)); the others are counted from
+// the suffix array when asked, with the same arithmetic in the same order (kn::context), so every probability is the
+// same bit for bit. keep 1 keeps every context (and the suffix array can then go).
 class WordKN {
  public:
+    using Index = cidx::CountIndex<std::uint32_t>;
+    static constexpr std::uint32_t kKeep = 64;
     // ids: the training stream (documents as BOS + token ids), every id below V <= 65,536. order: 2 to kMaxOrder.
-    void build(const std::vector<std::uint32_t>& ids, std::size_t V, int order = kOrder) {
+    // keep: contexts with at least this many occurrences are kept as tables. keep_index false: the index is dropped
+    // after the build (only with keep 1, when nothing is counted later).
+    void build(std::vector<std::uint32_t> ids, std::size_t V, int order = kOrder, std::uint32_t keep = kKeep, bool keep_index = true) {
         V_ = V;
         order_ = std::clamp(order, 2, kMaxOrder);
-        const int L = order_ - 1;
-        std::vector<Pair> pr;
-        if (ids.size() > static_cast<std::size_t>(L)) {
-            pr.reserve(ids.size() - static_cast<std::size_t>(L));
-            for (std::size_t t = static_cast<std::size_t>(L); t < ids.size(); ++t) {
-                Key k = 0;
-                for (int i = 0; i < L; ++i) k |= Key{ids[t - 1 - static_cast<std::size_t>(i)]} << (16 * i);
-                pr.push_back({k, static_cast<std::uint16_t>(ids[t])});
-            }
-        }
-        for (int k = order_; k >= 2; --k) {
-            std::sort(pr.begin(), pr.end());
+        keep_ = std::max<std::uint32_t>(keep, 1);
+        idx_.build(std::move(ids), static_cast<std::uint32_t>(std::max<std::size_t>(V, 1)));
+        const Index& x = idx_;
+        const std::size_t N = x.size();
+        // Common prefixes of neighbours in the suffix array, up to the top order's length.
+        std::vector<std::uint8_t> lcp(N, 0);
+        for (std::size_t i = 1; i < N; ++i) lcp[i] = static_cast<std::uint8_t>(x.lcp(i, static_cast<std::size_t>(order_)));
+        cidx::Distinct seen(V);
+        std::vector<std::uint32_t> cnt;
+        for (int k = 2; k <= order_; ++k) {
+            const auto L = static_cast<std::size_t>(k - 1);
+            const std::size_t minpos = k == order_ ? 0 : static_cast<std::size_t>(order_ - k);
             Level& lv = lv_[k];
             lv = Level{};
-            std::vector<std::uint32_t> cnt;
-            for (std::size_t a = 0; a < pr.size();) {
-                std::size_t b = a + 1;
-                while (b < pr.size() && pr[b].key == pr[a].key && pr[b].w == pr[a].w) ++b;
-                if (lv.keys.empty() || lv.keys.back() != pr[a].key) {
-                    lv.keys.push_back(pr[a].key);
-                    lv.off.push_back(static_cast<std::uint32_t>(lv.ids.size()));
+            cnt.clear();
+            double nj[5] = {0, 0, 0, 0, 0};
+            for (std::size_t i = 0; i < N;) {
+                std::size_t j = i + 1;
+                while (j < N && lcp[j] >= L) ++j;
+                if (!x.has(i, L - 1)) {  // shorter than a context
+                    i = j;
+                    continue;
                 }
-                lv.ids.push_back(pr[a].w);
-                cnt.push_back(static_cast<std::uint32_t>(b - a));
-                a = b;
+                const Index::Range r = x.longer({static_cast<Index::Pos>(i), static_cast<Index::Pos>(j)}, L);
+                const bool kept = r.size() >= keep_;
+                const std::size_t e0 = lv.ids.size();
+                std::size_t m = 0;
+                for (std::size_t a = r.lo; a < r.hi;) {
+                    std::size_t b = a + 1;
+                    while (b < r.hi && lcp[b] > L) ++b;
+                    const std::uint32_t c = count(a, b, k == order_, minpos, seen);
+                    if (c > 0) {
+                        ++m;
+                        if (c <= 4) nj[c] += 1;
+                        if (kept) lv.ids.push_back(static_cast<std::uint16_t>(x.at(a, L))), cnt.push_back(c);
+                    }
+                    a = b;
+                }
+                if (m > 0) {
+                    ++lv.contexts, lv.entries += m;
+                    if (kept) {
+                        Key key = 0;
+                        for (std::size_t q = 0; q < L; ++q) key |= Key{x.at(i, L - 1 - q)} << (16 * q);
+                        lv.keys.push_back(key);
+                        lv.off.push_back(static_cast<std::uint32_t>(e0));
+                    }
+                }
+                i = j;
             }
             lv.off.push_back(static_cast<std::uint32_t>(lv.ids.size()));
-            finish(lv, cnt);
-            if (k > 2) {  // the next order's pairs: this order's distinct entries, the farthest context word dropped
-                const Key mask = (Key{1} << (16 * (k - 2))) - 1;
-                pr.clear();
-                for (std::size_t c = 0; c < lv.keys.size(); ++c)
-                    for (std::uint32_t e = lv.off[c]; e < lv.off[c + 1]; ++e) pr.push_back({lv.keys[c] & mask, lv.ids[e]});
+            kn::discounts(nj, lv.D, kn::Zero::k5);
+            const std::size_t C = lv.keys.size();
+            lv.gam.resize(C), lv.tot.resize(C), lv.disc.resize(lv.ids.size());
+            for (std::size_t c = 0; c < C; ++c) {
+                double* d = lv.disc.data() + lv.off[c];
+                lv.gam[c] = kn::context(cnt.data() + lv.off[c], lv.off[c + 1] - lv.off[c], lv.D, false, [&](std::size_t e, double v) { d[e] = v; }, &lv.tot[c]);
             }
+            lv.keys.shrink_to_fit(), lv.off.shrink_to_fit(), lv.ids.shrink_to_fit();
         }
+        // Order 1: the distinct words before w over its occurrences at order - 1 or later.
         std::vector<double> cc(V, 0.0);
-        for (const std::uint16_t w : lv_[2].ids) cc[w] += 1.0;
+        for (std::uint32_t w = 0; w < V; ++w) {
+            const Index::Range r = x.first(w);
+            cc[w] = count(r.lo, r.hi, false, static_cast<std::size_t>(order_ - 1), seen);
+        }
         double z = 0;
-        for (double& x : cc) z += (x += 0.01);
+        for (double& v : cc) z += (v += 0.01);
         p1_.resize(V);
         for (std::size_t w = 0; w < V; ++w) p1_[w] = cc[w] / z;
         by_p1_.resize(V);
         for (std::uint32_t w = 0; w < V; ++w) by_p1_[w] = w;
-        std::stable_sort(by_p1_.begin(), by_p1_.end(), [&](std::uint32_t x, std::uint32_t y) { return p1_[x] > p1_[y]; });
+        std::stable_sort(by_p1_.begin(), by_p1_.end(), [&](std::uint32_t a, std::uint32_t b) { return p1_[a] > p1_[b]; });
+        if (!keep_index && keep_ <= 1) idx_.clear();
     }
+    // The suffix array over the training ids (the copy cap and the prompt association read it too).
+    const Index& index() const { return idx_; }
     // The vocabulary by its order-1 probability, most probable first: every word outside the stored contexts' entries
     // keeps this order in any distribution, which makes a tight threshold for the most probable words (K5::generate).
     // (With a class floor, base != p1, the threshold is not tight; K5::generate then sorts all words.)
@@ -284,32 +330,31 @@ class WordKN {
         if (base) std::copy(base, base + V_, p);
         else std::copy(p1_.begin(), p1_.end(), p);
         bool main_ok = true;
+        View v;
         for (int k = 2; k <= order_; ++k) {
             const std::size_t L = static_cast<std::size_t>(k - 1);
             if (n < L) break;
             Key key = 0;
             for (std::size_t i = 0; i < L; ++i) key |= Key{ctx[n - 1 - i]} << (16 * i);
-            const Level& lv = lv_[k];
-            std::ptrdiff_t c = -1;
+            bool c = false;
             if (main_ok) {
-                const auto it = std::lower_bound(lv.keys.begin(), lv.keys.end(), key);
-                if (it != lv.keys.end() && *it == key) c = it - lv.keys.begin();
-                else main_ok = false;
+                c = context(k, ctx, n, key, v);
+                main_ok = c;
             }
             const Overlay::Ctx* oc = ov && k <= ov->order ? ov->find(k, key) : nullptr;
             if (!oc) {
-                if (c < 0) break;
-                const double g = lv.gam[static_cast<std::size_t>(c)];
+                if (!c) break;
+                const double g = v.gam;
                 for (std::size_t w = 0; w < V_; ++w) p[w] *= g;
-                for (std::uint32_t e = lv.off[static_cast<std::size_t>(c)]; e < lv.off[static_cast<std::size_t>(c) + 1]; ++e) p[lv.ids[e]] += lv.disc[e];
+                for (std::size_t e = 0; e < v.m; ++e) p[v.ids[e]] += v.disc[e];
                 continue;
             }
-            const double T = c >= 0 ? lv.tot[static_cast<std::size_t>(c)] : 0.0, G = c >= 0 ? lv.gam[static_cast<std::size_t>(c)] * T : 0.0;
+            const double T = c ? v.tot : 0.0, G = c ? v.gam * T : 0.0;
             const double den = T + ov->L * oc->tot;
             const double g = (G + ov->L * ov->Dd * static_cast<double>(oc->e.size())) / den;
             for (std::size_t w = 0; w < V_; ++w) p[w] *= g;
-            if (c >= 0)
-                for (std::uint32_t e = lv.off[static_cast<std::size_t>(c)]; e < lv.off[static_cast<std::size_t>(c) + 1]; ++e) p[lv.ids[e]] += lv.disc[e] * T / den;
+            if (c)
+                for (std::size_t e = 0; e < v.m; ++e) p[v.ids[e]] += v.disc[e] * T / den;
             for (const auto& [w, d] : oc->e) p[w] += ov->L * (d - ov->Dd) / den;
         }
     }
@@ -317,40 +362,33 @@ class WordKN {
     // probability of w (p1()[w], or the class floor's).
     double prob(const std::uint32_t* ctx, std::size_t n, std::uint32_t w, double base_w) const {
         double p = base_w;
+        View v;
         for (int k = 2; k <= order_; ++k) {
             const std::size_t L = static_cast<std::size_t>(k - 1);
             if (n < L) break;
             Key key = 0;
             for (std::size_t i = 0; i < L; ++i) key |= Key{ctx[n - 1 - i]} << (16 * i);
-            const Level& lv = lv_[k];
-            const auto it = std::lower_bound(lv.keys.begin(), lv.keys.end(), key);
-            if (it == lv.keys.end() || *it != key) break;
-            const auto c = static_cast<std::size_t>(it - lv.keys.begin());
-            p *= lv.gam[c];
-            const auto b = lv.ids.begin() + lv.off[c], e = lv.ids.begin() + lv.off[c + 1];
-            const auto f = std::lower_bound(b, e, static_cast<std::uint16_t>(w));
-            if (f != e && *f == w) p += lv.disc[static_cast<std::size_t>(f - lv.ids.begin())];
+            if (!context(k, ctx, n, key, v)) break;
+            p *= v.gam;
+            const std::uint16_t* f = std::lower_bound(v.ids, v.ids + v.m, static_cast<std::uint16_t>(w));
+            if (f != v.ids + v.m && *f == w) p += v.disc[f - v.ids];
         }
         return p;
     }
     std::size_t vocab_size() const { return V_; }
-    std::size_t contexts(int k) const { return lv_[k].keys.size(); }
-    std::size_t entries(int k) const { return k <= order_ ? lv_[k].ids.size() : 0; }
+    std::size_t contexts(int k) const { return lv_[k].contexts; }
+    std::size_t entries(int k) const { return k <= order_ ? lv_[k].entries : 0; }
+    std::size_t kept_contexts(int k) const { return lv_[k].keys.size(); }
     const double* discounts(int k) const { return lv_[k].D; }
     std::size_t bytes() const {
-        std::size_t b = p1_.size() * 8;
+        std::size_t b = p1_.size() * 8 + by_p1_.size() * 4 + idx_.bytes();
         for (int k = 2; k <= order_; ++k)
-            b += lv_[k].keys.size() * 32 + lv_[k].off.size() * 4 + lv_[k].ids.size() * 10;
+            b += lv_[k].keys.size() * 40 + lv_[k].off.size() * 4 + lv_[k].ids.size() * 10;
         return b;
     }
 
  private:
-    struct Pair {
-        Key key;
-        std::uint16_t w;
-        bool operator<(const Pair& o) const { return key != o.key ? key < o.key : w < o.w; }
-    };
-    struct Level {
+    struct Level {  // the kept contexts of one order
         std::vector<Key> keys;            // contexts, ascending: w-1 in bits 0-15, w-2 in bits 16-31, ...
         std::vector<std::uint32_t> off;   // entries of context c: [off[c], off[c + 1])
         std::vector<std::uint16_t> ids;   // the next words, ascending within a context
@@ -358,35 +396,72 @@ class WordKN {
         std::vector<double> gam;          // sum D / n(c)
         std::vector<double> tot;          // n(c), for the dynamic counts
         double D[4] = {0, 0, 0, 0};
+        std::size_t contexts = 0, entries = 0;  // every context and entry of the order, kept or not
     };
-    static void finish(Level& lv, const std::vector<std::uint32_t>& cnt) {
-        double nj[5] = {0, 0, 0, 0, 0};
-        for (const std::uint32_t c : cnt)
-            if (c <= 4) nj[c] += 1;
-        for (int j = 1; j <= 4; ++j) nj[j] = std::max(1.0, nj[j]);
-        const double Y = nj[1] / (nj[1] + 2 * nj[2]);
-        lv.D[0] = 0;
-        lv.D[1] = std::max(0.0, 1 - 2 * Y * nj[2] / nj[1]);
-        lv.D[2] = std::max(0.0, 2 - 3 * Y * nj[3] / nj[2]);
-        lv.D[3] = std::max(0.0, 3 - 4 * Y * nj[4] / nj[3]);
-        const std::size_t C = lv.keys.size();
-        lv.gam.assign(C, 0.0);
-        lv.tot.assign(C, 0.0);
-        lv.disc.resize(cnt.size());
-        for (std::size_t c = 0; c < C; ++c) {
-            double tot = 0, g = 0;
-            for (std::uint32_t e = lv.off[c]; e < lv.off[c + 1]; ++e) tot += cnt[e];
-            for (std::uint32_t e = lv.off[c]; e < lv.off[c + 1]; ++e) {
-                const double dc = lv.D[std::min<std::uint32_t>(cnt[e], 3)];
-                lv.disc[e] = (cnt[e] - dc) / tot;
-                g += dc;
-            }
-            lv.gam[c] = g / tot;
-            lv.tot[c] = tot;
+    struct View {  // one context's entries, gamma and n(c): in a Level, or counted into a thread's scratch
+        const std::uint16_t* ids = nullptr;
+        const double* disc = nullptr;
+        std::size_t m = 0;
+        double gam = 0, tot = 0;
+    };
+    // An entry's count over suffix-array ranks [a, b) (the occurrences of c w): the occurrences at the top order, else
+    // the distinct words before those that start at minpos or later.
+    std::uint32_t count(std::size_t a, std::size_t b, bool top, std::size_t minpos, cidx::Distinct& seen) const {
+        if (top) return static_cast<std::uint32_t>(b - a);
+        seen.next();
+        const std::vector<std::uint32_t>& t = idx_.text();
+        std::uint32_t c = 0;
+        for (std::size_t q = a; q < b; ++q) {
+            const std::size_t p = idx_.sa(q);
+            if (p >= minpos && seen.add(t[p - 1])) ++c;
         }
+        return c;
+    }
+    // The context of order k made of the last k - 1 ids of ctx[0, n) (key: them packed): kept, or counted from the
+    // suffix array with the kept contexts' arithmetic. False when the order has no such context.
+    bool context(int k, const std::uint32_t* ctx, std::size_t n, Key key, View& v) const {
+        const Level& lv = lv_[k];
+        const auto it = std::lower_bound(lv.keys.begin(), lv.keys.end(), key);
+        if (it != lv.keys.end() && *it == key) {
+            const auto c = static_cast<std::size_t>(it - lv.keys.begin());
+            v.ids = lv.ids.data() + lv.off[c];
+            v.disc = lv.disc.data() + lv.off[c];
+            v.m = lv.off[c + 1] - lv.off[c];
+            v.gam = lv.gam[c], v.tot = lv.tot[c];
+            return true;
+        }
+        if (keep_ <= 1 || !idx_.built()) return false;
+        const auto L = static_cast<std::size_t>(k - 1);
+        const Index::Range r = idx_.longer(idx_.find(ctx + n - L, L), L);
+        if (r.empty()) return false;
+        struct Scratch {
+            std::vector<std::uint16_t> ids;
+            std::vector<std::uint32_t> cnt;
+            std::vector<double> disc;
+            cidx::Distinct seen;
+        };
+        thread_local Scratch s;
+        s.ids.clear(), s.cnt.clear();
+        s.seen.resize(V_);
+        const std::size_t minpos = k == order_ ? 0 : static_cast<std::size_t>(order_ - k);
+        for (std::size_t a = r.lo; a < r.hi;) {
+            const std::uint32_t w = idx_.at(a, L);
+            std::size_t b = a + 1;
+            while (b < r.hi && idx_.at(b, L) == w) ++b;
+            const std::uint32_t c = count(a, b, k == order_, minpos, s.seen);
+            if (c > 0) s.ids.push_back(static_cast<std::uint16_t>(w)), s.cnt.push_back(c);
+            a = b;
+        }
+        if (s.ids.empty()) return false;
+        s.disc.resize(s.ids.size());
+        v.gam = kn::context(s.cnt.data(), s.cnt.size(), lv.D, false, [&](std::size_t e, double x) { s.disc[e] = x; }, &v.tot);
+        v.ids = s.ids.data(), v.disc = s.disc.data(), v.m = s.ids.size();
+        return true;
     }
     std::size_t V_ = 0;
     int order_ = kOrder;
+    std::uint32_t keep_ = kKeep;
+    Index idx_;
     std::vector<double> p1_;
     std::vector<std::uint32_t> by_p1_;
     Level lv_[kMaxOrder + 1];
@@ -491,7 +566,7 @@ class ClassModel {
         cls_ = exchange_classes(ids, V, K, passes, 3, &loglik_);
         std::vector<std::uint32_t> cids(ids.size());
         for (std::size_t t = 0; t < ids.size(); ++t) cids[t] = cls_[ids[t]];
-        kn_.build(cids, K + 2, 3);
+        kn_.build(std::move(cids), K + 2, 3, 1, false);  // every class context kept; the suffix array goes after the build
         std::vector<double> cnt(V, 0.01), ctot(K + 2, 0.0);
         for (const std::uint32_t w : ids) cnt[w] += 1;
         for (std::size_t w = 0; w < V; ++w) ctot[cls_[w]] += cnt[w];
@@ -606,55 +681,86 @@ class RepeatBan {
     mutable std::vector<std::pair<Key, unsigned char>> local_;
 };
 
-// The copy cap (Odin: at most 12 consecutive words copied): the hashes of every n-token window of the training ids.
+// The copy cap (Odin: at most 12 consecutive words copied): the n-token windows of the training ids, read from K5's
+// suffix array (GENERATION_PLAN §13.40 M1; before, a sorted set of the windows' 64-bit hashes). A view: K5::cap_set()
+// makes one; the index and the hash store belong to the K5 model.
+//   prefix(ctx, r) / completes(r, w): does ctx's last n - 1 ids followed by w occur (exact).
+//   prefix(ctx, h) / has(h): the old hash calls, for code that hashes windows itself (lm/planner/writer.hpp,
+//   lm/k5_mcmc.hpp); their windows' hashes are made on first use, once per model, exactly as before.
 class NgramSet {
  public:
-    void build(const std::vector<std::uint32_t>& ids, int n) {
-        n_ = n;
-        h_.clear();
-        hp_.clear();
-        if (n <= 0 || ids.size() < static_cast<std::size_t>(n)) return;
-        h_.reserve(ids.size() - static_cast<std::size_t>(n) + 1);
-        hp_.reserve(h_.capacity());
-        for (std::size_t s = 0; s + static_cast<std::size_t>(n) <= ids.size(); ++s) {
-            std::uint64_t h = kFnv0;
-            for (int j = 0; j + 1 < n; ++j) h = fnv_step(h, ids[s + static_cast<std::size_t>(j)]);
-            hp_.push_back(h);
-            h_.push_back(fnv_step(h, ids[s + static_cast<std::size_t>(n - 1)]));
-        }
-        for (auto* v : {&h_, &hp_}) {
-            std::sort(v->begin(), v->end());
-            v->erase(std::unique(v->begin(), v->end()), v->end());
-        }
-    }
+    using Index = cidx::CountIndex<std::uint32_t>;
+    struct Hashes {  // the windows' hashes and their first n - 1 ids' hashes, sorted, made on first use
+        std::once_flag once;
+        std::vector<std::uint64_t> h, hp;
+    };
+    NgramSet() = default;
+    NgramSet(const Index* idx, int n, Hashes* hs) : idx_(idx), n_(n), hs_(hs) {}
     int n() const { return n_; }
-    bool on() const { return n_ > 0 && !h_.empty(); }
-    bool has(std::uint64_t h) const { return std::binary_search(h_.begin(), h_.end(), h); }
-    // The hash of ctx's last n - 1 ids, to be finished with a candidate (fnv_step); false when ctx is shorter or its
-    // last n - 1 ids begin no window (then no candidate can complete one).
+    bool on() const { return n_ > 0 && idx_ && idx_->size() >= static_cast<std::size_t>(n_); }
+    // The suffixes that start with ctx's last n - 1 ids and go on; false when ctx is shorter or none does (then no
+    // candidate can complete a window).
+    bool prefix(const std::vector<std::uint32_t>& ctx, Index::Range& r) const {
+        const auto m = static_cast<std::size_t>(n_ - 1);
+        if (!on() || ctx.size() < m) return false;
+        r = idx_->longer(idx_->find(ctx.data() + ctx.size() - m, m), m);
+        return !r.empty();
+    }
+    // Would w complete a window after the prefix r?
+    bool completes(Index::Range r, std::uint32_t w) const { return !idx_->narrow(r, static_cast<std::size_t>(n_ - 1), w).empty(); }
+    // Does ids hold an n-token window of the training ids?
+    bool any(const std::vector<std::uint32_t>& ids) const {
+        if (!on()) return false;
+        for (std::size_t s = 0; s + static_cast<std::size_t>(n_) <= ids.size(); ++s)
+            if (idx_->count(ids.data() + s, static_cast<std::size_t>(n_)) > 0) return true;
+        return false;
+    }
+    // The distinct windows.
+    std::size_t size() const {
+        if (!on()) return 0;
+        const auto n = static_cast<std::size_t>(n_);
+        std::size_t d = 0;
+        for (std::size_t i = 0; i < idx_->size(); ++i) d += idx_->has(i, n - 1) && (i == 0 || idx_->lcp(i, n) < n);
+        return d;
+    }
+    // The hash calls (see above).
+    bool has(std::uint64_t h) const {
+        if (!on()) return false;
+        const Hashes& s = hashes();
+        return std::binary_search(s.h.begin(), s.h.end(), h);
+    }
     bool prefix(const std::vector<std::uint32_t>& ctx, std::uint64_t& h) const {
         const auto m = static_cast<std::size_t>(n_ - 1);
         if (!on() || ctx.size() < m) return false;
         h = kFnv0;
         for (std::size_t j = ctx.size() - m; j < ctx.size(); ++j) h = fnv_step(h, ctx[j]);
-        return std::binary_search(hp_.begin(), hp_.end(), h);
+        const Hashes& s = hashes();
+        return std::binary_search(s.hp.begin(), s.hp.end(), h);
     }
-    // Does ids hold an n-token window of the training ids?
-    bool any(const std::vector<std::uint32_t>& ids) const {
-        if (!on()) return false;
-        for (std::size_t s = 0; s + static_cast<std::size_t>(n_) <= ids.size(); ++s) {
-            std::uint64_t h = kFnv0;
-            for (int j = 0; j < n_; ++j) h = fnv_step(h, ids[s + static_cast<std::size_t>(j)]);
-            if (has(h)) return true;
-        }
-        return false;
-    }
-    std::size_t size() const { return h_.size(); }
-    std::size_t bytes() const { return (h_.size() + hp_.size()) * 8; }
 
  private:
+    const Hashes& hashes() const {
+        std::call_once(hs_->once, [&] {
+            const std::vector<std::uint32_t>& ids = idx_->text();
+            const auto n = static_cast<std::size_t>(n_);
+            if (ids.size() < n) return;
+            hs_->h.reserve(ids.size() - n + 1), hs_->hp.reserve(ids.size() - n + 1);
+            for (std::size_t s = 0; s + n <= ids.size(); ++s) {
+                std::uint64_t h = kFnv0;
+                for (std::size_t j = 0; j + 1 < n; ++j) h = fnv_step(h, ids[s + j]);
+                hs_->hp.push_back(h);
+                hs_->h.push_back(fnv_step(h, ids[s + n - 1]));
+            }
+            for (auto* v : {&hs_->h, &hs_->hp}) {
+                std::sort(v->begin(), v->end());
+                v->erase(std::unique(v->begin(), v->end()), v->end());
+            }
+        });
+        return *hs_;
+    }
+    const Index* idx_ = nullptr;
     int n_ = 0;
-    std::vector<std::uint64_t> h_, hp_;  // the windows' hashes and their first n - 1 ids' hashes
+    Hashes* hs_ = nullptr;
 };
 
 // ---------------------------------------------------------------- the model
@@ -1076,30 +1182,30 @@ class K5 {
         tid_.clear();
         tid_.reserve(vocab_.size() * 2);
         for (std::uint32_t i = 0; i < vocab_.size(); ++i) tid_.emplace(vocab_[i], i);
-        std::vector<std::uint32_t>& ids = ids_;
-        ids.clear();
-        ids.reserve(seq.size());
-        unk_ = 0;
-        for (const std::uint32_t s : seq) {
-            ids.push_back(s == ~0u ? kBos : id_of[s]);
-            unk_ += s != ~0u && id_of[s] == kUnk;
+        {
+            std::vector<std::uint32_t> ids;
+            ids.reserve(seq.size());
+            unk_ = 0;
+            for (const std::uint32_t s : seq) {
+                ids.push_back(s == ~0u ? kBos : id_of[s]);
+                unk_ += s != ~0u && id_of[s] == kUnk;
+            }
+            std::vector<std::uint32_t>().swap(seq);
+            tokens_ = ids.size();
+            // One suffix array over the ids gives the counts, the copy cap's windows, fuzzy_bake.py has_run's 13-token
+            // runs and each word's positions (GENERATION_PLAN §13.40 M1).
+            std::uint32_t keep = WordKN::kKeep;
+            if (const char* e = std::getenv("CYPHA_K5_KEEP")) keep = static_cast<std::uint32_t>(std::max(1, std::atoi(e)));
+            kn_.build(std::move(ids), vocab_.size(), order, keep);
         }
-        tokens_ = ids.size();
-        kn_.build(ids, vocab_.size(), order);
-        run13_.build(ids, 13);  // fuzzy_bake.py has_run: the measure of verbatim runs of more than 12 tokens
-        if (cap > 0 && cap + 1 != 13) capset_.build(ids, cap + 1);
+        const std::vector<std::uint32_t>& ids = kn_.index().text();
+        hs13_ = std::make_unique<NgramSet::Hashes>();
+        hscap_ = std::make_unique<NgramSet::Hashes>();
         cap_ = cap;
-        // Each word's positions (the sentence gate's prompt association) and counts.
+        // Each word's count (the sentence gate's prompt association; its positions are its suffix-array interval).
         const std::size_t V = vocab_.size();
         cnt_.assign(V, 0.0);
-        pos_off_.assign(V + 1, 0);
-        for (const std::uint32_t w : ids) cnt_[w] += 1, ++pos_off_[w + 1];
-        for (std::size_t w = 0; w < V; ++w) pos_off_[w + 1] += pos_off_[w];
-        pos_.resize(ids.size());
-        {
-            std::vector<std::uint32_t> at(pos_off_.begin(), pos_off_.end() - 1);
-            for (std::size_t t = 0; t < ids.size(); ++t) pos_[at[ids[t]]++] = static_cast<std::uint32_t>(t);
-        }
+        for (std::uint32_t w = 0; w < V; ++w) cnt_[w] = static_cast<double>(kn_.index().first(w).size());
         if (classes > 0) cm_.build(ids, V, classes);
         else cm_ = ClassModel{};
         secs_ = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
@@ -1112,19 +1218,25 @@ class K5 {
     const std::vector<std::string>& vocab() const { return vocab_; }
     const WordKN& kn() const { return kn_; }
     const ClassModel& classes() const { return cm_; }
-    const NgramSet& cap_set() const { return cap_ + 1 == 13 ? run13_ : capset_; }
+    // The copy cap's windows (cap + 1 tokens; none with cap 0), a view on the suffix array.
+    NgramSet cap_set() const { return cap_ + 1 == 13 ? run13() : NgramSet(&kn_.index(), cap_ > 0 ? cap_ + 1 : 0, hscap_.get()); }
     int cap() const { return cap_; }
     std::size_t docs() const { return docs_; }
     std::size_t tokens() const { return tokens_; }
     std::size_t unk() const { return unk_; }
     double build_seconds() const { return secs_; }
-    std::size_t bytes() const { return kn_.bytes() + run13_.bytes() + capset_.bytes() + vocab_.size() * 64; }
+    std::size_t bytes() const {
+        std::size_t b = kn_.bytes() + vocab_.size() * 64;
+        for (const auto* h : {hs13_.get(), hscap_.get()})
+            if (h) b += (h->h.capacity() + h->hp.capacity()) * 8;
+        return b;
+    }
 
     // fuzzy_bake.py has_run(g): does g, tokenised and mapped to ids, hold 13 consecutive ids of the training stream?
     bool has_run13(std::string_view g) const {
         std::vector<std::uint32_t> ids;
         tokenize(g, [&](std::string_view t) { ids.push_back(id(t)); });
-        return run13_.any(ids);
+        return run13().any(ids);
     }
 
     // One continuation's state: the context, the repeat ban, the text, and the online parts (step 2).
@@ -1242,20 +1354,23 @@ class K5 {
         for (const std::uint32_t v : ctx)
             if (v >= 2 + skip_top && std::find(vs.begin(), vs.end(), v) == vs.end()) vs.push_back(v);
         if (vs.empty()) return a;
-        const double N = static_cast<double>(ids_.size());
+        const std::vector<std::uint32_t>& ids = kn_.index().text();
+        const double N = static_cast<double>(ids.size());
         for (const std::uint32_t v : vs) {
             touched.clear();
-            for (std::uint32_t e = pos_off_[v]; e < pos_off_[v + 1]; ++e) {
-                const std::size_t t = pos_[e];
+            // v's positions: its suffix-array interval (in suffix order; the counts below do not depend on the order).
+            const NgramSet::Index::Range r = kn_.index().first(v);
+            for (std::uint32_t e = r.lo; e < r.hi; ++e) {
+                const std::size_t t = kn_.index().sa(e);
                 for (std::size_t j = t; j-- > 0 && t - j <= W;) {
-                    if (ids_[j] == kBos) break;
-                    if (c[ids_[j]] == 0) touched.push_back(ids_[j]);
-                    c[ids_[j]] += 1;
+                    if (ids[j] == kBos) break;
+                    if (c[ids[j]] == 0) touched.push_back(ids[j]);
+                    c[ids[j]] += 1;
                 }
-                for (std::size_t j = t + 1; j < ids_.size() && j - t <= W; ++j) {
-                    if (ids_[j] == kBos) break;
-                    if (c[ids_[j]] == 0) touched.push_back(ids_[j]);
-                    c[ids_[j]] += 1;
+                for (std::size_t j = t + 1; j < ids.size() && j - t <= W; ++j) {
+                    if (ids[j] == kBos) break;
+                    if (c[ids[j]] == 0) touched.push_back(ids[j]);
+                    c[ids[j]] += 1;
                 }
             }
             for (const std::uint32_t w : touched) {
@@ -1375,7 +1490,7 @@ class K5 {
         ++g.gate_cands;
     }
     // K5_STRUCTURE.md: the training text's ids (documents start with <s>).
-    const std::vector<std::uint32_t>& train_ids() const { return ids_; }
+    const std::vector<std::uint32_t>& train_ids() const { return kn_.index().text(); }
     // K5_DISCOURSE.md: the drafts of --k5-mbr-doc N (N drafts of o) or --k5-meta SPEC (the pooled drafts of variants of
     // o), and the MBR choice among them (the highest mean chrF to the other drafts). Draft i draws from its own seed.
     std::vector<std::pair<std::string, Options>> pool_variants(const Options& o) const {
@@ -1555,14 +1670,14 @@ class K5 {
         sc.cb.assign(nc, 0);
         std::vector<std::string>& pieces = sc.pieces;
         std::vector<char>&rb = sc.rb, &cb = sc.cb;
-        const NgramSet& cs = cap_set();
-        std::uint64_t hp = 0;
+        const NgramSet cs = cap_set();
+        NgramSet::Index::Range hp;
         const bool capped = o.cap && cs.prefix(s.ctx, hp);
         std::size_t ncap = 0;
         bool any_kept = false, any_cap_ok = false;
         for (std::size_t i = 0; i < nc; ++i) {
             pieces[i] = piece(vocab_[cand[i]], s.prev, s.has_prev);
-            cb[i] = capped && cs.has(fnv_step(hp, cand[i]));
+            cb[i] = capped && cs.completes(hp, cand[i]);
             rb[i] = s.rep.banned(pieces[i]);
             ncap += cb[i];
             g.rep_banned += rb[i] && !cb[i];
@@ -1579,7 +1694,7 @@ class K5 {
             for (std::uint32_t x = 0; x < V; ++x) top[x] = x;
             std::sort(top.begin(), top.end(), above);
             for (const std::uint32_t x : top)
-                if (p[x] > 0 && !cs.has(fnv_step(hp, x))) {
+                if (p[x] > 0 && !cs.completes(hp, x)) {
                     w = x;
                     break;
                 }
@@ -1675,8 +1790,9 @@ class K5 {
     eg::EntityGrid eg_;        // K5_DISCOURSE.md
     lda::LDA lda_;             // K5_DISCOURSE.md
     std::vector<long> k2l_;    // K5 id -> LDA content-word id (-1: none)
-    NgramSet run13_, capset_;
-    std::vector<std::uint32_t> ids_, pos_off_, pos_;
+    // fuzzy_bake.py has_run's 13-token windows (the verbatim measure), a view on the suffix array.
+    NgramSet run13() const { return NgramSet(&kn_.index(), 13, hs13_.get()); }
+    std::unique_ptr<NgramSet::Hashes> hs13_, hscap_;  // the hash calls' windows, made on first use
     std::vector<double> cnt_;
     int cap_ = 12;
     std::size_t docs_ = 0, tokens_ = 0, unk_ = 0;
@@ -1961,6 +2077,60 @@ inline bool self_test(std::string& err) {
         if (n3.empty() || std::fabs(p[saw] - q) > 1e-12 * q) {
             err = "KN differs from the direct count (" + std::to_string(p[saw]) + " vs " + std::to_string(q) + ")";
             return false;
+        }
+    }
+    {  // GENERATION_PLAN §13.40 M1: the count index against a direct scan; the same distributions whatever is kept as
+       // tables (every context, the default, none); the exact cap against the hash calls.
+        const std::vector<std::uint32_t>& ids = m.train_ids();
+        std::mt19937_64 r(11);
+        for (int t = 0; t < 300; ++t) {
+            const std::size_t len = 1 + r() % 14, s = r() % (ids.size() - len);
+            std::vector<std::uint32_t> q(ids.begin() + static_cast<std::ptrdiff_t>(s), ids.begin() + static_cast<std::ptrdiff_t>(s + len));
+            if (t % 3 == 0) q[r() % len] = static_cast<std::uint32_t>(r() % V);
+            std::size_t direct = 0, longest = 0;
+            for (std::size_t a = 0; a < ids.size(); ++a) {
+                std::size_t k = 0;
+                while (k < len && a + k < ids.size() && ids[a + k] == q[k]) ++k;
+                direct += k == len, longest = std::max(longest, k);
+            }
+            if (m.kn().index().count(q.data(), len) != direct || m.kn().index().match(q.data(), len) != longest) {
+                err = "count index: count or match differs from a direct scan";
+                return false;
+            }
+        }
+        WordKN all, none;
+        all.build(ids, V, kOrder, 1);
+        none.build(ids, V, kOrder, 1u << 30);
+        std::vector<double> pa(V), pn(V);
+        for (int t = 0; t < 400; ++t) {
+            const std::size_t pos = 1 + r() % (ids.size() - 1), len = std::min<std::size_t>(pos, 1 + r() % 6);
+            std::vector<std::uint32_t> c(ids.begin() + static_cast<std::ptrdiff_t>(pos - len), ids.begin() + static_cast<std::ptrdiff_t>(pos));
+            if (t % 4 == 1) c.back() = static_cast<std::uint32_t>(r() % V);
+            m.kn().dist(c.data(), c.size(), p.data());
+            all.dist(c.data(), c.size(), pa.data());
+            none.dist(c.data(), c.size(), pn.data());
+            const std::uint32_t w = pos < ids.size() ? ids[pos] : kBos;
+            if (std::memcmp(p.data(), pa.data(), V * 8) != 0 || std::memcmp(p.data(), pn.data(), V * 8) != 0 ||
+                m.kn().prob(c.data(), c.size(), w, m.kn().p1()[w]) != none.prob(c.data(), c.size(), w, none.p1()[w])) {
+                err = "KN differs between contexts kept as tables and counted from the suffix array";
+                return false;
+            }
+        }
+        if (all.entries(4) != m.kn().entries(4) || all.kept_contexts(4) != all.contexts(4) || none.kept_contexts(4) != 0) {
+            err = "count index: kept contexts";
+            return false;
+        }
+        const NgramSet cs = m.cap_set();
+        for (std::size_t pos = 12; pos < ids.size(); pos += 7) {
+            std::vector<std::uint32_t> c(ids.begin() + static_cast<std::ptrdiff_t>(pos - 12), ids.begin() + static_cast<std::ptrdiff_t>(pos));
+            NgramSet::Index::Range rr;
+            std::uint64_t h = 0;
+            const bool a = cs.prefix(c, rr), b = cs.prefix(c, h);
+            const std::uint32_t w1 = ids[pos], w2 = static_cast<std::uint32_t>(r() % V);
+            if (a != b || (a && (cs.completes(rr, w1) != cs.has(fnv_step(h, w1)) || cs.completes(rr, w2) != cs.has(fnv_step(h, w2)) || !cs.completes(rr, w1)))) {
+                err = "copy cap: the suffix array and the window hashes differ";
+                return false;
+            }
         }
     }
     // The cap: after twelve words of the repeated sentence the thirteenth is never written; with --k5-cap 0 it is.

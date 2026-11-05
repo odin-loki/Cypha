@@ -74,6 +74,8 @@
 #include <utility>
 #include <vector>
 
+#include "cypha/lm/count_index.hpp"  // MATCH's suffix array over the pack (GENERATION_PLAN §13.40 M1)
+
 namespace cypha::eval {
 
 // ===========================================================================
@@ -2960,140 +2962,51 @@ class SurpriseModel {
 // MATCH: a suffix array over the pack, matching statistics, Lempel-Ziv complexity
 // ---------------------------------------------------------------------------
 
-// The pack's documents joined by '\n' and a suffix array sorted on the first kCap bytes of each suffix (matches are
-// counted up to kCap bytes; a longer one counts as kCap). The texts scored never hold '\n', so no match crosses a
-// document boundary. The longest prefix of a pattern that occurs in the pack is its longest common prefix with one of
-// its two neighbours in the sorted order: one binary search inside the bucket of its first two bytes.
+// The pack's documents joined by '\n', and CyphaLM's count index over its bytes (cypha/lm/count_index.hpp, one suffix
+// array; GENERATION_PLAN §13.40 M1). Matches are counted up to kCap bytes (a longer one counts as kCap). The texts
+// scored never hold '\n', so no match crosses a document boundary; a pattern that starts with '\n' matches one byte and
+// is never counted past it (the suffixes that start at a document's end are left out, as before).
 class PackIndex {
  public:
   static constexpr size_t kCap = 64;
+  // threads: unused (libsais sorts on one core; kept for the callers).
   void build(const std::vector<std::string>& docs, unsigned threads = 4) {
-    text_.clear();
+    (void)threads;
+    std::vector<std::uint8_t> text;
     size_t tot = 0;
     for (const std::string& d : docs) tot += d.size() + 1;
-    text_.reserve(tot);
+    text.reserve(tot);
     for (const std::string& d : docs) {
-      text_ += d;
-      text_.push_back('\n');
+      text.insert(text.end(), d.begin(), d.end());
+      text.push_back('\n');
     }
-    for (char& c : text_)
+    for (std::uint8_t& c : text)
       if (c == '\0') c = ' ';
-    const size_t N = text_.size();
-    const unsigned char* t = reinterpret_cast<const unsigned char*>(text_.data());
-    for (size_t i = 0; i < N; ++i) {
-      has1_[t[i]] = true;
-      ++n1_[t[i]];
-    }
-    auto key2 = [&](size_t i) { return (static_cast<std::uint32_t>(t[i]) << 8) | (i + 1 < N ? t[i + 1] : 0u); };
-    b2_.assign(65537, 0);
-    for (size_t i = 0; i < N; ++i)
-      if (t[i] != '\n') ++b2_[key2(i) + 1];
-    for (size_t k = 1; k <= 65536; ++k) b2_[k] += b2_[k - 1];
-    sa_.assign(b2_[65536], 0);
-    {
-      std::vector<std::uint32_t> fill(b2_.begin(), b2_.end() - 1);
-      for (size_t i = 0; i < N; ++i)
-        if (t[i] != '\n') sa_[fill[key2(i)]++] = static_cast<std::uint32_t>(i);
-    }
-    std::atomic<size_t> next{0};
-    auto work = [&]() {
-      std::vector<std::pair<std::uint64_t, std::uint32_t>> buf;
-      for (size_t b; (b = next++) < 65536;) {
-        const size_t lo = b2_[b], hi = b2_[b + 1];
-        if (hi - lo < 2) continue;
-        buf.clear();
-        for (size_t r = lo; r < hi; ++r) buf.emplace_back(key8(sa_[r] + 2), sa_[r]);
-        std::sort(buf.begin(), buf.end(), [&](const auto& x, const auto& y) {
-          if (x.first != y.first) return x.first < y.first;
-          return cmp_text(x.second + 10, y.second + 10, kCap - 10) < 0;
-        });
-        for (size_t r = lo; r < hi; ++r) sa_[r] = buf[r - lo].second;
-      }
-    };
-    std::vector<std::thread> th;
-    for (unsigned k = 1; k < std::max(1u, threads); ++k) th.emplace_back(work);
-    work();
-    for (std::thread& x : th) x.join();
+    idx_.build(std::move(text), 256);
     built_ = true;
   }
   bool built() const { return built_; }
-  size_t size() const { return text_.size(); }
-  size_t bytes() const { return text_.size() + sa_.size() * 4 + b2_.size() * 4; }
+  size_t size() const { return idx_.size(); }
+  size_t bytes() const { return idx_.bytes(); }
 
   // The longest prefix of p[0..len), at most kCap bytes, that occurs in the pack.
   size_t match(const unsigned char* p, size_t len) const {
     len = std::min(len, kCap);
-    if (len == 0 || !has1_[p[0]]) return 0;
-    if (len == 1) return 1;
-    const std::uint32_t k = (static_cast<std::uint32_t>(p[0]) << 8) | p[1];
-    const size_t lo = b2_[k], hi = b2_[k + 1];
-    if (lo == hi) return 1;
-    size_t a = lo, b = hi;
-    while (a < b) {
-      const size_t mid = a + (b - a) / 2;
-      if (cmp_pat(sa_[mid] + 2, p + 2, len - 2) < 0) a = mid + 1;
-      else b = mid;
-    }
-    size_t best = 2;
-    if (a < hi) best = std::max(best, 2 + lcp(sa_[a] + 2, p + 2, len - 2));
-    if (a > lo) best = std::max(best, 2 + lcp(sa_[a - 1] + 2, p + 2, len - 2));
-    return best;
+    if (len == 0) return 0;
+    if (p[0] == '\n') return idx_.first('\n').empty() ? 0 : 1;
+    return idx_.match(p, len);
   }
   // How often p[0..len) occurs in the pack (len <= kCap; a longer string is counted by its first kCap bytes).
   size_t count(const unsigned char* p, size_t len) const {
     len = std::min(len, kCap);
-    if (len == 0) return text_.size();
-    if (len == 1) return n1_[p[0]];
-    const std::uint32_t k = (static_cast<std::uint32_t>(p[0]) << 8) | p[1];
-    const size_t lo = b2_[k], hi = b2_[k + 1];
-    if (len == 2) return hi - lo;
-    size_t a = lo, b = hi;
-    while (a < b) {  // first suffix >= p
-      const size_t mid = a + (b - a) / 2;
-      if (cmp_pat(sa_[mid] + 2, p + 2, len - 2) < 0) a = mid + 1;
-      else b = mid;
-    }
-    size_t c = a, e = hi;
-    while (c < e) {  // first suffix that does not start with p
-      const size_t mid = c + (e - c) / 2;
-      if (lcp(sa_[mid] + 2, p + 2, len - 2) == len - 2) c = mid + 1;
-      else e = mid;
-    }
-    return c - a;
+    if (len == 0) return idx_.size();
+    if (p[0] == '\n' && len >= 2) return 0;
+    return idx_.count(p, len);
   }
 
  private:
-  std::uint64_t key8(size_t i) const {
-    std::uint64_t k = 0;
-    for (size_t j = 0; j < 8; ++j) k = (k << 8) | (i + j < text_.size() ? static_cast<unsigned char>(text_[i + j]) : 0u);
-    return k;
-  }
-  int cmp_text(size_t i, size_t j, size_t len) const {
-    const size_t N = text_.size();
-    const size_t li = i < N ? std::min(len, N - i) : 0, lj = j < N ? std::min(len, N - j) : 0;
-    const int r = std::memcmp(text_.data() + std::min(i, N), text_.data() + std::min(j, N), std::min(li, lj));
-    if (r != 0) return r;
-    return li < lj ? -1 : (li > lj ? 1 : 0);
-  }
-  int cmp_pat(size_t i, const unsigned char* q, size_t m) const {
-    const size_t N = text_.size();
-    const size_t li = i < N ? std::min(m, N - i) : 0;
-    const int r = std::memcmp(text_.data() + std::min(i, N), q, li);
-    if (r != 0) return r;
-    return li < m ? -1 : 0;
-  }
-  size_t lcp(size_t i, const unsigned char* q, size_t m) const {
-    const size_t N = text_.size();
-    const size_t li = i < N ? std::min(m, N - i) : 0;
-    size_t k = 0;
-    while (k < li && static_cast<unsigned char>(text_[i + k]) == q[k]) ++k;
-    return k;
-  }
   bool built_ = false;
-  std::string text_;
-  std::vector<std::uint32_t> sa_, b2_;
-  bool has1_[256] = {};
-  size_t n1_[256] = {};
+  cyphalm::cidx::CountIndex<std::uint8_t> idx_;
 };
 
 namespace scribe_detail {
@@ -4016,6 +3929,43 @@ inline void scribe_v3_selftest(int& checks, int& fails) {
            px.count(reinterpret_cast<const unsigned char*>(q.data()), q.size()) == cnt;
     }
     check(ok, "suffix array match and count equal a brute-force scan");
+  }
+  // GENERATION_PLAN §13.40 M1: the pack index on random documents and patterns (some that start with '\n' or cross
+  // one, some longer than kCap) against a brute-force scan; a pattern that starts with '\n' matches one byte and is
+  // not counted past it, as the old sorted array (which left those suffixes out) answered.
+  {
+    std::mt19937_64 r(29);
+    std::vector<std::string> docs;
+    for (int d = 0; d < 40; ++d) {
+      std::string s;
+      const size_t n = 5 + r() % 120;
+      for (size_t i = 0; i < n; ++i) s.push_back(static_cast<char>("abcab \0x"[r() % 8]));
+      if (d % 9 == 0) s += std::string(70, 'a');
+      docs.push_back(s);
+    }
+    PackIndex px;
+    px.build(docs, 2);
+    std::string all;
+    for (const std::string& d : docs) all += d + "\n";
+    for (char& c : all)
+      if (c == '\0') c = ' ';
+    bool ok = true;
+    for (int t = 0; t < 600 && ok; ++t) {
+      const size_t s = r() % all.size(), len = 1 + r() % 80;
+      std::string q = all.substr(s, len);
+      if (t % 5 == 1) q[r() % q.size()] = 'z';
+      const size_t L = std::min(q.size(), PackIndex::kCap);
+      size_t best = 0, cnt = 0;
+      for (size_t i = 0; i < all.size(); ++i) {
+        size_t k = 0;
+        while (k < L && i + k < all.size() && all[i + k] == q[k]) ++k;
+        best = std::max(best, k), cnt += k == L;
+      }
+      if (q[0] == '\n') best = 1, cnt = L == 1 ? cnt : 0;
+      ok = px.match(reinterpret_cast<const unsigned char*>(q.data()), q.size()) == best &&
+           px.count(reinterpret_cast<const unsigned char*>(q.data()), q.size()) == cnt;
+    }
+    check(ok, "pack index on random patterns equals a brute-force scan");
   }
   // SURPRISE: the history makes a repeated sentence cheap; MATCH: copying the pack and the prompt are seen.
   {
