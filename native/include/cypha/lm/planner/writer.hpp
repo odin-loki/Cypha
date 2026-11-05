@@ -569,6 +569,7 @@ inline std::string log_clean(std::string s) {
 class Writer final : public wkn::StructureWriter {
  public:
     explicit Writer(std::shared_ptr<const Model> md) : md_(std::move(md)) {}
+    const std::shared_ptr<const Model>& model() const { return md_; }  // discourse.hpp (PLAN_DISCOURSE.md) writes with it
     // §13.40 M3: the fill's cost, summed over the sampling threads (stderr; the GEN file is not touched).
     ~Writer() {
         const Model& md = *md_;
