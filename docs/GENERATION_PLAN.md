@@ -1823,3 +1823,28 @@ The MCMC sampler (session 3) can use the learned mix as its energy.
   - W3 about W0;
   - W5 about W0, within ±0.2;
   - human about 9.
+
+**§13.36 result** (2026-11-05; 4 blind raters, 50 prompts × 5 texts):
+- Human text **8.41**.
+- W0 (today's K5), W1, W3 and W5 (the structure mixer's writing): **2.00 each, from every rater on every text**. Every difference from W0 is 0.000 [0.000, 0.000].
+- **No arm reads better than K5. Nothing is adopted.**
+- **A floor effect:**
+  - All K5 variants sit at "mostly sentence-shaped, but they don't connect", so this 1–10 scale cannot separate them any more.
+  - Telling them apart would need a pairwise forced choice (which of two reads better).
+  - The point stands without it: no helper moves K5 off the floor.
+- **The structure mixer itself** (K5_STRUCTURE.md):
+  - It picks the real next sentence among 8 K5 drafts with 0.113 sentence bits (98%), against 0.415 for K5 alone and 2.72 for uniform weights. More data helped: 0.166 bits with statistics from 10 MB, 0.113 with 210 MB.
+  - But it wins mostly because real sentences are *less* probable under K5 than K5's own drafts. In writing, every candidate is a K5 draft, so that cue picks the oddest one.
+  - Choosing the draft nearest the real sentence finds almost nothing: 2.992 bits against 3.000 by chance. **K5's drafts hold no good sentence to choose.**
+- **Predictions:** W0 near 2.2 hit (2.00); W1 below W0 missed (equal, at the floor); W3 and W5 about W0 hit; human about 9 hit (8.4).
+
+**What the four days of writing work show** (§13.31–13.36):
+- **Choosing among K5's sentences cannot fix K5.** Its candidates are all sentence-shaped text that doesn't connect, so the gate, MBR, the entity grid, topic steering, MCMC and the learned structure mixer all land at about 2 out of 10.
+- **The next step has to change what writes the sentences,** not what picks among them.
+
+**Code kept, off by default:**
+- `lda.hpp`, `entity_grid.hpp`, `mbr.hpp` (`wip/k5-discourse`);
+- `k5_mcmc.hpp` (`wip/k5-mcmc`);
+- `lm/structure/` (`wip/k5-structure`, `sample --k5-struct`).
+
+K5's default output is byte-identical after the merges: all 250 dev prompts, checked in the cloud.

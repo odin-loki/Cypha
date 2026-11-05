@@ -121,6 +121,8 @@ Odin: "Make another two metrics with different maths that complement each other 
 - K5 gate: v3.1 +0.048, most of it from v2. Still not confirmed by a judge of another kind.
 - v3 does not confirm the old K5's gain from 330 MB of text either (v2 +0.046, v3 +0.001). Both of 4 November's writing gains rest on v2 alone.
 
+**Choosing among K5's sentences cannot fix K5** (§13.31–13.36). Gate, MBR, entity grid, topic steering, MCMC and the learned structure mixer all read at about 2 out of 10, against 8.4–9.0 for human text. The next step must change what writes the sentences.
+
 ## 4. Smaller findings and fixes
 
 - GLNB's LSTM predicted from a state one byte stale. Fixed (§13.13).
@@ -147,7 +149,7 @@ Odin: "Make another two metrics with different maths that complement each other 
 | LSTM and n-gram optimised, every number unchanged | Odin's PC | **Done**: `context8k` 38% faster (LSTM 256 937 → 218 s); bit-for-bit check repeated in the cloud |
 | The full mix folded into the main pass, then on by default (Odin: optimise "before going in") | Odin's PC | **Done**: +1% time instead of +83%, numbers unchanged (§13.30) |
 | Meta mixing (§13.35) | Odin's PC | **Done**: 1.5051 → 1.4962, on by default |
-| Structure experts + learned meta-mixer (§13.33) | Odin's PC | Running |
+| Structure experts + learned meta-mixer (§13.33, §13.36) | Odin's PC + cloud raters | **Done**: sentence bits 0.113 (K5 alone 0.415), but its writing reads like K5 (2.00/10); K5's drafts hold no good sentence to choose |
 | Topic, entity grid, MBR, MCMC as writers (§13.34) | Odin's PC + cloud raters | **Done**: none reads better than K5; topic rescaling stuffs words (readers −0.22 / −0.42) |
 | SCRIBE v3 paper, Zenodo version 2.0 | cloud | **Written**: `paper/scribe/`; upload waits on Odin (v1.0 DOI, "New version") |
 
