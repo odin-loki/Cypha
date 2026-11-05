@@ -285,6 +285,7 @@
 #include "cypha/lm/word_kn.hpp"      // §13.19: sample --k5
 #include "cypha/lm/k5_mcmc.hpp"      // docs/reports/K5_MCMC.md: sample --k5 ... --k5-mcmc STEPS
 #include "cypha/lm/structure/writer.hpp"  // K5_STRUCTURE.md: sample --k5-struct
+#include "cypha/lm/planner/writer.hpp"    // K5_PLANNER.md: sample --k5-plan
 #include "cypha/eval/lci.hpp"
 #include "cypha/eval/scribe.hpp"
 #include "cypha/knowledge/unknown_signals.hpp"
@@ -2087,6 +2088,7 @@ int cmd_sample(const Args& a) {
         cypha::cyphalm::wkn::mcmc::Params mp;  // K5_MCMC.md: --k5-mcmc... flags (k5_mcmc.hpp)
         std::string k5_struct;      // K5_STRUCTURE.md: --k5-struct MODEL, --k5-struct-temp T
         double k5_struct_temp = 0;
+        std::string k5_plan, k5_plan_model, k5_plan_gate = "full";  // K5_PLANNER.md: --k5-plan STOREDIR ...
         for (const auto& [k, v] : a.k5_opts) {  // K5_UPGRADES.md
             std::string err;
             if (k == "--k5-struct") {
@@ -2095,6 +2097,10 @@ int cmd_sample(const Args& a) {
             }
             if (k == "--k5-struct-temp") {
                 k5_struct_temp = std::atof(v.c_str());
+                continue;
+            }
+            if (k == "--k5-plan" || k == "--k5-plan-model" || k == "--k5-plan-gate") {  // K5_PLANNER.md
+                (k == "--k5-plan" ? k5_plan : k == "--k5-plan-model" ? k5_plan_model : k5_plan_gate) = v;
                 continue;
             }
             if (k.rfind("--k5-mcmc", 0) == 0 ? !cypha::cyphalm::wkn::mcmc::apply_flag(k, v, mp, err)
@@ -2110,6 +2116,26 @@ int cmd_sample(const Args& a) {
                 return 2;
             }
             std::cerr << "k5: structure model " << k5_struct << " chooses each sentence (temp " << k5_struct_temp << ")\n";
+        }
+        if (!k5_plan.empty()) {  // K5_PLANNER.md: plan -> skeleton -> fill -> gate writes the facts' sentences
+            if (!k5_struct.empty()) {
+                std::cerr << "--k5-plan does not take --k5-struct\n";
+                return 2;
+            }
+            std::vector<std::pair<std::size_t, std::size_t>> drops = {{plan_lo, plan_hi}};  // the holdout, as --plan
+            if (!a.plan_drop.empty()) {
+                const std::size_t c = a.plan_drop.find(':');
+                if (c == std::string::npos) {
+                    std::cerr << "--plan-drop wants LO:HI\n";
+                    return 2;
+                }
+                drops.push_back({std::strtoull(a.plan_drop.substr(0, c).c_str(), nullptr, 10), std::strtoull(a.plan_drop.substr(c + 1).c_str(), nullptr, 10)});
+            }
+            std::string err;
+            if (!cypha::cyphalm::planner::apply_plan_flags(k5_plan, k5_plan_model, k5_plan_gate, drops, base, err)) {
+                std::cerr << "--k5-plan: " << err << "\n";
+                return 2;
+            }
         }
         std::unique_ptr<cypha::online::ByteLSTM> kl;
         if (!a.k5_lstm.empty()) {  // §13.24: the byte LSTM reranks the words inside K5's nucleus

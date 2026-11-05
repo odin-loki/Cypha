@@ -2598,6 +2598,13 @@ find_package(Threads REQUIRED)
 target_link_libraries(cyphalm_trie PRIVATE Threads::Threads)
 add_test(NAME native_cyphalm_trie_selftest COMMAND "$<TARGET_FILE:cyphalm_trie>" selftest)
 set_tests_properties(native_cyphalm_trie_selftest PROPERTIES TIMEOUT 60)
+# docs/reports/K5_PLANNER.md: the planner's offline steps (skeleton mining, gate training) for sample --k5-plan.
+add_executable(k5_planner tools/lm/k5_planner.cpp)
+target_include_directories(k5_planner PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
+cypha_mingw_apply_exe_link_options(k5_planner)
+target_link_libraries(k5_planner PRIVATE Threads::Threads)
+add_test(NAME native_k5_planner_selftest COMMAND "$<TARGET_FILE:k5_planner>" selftest)
+set_tests_properties(native_k5_planner_selftest PROPERTIES TIMEOUT 60)
 # --- end B1 block ---------------------------------------------------------------------------------
 
 # --- Tokens T0-T2: CyphaLM over tokens, beside the byte model (docs/TOKENS_PLAN.md) ------------------------
