@@ -12,6 +12,8 @@
 ///    subject's page, so these are the entities that co-occur with it on its pages. Each candidate gets a static fit
 ///    (the link's kind, K5's prompt association of its name, the topic fit of its name to the prompt, the structure
 ///    statistics' document PPMI with the main entity); the best `ents` are kept at hop 1, half as many at hop 2.
+///    A shared value links only if at most `hub` subjects share it under that relation (not "country: United States"
+///    or "occupation: writer"), and overview pages ("List of ...", "Politics of India") are not entities.
 /// 2. The paragraph. P1's plan first (make_plan, in its order), then at every step the unstated fact with the highest
 ///    focus weight: the entity grid's change when the fact's subject (S) and value (O) join the grid of the whole
 ///    paragraph so far, the LDA topic fit of its words to the whole paragraph, the prompt association, the document
@@ -20,7 +22,10 @@
 /// 3. Long context. The fill and the gate read the whole paragraph (every sentence, fact and free, joins the experts'
 ///    context: the grid over all sentences, the topic over the paragraph). A fact is not stated twice: not the same
 ///    (subject, relation), not the same (subject, value), and not one a sentence of the prompt or the paragraph already
-///    holds (subject and value both in it). Every `gap` fact sentences (0: none), K5 writes one free sentence; its 8
+///    holds (subject and value both in it); past P1's plan, not the same (relation, value) as a fact already written
+///    either (a third subject that "is Israeli" repeats the paragraph). A skeleton is not used twice in a paragraph
+///    while the relation has another among its best. Names are written without the page title's "( ... )" or
+///    ", Region" ("Alcaeus (poet)" -> "Alcaeus"). Every `gap` fact sentences (0: none), K5 writes one free sentence; its 8
 ///    drafts are chosen by the paragraph's topic (LDA over the whole paragraph), its entities (the grid's change) and the
 ///    prompt association, each z-scored over the drafts, minus the markup share as in K5's gate.
 /// 4. Past the facts. When P1's plan runs out, the linked entities' facts go on; only when none is left does K5 write
@@ -58,6 +63,7 @@ struct DiscourseParams {
     int main_max = 8;    // facts of the main entity in all (P1's plan first)
     int gap = 0;         // one free K5 sentence after every `gap` fact sentences (0: none until the facts run out)
     int scan = 4000;     // store rows read per entity when linking (bounds the inverse and shared links)
+    int hub = 25;        // a shared value links only if at most this many subjects share it (not a country, an occupation)
     // the focus weight of a fact (step 2)
     double w_grid = 0.25, w_topic = 1, w_assoc = 1, w_cooc = 0.25, w_trans = 0.25, w_hop = 2;
     // the static fit of a linked entity by its link's kind: a value of a fact, has it as a value, shares a value
@@ -67,9 +73,9 @@ struct DiscourseParams {
 
     std::string describe() const {
         char b[512];
-        std::snprintf(b, sizeof b, "hops=%d,ents=%d,per_ent=%d,main_max=%d,gap=%d,scan=%d,w_grid=%g,w_topic=%g,w_assoc=%g,w_cooc=%g,"
+        std::snprintf(b, sizeof b, "hops=%d,ents=%d,per_ent=%d,main_max=%d,gap=%d,scan=%d,hub=%d,w_grid=%g,w_topic=%g,w_assoc=%g,w_cooc=%g,"
                       "w_trans=%g,w_hop=%g,k_obj=%g,k_inv=%g,k_share=%g,g_pmi=%g,g_topic=%g,g_grid=%g",
-                      hops, ents, per_ent, main_max, gap, scan, w_grid, w_topic, w_assoc, w_cooc, w_trans, w_hop, k_obj, k_inv, k_share,
+                      hops, ents, per_ent, main_max, gap, scan, hub, w_grid, w_topic, w_assoc, w_cooc, w_trans, w_hop, k_obj, k_inv, k_share,
                       g_pmi, g_topic, g_grid);
         return b;
     }
@@ -95,7 +101,7 @@ inline bool parse_discourse(const std::string& spec, DiscourseParams& p, std::st
         const double x = std::strtod(v.c_str(), &end);
         if (v.empty() || *end) return err = "--k5-plan-discourse: " + k + " wants a number", false;
         int* ip = k == "hops" ? &p.hops : k == "ents" ? &p.ents : k == "per_ent" ? &p.per_ent : k == "main_max" ? &p.main_max
-                : k == "gap" ? &p.gap : k == "scan" ? &p.scan : nullptr;
+                : k == "gap" ? &p.gap : k == "scan" ? &p.scan : k == "hub" ? &p.hub : nullptr;
         double* dp = k == "w_grid" ? &p.w_grid : k == "w_topic" ? &p.w_topic : k == "w_assoc" ? &p.w_assoc : k == "w_cooc" ? &p.w_cooc
                    : k == "w_trans" ? &p.w_trans : k == "w_hop" ? &p.w_hop : k == "k_obj" ? &p.k_obj : k == "k_inv" ? &p.k_inv
                    : k == "k_share" ? &p.k_share : k == "g_pmi" ? &p.g_pmi : k == "g_topic" ? &p.g_topic : k == "g_grid" ? &p.g_grid : nullptr;
@@ -134,6 +140,46 @@ inline bool holds_seq(const std::vector<std::string>& t, const std::vector<std::
         for (std::size_t k = 0; k < n.size() && ok; ++k) ok = t[a + k].size() == n[k].size() && lower_s(t[a + k]) == lower_s(n[k]);
         if (ok) return true;
     }
+    return false;
+}
+
+// The name as a sentence writes it: the store's page title without a trailing "( ... )" and without a ", Region" after
+// a word ("Alcaeus ( poet )" -> "Alcaeus", "Balclutha , New Zealand" -> "Balclutha"). The full title is kept if
+// nothing would be left.
+inline std::vector<std::string> write_name(const std::vector<std::string>& t) {
+    std::vector<std::string> o = t;
+    if (o.size() > 2 && o.back() == ")") {
+        const auto it = std::find(o.begin() + 1, o.end(), std::string("("));
+        if (it != o.end()) o.erase(it, o.end());
+    }
+    const auto letter = [](const std::string& w) {  // starts with a letter (ASCII or a UTF-8 lead byte)
+        const auto c = w.empty() ? 0 : static_cast<unsigned char>(w[0]);
+        return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c >= 0xC0;
+    };
+    const auto upper = [](const std::string& w) {
+        const auto c = w.empty() ? 0 : static_cast<unsigned char>(w[0]);
+        return (c >= 'A' && c <= 'Z') || c >= 0xC0;
+    };
+    for (std::size_t i = 1; i + 1 < o.size(); ++i)
+        if (o[i] == "," && letter(o[i - 1]) && upper(o[i + 1])) {
+            o.resize(i);
+            break;
+        }
+    return o.empty() ? t : o;
+}
+
+// A Wikipedia overview page ("List of ...", "Politics of India", "Religion in India"), not an entity to write about.
+inline bool overview(const std::string& n) {
+    static const char* const heads[] = {
+        "List of ", "Lists of ", "Outline of ", "Index of ", "Timeline of ", "History of ", "Geography of ", "Politics of ",
+        "Demographics of ", "Economy of ", "Military of ", "Culture of ", "Foreign relations of ", "Communications in ",
+        "Transport in ", "Transportation in ", "Religion in ", "Education in ", "Sport in ", "Tourism in ", "Music of ",
+        "Cinema of ", "Cuisine of ", "Government of ", "Regions of ", "Districts of ", "Provinces of ", "Counties of ",
+        "Municipalities of ", "States of ", "Islands of ", "Subdivisions of ", "Administrative divisions of ",
+        "Reservoirs and dams in ", "Telecommunications in ", "Languages of ", "Flag of ", "Location of ", "Deaths in ",
+        "Place of "};
+    for (const char* h : heads)
+        if (n.rfind(h, 0) == 0) return true;
     return false;
 }
 
@@ -197,7 +243,7 @@ class DiscourseWriter final : public wkn::StructureWriter {
         for (int hop = 1; hop <= p_.hops && !frontier.empty(); ++hop) {
             std::map<std::uint32_t, Linked> cand;  // entity -> its best link
             const auto offer = [&](std::uint32_t e, int kind, std::size_t parent, std::uint32_t via) {
-                if (at.count(e) || numeric(e) || !plannable(e)) return;
+                if (at.count(e) || numeric(e) || overview(fs.ent(e)) || !plannable(e)) return;
                 const double k = kind == 1 ? p_.k_obj : kind == 2 ? p_.k_inv : p_.k_share;
                 const double fit = k + p_.w_assoc * name_assoc(m, e, assoc) + p_.w_topic * name_topic(e, theta) + p_.w_cooc * cooc(e, main);
                 auto it = cand.find(e);
@@ -210,10 +256,15 @@ class DiscourseWriter final : public wkn::StructureWriter {
                     const auto& f = fs.fact(fi);
                     offer(f.val, 1, pi, ~0u);
                     if (numeric(f.val)) continue;
+                    // a shared value links only if few subjects share it under the relation: sharing "country: United
+                    // States" or "occupation: writer" with hundreds of subjects says nothing about the subject
+                    std::set<std::uint32_t> share;
                     for (const auto fj : fs.of_val(f.val)) {
                         if (++n > p_.scan) break;
-                        if (fs.fact(fj).rel == f.rel && fs.fact(fj).subj != pe) offer(fs.fact(fj).subj, 3, pi, f.val);
+                        if (fs.fact(fj).rel == f.rel && fs.fact(fj).subj != pe) share.insert(fs.fact(fj).subj);
                     }
+                    if (share.size() > static_cast<std::size_t>(p_.hub)) continue;
+                    for (const auto sj : share) offer(sj, 3, pi, f.val);
                 }
                 n = 0;
                 for (const auto fi : fs.of_val(pe)) {  // the subjects that have it as a value
@@ -273,16 +324,20 @@ class DiscourseWriter final : public wkn::StructureWriter {
         const Filler fl(m, o, md.beam, 3, md.fill_dba);
         const auto& fs = md.fs;
         std::vector<char> used(dp.facts.size(), 0);
-        std::set<std::pair<std::uint32_t, std::uint32_t>> said_rel, said_val;  // (subject, relation), (subject, value)
+        // (subject, relation), (subject, value), and past P1's plan (relation, value): a third subject that "is Israeli"
+        // or "is in New Zealand" repeats the paragraph rather than saying something new
+        std::set<std::pair<std::uint32_t, std::uint32_t>> said_rel, said_val, said_rv;
         const auto said = [&](std::size_t j) {
             const auto& f = fs.fact(dp.facts[j]);
             if (said_rel.count({f.subj, f.rel}) || said_val.count({f.subj, f.val})) return true;
-            const auto& S = fs.ent_tok(f.subj);
-            const auto& O = fs.ent_tok(f.val);
+            if (j >= dp.spine && said_rv.count({f.rel, f.val})) return true;
+            const auto S = write_tok(f.subj);
+            const auto O = write_tok(f.val);
             for (const auto& z : c.sents)
                 if (holds_seq(z.tok, S) && holds_seq(z.tok, O)) return true;
             return false;
         };
+        std::set<std::vector<std::uint16_t>> used_shape;  // the skeletons written in this paragraph (their class codes)
         std::vector<std::size_t> end_at, written;  // each fact sentence's end offset; its pool index
         std::vector<std::string> sent_tok;
         std::vector<Cand> cands;
@@ -311,19 +366,28 @@ class DiscourseWriter final : public wkn::StructureWriter {
                         continue;
                     }
                     const double w = focus(m, c, assoc, dp, j, prev_subj, prev_rel);
+                    if (std::getenv("Q3_DEBUG")) std::fprintf(stderr, "Q3DBG %.30s j=%zu %s|%s|%s w=%g\n", std::string(prompt).c_str(), j, fs.ent(fs.fact(dp.facts[j]).subj).c_str(), fs.rel(fs.fact(dp.facts[j]).rel).c_str(), fs.ent(fs.fact(dp.facts[j]).val).c_str(), w);
                     if (w > best) best = w, pick = j;
                 }
             }
+            if (std::getenv("Q3_DEBUG")) std::fprintf(stderr, "Q3DBG %.30s pick=%zu of %zu\n", std::string(prompt).c_str(), pick, dp.facts.size());
             if (pick == dp.facts.size()) break;  // no fact left
             used[pick] = 1;
             const std::uint32_t fi = dp.facts[pick];
             const auto& f = fs.fact(fi);
             const auto* sk = md.bank.of(fs.rel(f.rel));
             if (!sk) continue;
-            const auto& S = fs.ent_tok(f.subj);
-            const auto& O = fs.ent_tok(f.val);
-            const auto pk = md.best_skeletons(m, c, *sk, S, O, kSkel);
+            const auto S = write_tok(f.subj);
+            const auto O = write_tok(f.val);
+            // a skeleton is not used twice in one paragraph while the relation has another among its best
+            auto pk = md.best_skeletons(m, c, *sk, S, O, static_cast<std::size_t>(kSkel) + used_shape.size());
+            std::vector<std::size_t> fresh;
+            for (const auto i : pk)
+                if (!used_shape.count((*sk)[i].codes) && fresh.size() < static_cast<std::size_t>(kSkel)) fresh.push_back(i);
+            if (!fresh.empty()) pk.swap(fresh);
+            else if (pk.size() > static_cast<std::size_t>(kSkel)) pk.resize(static_cast<std::size_t>(kSkel));
             md.candidates(m, ex, fl, c, s, assoc, *sk, pk, S, O, cands);
+            if (std::getenv("Q3_DEBUG")) std::fprintf(stderr, "Q3DBG %.30s cands=%zu pk=%zu\n", std::string(prompt).c_str(), cands.size(), pk.size());
             if (cands.empty()) continue;
             const std::size_t b = md.choose(c, cands);
             const auto& win = cands[b].fill;
@@ -339,7 +403,8 @@ class DiscourseWriter final : public wkn::StructureWriter {
             st::Sent z;
             z.tok = win.tok, z.ended = true;
             c.sents.push_back(std::move(z));
-            said_rel.insert({f.subj, f.rel}), said_val.insert({f.subj, f.val});
+            said_rel.insert({f.subj, f.rel}), said_val.insert({f.subj, f.val}), said_rv.insert({f.rel, f.val});
+            used_shape.insert((*sk)[cands[b].skel].codes);
             prev_subj = f.subj, prev_rel = fs.rel(f.rel);
             end_at.push_back(s.out.size());
             written.push_back(pick);
@@ -381,6 +446,8 @@ class DiscourseWriter final : public wkn::StructureWriter {
         const auto& t = md_->fs.ent_tok(e);
         return t.empty() || (!t[0].empty() && t[0][0] >= '0' && t[0][0] <= '9');
     }
+    // The name a sentence writes (write_name on the store's tokens).
+    std::vector<std::string> write_tok(std::uint32_t e) const { return numeric(e) ? md_->fs.ent_tok(e) : write_name(md_->fs.ent_tok(e)); }
     // An entity with at least one fact under a relation of the skeleton bank.
     bool plannable(std::uint32_t e) const {
         const Model& md = *md_;
@@ -456,8 +523,8 @@ class DiscourseWriter final : public wkn::StructureWriter {
         const Model& md = *md_;
         const auto& fs = md.fs;
         const auto& f = fs.fact(dp.facts[j]);
-        const auto& S = fs.ent_tok(f.subj);
-        const auto& O = fs.ent_tok(f.val);
+        const auto S = write_tok(f.subj);
+        const auto O = write_tok(f.val);
         double grid = 0;
         if (md.grid.trained()) {  // the fact's subject as S and its value (a name) as O
             eg::SentRoles r;
@@ -579,6 +646,13 @@ inline bool discourse_self_test(std::string& err) {
     const auto z = zscores({1, 2, 3});
     if (std::abs(z[0] + z[2]) > 1e-12 || std::abs(z[1]) > 1e-12 || z[2] <= 0 || zscores({2, 2})[0] != 0) return err = "discourse: zscores", false;
     if (!holds_seq({"In", "new", "york", "City"}, {"New", "York"}) || holds_seq({"New"}, {"New", "York"})) return err = "discourse: holds_seq", false;
+    using V = std::vector<std::string>;
+    if (write_name({"Alcaeus", "(", "poet", ")"}) != V{"Alcaeus"} || write_name({"Balclutha", ",", "New", "Zealand"}) != V{"Balclutha"} ||
+        write_name({"John", "Stuart", ",", "3rd", "Earl"}) != V{"John", "Stuart", ",", "3rd", "Earl"} || write_name({"(", "x", ")"}) != V{"(", "x", ")"} ||
+        write_name({"New", "York"}) != V{"New", "York"})
+        return err = "discourse: write_name", false;
+    if (!overview("List of Israeli musical artists") || !overview("Religion in India") || overview("University of Auckland") || overview("India"))
+        return err = "discourse: overview", false;
     return true;
 }
 

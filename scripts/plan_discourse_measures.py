@@ -8,7 +8,8 @@
 linked entities. Every arm is measured against the same entity lists. Per arm, over the prompts the planner writes
 from facts (paths main and cooc in --ref) and over all prompts:
   - on subject: the share of the continuation's sentences that name the main entity, and that name the main entity
-    or a linked entity (the full name, case-insensitive, at word boundaries; pronouns do not count);
+    or a linked entity (the full name or the short name the writer uses, without a trailing "(...)" or ", Region";
+    case-insensitive, at word boundaries; pronouns do not count);
   - facts stated per prompt (the arm's plan log: facts whose sentence ends inside the byte limit);
   - repeated facts: stated facts that repeat an earlier stated fact of the same continuation (the same subject and
     value, or the same subject and relation), or that the prompt already holds (its subject and value both in it);
@@ -91,8 +92,18 @@ def sentences(t):
     return [s for s in re.split(r"(?<=[.!?])\s+", t) if len(s) >= 3]
 
 
+def short(n):
+    """The name as the discourse writer writes it: no trailing "(...)", no ", Region" (Alcaeus (poet) -> Alcaeus)."""
+    s = re.sub(r"\s*\([^()]*\)\s*$", "", n)
+    m = re.search(r"(?<=[^\W\d_]),\s*(?=[^\W\d_])", s)
+    if m and s[m.end()].isupper():
+        s = s[: m.start()]
+    return s.strip() or n
+
+
 def names_re(names):
     names = [n for n in names if n and n != "-" and not re.fullmatch(r"[\d\s.,-]+", n)]
+    names = names + [short(n) for n in names]
     if not names:
         return None
     alt = "|".join(re.escape(n) for n in sorted(set(names), key=len, reverse=True))
