@@ -13,7 +13,8 @@ from facts (paths main and cooc in --ref) and over all prompts:
   - facts stated per prompt (the arm's plan log: facts whose sentence ends inside the byte limit);
   - repeated facts: stated facts that repeat an earlier stated fact of the same continuation (the same subject and
     value, or the same subject and relation), or that the prompt already holds (its subject and value both in it);
-  - repeated sentences: sentences that occur twice in one continuation.
+  - repeated sentences: sentences that occur twice in one continuation;
+  - stated facts by hop from the main entity (0, 1, 2), from the arm's D field (the discourse writer's logs only).
 --cut N measures only the first N characters of each continuation (whitespace joined, as blind_rate.py's cut).
 Measurement only; nothing here writes text.
 
@@ -74,16 +75,18 @@ def read_log(path, by_key):
             i = by_key.get(p[1])
             if i is None:
                 continue
-            facts, linked = [], []
+            facts, linked, hops = [], [], []
             for x in p[8:]:
                 q = x.decode("utf-8", errors="replace").split("|")
                 if q[0] == "D" and len(q) >= 4:
                     linked = [e for e in q[2].split(";;") if e]
+                    hops = [int(h) for h in q[1].split(",") if h.isdigit()]
                     continue
                 if len(q) < 7:
                     continue
                 facts.append((q[0], q[1], q[2], q[3] == "1"))
-            rows[i] = {"path": p[2].decode(), "ent": p[3].decode("utf-8", errors="replace"), "facts": facts, "linked": linked}
+            rows[i] = {"path": p[2].decode(), "ent": p[3].decode("utf-8", errors="replace"), "facts": facts, "linked": linked,
+                       "hops": hops}
     return rows
 
 
@@ -140,8 +143,8 @@ def main():
     planned = sorted(i for i, r in ref.items() if r["path"] in ("main", "cooc") and (only is None or i in only))
     every = sorted(i for i in prompts if i in ref and (only is None or i in only))
     print(f"prompts {len(every)}; planned from facts (main or cooc in --ref) {len(planned)}; cut {a.cut or 'none'}")
-    print("| Arm | sentences (planned) | main entity | main or linked | facts stated / planned prompt | / all prompts | repeated facts | repeated sentences |")
-    print("|---|---:|---:|---:|---:|---:|---:|---:|")
+    print("| Arm | sentences (planned) | main entity | main or linked | facts stated / planned prompt | / all prompts | repeated facts | repeated sentences | stated by hop 0/1/2 |")
+    print("|---|---:|---:|---:|---:|---:|---:|---:|---|")
     for spec in a.arm:
         name, files = spec.split("=", 1)
         gen_path, log_path = files.split(",", 1)
@@ -172,8 +175,15 @@ def main():
                 sv.add((subj, val)), sr.add((subj, rel))
         tot = sum(len(v) for v in stated.values())
         per_planned = stt.mean(len(stated[i]) for i in planned) if planned else 0
+        by_hop = [0, 0, 0]  # stated facts by hop from the main entity (the arm's D field; none for P1)
+        for i in every:
+            r = log.get(i, {})
+            for (_, _, _, ok), h in zip(r.get("facts", []), r.get("hops", [])):
+                if ok:
+                    by_hop[min(h, 2)] += 1
+        hop_s = "/".join(map(str, by_hop)) if any(by_hop) else "-"
         print(f"| {name} | {ns} | {nm / max(ns, 1):.3f} ({nm}) | {nl / max(ns, 1):.3f} ({nl}) | {per_planned:.2f} | {tot / max(len(every), 1):.2f} "
-              f"| {rep_f} of {tot} | {rep_s} |")
+              f"| {rep_f} of {tot} | {rep_s} | {hop_s} |")
 
 
 if __name__ == "__main__":

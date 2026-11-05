@@ -8,12 +8,14 @@
 /// subject. Here:
 /// 1. Linked entities. From the main entity, the store's links: the values of its facts (they are on its page), the
 ///    subjects whose facts have it as a value (it is on their pages), and the subjects that share one of its facts'
-///    values under the same relation; then the same from those, up to `hops` links. Every store row lies on its
+///    values under the same relation; then values and subjects from those, up to `hops` links. Every store row lies on its
 ///    subject's page, so these are the entities that co-occur with it on its pages. Each candidate gets a static fit
 ///    (the link's kind, K5's prompt association of its name, the topic fit of its name to the prompt, the structure
 ///    statistics' document PPMI with the main entity); the best `ents` are kept at hop 1, half as many at hop 2.
-///    A shared value links only if at most `hub` subjects share it under that relation (not "country: United States"
-///    or "occupation: writer"), and overview pages ("List of ...", "Politics of India") are not entities.
+///    A shared value links only from the main entity and only if at most `hub` subjects share it under that relation
+///    (not "country: United States" or "occupation: writer"); past hop 1, a subject that has a linked entity as a
+///    value links under the same limit (not everyone "born in Cleveland"). Overview pages ("List of ...", "Politics of
+///    India") are not entities.
 /// 2. The paragraph. P1's plan first (make_plan, in its order), then at every step the unstated fact with the highest
 ///    focus weight: the entity grid's change when the fact's subject (S) and value (O) join the grid of the whole
 ///    paragraph so far, the LDA topic fit of its words to the whole paragraph, the prompt association, the document
@@ -23,11 +25,15 @@
 ///    context: the grid over all sentences, the topic over the paragraph). A fact is not stated twice: not the same
 ///    (subject, relation), not the same (subject, value), and not one a sentence of the prompt or the paragraph already
 ///    holds (subject and value both in it); past P1's plan, not the same (relation, value) as a fact already written
-///    either (a third subject that "is Israeli" repeats the paragraph). A skeleton is not used twice in a paragraph
-///    while the relation has another among its best. Names are written without the page title's "( ... )" or
-///    ", Region" ("Alcaeus (poet)" -> "Alcaeus"). Every `gap` fact sentences (0: none), K5 writes one free sentence; its 8
-///    drafts are chosen by the paragraph's topic (LDA over the whole paragraph), its entities (the grid's change) and the
-///    prompt association, each z-scored over the drafts, minus the markup share as in K5's gate.
+///    either (a third subject that "is Israeli" repeats the paragraph), and not a second birth or death year of one
+///    subject (the fill writes either as "Name (date - date)" and makes up the other date). A skeleton is not used
+///    twice in a paragraph while the relation has another among its best. Names are written without the page title's
+///    "( ... )" or ", Region" ("Alcaeus (poet)" -> "Alcaeus"), and without K5's space inside a word at a non-ASCII
+///    letter ("Luleå", not "Lule å"). When the repeat ban leaves no fill (the paragraph ends as an earlier sentence
+///    ended), it is lifted at the sentence edge, then wholly, as K5 lifts it. Every `gap` fact sentences (0: none, the
+///    default, PLAN_DISCOURSE.md), K5 writes one free sentence; its 8 drafts are chosen by the paragraph's topic (LDA
+///    over the whole paragraph), its entities (the grid's change) and the prompt association, each z-scored over the
+///    drafts, minus the markup share as in K5's gate.
 /// 4. Past the facts. When P1's plan runs out, the linked entities' facts go on; only when none is left does K5 write
 ///    the rest, with the same paragraph gate.
 /// Prompts with no plan (path k5) are plain K5, as P1. The search runs on IDs; only the winners become text.
@@ -168,6 +174,27 @@ inline std::vector<std::string> write_name(const std::vector<std::string>& t) {
     return o.empty() ? t : o;
 }
 
+// Which of a name's K5 tokens are written without a space before them: K5 splits a word at every non-ASCII letter
+// ("Luleå" -> "Lule", "å"), and the renderer would print "Lule å". A token is glued to the one before it when the raw
+// name has no space between them and one of the two is non-ASCII ("Luleå", "Östergötland", "Anaïs"); hyphens and
+// initials keep K5's spacing, as everywhere else in its text. One flag per token of wkn::tokens(raw).
+inline std::vector<char> name_glue(std::string_view raw) {
+    std::vector<char> g;
+    std::size_t end = std::string_view::npos;
+    bool prev_hi = false;
+    wkn::tokenize(raw, [&](std::string_view t) {
+        const auto at = static_cast<std::size_t>(t.data() - raw.data());
+        const bool hi = std::any_of(t.begin(), t.end(), [](char ch) { return static_cast<unsigned char>(ch) >= 0x80; });
+        g.push_back(end != std::string_view::npos && at == end && (hi || prev_hi) ? 1 : 0);
+        end = at + t.size(), prev_hi = hi;
+    });
+    return g;
+}
+
+// Birth and death years: past P1's plan, one of them per subject. The fill writes either one in a "Name (date - date)"
+// shape and makes up the other date, so the second sentence repeats the first with other dates.
+inline bool life_date(const std::string& rel) { return rel == "birth_year" || rel == "death_year"; }
+
 // A Wikipedia overview page ("List of ...", "Politics of India", "Religion in India"), not an entity to write about.
 inline bool overview(const std::string& n) {
     static const char* const heads[] = {
@@ -209,10 +236,12 @@ class DiscourseWriter final : public wkn::StructureWriter {
         const Model& md = *md_;
         if (md.planned == 0) return;
         std::fprintf(stderr, "k5-plan-discourse: %llu prompts planned; %llu fact sentences (%llu from linked entities), %llu free "
-                     "sentences between facts, %llu after them; fact steps %.2f thread-s\n",
+                     "sentences between facts, %llu after them; repeat ban lifted for %llu facts at the sentence edge, %llu "
+                     "wholly; fact steps %.2f thread-s\n",
                      static_cast<unsigned long long>(md.planned.load()), static_cast<unsigned long long>(n_fact_.load()),
                      static_cast<unsigned long long>(n_linked_.load()), static_cast<unsigned long long>(n_free_mid_.load()),
-                     static_cast<unsigned long long>(n_free_end_.load()), static_cast<double>(md.steps_ns.load()) / 1e9);
+                     static_cast<unsigned long long>(n_free_end_.load()), static_cast<unsigned long long>(n_lift_edge_.load()),
+                     static_cast<unsigned long long>(n_lift_all_.load()), static_cast<double>(md.steps_ns.load()) / 1e9);
     }
 
     // Step 1: the linked entities and the fact pool.
@@ -251,24 +280,33 @@ class DiscourseWriter final : public wkn::StructureWriter {
             };
             for (const std::size_t pi : frontier) {
                 const std::uint32_t pe = dp.ents[pi].ent;
-                int n = 0;
-                for (const auto fi : fs.of_subj(pe)) {  // its facts' values, and the subjects sharing a value
+                for (const auto fi : fs.of_subj(pe)) {  // its facts' values, and (from the main entity) the subjects sharing a value
                     const auto& f = fs.fact(fi);
                     offer(f.val, 1, pi, ~0u);
-                    if (numeric(f.val)) continue;
-                    // a shared value links only if few subjects share it under the relation: sharing "country: United
-                    // States" or "occupation: writer" with hundreds of subjects says nothing about the subject
+                    // A shared value links only at hop 1 (two weak links in a row drift off the subject: Gustav
+                    // Radbruch -> "occupation: Jurist" -> Clarence Thomas), and only if few subjects share it under the
+                    // relation: sharing "country: United States" or "occupation: writer" with hundreds of subjects says
+                    // nothing about the subject. The value's whole row list is counted (a cut-off count let 35 states
+                    // that are "located in the United States" through as fewer than `hub`).
+                    if (hop > 1 || numeric(f.val)) continue;
                     std::set<std::uint32_t> share;
                     for (const auto fj : fs.of_val(f.val)) {
-                        if (++n > p_.scan) break;
                         if (fs.fact(fj).rel == f.rel && fs.fact(fj).subj != pe) share.insert(fs.fact(fj).subj);
+                        if (share.size() > static_cast<std::size_t>(p_.hub)) break;
                     }
                     if (share.size() > static_cast<std::size_t>(p_.hub)) continue;
                     for (const auto sj : share) offer(sj, 3, pi, f.val);
                 }
-                n = 0;
-                for (const auto fi : fs.of_val(pe)) {  // the subjects that have it as a value
+                // The subjects that have it as a value. Past hop 1, under a relation where at most `hub` subjects have
+                // it: Avery Hopwood -> Cleveland -> "born in Cleveland" -> Halle Berry is the shared-value link again,
+                // two links long. (From the main entity all count: "nationality: Israeli" is the prompt's subject.)
+                std::map<std::uint32_t, std::size_t> per_rel;
+                if (hop > 1)
+                    for (const auto fi : fs.of_val(pe)) ++per_rel[fs.fact(fi).rel];
+                int n = 0;
+                for (const auto fi : fs.of_val(pe)) {
                     if (++n > p_.scan) break;
+                    if (hop > 1 && per_rel[fs.fact(fi).rel] > static_cast<std::size_t>(p_.hub)) continue;
                     offer(fs.fact(fi).subj, 2, pi, pe);
                 }
             }
@@ -327,10 +365,12 @@ class DiscourseWriter final : public wkn::StructureWriter {
         // (subject, relation), (subject, value), and past P1's plan (relation, value): a third subject that "is Israeli"
         // or "is in New Zealand" repeats the paragraph rather than saying something new
         std::set<std::pair<std::uint32_t, std::uint32_t>> said_rel, said_val, said_rv;
+        std::set<std::uint32_t> said_life;  // subjects with a birth or death year written
         const auto said = [&](std::size_t j) {
             const auto& f = fs.fact(dp.facts[j]);
             if (said_rel.count({f.subj, f.rel}) || said_val.count({f.subj, f.val})) return true;
             if (j >= dp.spine && said_rv.count({f.rel, f.val})) return true;
+            if (j >= dp.spine && said_life.count(f.subj) && life_date(fs.rel(f.rel))) return true;
             const auto S = write_tok(f.subj);
             const auto O = write_tok(f.val);
             for (const auto& z : c.sents)
@@ -366,11 +406,9 @@ class DiscourseWriter final : public wkn::StructureWriter {
                         continue;
                     }
                     const double w = focus(m, c, assoc, dp, j, prev_subj, prev_rel);
-                    if (std::getenv("Q3_DEBUG")) std::fprintf(stderr, "Q3DBG %.30s j=%zu %s|%s|%s w=%g\n", std::string(prompt).c_str(), j, fs.ent(fs.fact(dp.facts[j]).subj).c_str(), fs.rel(fs.fact(dp.facts[j]).rel).c_str(), fs.ent(fs.fact(dp.facts[j]).val).c_str(), w);
                     if (w > best) best = w, pick = j;
                 }
             }
-            if (std::getenv("Q3_DEBUG")) std::fprintf(stderr, "Q3DBG %.30s pick=%zu of %zu\n", std::string(prompt).c_str(), pick, dp.facts.size());
             if (pick == dp.facts.size()) break;  // no fact left
             used[pick] = 1;
             const std::uint32_t fi = dp.facts[pick];
@@ -387,12 +425,49 @@ class DiscourseWriter final : public wkn::StructureWriter {
             if (!fresh.empty()) pk.swap(fresh);
             else if (pk.size() > static_cast<std::size_t>(kSkel)) pk.resize(static_cast<std::size_t>(kSkel));
             md.candidates(m, ex, fl, c, s, assoc, *sk, pk, S, O, cands);
-            if (std::getenv("Q3_DEBUG")) std::fprintf(stderr, "Q3DBG %.30s cands=%zu pk=%zu\n", std::string(prompt).c_str(), cands.size(), pk.size());
+            if (cands.empty()) {
+                // The repeat ban reads the text's last 11 bytes and the fill's first byte together. When the paragraph
+                // ends as an earlier sentence ended ("..., California." twice), every word's leading space is banned
+                // and no skeleton can be filled. K5's own sampler lifts the ban when it leaves nothing; here the ban
+                // is first lifted across the sentence boundary only (a marker after the text), then wholly.
+                wkn::K5::State s2 = s;
+                s2.rep = wkn::RepeatBan(std::string(prompt) + s.out + '\x01');  // the ban's text: the prompt, then the output
+                md.candidates(m, ex, fl, c, s2, assoc, *sk, pk, S, O, cands);
+                if (cands.empty()) {
+                    s2.rep = wkn::RepeatBan();
+                    md.candidates(m, ex, fl, c, s2, assoc, *sk, pk, S, O, cands);
+                    if (!cands.empty()) ++n_lift_all_;
+                } else {
+                    ++n_lift_edge_;
+                }
+            }
             if (cands.empty()) continue;
             const std::size_t b = md.choose(c, cands);
             const auto& win = cands[b].fill;
+            // the names' tokens that are written without a space (name_glue), placed by the skeleton's slots
+            std::vector<char> glue(win.tok.size(), 0);
+            {
+                const auto gS = name_glue(fs.ent(f.subj)), gO = name_glue(fs.ent(f.val));
+                std::size_t at = 0;
+                bool fits = true;
+                for (const auto code : (*sk)[cands[b].skel].codes) {
+                    const bool slot = code == kSlotS || code == kSlotO;
+                    const auto& nm = code == kSlotS ? S : O;
+                    const auto& gl = code == kSlotS ? gS : gO;
+                    const std::size_t n = slot ? nm.size() : 1;
+                    if (at + n > glue.size()) {
+                        fits = false;
+                        break;
+                    }
+                    // (the dba fill may write a name before its slot: then the tokens there are not the name's, no glue)
+                    if (slot && std::equal(nm.begin(), nm.end(), win.tok.begin() + static_cast<std::ptrdiff_t>(at)))
+                        for (std::size_t k = 1; k < n && k < gl.size(); ++k) glue[at + k] = gl[k];
+                    at += n;
+                }
+                if (!fits || at != glue.size()) std::fill(glue.begin(), glue.end(), 0);
+            }
             for (std::size_t i = 0; i < win.tok.size(); ++i) {  // only the winner becomes text
-                const std::string pc = wkn::piece(win.tok[i], s.prev, s.has_prev);
+                const std::string pc = glue[i] ? win.tok[i] : wkn::piece(win.tok[i], s.prev, s.has_prev);
                 s.out += pc;
                 s.rep.add(pc);
                 wkn::K5::learn(s, win.ids[i], o);
@@ -404,6 +479,7 @@ class DiscourseWriter final : public wkn::StructureWriter {
             z.tok = win.tok, z.ended = true;
             c.sents.push_back(std::move(z));
             said_rel.insert({f.subj, f.rel}), said_val.insert({f.subj, f.val}), said_rv.insert({f.rel, f.val});
+            if (life_date(fs.rel(f.rel))) said_life.insert(f.subj);
             used_shape.insert((*sk)[cands[b].skel].codes);
             prev_subj = f.subj, prev_rel = fs.rel(f.rel);
             end_at.push_back(s.out.size());
@@ -584,8 +660,10 @@ class DiscourseWriter final : public wkn::StructureWriter {
         if (!z.tok.empty()) c.sents.push_back(std::move(z));
         s = std::move(drafts[bu]);
     }
-    // The PLAN line (P1's columns, so k5_planner_measures.py reads it), then one field "D|hops|entities|free" with each
-    // written fact's hop, the linked entities (;; between) and the free sentences between and after the facts.
+    // The PLAN line (P1's columns, so k5_planner_measures.py reads it), then one field "D|hops|entities|free|links" with
+    // each written fact's hop, the linked entities (;; between), the free sentences between and after the facts, and
+    // each linked entity's hop:kind:parent:fit (kind 1 a value of the parent's facts, 2 has the parent as a value,
+    // 3 shares a value with it; parent an index into the entity list, 0 the main entity).
     void log(std::string_view prompt, const DPlan& dp, const std::vector<std::size_t>& written, const std::vector<int>& stated,
              const std::vector<std::string>& sents, int n_mid, int n_end) const {
         const Model& md = *md_;
@@ -602,9 +680,15 @@ class DiscourseWriter final : public wkn::StructureWriter {
             hops += (i ? "," : "") + std::to_string(dp.ents[dp.of[written[i]]].hop);
         }
         if (pl.path != "k5") {
-            std::string ents;
-            for (std::size_t i = 1; i < dp.ents.size(); ++i) ents += (i > 1 ? ";;" : "") + log_clean(md.fs.ent(dp.ents[i].ent));
-            line += "\tD|" + hops + "|" + ents + "|" + std::to_string(n_mid) + "," + std::to_string(n_end);
+            std::string ents, why;
+            for (std::size_t i = 1; i < dp.ents.size(); ++i) {
+                const auto& l = dp.ents[i];
+                char b[64];
+                std::snprintf(b, sizeof b, "%d:%d:%u:%.2f", l.hop, l.kind, l.parent, l.fit);
+                ents += (i > 1 ? ";;" : "") + log_clean(md.fs.ent(l.ent));
+                why += (i > 1 ? ";;" : "") + std::string(b);
+            }
+            line += "\tD|" + hops + "|" + ents + "|" + std::to_string(n_mid) + "," + std::to_string(n_end) + "|" + why;
         }
         std::lock_guard<std::mutex> lk(log_mutex());
         static std::FILE* fp = [] {
@@ -618,7 +702,7 @@ class DiscourseWriter final : public wkn::StructureWriter {
 
     std::shared_ptr<const Model> md_;
     DiscourseParams p_;
-    mutable std::atomic<std::uint64_t> n_fact_{0}, n_linked_{0}, n_free_mid_{0}, n_free_end_{0};
+    mutable std::atomic<std::uint64_t> n_fact_{0}, n_linked_{0}, n_free_mid_{0}, n_free_end_{0}, n_lift_edge_{0}, n_lift_all_{0};
 };
 
 // cyphalm_trie --k5-plan-discourse on|SPEC, after apply_plan_flags: the planner's writer becomes the discourse writer
@@ -653,6 +737,11 @@ inline bool discourse_self_test(std::string& err) {
         return err = "discourse: write_name", false;
     if (!overview("List of Israeli musical artists") || !overview("Religion in India") || overview("University of Auckland") || overview("India"))
         return err = "discourse: overview", false;
+    using G = std::vector<char>;
+    if (name_glue("Lule\xc3\xa5 University") != G{0, 1, 0} || name_glue("Ana\xc3\xafs Nin") != G{0, 1, 1, 0} ||
+        name_glue("Rhein-Neckar-Kreis") != G{0, 0, 0, 0, 0} || name_glue("L. L. Zamenhof") != G{0, 0, 0, 0, 0})
+        return err = "discourse: name_glue", false;
+    if (!life_date("birth_year") || !life_date("death_year") || life_date("birth_place")) return err = "discourse: life_date", false;
     return true;
 }
 
