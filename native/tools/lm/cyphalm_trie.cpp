@@ -959,9 +959,10 @@ std::vector<double> mix_plan_into(const ContentPlanStore& st, const std::map<std
 // the chain's own instances, so each is computed once. Every value is computed by the same code in the same order as
 // before, so the output is the same to the last bit.
 // OPT_PIPELINE.md (§13.41 O2): the rows come through a ring of `slots` blocks (cypha/lm/expert_pipeline.hpp). The
-// static experts (kStatic producers, each a fixed part of every block), the LSTM and the n-gram each fill their part of
-// a block as soon as its slot is free, and run up to `slots` blocks ahead of the main thread, which mixes the blocks in
-// order. The similar-context expert's rows are read from its one pass over the holdout (the chain's), and the document
+// static experts (nstatic producers, each a fixed part of every block; with the pipeline one, which also reads the
+// document experts' stream over every row of the block), the LSTM and the n-gram each fill their part of a block as
+// soon as its slot is free, and run up to `slots` blocks ahead of the mixer's thread, which mixes the blocks in order.
+// The similar-context expert's rows are read from its one pass over the holdout (the chain's), and the document
 // experts' from a fresh stream over the chain's tables.
 // The meta mixer only reads what the full mix hands its hook (META_MIXING.md: a read-only hook), so with the pipeline
 // on, MetaRelay copies each byte's hand-over into a ring and the meta mixer reads the copies on its own thread, in the
@@ -1049,6 +1050,11 @@ struct FullMixRun {
     std::size_t slots;                                 // the ring's blocks (2: the old double buffer)
     cypha::cyphalm::pipeline::Progress* sim_ready = nullptr;  // rows of sim done (nullptr: all are)
     bool relay_meta = false;                                  // the meta mixer on its own thread (MetaRelay)
+    // OPT_PIPELINE.md: the static producers (each a fixed part of every block's rows; kStatic before, 1 with the
+    // pipeline: they are busy a quarter of the time), and the document experts' stream as a producer (the first static
+    // producer reads every row of a block, in order, after its own rows) instead of in the mixer's thread.
+    int nstatic = kStatic;
+    bool doc_ahead = false;
     cypha::online::fullmix::Params P;
     std::unique_ptr<cypha::online::fullmix::FullMixer> fm;
     cypha::online::metamix::Params MP;                    // META_MIXING.md: --meta-mix
@@ -1057,18 +1063,19 @@ struct FullMixRun {
     int head = -1;
     std::vector<double> chain_y, snap3_y;
     double maxng = 0, t_static = 0, t_lstm = 0, t_ng = 0, t_main = 0, t_wait = 0, t_pwait = 0, t_simwait = 0, seconds = 0;
-    double t_meta_wait = 0, t_relay_wait = 0;
+    double t_meta_wait = 0, t_relay_wait = 0, t_doc = 0;
 
     struct Block {
         int O = 0;
-        std::vector<double> trie, kn, ig, cls, lstm, ng, ngo;
+        std::vector<double> trie, kn, ig, cls, lstm, ng, ngo, doc;
         std::vector<std::uint8_t> em, pred, ig_has;
-        std::vector<int> kn_b, ig_b, ig_n, cls_b, cpred, cn;
-        void size(int orders) {
+        std::vector<int> kn_b, ig_b, ig_n, cls_b, cpred, cn, doc_b;
+        void size(int orders, bool docs) {
             O = orders;
             const std::size_t B = kBlock;
             trie.assign(B * 5 * 256, 0), kn.assign(B * 256, 0), ig.assign(B * 5 * 256, 0), cls.assign(B * 256, 0);
             lstm.assign(B * 256, 0), ng.assign(B * 256, 0), ngo.assign(B * std::max(O, 1) * 256, 0);
+            if (docs) doc.assign(B * 3 * 256, 0), doc_b.assign(B * 3, 0);
             em.assign(B, 0), pred.assign(B, 0), ig_has.assign(B, 0);
             for (auto* v : {&kn_b, &ig_b, &ig_n, &cls_b, &cpred, &cn}) v->assign(B, 0);
         }
@@ -1187,25 +1194,39 @@ struct FullMixRun {
         auto secs = [](clk::time_point s) { return std::chrono::duration<double>(clk::now() - s).count(); };
         const std::size_t nblk = (H + kBlock - 1) / kBlock;
         auto rows_of = [&](std::size_t b) { return std::min(kBlock, H - b * kBlock); };
+        const bool docp = ds && doc_ahead;  // the document stream in the first static producer (OPT_PIPELINE.md)
         std::vector<Block> buf(slots);
-        for (auto& b : buf) b.size(O);
-        const int roles = kStatic + (L ? 1 : 0) + (ng ? 1 : 0);
+        for (auto& b : buf) b.size(O, docp);
+        const int ns = std::clamp(nstatic, 1, kStatic);
+        const int roles = ns + (L ? 1 : 0) + (ng ? 1 : 0);
         pl::BlockRing ring(slots, roles);
-        double ts[kStatic] = {}, tl = 0, tn = 0;
+        double ts[kStatic] = {}, tl = 0, tn = 0, td = 0;
         std::vector<std::thread> th;
         // Producers: every value as the chain computes it; each role fills its own part of a block, in block order.
-        for (int t = 0; t < kStatic; ++t)
+        // FmInfiniGram's cursors and hints cost time, never a different answer (fm_infinigram.hpp), so how the rows are
+        // split between the static producers changes nothing.
+        for (int t = 0; t < ns; ++t)
             th.emplace_back([&, t] {
                 for (std::size_t b = 0; b < nblk && ring.acquire(t, b); ++b) {
-                    const auto s = clk::now();
+                    auto s = clk::now();
                     const std::size_t n = rows_of(b);
-                    static_rows(buf[ring.slot(b)], b * kBlock, n * static_cast<std::size_t>(t) / kStatic,
-                                n * static_cast<std::size_t>(t + 1) / kStatic);
+                    Block& B = buf[ring.slot(b)];
+                    static_rows(B, b * kBlock, n * static_cast<std::size_t>(t) / static_cast<std::size_t>(ns),
+                                n * static_cast<std::size_t>(t + 1) / static_cast<std::size_t>(ns));
                     ts[t] += secs(s);
+                    if (t == 0 && docp) {  // each row's on parts, then the byte, as the mixer's thread read them before
+                        s = clk::now();
+                        for (std::size_t r = 0; r < n; ++r) {
+                            for (int q = 0; q < 3; ++q)
+                                if (cs.doc_on[q]) B.doc_b[r * 3 + q] = ds->predict(q, &B.doc[(r * 3 + static_cast<std::size_t>(q)) * 256]);
+                            ds->feed(data[kTrain + b * kBlock + r]);
+                        }
+                        td += secs(s);
+                    }
                     ring.publish(t, b);
                 }
             });
-        int role = kStatic;
+        int role = ns;
         if (L) {
             const int me = role++;
             th.emplace_back([&, me] {  // the LSTM pass: plstm[k] = max(P(y), 1e-12), lb over the second half, then learn
@@ -1271,16 +1292,20 @@ struct FullMixRun {
                 if (cc) in.cls = &b.cls[r * 256], in.cls_b = b.cls_b[r];
                 if (sim) sim->get(k, Ps), in.sim = Ps, in.sim_b = (*sim_b)[k];
                 in.cpred = b.cpred[r], in.cn = b.cn[r];
-                if (ds)
+                if (docp) {
+                    for (int q = 0; q < 3; ++q)
+                        if (cs.doc_on[q]) in.doc_b[q] = b.doc_b[r * 3 + q], in.doc[q] = &b.doc[(r * 3 + static_cast<std::size_t>(q)) * 256];
+                } else if (ds) {
                     for (int q = 0; q < 3; ++q)
                         if (cs.doc_on[q]) in.doc_b[q] = ds->predict(q, Pd[q]), in.doc[q] = Pd[q];
+                }
                 if (L) in.lstm = &b.lstm[r * 256];
                 if (ng) in.ngram = &b.ng[r * 256], in.ngram_o = &b.ngo[r * static_cast<std::size_t>(O) * 256];
                 fm->step(in, k);
                 if (df.is_open()) fx::dump_byte(df, in, O);
                 chain_y[k] = fm->chain_y();
                 snap3_y[k] = fm->snap3_y();
-                if (ds) ds->feed(data[i]);
+                if (ds && !docp) ds->feed(data[i]);
             }
             t_main += secs(s);
             ring.release(bi);
@@ -1292,7 +1317,8 @@ struct FullMixRun {
             t_meta_wait = relay->ring.reader_waited(), t_relay_wait = relay->ring.writer_waited();
         }
         for (double t : ts) t_static += t;
-        t_lstm = tl, t_ng = tn, t_wait = ring.consumer_waited(), t_pwait = ring.producers_waited();
+        nstatic = ns;
+        t_lstm = tl, t_ng = tn, t_doc = td, t_wait = ring.consumer_waited(), t_pwait = ring.producers_waited();
         seconds = secs(t0);
         return sim_failed ? 1 : 0;
     }
@@ -1314,9 +1340,9 @@ struct FullMixRun {
         std::fflush(stdout);
         std::fprintf(stderr,
                      "full_mix state_bytes %zu seconds %.1f | ring %zu blocks of %zu | thread busy s: static %.1f (%d threads) "
-                     "lstm %.1f ngram %.1f mix %.1f; mix waited %.1f for blocks, %.1f for sim rows; producers waited %.1f%s | "
-                     "mixer s: %s\n",
-                     fm->bytes(), seconds, slots, kBlock, t_static, kStatic, t_lstm, t_ng, t_main, t_wait, t_simwait, t_pwait,
+                     "doc %.1f lstm %.1f ngram %.1f mix %.1f; mix waited %.1f for blocks, %.1f for sim rows; producers waited "
+                     "%.1f%s | mixer s: %s\n",
+                     fm->bytes(), seconds, slots, kBlock, t_static, nstatic, t_doc, t_lstm, t_ng, t_main, t_wait, t_simwait, t_pwait,
                      relay_meta && mm ? (" | meta thread waited " + std::to_string(t_meta_wait) + ", relay waited " +
                                          std::to_string(t_relay_wait)).c_str()
                                       : "",
@@ -1445,6 +1471,7 @@ int cmd_context8k(const Args& a) {
     std::vector<int> cap_b[5], kn_bk, cls_bk, n8k(H);
     pl::Task t_index;
     auto index_job = [&]() -> int {
+        const auto s0 = clk::now();
         const std::size_t tn = T0.size();
         igp = std::make_unique<FmInfiniGram>(std::move(T0));
         std::vector<std::uint8_t>().swap(T0);
@@ -1489,6 +1516,8 @@ int cmd_context8k(const Args& a) {
                 for (std::size_t k = 0; k < H; ++k) kn_pe[k] = kn->prob_bucket(hw, kTrain + k, hw[kTrain + k], kn_bk[k]);
             });
         pl::parallel_jobs(jobs, pthreads);
+        std::fprintf(stderr, "pipeline index, class, Kneser-Ney and InfiniGram passes %.1f s\n",
+                     std::chrono::duration<double>(clk::now() - s0).count());
         return 0;
     };
     // The similar-context expert (A4): one pass, in order (it learns online keys as it reads). It keeps P(y) and the
@@ -1531,6 +1560,7 @@ int cmd_context8k(const Args& a) {
     std::vector<int> doc_bk[DocTopic::kParts], copy_bk(H), copy_cp(H), copy_cn(H);
     pl::Task t_doc, t_copy;
     auto doc_job = [&]() -> int {
+        const auto s0 = clk::now();
         int drc = 0;
         dt = make_doc(a.doc.empty() ? std::string("cache") : a.doc, hw, kTrain, drc);
         if (!dt) return drc ? drc : 1;
@@ -1548,15 +1578,18 @@ int cmd_context8k(const Args& a) {
                 }
             st.feed(hw[kTrain + k]);
         }
+        std::fprintf(stderr, "pipeline doc pass %.1f s\n", std::chrono::duration<double>(clk::now() - s0).count());
         return 0;
     };
     auto copy_job = [&]() -> int {  // as mix_copy_into reads it (and the final layer's row)
+        const auto s0 = clk::now();
         for (std::size_t k = 0; k < H; ++k) {
             int n = 0;
             const int cp = copy_pred(hw, kTrain + k, n);
             copy_pe[k] = cp == hw[kTrain + k] ? 1.0 : 0.0;
             copy_bk[k] = copy_bucket(n), copy_cp[k] = cp, copy_cn[k] = n;
         }
+        std::fprintf(stderr, "pipeline copy pass %.1f s\n", std::chrono::duration<double>(clk::now() - s0).count());
         return 0;
     };
     // ONLINE_LEARNING_UPGRADES --ngram: the online n-gram expert (cypha::online::OnlineNgram; hashed bit counts of orders
@@ -1614,7 +1647,7 @@ int cmd_context8k(const Args& a) {
     std::vector<double> plstm;
     std::vector<std::uint8_t> lgate;
     double lstm_bits = 0, lstm_s = 0;
-    pl::Task t_lstm;
+    bool lstm_ran = false;  // the pass below ran on the index's thread (OPT_PIPELINE.md)
     auto lstm_alone = [&](auto& L) {
         constexpr int LH = std::remove_reference_t<decltype(L)>::H;
         const auto s0 = clk::now();
@@ -1658,14 +1691,20 @@ int cmd_context8k(const Args& a) {
         }
         return 0;
     };
-    const bool lstm_alone_pass = !a.no_lstm && !full_mix && lstm_ok && !(a.final_gate == "lstm" && a.no_lstm);
+    const bool lstm_alone_pass = !a.no_lstm && !full_mix && lstm_ok;
     // Every pass that reads bytes only starts now, while the trie trains; those that read the index start when it is built.
+    // Without the full mix, the LSTM's pass follows the index's passes on their thread, so the threads stay few.
     if (pipe) {
-        t_index.start(index_job, true);
+        t_index.start(
+            [&]() -> int {
+                const int rc = index_job();
+                if (!rc && lstm_alone_pass) (void)lstm_job(), lstm_ran = true;
+                return rc;
+            },
+            true);
         t_sim.start(sim_job, true);
         if (!a.no_doc) t_doc.start(doc_job, true);
         if (!a.no_copy || keep) t_copy.start(copy_job, true);
-        if (lstm_alone_pass) t_lstm.start(lstm_job, true);
     }
 
     Model model;
@@ -1923,6 +1962,11 @@ int cmd_context8k(const Args& a) {
         fmr.reset(new FullMixRun{a, pm, w, data, kTrain, H, half, kn.get(), ig, cc.get(), lam, &snaps,
                                  a.no_sim ? nullptr : &sim_rows, a.no_sim ? nullptr : &sb, dt.get(),
                                  pipe ? static_cast<std::size_t>(a.pipeline) : 2});
+        if (pipe) {  // OPT_PIPELINE.md: the meta mixer on its own thread, one static producer, the document stream ahead
+            fmr->relay_meta = true;
+            fmr->nstatic = 1;
+            fmr->doc_ahead = true;
+        }
         fmr_rc = fmr->init();
     };
     pl::Task t_fm;
@@ -1983,7 +2027,6 @@ int cmd_context8k(const Args& a) {
             make_fmr(lam_pre);
             if (!fmr_rc) {
                 fmr->sim_ready = a.no_sim ? nullptr : &sim_prog;
-                fmr->relay_meta = true;
                 t_fm.start(fm_job, true);
                 phase("full mix started at");
             }
@@ -2143,9 +2186,8 @@ int cmd_context8k(const Args& a) {
             ng.reset();
             if (ngram_tail) ngram_tail();
             lstm_bits = fm_lb, lstm_s = fm_s;
-        } else {
-            if (!t_lstm.started()) t_lstm.start(lstm_job, false);
-            (void)t_lstm.wait();
+        } else if (!lstm_ran) {
+            (void)lstm_job();
         }
         std::cout << "lstm_alone_bpc " << lstm_bits / static_cast<double>(H - half) << "\n";
         std::cerr << "lstm hidden " << a.lstm_size << " window " << a.lstm_window << ": " << lstm_s << " s\n";
