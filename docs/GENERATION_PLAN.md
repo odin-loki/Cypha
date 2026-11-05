@@ -2183,3 +2183,24 @@ Every branch first merges `origin/main` (M1 and M2 are exact, so P1 and every ba
 - SCRIBE v2 within ±0.02 of P1's 0.532;
 - raters: P1t against K5 still above 0.5, but lower than P1's 0.635, since fewer prompts get a plan (about 0.58);
 - the interval may include 0.5.
+
+**§13.46 result** (2026-11-06):
+- **P1t** (the planner on the text-only store `e9_text`), dev, seed 0, 250 prompts:
+  - paths: main entity 24, co-occurring entities 53, plain K5 173;
+  - SCRIBE v2 0.511 [0.481, 0.542], v3.1 0.511 [0.491, 0.532];
+  - copy32 0.039, no 13-word copies;
+  - 3:25 wall, 630 MB.
+- **Blind pairwise raters, P1t against K5** (packets committed first, 5df1569): **0.610 [0.560, 0.670]**, rater pairs 0.64 and 0.58. On the 11 rated prompts where P1t's text differs from K5's, it wins 1.00.
+- **P1t reads better than K5. It stays the default.**
+- **The one test read** (GEN-A test, 250 prompts): SCRIBE v2 **0.537 [0.505, 0.564]** (K5 0.524; P1 with the Wikidata seeds 0.561), v3.1 0.528 [0.509, 0.547], copy32 0.039, no 13-word copies.
+- **Q1 against P1t** (packets committed first, same commit): **0.530 [0.450, 0.610]**, rater pairs 0.52 and 0.54, so no difference. Q1 has a plan for more prompts, but its extra fact sentences do not read better while the fill around them stays weak. **Q1 is not adopted.** Its flags (`--k5-plan-find 2`, `--k5-plan-fallback pattern`, `--k5-plan-filter`) and its text-only store `e9_v2` are kept for the combination with Q2 and Q3.
+- **Predictions:**
+  - main-entity coverage about 24: **hit** (24);
+  - SCRIBE v2 within ±0.02 of 0.532: **miss** (−0.021);
+  - raters above 0.5 but below 0.635, about 0.58: **hit** (0.610);
+  - "the interval may include 0.5": it does not.
+- **Q1's own results** ([PLAN_FACTS](reports/PLAN_FACTS.md), branch `wip/plan-facts`):
+  - main-entity coverage 62 of 250 with `e9_v2` and the better entity finder, plus 78 through the pattern fallback;
+  - the gibberish filter: precision 0.80 [0.38, 0.96], recall 0.36 [0.15, 0.65], sensible kept 0.993;
+  - by blind labels, 8.1% of store facts are gibberish.
+  - §13.42 Q1 predictions: coverage ≥80 **miss** (62); filter removes ≥70% **miss** (36%); keeps ≥90% **hit**; about 30% gibberish **miss** (8%); raters prefer Q1 **miss** (even, against P1t).
