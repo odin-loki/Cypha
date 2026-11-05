@@ -2241,3 +2241,12 @@ Every branch first merges `origin/main` (M1 and M2 are exact, so P1 and every ba
 - **Combination predictions:**
   - raters prefer it to P1 above 0.6: **miss** (0.590 against P1t);
   - test SCRIBE v2 at least 0.561: scored after the read.
+
+**The combination's result** (2026-11-06):
+- **The default is now the discourse planner:** `sample --k5` = the planner on `e9_text` + `--k5-plan-discourse on`.
+- **Checks:**
+  - on all 250 dev prompts, the default's samples equal Q3t's dev GEN file, and `--k5-plan-discourse off` equals P1t's (`cmp`, MODEL line aside);
+  - the selftest passes.
+- **The one test read** (GEN-A test, 250 prompts): SCRIBE v2 **0.631 [0.595, 0.665]**, v3.1 0.592 [0.566, 0.619], copy32 0.041, no 13-word copies. For comparison: P1t 0.537, K5 0.524.
+- **Prediction** test SCRIBE v2 at least 0.561: **hit** (0.631).
+- **SCRIBE rewards topic words** (§13.34), so its rise is not the evidence. The evidence is the blind raters: Q3 against P1t 0.590 [0.540, 0.640], and P1t against K5 0.610.

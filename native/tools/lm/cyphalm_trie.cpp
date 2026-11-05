@@ -2148,6 +2148,7 @@ int cmd_sample(const Args& a) {
             if (std::ifstream(ds + "/seeds.tsv") && std::ifstream(dm)) {
                 k5_plan = ds;
                 if (k5_plan_model.empty()) k5_plan_model = dm;
+                if (k5_plan_disc.empty()) k5_plan_disc = "on";  // §13.42: the discourse planner (Q3) is the default
             } else {
                 std::cerr << "k5: planner files not found (" << ds << ", " << dm
                           << "; set CYPHA_K5_PLAN_STORE and CYPHA_K5_PLAN_MODEL); writing with K5 alone\n";
@@ -2173,6 +2174,7 @@ int cmd_sample(const Args& a) {
                 return 2;
             }
         }
+        if (k5_plan_disc == "off") k5_plan_disc.clear();  // §13.42: --k5-plan-discourse off gives P1t (§13.46)
         if (!k5_plan_disc.empty()) {  // PLAN_DISCOURSE.md: the planner's writer becomes the discourse writer
             std::string err;
             if (!cypha::cyphalm::planner::apply_discourse_flag(k5_plan_disc, base, err)) {

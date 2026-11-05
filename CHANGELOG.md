@@ -9,6 +9,7 @@ milestone or a significant self-contained change.
 ## [Unreleased]
 
 ### Added
+- **The discourse planner is the default** (2026-11-06; GENERATION_PLAN §13.42, ledger 128): `sample --k5` plans the whole paragraph through linked entities (`lm/planner/discourse.hpp`); `--k5-plan-discourse off` gives the single-step planner. Blind raters prefer it (0.590); test SCRIBE v2 0.631.
 - **The planner's default store is text-only** (2026-11-06; GENERATION_PLAN §13.46, ledger 127): `bench/fact_store/e9_text` (e9_aug without its 17,907 Wikidata seeds). Blind raters still prefer the planner to K5 (0.610).
 - **One count index and one mixer library** (2026-11-05; GENERATION_PLAN §13.40, ledger 126): `lm/count_index.hpp` (a libsais suffix array: any-order counts, continuation counts, longest matches) under K5, its copy cap and SCRIBE's MATCH, byte-identical output, K5's peak RAM −51%; `online/mix_core.hpp` shared by the content, full and meta mixers and the structure ranker, byte-identical. `sample --k5-plan-fill dba`, `--k5-plan-beam N` (off; not adopted).
 - **The planner on by default** (2026-11-05; GENERATION_PLAN §13.39, ledger 125): `sample --k5` writes through the planner with `bench/fact_store/e9_aug` and `bench/k5_planner/model/plan_e9.model` (`CYPHA_K5_PLAN_STORE`, `CYPHA_K5_PLAN_MODEL`); `--no-k5-plan` is K5 alone, byte-identical to before. `scripts/gen_eval.sh` always passes `--plan-drop 75497472:100000000`.
