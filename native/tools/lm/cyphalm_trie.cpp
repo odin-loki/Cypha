@@ -2137,7 +2137,7 @@ int cmd_sample(const Args& a) {
         if (k5_plan.empty() && k5_struct.empty() && !a.no_k5_plan) {  // §13.39: the planner is on by default
             const char* es = std::getenv("CYPHA_K5_PLAN_STORE");
             const char* em = std::getenv("CYPHA_K5_PLAN_MODEL");
-            const std::string ds = es ? es : "bench/fact_store/e9_aug";
+            const std::string ds = es ? es : "bench/fact_store/e9_text";  // §13.46: text-only
             const std::string dm = em ? em : "bench/k5_planner/model/plan_e9.model";
             if (std::ifstream(ds + "/seeds.tsv") && std::ifstream(dm)) {
                 k5_plan = ds;
