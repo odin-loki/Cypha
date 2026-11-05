@@ -335,6 +335,35 @@ int cmd_selftest() {
     const auto& cls = m.classes().classes();
     for (const std::size_t i : {2u, 3u, 4u, 6u})
         if (cls[f.ids[i]] != codes[i - 1]) return std::fprintf(stderr, "selftest: fill broke a class code\n"), 1;
+    // MERGE_FILL.md: dynamic beam allocation. Bank sizes (no slot left unused while candidates remain); the fill writes
+    // each name once, whole, and the skeleton's class codes in order.
+    if (pl::bank_sizes(3, 4, {3, 2, 0, 0}) != std::vector<int>{2, 2, 0, 0} || pl::bank_sizes(5, 4, {3, 2, 0, 0, 0, 0}) != std::vector<int>{2, 2, 0, 0, 0, 0} ||
+        pl::bank_sizes(2, 4, {0, 0, 5}) != std::vector<int>{0, 0, 4} || pl::bank_sizes(3, 4, {0, 0, 3, 1}) != std::vector<int>{0, 0, 3, 1} ||
+        pl::bank_sizes(3, 8, {5, 1, 1, 9}) != std::vector<int>{3, 1, 1, 3} || pl::bank_sizes(1, 4, {1, 1}) != std::vector<int>{1, 1})
+        return std::fprintf(stderr, "selftest: bank sizes\n"), 1;
+    for (const int beam : {1, 4, 8}) {
+        const pl::Filler fd(m, o, beam, 3, true);
+        const auto g = fd.fill(s0, codes, fs.ent_tok(fs.fact(0).subj), fs.ent_tok(fs.fact(0).val));
+        if (!g.ok || g.tok.size() != 7) return std::fprintf(stderr, "selftest: dba fill failed (beam %d)\n", beam), 1;
+        std::vector<std::uint16_t> rest;
+        int alan = -1, paris = -1;
+        for (std::size_t i = 0; i < g.tok.size(); ++i) {
+            if (g.tok[i] == "Alan" && i + 1 < g.tok.size() && g.tok[i + 1] == "Smith" && alan < 0) alan = static_cast<int>(i), ++i;
+            else if (g.tok[i] == "Paris" && paris < 0) paris = static_cast<int>(i);
+            else rest.push_back(static_cast<std::uint16_t>(cls[g.ids[i]]));
+        }
+        std::vector<std::uint16_t> want;
+        for (const auto c : codes)
+            if (c != pl::kSlotS && c != pl::kSlotO) want.push_back(c);
+        if (alan < 0 || paris < 0 || rest != want) return std::fprintf(stderr, "selftest: dba fill broke a name or a class code (beam %d)\n", beam), 1;
+        if (fd.dists() == 0 || fd.dists() > static_cast<std::uint64_t>(beam) * g.tok.size())  // one K5 distribution per hypothesis and step
+            return std::fprintf(stderr, "selftest: dba distributions %llu (beam %d)\n", static_cast<unsigned long long>(fd.dists()), beam), 1;
+        if (beam == 4) {
+            std::string t;
+            for (const auto& x : g.tok) t += x + " ";
+            std::printf("k5_planner selftest: dba fill (beam 4): %s\n", t.c_str());
+        }
+    }
     pl::SkelBank b;
     b.add("birth_place", codes), b.add_trans("<s>", "birth_place");
     b.finish();

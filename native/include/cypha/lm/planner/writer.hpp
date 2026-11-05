@@ -10,7 +10,8 @@
 /// 2. Skeleton. The relation's skeletons (class codes with S and O slots, skeleton.hpp), scored by the structure
 ///    experts' class 5-gram and the rhythm expert's length model, the best kSkel kept.
 /// 3. Fill. A beam over K5 word IDs: each class code takes a word of that class (K5's probabilities, the repeat ban and
-///    the copy cap as in K5's own sampler), the slots take the fact's tokens.
+///    the copy cap as in K5's own sampler), the slots take the fact's tokens. --k5-plan-fill dba: dynamic beam
+///    allocation instead (Filler::fill_dba, docs/reports/MERGE_FILL.md); --k5-plan-beam N: the beam (default 4).
 /// 4. Gate. Every structure expert (structure/experts.hpp) plus an MBR consensus on word IDs, joined by a meta-mixer
 ///    trained to rank the real sentence's own fill above the other fills of the same fact (k5_planner train), with a K5
 ///    fluency floor; or K5 alone (--k5-plan-gate k5, the P2 ablation). Only the winner becomes text.
@@ -28,6 +29,8 @@
 #include "cypha/lm/word_kn.hpp"
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -55,10 +58,35 @@ struct Fill {
     double mean() const { return tok.empty() ? -99.0 : lp / static_cast<double>(tok.size()); }
 };
 
+// Bank sizes for dynamic beam allocation (Post and Vilar, NAACL 2018): the beam split evenly over banks 0..C (C
+// constraint tokens), the remainder to the top bank. Bank adjustment, from the top bank down: a bank with more slots
+// than candidates gives the spare slots to the nearest banks that have more candidates than slots (the lower one first
+// at equal distance). Sockeye's single leftward pass can leave slots unused; this does not while candidates remain.
+inline std::vector<int> bank_sizes(int C, int beam, const std::vector<int>& count) {
+    const int nb = C + 1, each = beam / nb;
+    std::vector<int> a(static_cast<std::size_t>(nb), each);
+    a.back() += beam - each * nb;
+    const auto at = [](std::vector<int>& v, int i) -> int& { return v[static_cast<std::size_t>(i)]; };
+    std::vector<int> n = count;
+    for (int i = nb - 1; i >= 0; --i) {
+        int over = at(a, i) - at(n, i);
+        if (over <= 0) continue;
+        at(a, i) = at(n, i);
+        for (int d = 1; d < nb && over > 0; ++d)
+            for (const int j : {i - d, i + d})
+                if (j >= 0 && j < nb && at(n, j) > at(a, j)) {
+                    const int take = std::min(over, at(n, j) - at(a, j));
+                    at(a, j) += take, over -= take;
+                }
+    }
+    return a;
+}
+
 // The constrained beam (step 3).
 class Filler {
  public:
-    Filler(const wkn::K5& m, const wkn::Options& o, int beam = 4, int expand = 3) : m_(m), o_(o), beam_(beam), expand_(expand) {
+    Filler(const wkn::K5& m, const wkn::Options& o, int beam = 4, int expand = 3, bool dba = false)
+        : m_(m), o_(o), beam_(beam), expand_(expand), dba_(dba) {
         const auto& cls = m.classes().classes();
         for (std::uint32_t w = 2; w < cls.size(); ++w) {
             if (m.vocab()[w] == "\n") continue;
@@ -66,8 +94,11 @@ class Filler {
             by_cls_[cls[w]].push_back(w);
         }
     }
+    // K5 distributions computed by this filler (the fill's cost; GENERATION_PLAN §13.40 M3).
+    std::uint64_t dists() const { return dists_; }
     Fill fill(const wkn::K5::State& s, const std::vector<std::uint16_t>& codes, const std::vector<std::string>& S,
               const std::vector<std::string>& O) const {
+        if (dba_) return fill_dba(s, codes, S, O);
         struct It {
             std::vector<std::uint32_t> ids;
             std::vector<std::string> tok;
@@ -85,6 +116,7 @@ class Filler {
             tmp.ctx = s.ctx;
             tmp.ctx.insert(tmp.ctx.end(), it.ids.begin(), it.ids.end());
             m_.model_dist(tmp, o_, p.data(), scratch);
+            ++dists_;
             return std::max(1 - p[wkn::kUnk] - p[wkn::kBos], 1e-12);
         };
         for (const auto code : codes) {
@@ -135,10 +167,135 @@ class Filler {
         return f;
     }
 
+    // Dynamic beam allocation (Post and Vilar, NAACL 2018; GENERATION_PLAN §13.40 M3; docs/reports/MERGE_FILL.md).
+    // The fact's tokens are lexical constraints: S's and O's, C tokens in all. Before any class position ahead of a
+    // name's slot, a hypothesis may start that name; a started name runs to its end; at its slot, a name not yet written
+    // starts, and the slot of a written one is skipped. The slot is a deadline, so fill's placements stay in the search.
+    // Every step writes one token for every hypothesis (a class word or a name's token), so all finish together with
+    // every name written. One beam of beam_ is split over banks 0..C by the constraint tokens met (bank_sizes): a
+    // hypothesis that has paid for a name early is not pruned by those that have not. Class words as in fill (the best
+    // expand_ of the class by K5, the copy cap, the repeat ban); a name's token costs log2 of its K5 probability, as at
+    // a slot. Once started, a name is not broken off (Sockeye may break a phrase and unwind it).
+    Fill fill_dba(const wkn::K5::State& s, const std::vector<std::uint16_t>& codes, const std::vector<std::string>& S,
+                  const std::vector<std::string>& O) const {
+        const std::vector<std::string>* con[2] = {&S, &O};
+        bool slot[2] = {false, false};
+        std::size_t ncls = 0;
+        for (const auto c : codes) {
+            slot[0] = slot[0] || c == kSlotS, slot[1] = slot[1] || c == kSlotO;
+            ncls += c != kSlotS && c != kSlotO;
+        }
+        const std::size_t len[2] = {slot[0] ? S.size() : 0, slot[1] ? O.size() : 0};  // a name without a slot is not written (as fill)
+        const int C = static_cast<int>(len[0] + len[1]);
+        struct It {
+            std::vector<std::uint32_t> ids;
+            std::vector<std::string> tok;
+            double lp = 0;
+            std::string seg, prev;
+            bool has_prev = false;
+            std::size_t j = 0;             // the next skeleton position
+            int act = -1;                  // the name being written (0 S, 1 O), or -1
+            std::size_t done[2] = {0, 0};  // tokens of S and O written
+            int met = 0;                   // constraint tokens written: the bank
+        };
+        const auto name_of = [](std::uint16_t code) { return code == kSlotS ? 0 : code == kSlotO ? 1 : -1; };
+        std::vector<It> cur(1), nxt;
+        cur[0].prev = s.prev, cur[0].has_prev = s.has_prev;
+        thread_local wkn::K5::State tmp;
+        thread_local std::vector<double> p, scratch;
+        p.resize(m_.vocab().size());
+        const auto& cs = m_.cap_set();
+        const auto dist = [&](const It& it) {
+            tmp.ctx = s.ctx;
+            tmp.ctx.insert(tmp.ctx.end(), it.ids.begin(), it.ids.end());
+            m_.model_dist(tmp, o_, p.data(), scratch);
+            ++dists_;
+            return std::max(1 - p[wkn::kUnk] - p[wkn::kBos], 1e-12);
+        };
+        const auto settle = [&](It& it) {  // past the slots of written names
+            for (int c; it.act < 0 && it.j < codes.size() && (c = name_of(codes[it.j])) >= 0 && it.done[c] == len[c];) ++it.j;
+        };
+        const auto put = [&](const It& it, int c, double z) {  // it writes name c's next token (p: its distribution)
+            It x = it;
+            const std::string& t = (*con[c])[x.done[c]];
+            const std::uint32_t id = m_.id(t);
+            x.lp += std::log2(std::max(p[id] / (id == wkn::kUnk ? 1.0 : z), 1e-12));
+            x.ids.push_back(id), x.tok.push_back(t);
+            x.prev = t, x.has_prev = true;
+            x.seg.clear();
+            ++x.done[c], ++x.met;
+            x.act = x.done[c] < len[c] ? c : -1;
+            return x;
+        };
+        std::vector<int> cnt(static_cast<std::size_t>(C) + 1);
+        std::vector<std::pair<double, std::uint32_t>> top;
+        for (std::size_t step = 0; step < ncls + static_cast<std::size_t>(C); ++step) {
+            nxt.clear();
+            for (auto& it : cur) {
+                settle(it);
+                if (it.act < 0 && it.j >= codes.size()) continue;  // not reached: every hypothesis writes ncls + C tokens
+                if (it.act < 0 && name_of(codes[it.j]) < 0 && codes[it.j] >= by_cls_.size()) continue;
+                const double z = dist(it);
+                if (it.act >= 0) {  // the name runs on
+                    nxt.push_back(put(it, it.act, z));
+                    continue;
+                }
+                const auto code = codes[it.j];
+                if (name_of(code) >= 0) {  // its slot: the deadline
+                    It x = put(it, name_of(code), z);
+                    x.j = it.j + 1;
+                    nxt.push_back(std::move(x));
+                    continue;
+                }
+                std::uint64_t hp = 0;
+                const bool capped = o_.cap && cs.prefix(tmp.ctx, hp);
+                top.clear();
+                for (const auto w : by_cls_[code])
+                    if (p[w] > 0) top.push_back({p[w], w});
+                std::sort(top.begin(), top.end(), [](const auto& a, const auto& b) { return a.first > b.first || (a.first == b.first && a.second < b.second); });
+                int took = 0;
+                for (const auto& [pw, w] : top) {
+                    if (took >= expand_) break;
+                    if (capped && cs.has(wkn::fnv_step(hp, w))) continue;
+                    const std::string pc = wkn::piece(m_.vocab()[w], it.prev, it.has_prev);
+                    if (s.rep.banned(it.seg + pc)) continue;
+                    It x = it;
+                    x.lp += std::log2(std::max(pw / z, 1e-12));
+                    x.ids.push_back(w), x.tok.push_back(m_.vocab()[w]);
+                    x.seg += pc, x.prev = m_.vocab()[w], x.has_prev = true;
+                    x.j = it.j + 1;
+                    nxt.push_back(std::move(x));
+                    ++took;
+                }
+                for (int c = 0; c < 2; ++c)  // a name early, before this class position (its slot is ahead)
+                    if (len[c] > 0 && it.done[c] == 0) nxt.push_back(put(it, c, z));
+            }
+            if (nxt.empty()) return {};
+            std::stable_sort(nxt.begin(), nxt.end(), [](const It& a, const It& b) { return a.lp > b.lp; });
+            std::fill(cnt.begin(), cnt.end(), 0);
+            for (const auto& x : nxt) ++cnt[static_cast<std::size_t>(x.met)];
+            auto room = bank_sizes(C, beam_, cnt);
+            cur.clear();
+            for (auto& x : nxt)
+                if (room[static_cast<std::size_t>(x.met)] > 0) --room[static_cast<std::size_t>(x.met)], cur.push_back(std::move(x));
+        }
+        const It* best = nullptr;
+        for (auto& it : cur) {
+            settle(it);
+            if (it.met == C && it.act < 0 && it.j >= codes.size() && (!best || it.lp > best->lp)) best = &it;
+        }
+        if (!best) return {};
+        Fill f;
+        f.ids = best->ids, f.tok = best->tok, f.lp = best->lp, f.ok = true;
+        return f;
+    }
+
  private:
     const wkn::K5& m_;
     const wkn::Options& o_;
     int beam_, expand_;
+    bool dba_ = false;
+    mutable std::uint64_t dists_ = 0;
     std::vector<std::vector<std::uint32_t>> by_cls_;
 };
 
@@ -188,7 +345,12 @@ class Model {
     double floor = -1e9;  // K5 fluency floor (mean log2 P per word); fills below it are not chosen unless all are
     bool gate_k5 = false; // --k5-plan-gate k5 (P2): K5 alone chooses
     bool trained = false;
+    bool fill_dba = false;  // --k5-plan-fill dba: dynamic beam allocation (Filler::fill_dba)
+    int beam = 4;           // --k5-plan-beam N
     std::string stats_path, skel_path, model_path;
+    // §13.40 M3: thread-time inside Filler::fill and in the planner's fact steps (ns), fills, K5 distributions, prompts
+    // the planner wrote from facts.
+    mutable std::atomic<std::uint64_t> fill_ns{0}, fills{0}, dists{0}, steps_ns{0}, planned{0};
 
     // The model file (k5_planner train's output) without the store; then the store (load_store).
     bool load(const std::string& path, std::string& err) {
@@ -261,7 +423,10 @@ class Model {
         out.clear();
         for (const auto i : pick) {
             Cand cd;
+            const auto t0 = std::chrono::steady_clock::now();
             cd.fill = fl.fill(s, sk[i].codes, S, O);
+            fill_ns += static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - t0).count());
+            ++fills;
             if (!cd.fill.ok) continue;
             cd.skel = i;
             st::Sent z;
@@ -404,6 +569,17 @@ inline std::string log_clean(std::string s) {
 class Writer final : public wkn::StructureWriter {
  public:
     explicit Writer(std::shared_ptr<const Model> md) : md_(std::move(md)) {}
+    // §13.40 M3: the fill's cost, summed over the sampling threads (stderr; the GEN file is not touched).
+    ~Writer() {
+        const Model& md = *md_;
+        if (md.planned == 0) return;
+        std::fprintf(stderr, "k5-plan: fill %s (beam %d): %llu fills in %.2f thread-s (%.3f ms each), %llu K5 distributions; "
+                     "planner fact steps %.2f thread-s over %llu prompts\n",
+                     md.fill_dba ? "dba" : "beam", md.beam, static_cast<unsigned long long>(md.fills.load()), static_cast<double>(md.fill_ns.load()) / 1e9,
+                     md.fills ? static_cast<double>(md.fill_ns.load()) / 1e6 / static_cast<double>(md.fills.load()) : 0.0,
+                     static_cast<unsigned long long>(md.dists.load()), static_cast<double>(md.steps_ns.load()) / 1e9,
+                     static_cast<unsigned long long>(md.planned.load()));
+    }
     std::string generate(const wkn::K5& m, std::string_view prompt, std::uint64_t seed, const wkn::Options& o, wkn::GenStats* gst) const override {
         if (m.vocab().size() <= 2) return {};
         const Model& md = *md_;
@@ -418,8 +594,9 @@ class Writer final : public wkn::StructureWriter {
             return out;
         }
         wkn::GenStats g;
+        const auto t_steps = std::chrono::steady_clock::now();
         const st::Experts ex(md.stats, m, md.runs(m), &md.topics, &md.grid);
-        const Filler fl(m, o);
+        const Filler fl(m, o, md.beam, 3, md.fill_dba);
         st::Context c;
         c.sents = st::split(wkn::tokens(prompt));
         c.n_prompt = c.sents.size();
@@ -459,6 +636,9 @@ class Writer final : public wkn::StructureWriter {
             for (const auto& x : win.tok) t += (t.empty() ? "" : " ") + x;
             sent_tok.push_back(t);
         }
+        md.steps_ns += static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - t_steps).count());
+        md.dists += fl.dists();
+        ++md.planned;
         // K5's own gate writes on (the same streams as its gate; sentence numbers after the plan's).
         const int K = std::max(o.gate_k, 1);
         std::vector<wkn::K5::State> cs(static_cast<std::size_t>(K));
@@ -516,20 +696,28 @@ class Writer final : public wkn::StructureWriter {
     std::shared_ptr<const Model> md_;
 };
 
-// cyphalm_trie: --k5-plan STOREDIR --k5-plan-model FILE [--k5-plan-gate full|k5]; drops: the evidence ranges to drop.
+// cyphalm_trie: --k5-plan STOREDIR --k5-plan-model FILE [--k5-plan-gate full|k5] [--k5-plan-fill beam|dba]
+// [--k5-plan-beam N]; drops: the evidence ranges to drop. beam 0: the default (4).
 inline bool apply_plan_flags(const std::string& store, const std::string& model, const std::string& gate,
-                             const std::vector<std::pair<std::size_t, std::size_t>>& drops, wkn::Options& o, std::string& err) {
+                             const std::vector<std::pair<std::size_t, std::size_t>>& drops, wkn::Options& o, std::string& err,
+                             const std::string& fill = "beam", int beam = 0) {
     auto md = std::make_shared<Model>();
     if (model.empty()) return err = "--k5-plan needs --k5-plan-model FILE (k5_planner train)", false;
     if (gate != "full" && gate != "k5") return err = "--k5-plan-gate takes full or k5", false;
+    if (fill != "beam" && fill != "dba") return err = "--k5-plan-fill takes beam or dba", false;
+    if (beam < 0 || beam > 256) return err = "--k5-plan-beam takes 1 to 256", false;
     if (!md->load(model, err)) return false;
     md->gate_k5 = gate == "k5";
+    md->fill_dba = fill == "dba";
+    if (beam > 0) md->beam = beam;
     if (!md->fs.load(store, drops, err)) return false;
     std::fprintf(stderr, "k5-plan: store %s: %zu facts (%zu dropped), %zu subjects, %zu relations; bank %zu skeletons over %zu relations; gate %s%s; floor %.3f\n",
                  store.c_str(), md->fs.size(), md->fs.dropped(), md->fs.subjects(), md->fs.rels(), md->bank.skeletons(), md->bank.relations(),
                  gate.c_str(), md->trained ? "" : " (untrained: K5 alone)", md->floor);
+    if (md->fill_dba || beam > 0) std::fprintf(stderr, "k5-plan: fill %s, beam %d\n", fill.c_str(), md->beam);
     o.structure = std::make_shared<Writer>(md);
     o.structure_desc = "plan:" + store + "," + model + ",gate=" + gate;
+    if (md->fill_dba || beam > 0) o.structure_desc += ",fill=" + fill + ",beam=" + std::to_string(md->beam);  // MERGE_FILL.md
     return true;
 }
 
