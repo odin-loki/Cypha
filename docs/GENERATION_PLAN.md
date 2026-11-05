@@ -1878,3 +1878,33 @@ K5's default output is byte-identical after the merges: all 250 dev prompts, che
 - fact precision against the store;
 - copy cap and copy share;
 - test read once, only for an adopted arm.
+
+### 13.38 The fact store at scale and the planner: rules and predictions (registered 2026-11-05, before any run)
+
+**Who does it.** The two cloud-started PC sessions pushed nothing, so Odin stopped them. The lead PC session does both jobs (subagents in worktrees; branches `wip/fact-store-scale2` and `wip/k5-planner2`). Reports: `docs/reports/FACT_STORE_SCALE.md`, `docs/reports/K5_PLANNER.md`.
+
+**A. The fact store over enwik9.**
+- `pattern_learn` (F2), unchanged in its learning rules, run over enwik9 bytes 100,000,000 onward (past enwik8). The enwik8 store stays as it is; the new facts are added beside it with their own `byte_offset` into enwik9 and a source tag.
+- **Leakage guards:**
+  - every page that holds a GEN-A or SCRIBE overlap hit in K5_SCALE's check (`k5scale/clean/overlap_report.txt`) is skipped whole, infobox included;
+  - facts read from a GEN-A prompt's own source bytes are dropped at plan time (`--plan-drop`), as before;
+  - no GEN-A test prompt, continuation or entity list is read to choose anything.
+- **Coverage metric:** the share of the 250 GEN-A dev prompts whose main entity (the content plan's own entity finder, unchanged) has at least one fact after `--plan-drop`. Reported with Wilson 95% intervals, before and after.
+- **Predictions:** before about 30 of 250 (12%); after at least 75 of 250 (30%); fact precision against Wikidata checks (`facts_wd_check`) for prose facts within 0.05 of the enwik8 store's.
+
+**B. The planner (`native/include/cypha/lm/planner/`, `sample --k5 … --k5-plan DIR`).**
+- Plan → skeleton → fill → gate as §13.37, all search on fact IDs, word IDs and class codes; only the winner is decoded.
+- Gate: every expert of `lm/structure/` (K5, class, topic, grid, relations, reference, time, transitions, rhythm, novelty) plus MBR, joined by the meta-mixer. The mixer is **not** trained on "real vs K5 draft". It is trained to rank the real sentence's own fill (its skeleton and fact) above other fills of the same plan step, on clean enwik9 that K5 never saw, with a K5 fluency floor.
+- Prompts with no facts use the fallback (co-occurring entities and the relations expert's typed patterns); if even that is empty, the planner hands the prompt to plain K5. The share of each path is reported.
+- **Must hold:** with `--k5-plan` off, `sample` output is byte-identical to the binary before the change on all 250 dev prompts (`cmp`).
+- **Arms on dev (seed 0, 250 prompts):** K5 (today's default); P1 (`--k5-plan`, full gate); P2 (`--k5-plan`, gate of K5 alone, an ablation).
+- **Dev measures:** SCRIBE v2 (score of record) and v3.1; fact precision (stated facts that match the store, and their share); copy32 share and the 12-word cap; coverage by path.
+- **Deciding judge:** `scripts/blind_rate.py --mode pair --baseline K5`, 50 dev prompts, four fresh blind Claude raters, P1 vs K5 and P2 vs K5. The packets and key are committed before the raters run. An arm reads better if its win share minus 0.5 is above 0, its 95% bootstrap interval excludes 0, and both rater pairs agree on the sign.
+- **Adoption:** an arm is adopted (still off by default; Odin decides defaults) only if it reads better by the rule. Only then is GEN-A test read, once, with SCRIBE v2 and v3.1.
+- **Predictions:**
+  - byte-identical with the flag off: hit expected;
+  - P1 fact precision at least 0.8 of stated facts;
+  - P1 copy32 share no higher than K5's;
+  - SCRIBE v2 dev: P1 within ±0.05 of K5 (SCRIBE rewards K5's local fluency); v3.1 P1 above K5;
+  - pairwise: P1 beats K5 (win share above 0.6, interval excluding 0.5) on prompts with facts; overall P1 wins above 0.5 with the interval excluding it only if coverage reaches 30%;
+  - P2 below P1 in pairwise share.
