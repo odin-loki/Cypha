@@ -1,0 +1,10 @@
+prompts 250
+path main: 62 (0.248 [0.199, 0.305])
+path cooc: 5 (0.020 [0.009, 0.046])
+path k5: 105 (0.420 [0.360, 0.482])
+facts planned 246, written 246, stated in the cut text 246
+fact precision against the store: 246 of 246 (1.000; every stated fact is a store fact by construction)
+Wikidata check of stated facts: right 0, wrong 0, unchecked 246; right share of checked nan
+relation cue in the stated fact's sentence: 10 of 51 (0.196 [0.110, 0.325])
+stated facts by relation: is_a 87, birth_year 28, located_in 22, capital 18, death_year 16, language 13, largest_city 8, birth_place 7, founded 6, location 6, country 6, nationality 6, currency 3, class 2, family 2, creator 2, director 2, developer 2, genre 2, death_place 2, predecessor 2, publisher 2, occupation 1, successor 1
+plain K5 on the same prompts states 0 of the 239 facts the planner stated (subject and value both in its text)

@@ -1,0 +1,6 @@
+planner store bench/fact_store/e9_v2: 77658 facts (2814 dropped, 2732 filtered), 35197 subjects, 14543 aliases; find 2, filter bench/fact_filter/chosen.params
+main    62 of 250 = 0.248 [0.199, 0.305]; facts per main plan 1.81
+pattern 78 of 250 = 0.312 [0.258, 0.372]; facts per plan 1.56
+cooc    5 of 250 = 0.020 [0.009, 0.046]
+k5      105 of 250
+main-plan relations: birth_place 3 birth_year 9 capital 8 country 4 creator 2 currency 6 death_place 1 death_year 8 developer 1 director 1 genre 2 is_a 43 language 8 largest_city 8 located_in 5 nationality 1 occupation 1 predecessor 2 publisher 2 successor 2

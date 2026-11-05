@@ -1,0 +1,57 @@
+== A: bench/fact_store/e9_aug bench/eval/gen_prompts_dev.tsv --planner bench/k5_planner/model/skel_e9.txt --stats /home/odin/k5s_data/S10.stats
+planner store bench/fact_store/e9_aug: 70569 facts (2383 dropped, 0 filtered), 24891 subjects, 0 aliases; find 1, filter off
+main    50 of 250 = 0.200 [0.155, 0.254]; facts per main plan 3.00
+pattern 0 of 250 = 0.000 [0.000, 0.015]; facts per plan 0.00
+cooc    43 of 250 = 0.172 [0.130, 0.224]
+k5      157 of 250
+main-plan relations: author 3 birth_place 9 birth_year 13 capital 11 country 12 creator 3 currency 11 death_place 10 death_year 11 developer 1 director 1 founded 15 founder 1 genre 4 language 14 largest_city 5 located_in 12 location 1 nationality 3 occupation 10 predecessor 1 publisher 3 spouse 7 successor 1
+== At: /mnt/d/cypha_llm/plan/q1/e9_aug_text bench/eval/gen_prompts_dev.tsv --planner bench/k5_planner/model/skel_e9.txt --stats /home/odin/k5s_data/S10.stats
+planner store /mnt/d/cypha_llm/plan/q1/e9_aug_text: 56084 facts (2383 dropped, 0 filtered), 22718 subjects, 0 aliases; find 1, filter off
+main    24 of 250 = 0.096 [0.065, 0.139]; facts per main plan 2.42
+pattern 0 of 250 = 0.000 [0.000, 0.015]; facts per plan 0.00
+cooc    53 of 250 = 0.212 [0.166, 0.267]
+k5      173 of 250
+main-plan relations: birth_place 2 birth_year 7 capital 6 creator 2 currency 3 death_place 1 death_year 6 developer 1 director 1 genre 2 language 6 largest_city 5 located_in 7 location 1 nationality 3 occupation 2 predecessor 1 publisher 2 successor 1
+== B: bench/fact_store/e9_v2 bench/eval/gen_prompts_dev.tsv --planner bench/k5_planner/model/skel_e9.txt --stats /home/odin/k5s_data/S10.stats
+planner store bench/fact_store/e9_v2: 80390 facts (2814 dropped, 0 filtered), 35389 subjects, 0 aliases; find 1, filter off
+main    24 of 250 = 0.096 [0.065, 0.139]; facts per main plan 2.38
+pattern 0 of 250 = 0.000 [0.000, 0.015]; facts per plan 0.00
+cooc    52 of 250 = 0.208 [0.162, 0.263]
+k5      174 of 250
+main-plan relations: birth_place 1 birth_year 7 capital 6 creator 2 currency 3 death_place 1 death_year 6 developer 1 director 1 genre 2 language 6 largest_city 5 located_in 7 location 1 nationality 3 occupation 2 predecessor 1 publisher 2 successor 1
+== C: bench/fact_store/e9_v2 bench/eval/gen_prompts_dev.tsv --planner bench/fact_store/e9_v2/skel_q1.txt --stats /home/odin/k5s_data/S10.stats
+planner store bench/fact_store/e9_v2: 80390 facts (2814 dropped, 0 filtered), 35389 subjects, 0 aliases; find 1, filter off
+main    51 of 250 = 0.204 [0.159, 0.258]; facts per main plan 1.71
+pattern 0 of 250 = 0.000 [0.000, 0.015]; facts per plan 0.00
+cooc    53 of 250 = 0.212 [0.166, 0.267]
+k5      146 of 250
+main-plan relations: birth_place 1 birth_year 7 capital 3 creator 2 currency 1 death_place 1 death_year 6 developer 1 director 1 genre 2 is_a 42 language 3 largest_city 3 located_in 7 location 1 nationality 3 occupation 2 predecessor 1 publisher 2 successor 1
+== D: bench/fact_store/e9_v2 bench/eval/gen_prompts_dev.tsv --planner bench/fact_store/e9_v2/skel_q1.txt --stats /home/odin/k5s_data/S10.stats --find 2
+planner store bench/fact_store/e9_v2: 80390 facts (2814 dropped, 0 filtered), 35389 subjects, 14620 aliases; find 2, filter off
+main    62 of 250 = 0.248 [0.199, 0.305]; facts per main plan 1.82
+pattern 0 of 250 = 0.000 [0.000, 0.015]; facts per plan 0.00
+cooc    39 of 250 = 0.156 [0.116, 0.206]
+k5      149 of 250
+main-plan relations: birth_place 3 birth_year 9 capital 8 country 4 creator 2 currency 6 death_place 1 death_year 8 developer 1 director 1 genre 2 is_a 43 language 8 largest_city 8 located_in 5 nationality 2 occupation 1 predecessor 2 publisher 2 successor 2
+== Da: bench/fact_store/e9_aug bench/eval/gen_prompts_dev.tsv --planner bench/k5_planner/model/skel_e9.txt --stats /home/odin/k5s_data/S10.stats --find 2
+planner store bench/fact_store/e9_aug: 70569 facts (2383 dropped, 0 filtered), 24891 subjects, 0 aliases; find 2, filter off
+main    49 of 250 = 0.196 [0.152, 0.250]; facts per main plan 3.04
+pattern 0 of 250 = 0.000 [0.000, 0.015]; facts per plan 0.00
+cooc    42 of 250 = 0.168 [0.127, 0.219]
+k5      159 of 250
+main-plan relations: author 2 birth_place 10 birth_year 13 capital 11 country 13 creator 3 currency 11 death_place 10 death_year 11 developer 1 director 1 founded 15 founder 2 genre 3 language 14 largest_city 5 located_in 11 location 1 nationality 3 occupation 9 predecessor 1 publisher 3 spouse 7 successor 1
+== F: bench/fact_store/e9_v2 bench/eval/gen_prompts_dev.tsv --planner bench/fact_store/e9_v2/skel_q1.txt --stats /home/odin/k5s_data/S10.stats --find 2 --fallback pattern
+planner store bench/fact_store/e9_v2: 80390 facts (2814 dropped, 0 filtered), 35389 subjects, 14620 aliases; find 2, filter off
+main    62 of 250 = 0.248 [0.199, 0.305]; facts per main plan 1.82
+pattern 78 of 250 = 0.312 [0.258, 0.372]; facts per plan 1.56
+cooc    5 of 250 = 0.020 [0.009, 0.046]
+k5      105 of 250
+main-plan relations: birth_place 3 birth_year 9 capital 8 country 4 creator 2 currency 6 death_place 1 death_year 8 developer 1 director 1 genre 2 is_a 43 language 8 largest_city 8 located_in 5 nationality 2 occupation 1 predecessor 2 publisher 2 successor 2
+== G: bench/fact_store/e9_v2 bench/eval/gen_prompts_dev.tsv --planner bench/fact_store/e9_v2/skel_q1.txt --stats /home/odin/k5s_data/S10.stats --find 2 --fallback pattern --filter on
+planner store bench/fact_store/e9_v2: 73664 facts (2814 dropped, 6726 filtered), 33102 subjects, 13480 aliases; find 2, filter on
+main    58 of 250 = 0.232 [0.184, 0.288]; facts per main plan 1.76
+pattern 81 of 250 = 0.324 [0.269, 0.384]; facts per plan 1.58
+cooc    3 of 250 = 0.012 [0.004, 0.035]
+k5      108 of 250
+main-plan relations: birth_place 3 birth_year 9 capital 8 country 3 creator 2 currency 3 death_place 1 death_year 8 director 1 genre 2 is_a 38 language 5 largest_city 8 located_in 5 nationality 2 occupation 1 predecessor 2 publisher 1 successor 2
+COV_OK
