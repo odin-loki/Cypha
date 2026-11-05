@@ -498,10 +498,17 @@ XCOORD = [
                         "default,T=0.1", "default,T=0.2"], "default,T=0.05", True),
     ("bkn", "--bkn", ["4:4:2:1", "5:4:2:1", "6:4:2:1", "8:4:2:1", "10:4:2:1"], "6:4:2:1", True),
     ("cls", "--cls", ["shape:6:2:cp2", "shape:6:3:cp2", "shape:6:4:cp2", "shape:6:5:cp2"], "shape:6:3:cp2", True),
-    ("ngram-orders", "--ngram-orders", ["1,2,3,4,5,6,8,12", "1,2,3,4,5,6,7,8,10,12,16", "1,2,3,4,6,8,12,16"],
+    # each n-gram order is a 2^24-slot table (about 88 MB): 11 orders cost +265 MB (+20% on the small slice), so the
+    # cheaper sets of 9 and 10 orders are steps of the same move
+    ("ngram-orders", "--ngram-orders", ["1,2,3,4,5,6,8,12", "1,2,3,4,5,6,7,8,10,12,16", "1,2,3,4,6,8,12,16",
+                                        "1,2,3,4,5,6,8,12,16", "1,2,3,4,5,6,7,8,12", "1,2,3,4,5,6,7,8,12,16"],
      "1,2,3,4,5,6,8,12", False),
-    ("doc", "--doc", ["cache", "trig,cache", "cache,cand=2048", "cache,stop=100", "cache,stop=400"], "cache", False),
+    ("doc", "--doc", ["cache", "trig,cache", "cache,cand=2048", "cache,stop=100", "cache,stop=400", "cache,cand=4096"],
+     "cache", False),
 ]
+# §13.42's limit, kept inside the search: a point whose peak RSS on the small slice is more than 20% above the
+# defaults' (SM__default, 1302 MB) cannot be kept; the best such point is reported beside the kept one.
+RAM_FRAC = 1.20
 XDEFAULT = {c[1]: c[3] for c in XCOORD}
 
 
@@ -525,9 +532,29 @@ def cmd_expert(a):
         x.update(json.loads(a.start))
     only = set(a.only.split(";")) if a.only else None
     coords = [c for c in XCOORD if only is None or c[0] in only]
-    s0, _ = run_ctx(xflags(x, mix), "start")
-    log("expert start %.4f %s" % (s0, " ".join(xflags(x, mix))))
+    ram_limit = a.ram_limit
+    if not ram_limit:
+        d0 = [r for r in tsv_read(XLOG) if r["trial"] == "SM__default" and r["status"] == "ok"]
+        ram_limit = RAM_FRAC * float(d0[0]["peak_rss_mb"]) if d0 else math.inf
+    over = {"score": math.inf}  # the best point over the RAM limit
+
+    def judge(flags, phase):
+        """A trial's score for the search: inf when it is over the RAM limit (kept aside in `over`)."""
+        sc, row = run_ctx(flags, phase)
+        mb = float(row.get("peak_rss_mb") or 0)
+        if sc < math.inf and mb > ram_limit:
+            log("over the RAM limit (%.0f > %.0f MB): %.4f %s" % (mb, ram_limit, sc, " ".join(flags)))
+            if sc < over["score"]:
+                over.update(score=sc, flags=flags, peak_rss_mb=mb)
+            return math.inf, row
+        return sc, row
+    s0, _ = judge(xflags(x, mix), "start")
+    log("expert start %.4f %s (RAM limit %.0f MB)" % (s0, " ".join(xflags(x, mix)), ram_limit))
     dirs = {c[1]: (-1, 1) if c[4] else None for c in coords}  # the directions still open per ordered setting
+    if a.dirs:  # only these ordered settings, in these directions
+        dd = json.loads(a.dirs)
+        dirs = {f: (tuple(dd[f]) if f in dd else None) if v is not None else None for f, v in dirs.items()}
+    alts = json.loads(a.alts) if a.alts else None  # the categorical alternatives tried in round 1 (default: all)
     rnd = 0
     while True:
         rnd += 1
@@ -543,7 +570,7 @@ def cmd_expert(a):
                         y[flag] = vals[i + dd]
                         cand.append((flag, dd, y))
             elif rnd == 1:
-                for v in vals:
+                for v in (alts.get(flag, []) if alts is not None else vals):
                     if v != x[flag]:
                         y = dict(x)
                         y[flag] = v
@@ -551,7 +578,7 @@ def cmd_expert(a):
         if not cand:
             break
         with ThreadPoolExecutor(max_workers=a.jobs) as ex:
-            res = list(ex.map(lambda c: run_ctx(xflags(c[2], mix), "round%d" % rnd), cand))
+            res = list(ex.map(lambda c: judge(xflags(c[2], mix), "round%d" % rnd), cand))
         best = {}
         for (flag, dd, y), (sc, _) in zip(cand, res):
             if sc < s0 - TOL / 2 and (flag not in best or sc < best[flag][0]):
@@ -570,7 +597,7 @@ def cmd_expert(a):
             comb = dict(x)
             for f, (_, v, _) in best.items():
                 comb[f] = v
-            sc_c, _ = run_ctx(xflags(comb, mix), "round%d_comb" % rnd)
+            sc_c, _ = judge(xflags(comb, mix), "round%d_comb" % rnd)
         if sc_c < best[f1][0] - TOL / 2:
             x, s0 = comb, sc_c
             log("expert round %d: combined %s -> %.4f" % (rnd, ",".join(sorted(best)), s0))
@@ -578,8 +605,11 @@ def cmd_expert(a):
             x, s0 = single, best[f1][0]
             log("expert round %d: %s=%s -> %.4f" % (rnd, f1, best[f1][1], s0))
     log("RESULT expert %.4f %s" % (s0, " ".join(xflags(x, mix))))
+    if over["score"] < math.inf:
+        log("RESULT expert over the RAM limit: %.4f %.0f MB %s" % (over["score"], over["peak_rss_mb"], " ".join(over["flags"])))
     with open(os.path.join(OUT, "expert_best_%s.json" % (a.name or "small")), "w") as fo:
-        json.dump({"score": s0, "x": x, "flags": xflags(x, mix)}, fo, indent=1)
+        json.dump({"score": s0, "x": x, "flags": xflags(x, mix), "ram_limit_mb": ram_limit,
+                   "over_limit": over if over["score"] < math.inf else None}, fo, indent=1)
 
 
 def cmd_dump(a):
@@ -759,6 +789,9 @@ def main():
     e.add_argument("--mix", default="", help="JSON list of mixer flags added to every run (the tuned mixers)")
     e.add_argument("--only", default="", help="settings to move, ';'-separated")
     e.add_argument("--name", default="")
+    e.add_argument("--dirs", default="", help='JSON {flag: [-1|1, ...]}: only these ordered settings, these directions')
+    e.add_argument("--alts", default="", help="JSON {flag: [values]}: the categorical alternatives tried in round 1")
+    e.add_argument("--ram-limit", type=float, default=0, help="MB (default 1.2 x SM__default's peak RSS)")
     du = sp.add_parser("dump")
     du.add_argument("--slice", default="small", choices=sorted(SLICES))
     du.add_argument("--flags", default="")
