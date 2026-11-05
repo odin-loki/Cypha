@@ -1931,3 +1931,43 @@ K5's default output is byte-identical after the merges: all 250 dev prompts, che
 - **Guard:** `scripts/gen_eval.sh` now always passes `--plan-drop 75497472:100000000` (the GEN-A prompts' source bytes), so no eval run plans from a prompt's own page. The flag is read only by the planners.
 - **Checked on all 250 dev prompts:** the default's samples equal P1's (`cmp`; only the MODEL header line names the default paths), and `--no-k5-plan` equals the old K5 byte for byte. Dev SCRIBE v2 0.532 [0.502, 0.564], as P1. Selftests pass.
 - The report card's K5 writer now uses the planner too, when run from the repository root.
+
+### 13.40 Lighter and merged: one count index, one Kneser–Ney, one mixer, a cheaper fill, grouped gate experts (registered 2026-11-05, before any run; Odin's PC)
+
+**Odin:** "see if there are any algebraic, factorial or combinatorical reductions of these algorithms and see if we cant merge some of these algorithms together and lighten the load". And: "So do that testing for Cypha and use sub agents."
+
+**Why each merge should work** (the literature behind it):
+- Kneser–Ney of any order can be computed exactly from one compressed suffix tree (Shareghi, Petri, Haffari and Cohn, TACL 2016). A suffix array also gives any-order counts (infini-gram, Liu et al. 2024).
+- Interpolated Kneser–Ney is an approximation to a hierarchical Pitman–Yor model (Teh 2006). Byte KN and word KN are the same maths over different symbols.
+- PAQ's logistic mixing is geometric mixing for a binary alphabet, a product of experts with a convex loss (Mattern 2012–13). The content mixer, full mix, meta mixer and the structure ranker are all forms of it.
+- Dynamic beam allocation keeps one beam of fixed size across the constraint banks (Post and Vilar 2018). Its cost does not grow with the number of forced words, unlike grid beam search.
+
+**Four jobs, four branches, no shared files:**
+
+| Job | Branch | Files it owns | What it does |
+|---|---|---|---|
+| M1 counts | `wip/merge-counts` | `lm/word_kn.hpp`, `lm/byte_kn.hpp`, a new `lm/count_index.hpp` | one suffix array (word IDs for K5, bytes for byte KN) answers K5's counts, its continuation counts and the novelty/copy match lengths; byte KN and word KN share one KN core |
+| M2 mixers | `wip/merge-mixers` | `online/content_mixer.hpp`, `full_mixer.hpp`, `meta_mixer.hpp`, `lm/structure/mixer.hpp`, a new `online/mix_core.hpp` | one library for exponentiated-gradient and logistic/geometric mixing, used by all four |
+| M3 fill | `wip/merge-fill` | `lm/planner/writer.hpp` (fill only) | dynamic beam allocation for the planner's constrained fill |
+| M4 gate | `wip/merge-gate` | `lm/structure/experts.hpp` | experts that read the same statistics share one pass (topic with entity grid; class, rhythm and transitions over one class-code sequence) |
+
+Nobody touches `native/tools/trie_stream_train.cpp` or `scripts/run_train.sh`.
+
+**Rules:**
+- **M1, M2, M4 are exact refactors.** They must give the same output bit for bit:
+  - M1: K5's `sample --k5 --no-k5-plan` and `--k5-plan` GEN files on the 250 dev prompts; SCRIBE's MATCH numbers on its selftest and one dev run; any byte-KN user's output on the small `context8k` setup.
+  - M2: `context8k` on the small setup (`--train 1048576 --sample 1179648`) with the default and with `--no-meta-mix`, `--no-full-mix`; the planner's and `--k5-struct`'s dev GEN files.
+  - M4: the planner's dev GEN file and `--k5-struct`'s.
+  - Exact means `cmp` of whole outputs. Floating-point order must be kept; if a merge cannot keep it, that merge is reported as failed, not loosened.
+- **Each reports:** peak RAM (`/usr/bin/time -v`), wall time, run together with the old binary on the same thread count, and lines of code before and after.
+- **M3 changes the search, so it is a registered change:** arm F1 = dynamic beam allocation at today's beam; arm F2 = dynamic beam allocation with the beam doubled.
+  - On dev: planner time, SCRIBE v2 and v3.1, copy32, against P1.
+  - Deciding judge, only if F1 or F2 is no worse on SCRIBE v2 (intervals overlap or above): pairwise blind raters against P1, today's default (`blind_rate.py --mode pair --baseline P1`), the §13.38 rule.
+  - Adopted only by the raters; GEN-A test read once, only then.
+- **A merge is kept** if it is exact (M1, M2, M4) and lowers RAM or time or code with nothing worse, or (M3) if the raters prefer it or it is exact-quality and faster.
+
+**Predictions:**
+- M1: exact; K5's peak RAM down at least 30% (the count tables go), sampling time within +50% (suffix-array lookups are slower than hash lookups).
+- M2: exact; code down at least 25% across the four mixers; time within ±3%.
+- M3: F1 planner fill time down at least 30%, SCRIBE within ±0.02 of P1, raters about even with P1; F2 at about P1's time, raters prefer F2 to P1 (wider beam, better fills).
+- M4: exact; gate time down at least 20%.
