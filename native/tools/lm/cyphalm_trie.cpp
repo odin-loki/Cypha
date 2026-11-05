@@ -281,6 +281,7 @@
 #include "cypha/lm/similar_context.hpp"
 #include "cypha/lm/token_model.hpp"  // BKN selftest: the reference Kneser-Ney
 #include "cypha/lm/word_kn.hpp"      // §13.19: sample --k5
+#include "cypha/lm/k5_mcmc.hpp"      // docs/reports/K5_MCMC.md: sample --k5 ... --k5-mcmc STEPS
 #include "cypha/eval/lci.hpp"
 #include "cypha/eval/scribe.hpp"
 #include "cypha/knowledge/unknown_signals.hpp"
@@ -2080,9 +2081,11 @@ int cmd_sample(const Args& a) {
     }
     if (!a.k5.empty()) {  // §13.19: K5 writes every GEN line (T 1.0 unless --temps); the trie and its experts are not built
         cypha::cyphalm::wkn::Options base;
+        cypha::cyphalm::wkn::mcmc::Params mp;  // K5_MCMC.md: --k5-mcmc... flags (k5_mcmc.hpp)
         for (const auto& [k, v] : a.k5_opts) {  // K5_UPGRADES.md
             std::string err;
-            if (!cypha::cyphalm::wkn::apply_flag(k, v, base, err)) {
+            if (k.rfind("--k5-mcmc", 0) == 0 ? !cypha::cyphalm::wkn::mcmc::apply_flag(k, v, mp, err)
+                                              : !cypha::cyphalm::wkn::apply_flag(k, v, base, err)) {
                 std::cerr << err << "\n";
                 return 2;
             }
@@ -2138,9 +2141,59 @@ int cmd_sample(const Args& a) {
             base.scorer_w = a.k5_lstm_w;
             std::cerr << "k5: the byte LSTM " << a.k5_lstm << " reranks the nucleus (" << a.k5_lstm_mix << ", w " << a.k5_lstm_w << ")\n";
         }
-        return cypha::cyphalm::wkn::run_sample(a.k5, a.k5_cap, prompts, conts, a.outs, a.prompts, static_cast<std::size_t>(a.bytes),
-                                               a.temps.empty() ? std::vector<double>{1.0} : temps, printable, &base,
-                                               a.k5_seed, a.k5_vmax);
+        cypha::cyphalm::wkn::mcmc::SharedStats mstats;  // K5_MCMC.md
+        if (mp.steps > 0) {
+            namespace mc = cypha::cyphalm::wkn::mcmc;
+            std::string ktext;  // K5's text, if a model must be trained
+            const auto read_k5 = [&]() -> const std::string& {
+                if (ktext.empty()) {
+                    std::ifstream in(a.k5, std::ios::binary);
+                    ktext.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+                }
+                return ktext;
+            };
+            const auto tok = [](std::string_view line, auto&& emit) { cypha::cyphalm::wkn::tokenize(line, emit); };
+            if (mp.lt > 0 && mp.topic == "lda") {  // wip/k5-discourse's LDA: 100 topics, 200 sweeps, exact
+                if (mp.lda_path.empty()) {
+                    std::cerr << "--k5-mcmc-topic lda needs --k5-mcmc-lda PATH\n";
+                    return 2;
+                }
+                auto L = std::make_shared<cypha::cyphalm::lda::LDA>();
+                const bool hit = L->load(mp.lda_path);
+                if (!hit) {
+                    L->train_lines(read_k5(), tok, cypha::cyphalm::lda::Params{});
+                    L->save(mp.lda_path);
+                }
+                std::cerr << "k5-mcmc: LDA " << mp.lda_path << (hit ? " (loaded)" : " (trained)") << ", " << L->topics() << " topics, "
+                          << L->vocab_size() << " words\n";
+                std::shared_ptr<const cypha::cyphalm::lda::LDA> Lc = L;
+                mp.topic_term = [Lc] { return std::make_unique<mc::LdaTerm>(Lc); };
+            }
+            if (mp.le > 0) {  // wip/k5-discourse's entity grid
+                if (mp.eg_path.empty()) {
+                    std::cerr << "--k5-mcmc-le needs --k5-mcmc-eg PATH\n";
+                    return 2;
+                }
+                auto G = std::make_shared<cypha::cyphalm::eg::EntityGrid>();
+                const bool hit = G->load(mp.eg_path);
+                if (!hit) {
+                    G->train_lines(read_k5(), tok, 8);
+                    G->save(mp.eg_path);
+                }
+                std::cerr << "k5-mcmc: entity grid " << mp.eg_path << (hit ? " (loaded)" : " (trained)") << ", " << G->docs() << " docs, "
+                          << G->columns() << " columns\n";
+                std::shared_ptr<const cypha::cyphalm::eg::EntityGrid> Gc = G;
+                const bool cont = mp.entity == "cont";
+                mp.entity_term = [Gc, cont] { return std::make_unique<mc::GridTerm>(Gc, cont); };
+            }
+            cypha::cyphalm::wkn::mcmc::install(base, mp, &mstats);
+            std::cerr << "k5: whole-paragraph MCMC" << mp.describe() << "\n";
+        }
+        const int krc = cypha::cyphalm::wkn::run_sample(a.k5, a.k5_cap, prompts, conts, a.outs, a.prompts, static_cast<std::size_t>(a.bytes),
+                                                        a.temps.empty() ? std::vector<double>{1.0} : temps, printable, &base,
+                                                        a.k5_seed, a.k5_vmax);
+        if (mp.steps > 0) mstats.print(stderr);
+        return krc;
     }
 
     if (a.model.empty()) {
@@ -6535,6 +6588,10 @@ int cmd_bkn(const Args& a) {
 int cmd_selftest() {
     if (std::string err; !cypha::cyphalm::wkn::self_test(err)) {  // §13.19: K5's tokens, bans, cap and KN
         std::cerr << "selftest: K5 (word_kn.hpp) " << err << "\n";
+        return 1;
+    }
+    if (std::string err; !cypha::cyphalm::wkn::mcmc::self_test(err)) {  // K5_MCMC.md: the paragraph sampler
+        std::cerr << "selftest: K5 MCMC (k5_mcmc.hpp) " << err << "\n";
         return 1;
     }
     if (!self_test()) {
