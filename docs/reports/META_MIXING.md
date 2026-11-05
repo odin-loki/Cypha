@@ -214,3 +214,21 @@ The checks of the switch, on the new binary:
 | Run | What | Wall | Peak RSS | Lines |
 |---|---|---:|---:|---|
 | D1 | `context8k` (meta mix on by default) | 3419 s | 1556 MB | = R1's, except the last line: `context8k_bpc 1.4962 (meta_mix M1Gs)` against R1's `1.5051 (full_mix ABs)` |
+| N2 | `context8k --no-meta-mix` | 2372 s | 1148 MB | = MA's byte for byte (`cmp`), `context8k_bpc 1.5051 (full_mix ABs)` included |
+
+D1 and N2 ran at a lower load than MA and R1, so compare their wall times with each other, not with MA's. The fair cost is R1 against MA, side by side: **+5.9% wall, +405 MB**.
+
+## Risks before merging
+
+- **One 1 MiB holdout, no bootstrap interval.** The gain (−0.0089) is about 1.8 times the rule's margin. First and second half agree (−0.0099 and −0.0089).
+- **Memory: +405 MB at the peak** (1555 MB in all). M1's five rate copies are most of it. With `m1r=0`, M1Gs was 1.5180 on the first half against 1.5173 (T30 against T33 needs both), at about a fifth of M1's memory. That is a cheaper option if memory matters, but it was not read on the second half.
+- **The main thread now waits less.** The meta mixers add about 180 s of bit-loop work. On a machine where the LSTM is faster, the meta mix could become the critical path.
+- **Any change to the full mix's bitwise inputs changes M1.** The hook reads A's inputs and contexts as they are. The full mix's replica checks still guard the chain. N2 (`--no-meta-mix`) guards main's lines.
+- **`sample` does not use it**, as with the full mix.
+- Not tried: hidden-state selectors from the LSTM (they are not in the dump), and SSE chains after M1Gs.
+
+## Files
+
+- Code: `native/include/cypha/online/meta_mixer.hpp` (new); the hook in `full_mixer.hpp` (`StepHook`, `set_hook`, the replay's hook and first-half stop); the flags and `meta-mix-replay` in `cyphalm_trie.cpp`.
+- Runs: `/mnt/d/cypha_llm/meta_mix/` (D0, MA, R1, R0, D1, N2, with `.out`, `.err`, `.time`); tuning: `/mnt/d/cypha_llm/meta_mix/tune/` (T00–T45, T99 = T33 by the new defaults).
+- The 27.9 GB dump `~/meta_data/d0.fmx` is kept for now. `--full-mix-dump` remakes it.
