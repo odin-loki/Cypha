@@ -1921,3 +1921,13 @@ K5's default output is byte-identical after the merges: all 250 dev prompts, che
   - Predictions: byte-identical **hit**; fact precision ≥ 0.8 **hit but hollow** (1.0 by construction: every stated fact is a store fact); copy32 no higher than K5 **hit**; v2 within ±0.05 **hit** (+0.034); v3.1 above K5 **hit**; pairwise P1 above 0.6 on prompts with facts **hit** (0.95); overall win with the interval excluding 0.5 only if coverage reached 30% **miss in the good direction** (it wins at 20%); P2 below P1 **miss** (equal).
 - **What is weak:** the raters prefer the planner because its first one or two sentences stay on the prompt's subject, then K5 drifts as before. K5's fill around the fact words is often false or meaningless ("He was born in Gothenburg University, Gothenburg Municipality."). The co-occurring path can invent dates. 63% of prompts still get plain K5. The gate learns from only 415 training items, and the K5-only gate (P2) does as well, so the meta-mixer's part is not shown.
 - **Next:** better fills (constrain the slot's class to the fact's type, so a place stays a place), the relations-pattern fallback, more coverage, and writing past the facts.
+
+### 13.39 The planner on by default (2026-11-05; Odin: "Also turn the planner on by default.")
+
+- `sample --k5 TEXT` now writes through the planner (P1 of §13.38: the e9_aug store, the full gate). **`--no-k5-plan`** writes with K5 alone, as before.
+- Default files, relative to the repository root: the store `bench/fact_store/e9_aug`, the model `bench/k5_planner/model/plan_e9.model` (with its skeleton bank `skel_e9.txt`). `CYPHA_K5_PLAN_STORE` and `CYPHA_K5_PLAN_MODEL` override them. The model reads the structure statistics at `~/k5s_data/S10.stats` (305 MB, on Odin's PC only).
+- If the files are missing (CI, another machine), `sample` says so and writes with K5 alone.
+- `--k5-struct` and an explicit `--k5-plan` still choose for themselves.
+- **Guard:** `scripts/gen_eval.sh` now always passes `--plan-drop 75497472:100000000` (the GEN-A prompts' source bytes), so no eval run plans from a prompt's own page. The flag is read only by the planners.
+- **Checked on all 250 dev prompts:** the default's samples equal P1's (`cmp`; only the MODEL header line names the default paths), and `--no-k5-plan` equals the old K5 byte for byte. Dev SCRIBE v2 0.532 [0.502, 0.564], as P1. Selftests pass.
+- The report card's K5 writer now uses the planner too, when run from the repository root.

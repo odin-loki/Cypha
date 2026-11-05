@@ -93,3 +93,7 @@ Wall time covers sampling and both SCRIBE runs. Sampling alone: K5 120 s on 6 th
 - **Pairwise blind raters** (§13.38 rule; packets `bench/blind/planner_pair/`, committed before the ratings): P1 wins **0.635 [0.575, 0.700]** against K5, rater pairs 0.66 and 0.61. P2 is the same. Where the planner's text differs from K5's (15 of 50 prompts), it wins 0.95 [0.85, 1.00]; the rest are plain K5 on both sides and tie.
 - **P1 reads better than K5 by the rule and is adopted**, still off by default.
 - **Test read, once** (P1, `bench/k5_planner/test_read/`): SCRIBE v2 0.561 [0.532, 0.590] (K5 0.524), v3.1 0.551 [0.529, 0.574], copy32 0.036.
+
+## On by default (2026-11-05, GENERATION_PLAN §13.39)
+
+`sample --k5` now uses the planner (P1); `--no-k5-plan` is K5 alone. The model and skeleton bank are in `bench/k5_planner/model/`. The default's dev samples equal P1's, and `--no-k5-plan` equals the old K5, on all 250 dev prompts.

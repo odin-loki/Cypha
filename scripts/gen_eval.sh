@@ -37,7 +37,8 @@ PROMPTS=$ROOT/bench/eval/gen_prompts_$SPLIT.tsv
 mkdir -p "$OUT"
 G=$OUT/$LABEL.gen.txt
 if [ "$SPLIT" = test ]; then echo "gen_eval: TEST read ($LABEL); log it in docs/reports/GEN_TRACK.md" >&2; fi
-nice -n 5 "$TRIE" sample "$WIKI" "$G" --prompts-file "$PROMPTS" "$@" > "$OUT/$LABEL.sample.out" 2> "$OUT/$LABEL.sample.err"
+# The GEN-A prompts come from enwik8 [75497472, 1e8): a planner never plans from facts read there (GENERATION_PLAN §13.39).
+nice -n 5 "$TRIE" sample "$WIKI" "$G" --prompts-file "$PROMPTS" --plan-drop 75497472:100000000 "$@" > "$OUT/$LABEL.sample.out" 2> "$OUT/$LABEL.sample.err"
 nice -n 5 "$SC" ladder --pack "enwik:$E:16:48" --ref "enwik:$E:48:56" --test "enwik:$E:56:64" --vectors "$VEC" \
     --profile v2 --seed 20261027 --gen-trie "$G" --label "$LABEL" > "$OUT/$LABEL.scribe.md" 2> "$OUT/$LABEL.scribe.err"
 # SCRIBE v3.1 (docs/reports/SCRIBE_V31.md) on the same samples, reported beside v2 (v2 stays the score of record).
