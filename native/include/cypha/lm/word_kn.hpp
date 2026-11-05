@@ -673,6 +673,15 @@ struct ByteScorer {
 };
 
 class K5;
+struct Options;
+struct GenStats;
+// docs/reports/K5_STRUCTURE.md (GENERATION_PLAN §13.33): a writer that replaces generate's sentence choice (the structure
+// experts and their meta-mixer, cypha/lm/structure/writer.hpp). Shared by every thread, so generate is const.
+struct StructureWriter {
+    virtual ~StructureWriter() = default;
+    virtual std::string generate(const K5& m, std::string_view prompt, std::uint64_t seed, const Options& o, GenStats* st) const = 0;
+};
+
 struct Options {
     // docs/reports/K5_MCMC.md: rewrites each continuation after generate (k5_mcmc.hpp's paragraph sampler; seed is the
     // continuation's), and post_desc joins the MODEL line. Empty: K5's own text, unchanged.
@@ -704,6 +713,9 @@ struct Options {
     int gate_k = 8;                                    // step 4: --k5-gate K[,wf=..][,wp=..][,wm=..][,min=..][,max=..] (1: off)
     double gate_wf = 0, gate_wp = 1, gate_wm = 5;
     std::size_t gate_min = 24, gate_max = 240;
+    // K5_STRUCTURE.md: --k5-struct FILE (cyphalm_trie loads it); null: K5's own gate. desc goes on the MODEL line.
+    std::shared_ptr<const StructureWriter> structure;
+    std::string structure_desc;
     // docs/reports/K5_DISCOURSE.md (GENERATION_PLAN §13.32): K5's discourse helpers, all off by default. With any of
     // mbr_sent_w, eg_w or lda_w set, the gate z-scores each of its terms over the K candidates before weighing them.
     double mbr_sent_w = 0;      // --k5-mbr-sent W: the gate's MBR term (a candidate's mean chrF to the other candidates)
@@ -740,6 +752,7 @@ struct Options {
             add("classes", static_cast<double>(classes)), add(class_mode == 2 ? "class_mix" : "class_backoff", class_mode == 2 ? class_w : 1);
         if (gate_k != d.gate_k || gate_wf != d.gate_wf || gate_wp != d.gate_wp || gate_wm != d.gate_wm || gate_min != d.gate_min || gate_max != d.gate_max)
             add("gate", gate_k > 1 ? gate_k : 0), add("wf", gate_wf), add("wp", gate_wp), add("wm", gate_wm);
+        if (structure) s += "\tstruct=" + structure_desc;  // K5_STRUCTURE.md
         // K5_DISCOURSE.md
         if (mbr_sent_w != 0) add("mbr_sent", mbr_sent_w);
         if (mbr_doc > 1) add("mbr_doc", mbr_doc);
@@ -1259,6 +1272,7 @@ class K5 {
 
     // fuzzy_bake.py generate_one: the continuation of prompt, seeded with seed. With o.gate_k > 1, the sentence gate.
     std::string generate(std::string_view prompt, std::uint64_t seed, const Options& o, GenStats* st = nullptr) const {
+        if (o.structure) return o.structure->generate(*this, prompt, seed, o, st);  // K5_STRUCTURE.md
         if (o.mbr_doc > 1 || !o.meta.empty()) return generate_pool(prompt, seed, o, st);  // K5_DISCOURSE.md
         GenStats g;
         const std::size_t V = vocab_.size();
@@ -1316,8 +1330,15 @@ class K5 {
             }
         }
         std::string out = std::move(s.out);
-        if (out.size() > o.bytes) {  // cut to the byte limit; a character the cut splits is dropped (decode "ignore")
-            out.resize(o.bytes);
+        cut_bytes(out, o.bytes);
+        if (st) st->add(g);
+        return out;
+    }
+
+    // Cut to the byte limit; a character the cut splits is dropped (decode "ignore").
+    static void cut_bytes(std::string& out, std::size_t bytes) {
+        if (out.size() > bytes) {
+            out.resize(bytes);
             std::size_t i = out.size();
             std::size_t back = 0;
             while (i > 0 && back < 4 && (static_cast<unsigned char>(out[i - 1]) & 0xC0) == 0x80) --i, ++back;
@@ -1327,10 +1348,34 @@ class K5 {
                 if (need > back + 1) out.resize(i - 1);
             }
         }
-        if (st) st->add(g);
-        return out;
     }
 
+    // K5_STRUCTURE.md: one candidate sentence of the gate, drawn from s (left as it was) with the stream of sentence
+    // sent and candidate k of seed, as generate's gate draws it. c gets the state after it; words its words; lp their
+    // log2 probabilities (the gate's fluency).
+    void draft(const State& s, std::uint64_t seed, std::uint64_t sent, int k, const Options& o, State& c,
+               std::vector<std::uint32_t>& words, std::vector<double>& lp, GenStats& g) const {
+        c = s;
+        words.clear(), lp.clear();
+        thread_local Scratch sc;
+        sc.p.resize(vocab_.size());
+        const std::uint64_t cs = mix64(seed ^ mix64(0x6A7E000000ull + sent * 256 + static_cast<std::uint64_t>(k)));
+        std::mt19937_64 rng(cs);
+        const std::size_t b0 = c.out.size();
+        while (c.step < o.max_words && c.out.size() < o.bytes) {
+            const std::uint64_t salt = mix64(cs ^ mix64(static_cast<std::uint64_t>(c.step) + 0x5EED));
+            double l = 0;
+            const std::uint32_t w = step_word(c, rng, salt, o, g, nullptr, sc, &l);
+            words.push_back(w), lp.push_back(l);
+            const std::size_t nb = c.out.size() - b0;
+            const std::string& t = vocab_[w];
+            if (nb >= o.gate_max) break;
+            if (nb >= o.gate_min && (t == "." || t == "!" || t == "?" || t == "\n")) break;
+        }
+        ++g.gate_cands;
+    }
+    // K5_STRUCTURE.md: the training text's ids (documents start with <s>).
+    const std::vector<std::uint32_t>& train_ids() const { return ids_; }
     // K5_DISCOURSE.md: the drafts of --k5-mbr-doc N (N drafts of o) or --k5-meta SPEC (the pooled drafts of variants of
     // o), and the MBR choice among them (the highest mean chrF to the other drafts). Draft i draws from its own seed.
     std::vector<std::pair<std::string, Options>> pool_variants(const Options& o) const {

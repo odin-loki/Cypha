@@ -91,6 +91,8 @@
 //        docs/reports/K5_SCALE.md: --k5-seed S (default 20261101; prompt id i draws from S + i; an S below 20261101 is an offset, so
 //        --k5-seed 1000 is 20262101, as K5_UPGRADES.md's seeds) and --k5-vmax V (the
 //        vocabulary cap, default 32000, at most 65536).
+//        docs/reports/K5_STRUCTURE.md: --k5-struct MODEL (k5_structure's model: structure experts and a meta-mixer) picks
+//        each sentence among the gate's candidates; --k5-struct-temp T (0: argmax) samples from P^(1/T).
 //        chat and sample: --save FILE stores the trained packed trie with its weights and split (RAM_PROFILE M7);
 //        --model FILE serves that file without training (chat then prints no mix_stored: it measures the training form).
 //   bkn <wiki> K[:m:c:d] [more specs] [--bkn-fresh] [--bkn-stack]
@@ -282,6 +284,7 @@
 #include "cypha/lm/token_model.hpp"  // BKN selftest: the reference Kneser-Ney
 #include "cypha/lm/word_kn.hpp"      // §13.19: sample --k5
 #include "cypha/lm/k5_mcmc.hpp"      // docs/reports/K5_MCMC.md: sample --k5 ... --k5-mcmc STEPS
+#include "cypha/lm/structure/writer.hpp"  // K5_STRUCTURE.md: sample --k5-struct
 #include "cypha/eval/lci.hpp"
 #include "cypha/eval/scribe.hpp"
 #include "cypha/knowledge/unknown_signals.hpp"
@@ -2082,13 +2085,31 @@ int cmd_sample(const Args& a) {
     if (!a.k5.empty()) {  // §13.19: K5 writes every GEN line (T 1.0 unless --temps); the trie and its experts are not built
         cypha::cyphalm::wkn::Options base;
         cypha::cyphalm::wkn::mcmc::Params mp;  // K5_MCMC.md: --k5-mcmc... flags (k5_mcmc.hpp)
+        std::string k5_struct;      // K5_STRUCTURE.md: --k5-struct MODEL, --k5-struct-temp T
+        double k5_struct_temp = 0;
         for (const auto& [k, v] : a.k5_opts) {  // K5_UPGRADES.md
             std::string err;
+            if (k == "--k5-struct") {
+                k5_struct = v;
+                continue;
+            }
+            if (k == "--k5-struct-temp") {
+                k5_struct_temp = std::atof(v.c_str());
+                continue;
+            }
             if (k.rfind("--k5-mcmc", 0) == 0 ? !cypha::cyphalm::wkn::mcmc::apply_flag(k, v, mp, err)
                                               : !cypha::cyphalm::wkn::apply_flag(k, v, base, err)) {
                 std::cerr << err << "\n";
                 return 2;
             }
+        }
+        if (!k5_struct.empty()) {  // K5_STRUCTURE.md: the structure experts and their meta-mixer choose each sentence
+            std::string err;
+            if (!cypha::cyphalm::structure::apply_struct_flags(k5_struct, k5_struct_temp, base, err)) {
+                std::cerr << "--k5-struct: " << err << "\n";
+                return 2;
+            }
+            std::cerr << "k5: structure model " << k5_struct << " chooses each sentence (temp " << k5_struct_temp << ")\n";
         }
         std::unique_ptr<cypha::online::ByteLSTM> kl;
         if (!a.k5_lstm.empty()) {  // §13.24: the byte LSTM reranks the words inside K5's nucleus
