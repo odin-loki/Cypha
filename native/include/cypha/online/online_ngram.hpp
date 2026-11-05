@@ -10,12 +10,12 @@
 // cache line a lookup instead of three, the same memory); every key a byte needs is computed and prefetched before the
 // counts are read (the byte, or every partial byte for dist, is known in advance); pretrain fills the orders' tables on
 // a few threads (CYPHA_NGRAM_THREADS, 4 by default), each table in its original order.
-// OPT_SIMD (2026-11-05, GENERATION_PLAN §13.41 O5), every number unchanged again, the same hashing and replacement: the
-// tables are asked for 2 MB pages (Linux: madvise MADV_HUGEPAGE), so a random lookup misses the TLB less when the OS has
-// them; dist() computes each key once (it used to hash twice, to prefetch and to read). And less arithmetic, each value
-// by the same expressions: a slot's probability and stretch for counts that were never halved come from a table made at
-// the start; dist() forms the 256 byte products down the bit tree (shared prefixes once, each product in the old order);
-// the parts of the slot hash that do not depend on the partial byte are multiplied once a byte.
+// OPT_SIMD (2026-11-05, GENERATION_PLAN §13.41 O5), every number unchanged again, the same hashing and replacement:
+// dist() computes each key once (it used to hash twice, to prefetch and to read). And less arithmetic, each value by the
+// same expressions: a slot's probability and stretch for counts that were never halved come from a table made at the
+// start; dist() forms the 256 byte products down the bit tree (shared prefixes once, each product in the old order); the
+// parts of the slot hash that do not depend on the partial byte are multiplied once a byte; the context hashes are kept
+// until the history moves. Tried and not kept (docs/reports/OPT_SIMD.md): 2 MB pages, and prefetching one byte ahead.
 // Rule 10 (PLAN): an expert inside CyphaLM. It answers nothing.
 #pragma once
 
@@ -24,93 +24,12 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
-#include <cstring>
-#include <new>
 #include <thread>
 #include <vector>
-
-#if defined(__linux__)
-#include <sys/mman.h>
-#endif
 
 #include "cypha/online/byte_lstm.hpp"  // gln_stretch, gln_squash
 
 namespace cypha::online {
-
-// OPT_SIMD: a table of n zeroed bytes in whole 2 MB pages, 2 MB aligned. On Linux it is mapped anonymously and its pages
-// are asked to be huge; elsewhere it is 64-byte aligned memory, zeroed.
-class NgramPages {
-public:
-    static constexpr std::size_t kHuge = std::size_t{1} << 21;
-    NgramPages() = default;
-    explicit NgramPages(std::size_t n) { alloc(n); }
-    NgramPages(const NgramPages& o) {
-        alloc(o.n_);
-        if (n_) std::memcpy(p_, o.p_, n_);
-    }
-    NgramPages& operator=(const NgramPages& o) {
-        if (this != &o) {
-            release();
-            alloc(o.n_);
-            if (n_) std::memcpy(p_, o.p_, n_);
-        }
-        return *this;
-    }
-    NgramPages(NgramPages&& o) noexcept : p_(o.p_), n_(o.n_), cap_(o.cap_), mapped_(o.mapped_) { o.p_ = nullptr, o.n_ = o.cap_ = 0; }
-    NgramPages& operator=(NgramPages&& o) noexcept {
-        if (this != &o) {
-            release();
-            p_ = o.p_, n_ = o.n_, cap_ = o.cap_, mapped_ = o.mapped_;
-            o.p_ = nullptr, o.n_ = o.cap_ = 0;
-        }
-        return *this;
-    }
-    ~NgramPages() { release(); }
-    unsigned char* data() { return p_; }
-    const unsigned char* data() const { return p_; }
-
-private:
-    void alloc(std::size_t n) {
-        n_ = n;
-        cap_ = (n + kHuge - 1) / kHuge * kHuge;
-        if (!cap_) return;
-#if defined(__linux__)
-        void* m = ::mmap(nullptr, cap_ + kHuge, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-        if (m != MAP_FAILED) {  // keep the 2 MB aligned part
-            const auto a = reinterpret_cast<std::uintptr_t>(m), b = (a + kHuge - 1) & ~(kHuge - 1), e = a + cap_ + kHuge;
-            if (b > a) ::munmap(m, b - a);
-            if (e > b + cap_) ::munmap(reinterpret_cast<void*>(b + cap_), e - (b + cap_));
-            p_ = reinterpret_cast<unsigned char*>(b);
-            mapped_ = true;
-#if defined(MADV_HUGEPAGE)
-            ::madvise(p_, cap_, MADV_HUGEPAGE);
-#endif
-            // Touch every page now, in order, as the old zero-filled vector did: faulting them in later, at random
-            // from the pretrain threads, measured slower.
-            std::memset(p_, 0, cap_);
-            return;
-        }
-#endif
-        p_ = static_cast<unsigned char*>(::operator new(cap_, std::align_val_t{64}));
-        std::memset(p_, 0, cap_);
-        mapped_ = false;
-    }
-    void release() {
-        if (!p_) return;
-#if defined(__linux__)
-        if (mapped_) {
-            ::munmap(p_, cap_);
-            p_ = nullptr;
-            return;
-        }
-#endif
-        ::operator delete(p_, std::align_val_t{64});
-        p_ = nullptr;
-    }
-    unsigned char* p_ = nullptr;
-    std::size_t n_ = 0, cap_ = 0;
-    bool mapped_ = false;
-};
 
 class OnlineNgram {
 public:
@@ -124,11 +43,10 @@ public:
 
     explicit OnlineNgram(const Params& p) : p_(p) {
         O_ = static_cast<int>(p.orders.size());
-        t_.reserve(p.orders.size());
         for (int o : p.orders) {
             const int bits = std::min(p.tb, 8 * o + 10);
             mask_.push_back((std::uint64_t{1} << bits) - 1);
-            t_.emplace_back(std::size_t{1} << bits);
+            t_.emplace_back(std::size_t{1} << bits, Slot{});
         }
         K_ = O_ + 1;  // the orders and a bias
         W_.assign(static_cast<std::size_t>(8) * (O_ + 1) * K_, 0.3);
@@ -357,18 +275,6 @@ private:
     };
 #pragma pack(pop)
     static_assert(sizeof(Slot) == 5, "a slot is 5 bytes");
-    // OPT_SIMD: an order's table of zeroed slots, 5 bytes each, on huge pages where the OS gives them. (Twelve slots to a
-    // 64-byte line, so that none crosses two lines, measured slower: the index arithmetic cost more than the 1 in 16
-    // slots that cross.)
-    struct Table {
-        NgramPages pg;
-        std::size_t n = 0;
-        explicit Table(std::size_t slots) : pg(slots * sizeof(Slot)), n(slots) {}
-        Slot& operator[](std::size_t i) { return reinterpret_cast<Slot*>(pg.data())[i]; }
-        const Slot& operator[](std::size_t i) const { return reinterpret_cast<const Slot*>(pg.data())[i]; }
-        std::size_t size() const { return n; }
-        const void* addr(std::size_t i) const { return pg.data() + i * sizeof(Slot); }
-    };
 
     std::size_t slot(int q, unsigned c0) const { return kslot(kq_[static_cast<std::size_t>(q)], c0); }
     std::uint8_t check(int q, unsigned c0) const { return kcheck(kq_[static_cast<std::size_t>(q)], c0); }
@@ -391,7 +297,7 @@ private:
     }
     void prefetch(int q, std::size_t key) const {
 #if defined(__GNUC__) || defined(__clang__)
-        __builtin_prefetch(t_[static_cast<std::size_t>(q)].addr(key), 1);
+        __builtin_prefetch(&t_[static_cast<std::size_t>(q)][key], 1);
 #else
         (void)q;
         (void)key;
@@ -413,7 +319,7 @@ private:
     int tabL_ = 0;         // ptab_ and xtab_ hold counts up to tabL_ x 128
     std::vector<std::uint64_t> mask_;
     std::vector<Key> kq_;  // each order's context key
-    std::vector<Table> t_;
+    std::vector<std::vector<Slot>> t_;
     std::vector<double> W_;
     std::vector<double> ptab_, xtab_;
     std::vector<std::uint8_t> hist_;
