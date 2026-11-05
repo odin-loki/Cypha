@@ -224,11 +224,23 @@ Notes:
 
 ### Four seeds (1000–4000)
 
-SEEDS_TABLE
+| Arm | v3.1 per seed | mean [range] | v2 mean | copy32 | v13 | Rules 1 / 2 / 3 |
+|---|---|---|---:|---:|---:|---|
+| B0 K5 default | 0.470 0.474 0.476 0.480 | 0.475 [0.470, 0.480] | 0.499 | 0.0444 | 0 | — |
+| T2 rescale B 1 | 0.566 0.563 0.553 0.573 | 0.564 [0.553, 0.573] | 0.604 | 0.0489 | 0 | yes / yes / yes |
+| T2b rescale B 1.5 | 0.672 0.656 0.673 0.659 | 0.665 [0.656, 0.673] | 0.703 | 0.0611 | 0 | yes / yes / yes |
+| T2c rescale B 2 | 0.722 0.722 0.710 0.707 | 0.715 [0.707, 0.722] | 0.758 | 0.0614 | 0 | yes / yes / yes |
+| T6a rescale B 2, LDA 30 MB (T pick) | 0.731 0.729 0.731 0.725 | 0.729 [0.725, 0.731] | 0.786 | 0.0477 | 0 | yes / yes / yes |
+| E1 grid, full (E pick) | 0.468 0.449 0.455 0.464 | 0.459 [0.449, 0.468] | 0.471 | 0.0414 | 0 | no / no / yes |
+| X2 meta gate/eg/topic ×4 (X pick) | 0.653 0.637 0.663 0.661 | 0.653 [0.637, 0.663] | 0.715 | 0.0501 | 0 | yes / yes / yes |
+| M3 gate 16 + consensus (M pick) | 0.485 0.485 0.484 0.480 | 0.483 [0.480, 0.485] | 0.538 | 0.0485 | 0 | no / yes / yes |
+
+- Topic rescaling (T2, T2b, T2c, T6a) and X2 pass rules 1–3 by SCRIBE. The raters (below) fail them all.
+- The grid (E1) and MBR (M3) fail rule 1: M3's range overlaps B0's, and E1 is below it.
 
 ### What it means
 
-- **Topic rescaling is the only helper that moves the judges, and it moves them a lot.** v3.1 rises with B: 0.483 → 0.503 (0.5), 0.567 (1), 0.670 (1.5), 0.712 (2). v2 rises from 0.498 to 0.758. It holds over 4 seeds with disjoint ranges, and copying stays inside the bound.
+- **Topic rescaling is the only helper that moves SCRIBE, and it moves it a lot. Readers disagree (below).** v3.1 rises with B: 0.483 → 0.503 (0.5), 0.567 (1), 0.670 (1.5), 0.712 (2). v2 rises from 0.498 to 0.758. It holds over 4 seeds with disjoint ranges, and copying stays inside the bound.
 - **But at B 1.5–2 it is partly stuffing.**
   - The text strings the prompt's topic words together, and grammar breaks: D_S doubles, and samples read like "Agassi played baseball team posted the Braves won their team won seven cardinals".
   - K5's bits on human continuations rise past B0's at B 2 (1.586 with 7 MB LDA). The model no longer predicts real text better.
@@ -249,21 +261,41 @@ SEEDS_TABLE
   - P2 missed: the cont form of the grid did not help.
   - P3 missed in size and direction: rescaling at B 1 raised v3.1 by +0.08, not less than 0.01; B 1–2 was not punished by SURPRISE; LDA size mattered at B 1.
   - P4 missed.
-  - P5 missed on the judges: an arm passes rules 1–3. Whether a reader agrees (2 → 6 of 10) is for the raters.
+  - P5 missed on SCRIBE (an arm passes rules 1–3) and hit on readers: no helper took K5 from 2 towards 6 of 10 (below).
   - P6 hit except the time of the 330 MB LDA (51 min, once).
+
+### The deciding judge: four blind Claude raters (cloud session, GENERATION_PLAN §13.34)
+
+50 GEN-A dev prompts, 2 ratings per text, 1–10 for coherent, on-topic prose:
+
+| Arm | Mean | Against B0 [95%] |
+|---|---:|---:|
+| human | 9.04 | |
+| M3 (gate 16, pmi + consensus) | 2.22 | +0.04 [−0.01, +0.10] |
+| B0 (K5 default) | 2.18 | — |
+| T2 (rescale B 1) | 2.18 | 0.00 [−0.06, +0.05] |
+| T2b (rescale B 1.5) | 1.96 | −0.22 [−0.32, −0.12] |
+| T2c (rescale B 2) | 1.76 | −0.42 [−0.53, −0.32] |
+
+- **No arm reads better than K5's default.** M3 and T2 tie it.
+- **Topic rescaling reads worse as B rises.** It is the same order as SCRIBE's, reversed: SCRIBE v3.1 gives B 2 +0.24, and the raters give it −0.42. The amendment-2 reading was right: at B 1.5–2 the text is topic-word stuffing, and SCRIBE v2 and v3.1 reward it.
+- Predictions under amendment 2:
+  - T2c no higher than B0: hit (lower).
+  - T2 at most +0.5: hit (0.00).
 
 ### Decision
 
-- **No arm becomes K5's default yet.**
-  - Rules 1–3 hold for topic rescaling at B 1, 1.5 and 2 (and for the B 2 pick, T6a, see the seeds).
-  - Rule 4, the blind raters, is the cloud session's.
-  - **The GEN-A test split was not read.**
-- **What I recommend to the raters:**
-  - B0 against T2 or T6a_1/T6c_1 (B 1, the better model by bits) and T2c/T6a (B 2, the SCRIBE pick, partly stuffing).
-  - If B 1 wins with the raters and B 2 does not, adopt B 1 with LDA from 30–330 MB (the bits favour 330 MB; v3.1 is flat from 30 MB).
-- **For SCRIBE:** B 2's samples are a natural stuffing attack that v3.1 passes at 0.71. They belong in SCRIBE's attack battery.
+- **Nothing is adopted. K5's defaults are unchanged, and every new flag stays off by default** (topic rescaling and the topic term, the entity grid, MBR, meta).
+  - Topic rescaling passed rules 1–3 by SCRIBE, but failed rule 4, the raters.
+  - The grid and MBR failed rule 1.
+- **The GEN-A test split was not read.**
+- `lda.hpp` and `entity_grid.hpp` stay as they are. The structure session (`wip/k5-structure`) uses them as experts in a mixer trained on the real next sentence, which stuffing cannot game. The MCMC session uses them in its energy.
+- **What is kept:**
+  - Topic rescaling at B 1 with a large LDA is a better predictor of human continuations (bits −2.9% with 330 MB), though not better writing. It may serve where bits matter.
+  - B 1.5–2 samples are a natural stuffing attack: SCRIBE v3.1 scores them 0.67–0.73, and readers put them below K5. They belong in SCRIBE's attack battery (`bench/k5_discourse/T2c.gen.txt`, `T6a.gen.txt`).
+- **What it says about K5:** choosing among K5's own sentences (grid, MBR, topic term) cannot add meaning they do not have (P5), and steering K5's words toward the topic makes it worse to read. K5 writes about 2 of 10 whatever these helpers do.
 
 ### Files
 
-- Every arm's dev GEN file: `bench/k5_discourse/LABEL.gen.txt` (seed 0: the labels above; seeds: `LABEL_sN.gen.txt`).
+- Every arm's dev GEN file (seed 0 and every seed run, 59 files): `bench/k5_discourse/LABEL.gen.txt` and `LABEL_sN.gen.txt`. The run scripts (queue, collector, seed table, stuffing check, arm list) are in `bench/k5_discourse/scripts/`.
 - Full outputs (sample logs, SCRIBE v2 and v3.1 reports, times): `/mnt/d/cypha_llm/disc/out/` on Odin's PC. Model caches: `/mnt/d/cypha_llm/disc/cache/`.

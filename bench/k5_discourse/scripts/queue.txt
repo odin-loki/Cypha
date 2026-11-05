@@ -1,0 +1,33 @@
+B1 --k5-gate 1
+M1 --k5-gate 8,wp=0 --k5-mbr-sent 1
+M2 --k5-mbr-sent 1
+E1 --k5-eg 1 --k5-disc-text /mnt/d/cypha_llm/disc/k5train.txt --k5-disc-cache /mnt/d/cypha_llm/disc/cache
+E2 --k5-eg 1 --k5-eg-mode cont --k5-disc-text /mnt/d/cypha_llm/disc/k5train.txt --k5-disc-cache /mnt/d/cypha_llm/disc/cache
+T1 --k5-lda 100 --k5-lda-beta 0.5 --k5-disc-text /mnt/d/cypha_llm/disc/k5train.txt --k5-disc-cache /mnt/d/cypha_llm/disc/cache
+T2 --k5-lda 100 --k5-lda-beta 1 --k5-disc-text /mnt/d/cypha_llm/disc/k5train.txt --k5-disc-cache /mnt/d/cypha_llm/disc/cache
+T3 --k5-lda 100 --k5-lda-w 1 --k5-disc-text /mnt/d/cypha_llm/disc/k5train.txt --k5-disc-cache /mnt/d/cypha_llm/disc/cache
+T4 --k5-gate 8,wp=0 --k5-lda 100 --k5-lda-w 1 --k5-disc-text /mnt/d/cypha_llm/disc/k5train.txt --k5-disc-cache /mnt/d/cypha_llm/disc/cache
+T2b --k5-lda 100 --k5-lda-beta 1.5 --k5-disc-text /mnt/d/cypha_llm/disc/k5train.txt --k5-disc-cache /mnt/d/cypha_llm/disc/cache
+T2c --k5-lda 100 --k5-lda-beta 2 --k5-disc-text /mnt/d/cypha_llm/disc/k5train.txt --k5-disc-cache /mnt/d/cypha_llm/disc/cache
+E3 --k5-eg 2 --k5-disc-text /mnt/d/cypha_llm/disc/k5train.txt --k5-disc-cache /mnt/d/cypha_llm/disc/cache
+T5 --k5-lda 200 --k5-lda-beta 2 --k5-disc-text /mnt/d/cypha_llm/disc/k5train.txt --k5-disc-cache /mnt/d/cypha_llm/disc/cache
+T5_1 --k5-lda 200 --k5-lda-beta 1 --k5-disc-text /mnt/d/cypha_llm/disc/k5train.txt --k5-disc-cache /mnt/d/cypha_llm/disc/cache
+T6a --k5-lda 100 --k5-lda-beta 2 --k5-disc-text /mnt/d/cypha_llm/k5scale/clean/train_30M.txt --k5-disc-cache /mnt/d/cypha_llm/disc/cache
+T6a_1 --k5-lda 100 --k5-lda-beta 1 --k5-disc-text /mnt/d/cypha_llm/k5scale/clean/train_30M.txt --k5-disc-cache /mnt/d/cypha_llm/disc/cache
+T6b --k5-lda 100 --k5-lda-beta 2 --k5-disc-text /mnt/d/cypha_llm/k5scale/clean/train_100M.txt --k5-disc-cache /mnt/d/cypha_llm/disc/cache
+T6b_1 --k5-lda 100 --k5-lda-beta 1 --k5-disc-text /mnt/d/cypha_llm/k5scale/clean/train_100M.txt --k5-disc-cache /mnt/d/cypha_llm/disc/cache
+E4 --k5-eg 1 --k5-disc-text /mnt/d/cypha_llm/k5scale/clean/train_all.txt --k5-disc-cache /mnt/d/cypha_llm/disc/cache
+T6c --k5-lda 100 --k5-lda-beta 2 --k5-disc-text /mnt/d/cypha_llm/k5scale/clean/train_all.txt --k5-disc-cache /mnt/d/cypha_llm/disc/cache
+T6c_1 --k5-lda 100 --k5-lda-beta 1 --k5-disc-text /mnt/d/cypha_llm/k5scale/clean/train_all.txt --k5-disc-cache /mnt/d/cypha_llm/disc/cache
+M3 --k5-gate 16 --k5-mbr-sent 1
+X1 --k5-meta base:2,gate:2,eg:2,topic:2 --k5-eg 1 --k5-lda 100 --k5-lda-beta 2 --k5-disc-text /mnt/d/cypha_llm/k5scale/clean/train_30M.txt --k5-disc-cache /mnt/d/cypha_llm/disc/cache
+X2 --k5-meta gate:4,eg:4,topic:4 --k5-eg 1 --k5-lda 100 --k5-lda-beta 2 --k5-disc-text /mnt/d/cypha_llm/k5scale/clean/train_30M.txt --k5-disc-cache /mnt/d/cypha_llm/disc/cache
+M5 --k5-gate 1 --k5-mbr-doc 8
+M4 --k5-mbr-doc 8
+X2_s1000 --k5-seed 1000 --k5-meta gate:4,eg:4,topic:4 --k5-eg 1 --k5-lda 100 --k5-lda-beta 2 --k5-disc-text /mnt/d/cypha_llm/k5scale/clean/train_30M.txt --k5-disc-cache /mnt/d/cypha_llm/disc/cache
+X2_s2000 --k5-seed 2000 --k5-meta gate:4,eg:4,topic:4 --k5-eg 1 --k5-lda 100 --k5-lda-beta 2 --k5-disc-text /mnt/d/cypha_llm/k5scale/clean/train_30M.txt --k5-disc-cache /mnt/d/cypha_llm/disc/cache
+M3_s1000 --k5-seed 1000 --k5-gate 16 --k5-mbr-sent 1
+M3_s2000 --k5-seed 2000 --k5-gate 16 --k5-mbr-sent 1
+M3_s3000 --k5-seed 3000 --k5-gate 16 --k5-mbr-sent 1
+M3_s4000 --k5-seed 4000 --k5-gate 16 --k5-mbr-sent 1
+X2_s4000 --k5-seed 4000 --k5-meta gate:4,eg:4,topic:4 --k5-eg 1 --k5-lda 100 --k5-lda-beta 2 --k5-disc-text /mnt/d/cypha_llm/k5scale/clean/train_30M.txt --k5-disc-cache /mnt/d/cypha_llm/disc/cache
