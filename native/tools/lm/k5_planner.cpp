@@ -8,6 +8,13 @@
 //       the gate's meta-mixer: for each real sentence in [A, B) that states a store fact, the fill of its own skeleton
 //       and fact is the target among the fills of the relation's other best skeletons (same fact, same context). The
 //       first 80% of items train, the last 20% test. The K5 fluency floor is the 5th percentile of the targets' K5 score.
+//       [--typed SLOTS] [--s1 L] [--s1-mode class|low]: the fills typed and smoothed as sample's --k5-plan-typed and
+//       --k5-plan-s1 (docs/reports/PLAN_FILL.md).
+//   k5_planner types --k5 TEXT --store DIR --text CLEAN --lo A --hi B --out SLOTS [--drop LO:HI] [--types K]
+//                    [--iters N] [--restarts R] [--seed S] [--min N] [--table PREFIX]
+//       typed slots (slots.hpp, GENERATION_PLAN §13.42 Q2): the entity types by EM over the store's relation
+//       signatures, K5 head classes and name shapes; then the context model from the mentions of store entities in
+//       CLEAN's documents starting in [A, B). --table: PREFIX.entities.tsv and PREFIX.positions.tsv (the checker's types).
 //   k5_planner selftest
 //
 // Author: Odin Loch
@@ -105,6 +112,91 @@ int cmd_mine(const Args& a) {
     return 0;
 }
 
+// PLAN_FILL.md (§13.42 Q2): the slot types.
+int cmd_types(const Args& a) {
+    wkn::K5 m;
+    if (!load_k5(a.get("--k5"), m)) return 1;
+    pl::FactStore fs;
+    std::string err;
+    if (!fs.load(a.get("--store"), drops_of(a.get("--drop")), err)) return std::cerr << err << "\n", 1;
+    std::fprintf(stderr, "store: %zu facts, %zu subjects\n", fs.size(), fs.subjects());
+    const int K = std::atoi(a.get("--types", "12").c_str());
+    const int iters = std::atoi(a.get("--iters", "100").c_str()), restarts = std::atoi(a.get("--restarts", "4").c_str());
+    const std::uint64_t seed = std::strtoull(a.get("--seed", "20261105").c_str(), nullptr, 10);
+    const double minc = std::atof(a.get("--min", "10").c_str());
+    if (K < 2 || K > 64 || iters < 1 || restarts < 1) return std::cerr << "types: bad --types, --iters or --restarts\n", 2;
+    pl::SlotTypes ty;
+    const auto t0 = std::chrono::steady_clock::now();
+    const auto ob = ty.observe(fs, m, true);
+    const double ll = ty.fit(ob, K, iters, restarts, seed);
+    const auto post = ty.posteriors(ob);
+    const double npar = static_cast<double>(K) * static_cast<double>(ty.pos.size() + ty.C - 1 + pl::kShapes - 1) + K - 1;
+    std::printf("types: %zu entities, %zu positions, %zu head classes, %d types; log-likelihood %.1f, BIC %.1f (%.1f s)\n", ob.size(), ty.pos.size(), ty.C, K,
+                ll, -2 * ll + npar * std::log(static_cast<double>(ob.size())), std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count());
+    const std::string text = read_all(a.get("--text"));
+    const std::size_t lo = std::strtoull(a.get("--lo", "0").c_str(), nullptr, 10), hi = std::strtoull(a.get("--hi", "0").c_str(), nullptr, 10);
+    const std::size_t men = ty.count_text(text, lo, hi ? hi : text.size(), fs, m, post);
+    std::printf("context: %zu mentions of store entities in [%zu, %zu); words kept per offset (at least %.0f mentions):", men, lo, hi ? hi : text.size(), minc);
+    if (!ty.save(a.get("--out"), m, minc)) return std::cerr << "cannot write " << a.get("--out") << "\n", 1;
+    pl::SlotTypes back;  // what sample will read
+    if (!back.load(a.get("--out"), err)) return std::cerr << err << "\n", 1;
+    back.bind(m);
+    for (int k = 0; k < pl::kSlotOffs; ++k) std::printf(" %+d %zu", pl::slot_off_of(k), back.words(k));
+    std::printf("\n");
+    // Each type: its prior, positions and shape, its largest members, the words that suit it least and best at -2, -1, +1.
+    std::vector<std::size_t> nf(ob.size(), 0);
+    for (std::size_t i = 0; i < fs.size(); ++i) ++nf[fs.fact(static_cast<std::uint32_t>(i)).subj], ++nf[fs.fact(static_cast<std::uint32_t>(i)).val];
+    std::vector<int> arg(ob.size(), 0);
+    std::vector<std::size_t> size(static_cast<std::size_t>(K), 0);
+    for (std::size_t e = 0; e < ob.size(); ++e) {
+        const float* p = post.data() + e * static_cast<std::size_t>(K);
+        arg[e] = static_cast<int>(std::max_element(p, p + K) - p);
+        ++size[static_cast<std::size_t>(arg[e])];
+    }
+    for (int c = 0; c < K; ++c) {
+        std::printf("type %d: prior %.3f, %zu entities; %s\n  members:", c, ty.prior[static_cast<std::size_t>(c)], size[static_cast<std::size_t>(c)], ty.describe(c).c_str());
+        std::vector<std::pair<std::size_t, std::size_t>> mem;
+        for (std::size_t e = 0; e < ob.size(); ++e)
+            if (arg[e] == c) mem.push_back({nf[e], e});
+        std::sort(mem.rbegin(), mem.rend());
+        for (std::size_t i = 0; i < mem.size() && i < 8; ++i) std::printf(" %s;", fs.ent(static_cast<std::uint32_t>(mem[i].second)).c_str());
+        std::printf("\n");
+        for (const int off : {-2, -1, 1}) {
+            const int k = pl::slot_off_index(off);
+            std::printf("  %+d best:", off);
+            for (const auto& [f, w] : back.top_words(c, k, 8, 200, false)) std::printf(" %s %.1f", m.vocab()[w].c_str(), f);
+            std::printf(" | worst:");
+            for (const auto& [f, w] : back.top_words(c, k, 6, 200, true)) std::printf(" %s %.1f", m.vocab()[w].c_str(), f);
+            std::printf("\n");
+        }
+    }
+    const std::string tab = a.get("--table");
+    if (!tab.empty()) {
+        std::ofstream oe(tab + ".entities.tsv"), op(tab + ".positions.tsv");
+        oe << "entity\ttype\tposterior\tfacts\tpositions\n";
+        for (std::size_t e = 0; e < ob.size(); ++e) {
+            oe << fs.ent(static_cast<std::uint32_t>(e)) << "\t" << arg[e] << "\t" << post[e * static_cast<std::size_t>(K) + static_cast<std::size_t>(arg[e])] << "\t" << nf[e] << "\t";
+            for (std::size_t i = 0; i < ob[e].p.size(); ++i) oe << (i ? "," : "") << ty.pos[static_cast<std::size_t>(ob[e].p[i])];
+            oe << "\n";
+        }
+        std::vector<std::vector<std::size_t>> pc(ty.pos.size(), std::vector<std::size_t>(static_cast<std::size_t>(K), 0));
+        for (std::size_t e = 0; e < ob.size(); ++e)
+            for (const int p : ob[e].p) ++pc[static_cast<std::size_t>(p)][static_cast<std::size_t>(arg[e])];
+        op << "position\tentities";
+        for (int c = 0; c < K; ++c) op << "\tt" << c;
+        op << "\n";
+        for (std::size_t p = 0; p < ty.pos.size(); ++p) {
+            std::size_t n = 0;
+            for (const auto x : pc[p]) n += x;
+            op << ty.pos[p] << "\t" << n;
+            for (const auto x : pc[p]) op << "\t" << x;
+            op << "\n";
+        }
+        if (!oe || !op) return std::cerr << "cannot write " << tab << ".*.tsv\n", 1;
+    }
+    return 0;
+}
+
 struct TItem {
     std::vector<st::Sent> ctx;   // context sentences (first: the prompt)
     std::uint32_t fact = 0;
@@ -157,7 +249,16 @@ int cmd_train(const Args& a) {
     std::fprintf(stderr, "train: %zu real fact sentences with a skeleton, %zu used\n", seen, items.size());
     const wkn::Options o;
     const st::Experts ex(md->stats, m, md->runs(m), &md->topics, &md->grid);
-    const pl::Filler fl(m, o);
+    // PLAN_FILL.md: the fills typed and smoothed as sample's (--typed, --s1, --s1-mode, --typed-tau).
+    for (const char* k : {"--typed", "--typed-tau", "--s1", "--s1-mode"})
+        if (!a.get(k).empty() && (!pl::fill_flag(std::string("--k5-plan-") + (k + 2), a.get(k), md->fo, err) || !err.empty()))
+            return std::cerr << (err.empty() ? std::string("bad ") + k : err) << "\n", 2;
+    if (!md->fo.typed.empty()) {
+        md->types = std::make_shared<pl::SlotTypes>();
+        if (!md->types->load(md->fo.typed, err)) return std::cerr << err << "\n", 1;
+        std::fprintf(stderr, "train: fills %s\n", md->fo.desc().c_str());
+    }
+    const pl::Filler fl(m, o, 4, 3, false, &md->fo, md->bind_types(m));
     std::atomic<std::size_t> next{0}, done{0};
     const auto t0 = std::chrono::steady_clock::now();
     const auto work = [&] {
@@ -187,7 +288,7 @@ int cmd_train(const Args& a) {
             std::vector<std::size_t> pick(pool.size());
             for (std::size_t k = 0; k < pick.size(); ++k) pick[k] = k;
             std::vector<pl::Cand> cands;
-            md->candidates(m, ex, fl, c, s, assoc, pool, pick, S, O, cands);
+            md->candidates(m, ex, fl, c, s, assoc, pool, pick, S, O, cands, f.subj, f.val);
             if (cands.size() >= 2 && cands[0].skel == 0) {
                 for (const auto& cd : cands) it.f.emplace_back(cd.f, cd.f + pl::kNF), it.k5.push_back(cd.fill.mean());
                 it.ok = true;
@@ -302,6 +403,107 @@ int cmd_train(const Args& a) {
     return 0;
 }
 
+// PLAN_FILL.md (§13.42 Q2): the options' defaults change nothing; shapes; EM types on a small store; the context model's
+// signs; a typed fill refuses a word that does not suit its slot; S2 at temperature 1 equals the mixer; S4 at 0 equals
+// the old transitions.
+int selftest_q2(const wkn::K5& m, const std::string& txt, const std::vector<std::uint16_t>& codes, const wkn::K5::State& s0, const pl::Fill& f) {
+    const auto fail = [](const char* what) { return std::fprintf(stderr, "selftest q2: %s\n", what), 1; };
+    pl::FillOpts fo;
+    std::string err;
+    if (fo.any() || !fo.desc().empty()) return fail("default options");
+    if (!pl::fill_flag("--k5-plan-s1", "0.05", fo, err) || !err.empty() || fo.s1 != 0.05 || !fo.any()) return fail("--k5-plan-s1");
+    if (!pl::fill_flag("--k5-plan-s3", "0", fo, err) || err.empty()) return fail("--k5-plan-s3 0 must be refused");
+    if (pl::fill_flag("--k5-plan-beam", "4", fo, err)) return fail("fill_flag took another flag");
+    if (pl::name_shape(wkn::tokens("1954")) != 0 || pl::name_shape(wkn::tokens("Paris")) != 6 || pl::name_shape(wkn::tokens("Gothenburg University")) != 7 ||
+        pl::name_shape(wkn::tokens("Military personnel")) != 10 || pl::name_shape(wkn::tokens("May 4 , 1950")) != 5)
+        return fail("name shapes");
+    const std::string dir = "/tmp/k5_planner_selftest_q2";
+    if (std::system(("mkdir -p " + dir).c_str()) != 0) return fail("mkdir");
+    {
+        std::ofstream s(dir + "/seeds.tsv");
+        s << "subject\trelation\tobject\tsource\ttemplate\tbyte_offset\n";
+        const char* ppl[][3] = {{"Alan Smith", "Paris", "1901"}, {"Bob Jones", "Rome", "1910"}, {"Carl Brown", "Paris", "1920"},
+                                {"Dan White", "Berlin", "1930"}, {"Eve Black", "Rome", "1940"}, {"Fay Green", "Berlin", "1950"}};
+        for (const auto& p : ppl)
+            s << p[0] << "\tbirth_place\t" << p[1] << "\tinfobox\tinfobox\t5\n" << p[0] << "\tbirth_year\t" << p[2] << "\tinfobox\tinfobox\t5\n";
+        s << "Paris\tcountry\tFrance\tinfobox\tinfobox\t5\nRome\tcountry\tItaly\tinfobox\tinfobox\t5\nBerlin\tcountry\tGermany\tinfobox\tinfobox\t5\n";
+    }
+    pl::FactStore fs;
+    if (!fs.load(dir, {}, err)) return fail("store");
+    pl::SlotTypes ty;
+    const auto ob = ty.observe(fs, m, true);
+    ty.fit(ob, 4, 60, 4, 7);
+    const auto post = ty.posteriors(ob);
+    const auto type = [&](const std::string& e) {
+        const float* p = post.data() + static_cast<std::size_t>(fs.find(e)) * 4;
+        return static_cast<int>(std::max_element(p, p + 4) - p);
+    };
+    if (type("Paris") != type("Rome") || type("Rome") != type("Berlin") || type("1901") != type("1950") || type("Alan Smith") != type("Fay Green") ||
+        type("Paris") == type("1901") || type("Paris") == type("Alan Smith") || type("1901") == type("Alan Smith"))
+        return fail("EM types");
+    ty.count_text(txt, 0, txt.size(), fs, m, post);
+    if (!ty.save(dir + "/slots.txt", m, 1)) return fail("save");
+    pl::SlotTypes t2;
+    if (!t2.load(dir + "/slots.txt", err)) return fail(err.c_str());
+    t2.bind(m);
+    const auto P = [&](const std::string& e) { return post.data() + static_cast<std::size_t>(fs.find(e)) * 4; };
+    const int m2 = pl::slot_off_index(-2), p2 = pl::slot_off_index(2);
+    const double fc = t2.word_fit(P("Paris"), m2, m.id("born")), fp = t2.word_fit(P("Alan Smith"), m2, m.id("born"));
+    const double fq = t2.word_fit(P("Alan Smith"), p2, m.id("born")), fr = t2.word_fit(P("Paris"), p2, m.id("born"));
+    if (!(fc > 0 && fp < -2 && fq > 0 && fr < -2)) return std::fprintf(stderr, "selftest q2: context fits %.2f %.2f %.2f %.2f\n", fc, fp, fq, fr), 1;
+    if (std::fabs(t2.word_fit(P("Paris"), m2, m.id("born")) - ty.word_fit(P("Paris"), m2, m.id("born"))) > 1e-3) return fail("slots file round trip");
+    // Typed fills: the right types keep the untyped fill; the names' types swapped refuse "born" after the city.
+    const wkn::Options o;
+    pl::FillOpts ft;
+    ft.typed = dir + "/slots.txt";
+    const pl::Filler fl(m, o, 4, 3, false, &ft, &t2);
+    const auto S = wkn::tokens("Alan Smith"), O = wkn::tokens("Paris");
+    const auto g = fl.fill(s0, codes, S, O, P("Alan Smith"), P("Paris"));
+    if (!g.ok || g.tok != f.tok) return fail("typed fill with the right types");
+    const auto h = fl.fill(s0, codes, S, O, P("Paris"), P("Alan Smith"));
+    if (fl.refused() == 0 || (h.ok && h.tok.size() > 3 && h.tok[3] == "born")) return fail("typed fill with swapped types");
+    // S1 changes the fill's probabilities, not its tokens' places.
+    pl::FillOpts f1;
+    f1.s1 = 0.1;
+    const pl::Filler fs1(m, o, 4, 3, false, &f1);
+    const auto g1 = fs1.fill(s0, codes, S, O);
+    if (!g1.ok || g1.tok.size() != f.tok.size() || g1.tok[0] != "Alan" || g1.tok[5] != "Paris" || g1.lp == f.lp) return fail("S1 fill");
+    // S2: temperature 1 is the mixer itself; a higher one is flatter.
+    pl::Model md;
+    md.trained = true;
+    const std::vector<char> all(pl::kNF, 1);
+    md.mx.r.emplace_back(pl::kNF, 0, 4.0, 0.05, all), md.mx.r.emplace_back(pl::kNF, 2, 4.0, 0.2, all);
+    md.mx.init_layer2();
+    st::Item it;
+    it.n = 3;
+    it.z.resize(3 * pl::kNF);
+    std::mt19937_64 rng(5);
+    std::uniform_real_distribution<float> uz(-1, 1);
+    for (auto& x : it.z) x = uz(rng);
+    for (int r = 0; r < 30; ++r) md.mx.learn(it);
+    std::vector<double> P1, PT, P2;
+    md.mx.dist(it, P1);
+    md.dist_temp(it, 1.0, PT);
+    md.dist_temp(it, 3.0, P2);
+    for (int i = 0; i < 3; ++i)
+        if (std::fabs(P1[static_cast<std::size_t>(i)] - PT[static_cast<std::size_t>(i)]) > 1e-12) return fail("S2 at temperature 1");
+    if (!(*std::max_element(P2.begin(), P2.end()) < *std::max_element(P1.begin(), P1.end()))) return fail("S2 flatter");
+    // S4: 0 is the old add-half transitions; above 0 it moves towards the marginal.
+    pl::SkelBank b;
+    b.add("birth_place", codes), b.add("founded", codes), b.add_trans("<s>", "birth_place"), b.add_trans("<s>", "birth_place"), b.add_trans("birth_place", "founded");
+    b.finish();
+    if (!b.save(dir + "/skel.txt")) return fail("bank save");
+    pl::SkelBank b2;
+    if (!b2.load(dir + "/skel.txt", err)) return fail("bank load");
+    const double old = std::log2((0 + 0.5) / (2 + 0.5 * 3));
+    if (b2.trans_lp("<s>", "founded") != old) return fail("S4 at 0");
+    b2.s4 = 0.1;
+    if (!(b2.trans_lp("<s>", "founded") > old)) return fail("S4 above 0");
+    std::printf("k5_planner selftest q2: ok (typed fill with swapped types: %s; refused %llu)\n",
+                h.ok ? [&] { std::string t; for (const auto& x : h.tok) t += x + " "; return t; }().c_str() : "no fill", static_cast<unsigned long long>(fl.refused()));
+    return 0;
+}
+
 int cmd_selftest() {
     // A tiny K5 and store: a mined skeleton, a fill that keeps the fact's tokens and the class codes.
     std::string txt;
@@ -372,6 +574,7 @@ int cmd_selftest() {
     if (!b2.load(dir + "/skel.txt", err) || !b2.of("birth_place") || b2.of("birth_place")->at(0).codes != codes) return std::fprintf(stderr, "selftest: bank round trip\n"), 1;
     const auto u = pl::mbr_ids({&f.ids, &f.ids});
     if (std::fabs(u[0] - 1.0) > 1e-12) return std::fprintf(stderr, "selftest: mbr\n"), 1;
+    if (const int r = selftest_q2(m, txt, codes, s0, f)) return r;
     std::string fill;
     for (const auto& x : f.tok) fill += x + " ";
     std::printf("k5_planner selftest: ok (fill: %s)\n", fill.c_str());
@@ -382,7 +585,7 @@ int cmd_selftest() {
 
 int main(int argc, char** argv) {
     if (argc < 2) {
-        std::fprintf(stderr, "usage: k5_planner mine|train|selftest [--key value ...]\n");
+        std::fprintf(stderr, "usage: k5_planner mine|train|types|selftest [--key value ...]\n");
         return 2;
     }
     const std::string cmd = argv[1];
@@ -390,6 +593,7 @@ int main(int argc, char** argv) {
     for (int i = 2; i + 1 < argc; i += 2) a.kv[argv[i]] = argv[i + 1];
     if (cmd == "mine") return cmd_mine(a);
     if (cmd == "train") return cmd_train(a);
+    if (cmd == "types") return cmd_types(a);
     if (cmd == "selftest") return cmd_selftest();
     std::fprintf(stderr, "unknown command %s\n", cmd.c_str());
     return 2;

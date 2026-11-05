@@ -17,12 +17,18 @@
 ///    fluency floor; or K5 alone (--k5-plan-gate k5, the P2 ablation). Only the winner becomes text.
 /// After the plan, K5's own sentence gate writes on to the byte limit.
 ///
+/// §13.42 Q2 (slots.hpp, docs/reports/PLAN_FILL.md), all off by default: typed slots (--k5-plan-typed FILE: the words
+/// next to a name and the skeleton's class codes there must suit the name's learned type) and four smoothing places
+/// (--k5-plan-s1 the fill's distribution, -s2 the gate's temperature, -s3 add-k on skeleton counts, -s4 the plan's
+/// relation transitions).
+///
 /// The experts read candidates as K5 tokens (vocabulary entries of the IDs); no candidate is rendered to bytes.
 ///
 /// Author: Odin Loch
 
 #include "cypha/lm/planner/facts.hpp"
 #include "cypha/lm/planner/skeleton.hpp"
+#include "cypha/lm/planner/slots.hpp"  // §13.42 Q2: typed slots and the smoothing places (docs/reports/PLAN_FILL.md)
 #include "cypha/lm/structure/experts.hpp"
 #include "cypha/lm/structure/mixer.hpp"
 #include "cypha/lm/structure/writer.hpp"
@@ -85,19 +91,26 @@ inline std::vector<int> bank_sizes(int C, int beam, const std::vector<int>& coun
 // The constrained beam (step 3).
 class Filler {
  public:
-    Filler(const wkn::K5& m, const wkn::Options& o, int beam = 4, int expand = 3, bool dba = false)
-        : m_(m), o_(o), beam_(beam), expand_(expand), dba_(dba) {
+    // fo, types (§13.42 Q2, slots.hpp): S1's blend, and typed slots when types is given and fill gets the names'
+    // posteriors. Without them the fill is as before.
+    Filler(const wkn::K5& m, const wkn::Options& o, int beam = 4, int expand = 3, bool dba = false, const FillOpts* fo = nullptr,
+           const SlotTypes* types = nullptr)
+        : m_(m), o_(o), beam_(beam), expand_(expand), dba_(dba), types_(types) {
         const auto& cls = m.classes().classes();
         for (std::uint32_t w = 2; w < cls.size(); ++w) {
             if (m.vocab()[w] == "\n") continue;
             if (by_cls_.size() <= cls[w]) by_cls_.resize(cls[w] + 1);
             by_cls_[cls[w]].push_back(w);
         }
+        if (fo) tau_ = fo->tau, s1_ = fo->s1, s1_mode_ = fo->s1_mode;
     }
     // K5 distributions computed by this filler (the fill's cost; GENERATION_PLAN §13.40 M3).
     std::uint64_t dists() const { return dists_; }
+    // §13.42 Q2: class words refused next to a typed slot.
+    std::uint64_t refused() const { return refused_; }
+    // pS, pO: the names' type posteriors (typed slots; null: untyped).
     Fill fill(const wkn::K5::State& s, const std::vector<std::uint16_t>& codes, const std::vector<std::string>& S,
-              const std::vector<std::string>& O) const {
+              const std::vector<std::string>& O, const float* pS = nullptr, const float* pO = nullptr) const {
         if (dba_) return fill_dba(s, codes, S, O);
         struct It {
             std::vector<std::uint32_t> ids;
@@ -117,9 +130,21 @@ class Filler {
             tmp.ctx.insert(tmp.ctx.end(), it.ids.begin(), it.ids.end());
             m_.model_dist(tmp, o_, p.data(), scratch);
             ++dists_;
+            if (s1_ > 0) smooth(tmp, p, scratch);  // §13.42 Q2, S1
             return std::max(1 - p[wkn::kUnk] - p[wkn::kBos], 1e-12);
         };
-        for (const auto code : codes) {
+        const bool typed = types_ && (pS || pO);
+        std::pair<int, int> nb[4];
+        for (std::size_t j = 0; j < codes.size(); ++j) {
+            const auto code = codes[j];
+            int nnb = 0;  // §13.42 Q2: the typed slots this class position neighbours
+            if (typed) {
+                nnb = slot_neighbours(codes, j, nb);
+                int k = 0;
+                for (int q = 0; q < nnb; ++q)
+                    if ((nb[q].first == 0 ? pS : pO) != nullptr) nb[k++] = nb[q];
+                nnb = k;
+            }
             nxt.clear();
             for (const auto& it : cur) {
                 if (code == kSlotS || code == kSlotO) {
@@ -149,6 +174,10 @@ class Filler {
                     if (capped && cs.has(wkn::fnv_step(hp, w))) continue;
                     const std::string pc = wkn::piece(m_.vocab()[w], it.prev, it.has_prev);
                     if (s.rep.banned(it.seg + pc)) continue;
+                    if (nnb > 0 && !suits(nb, nnb, pS, pO, w)) {  // §13.42 Q2: the word does not suit a typed slot's name
+                        ++refused_;
+                        continue;
+                    }
                     It x = it;
                     x.lp += std::log2(std::max(pw / z, 1e-12));
                     x.ids.push_back(w), x.tok.push_back(m_.vocab()[w]);
@@ -165,6 +194,33 @@ class Filler {
         Fill f;
         f.ids = std::move(cur[0].ids), f.tok = std::move(cur[0].tok), f.lp = cur[0].lp, f.ok = true;
         return f;
+    }
+
+    // §13.42 Q2, typed slots: does word w fit every neighbouring slot's name (fit at least -tau)?
+    bool suits(const std::pair<int, int>* nb, int nnb, const float* pS, const float* pO, std::uint32_t w) const {
+        for (int q = 0; q < nnb; ++q)
+            if (types_->word_fit(nb[q].first == 0 ? pS : pO, nb[q].second, w) < -tau_) return false;
+        return true;
+    }
+    // §13.42 Q2, S1: p <- (1 - s1) p + s1 q, q K5's class model (model_dist leaves it in cls) or K5 at order 3 after
+    // the same context.
+    void smooth(const wkn::K5::State& at, std::vector<double>& p, const std::vector<double>& cls) const {
+        const std::size_t V = p.size();
+        const double* q = nullptr;
+        thread_local wkn::K5::State low;
+        thread_local std::vector<double> ql, sl;
+        if (s1_mode_ == 0) {
+            if (!m_.classes().on() || cls.size() < V) return;
+            q = cls.data();
+        } else {
+            const std::size_t n = std::min<std::size_t>(at.ctx.size(), 2);
+            low.ctx.assign(at.ctx.end() - static_cast<std::ptrdiff_t>(n), at.ctx.end());
+            ql.resize(V);
+            m_.model_dist(low, o_, ql.data(), sl);
+            ++dists_;
+            q = ql.data();
+        }
+        for (std::size_t w = 0; w < V; ++w) p[w] = (1 - s1_) * p[w] + s1_ * q[w];
     }
 
     // Dynamic beam allocation (Post and Vilar, NAACL 2018; GENERATION_PLAN §13.40 M3; docs/reports/MERGE_FILL.md).
@@ -295,7 +351,10 @@ class Filler {
     const wkn::Options& o_;
     int beam_, expand_;
     bool dba_ = false;
-    mutable std::uint64_t dists_ = 0;
+    const SlotTypes* types_ = nullptr;  // §13.42 Q2
+    double tau_ = 2.0, s1_ = 0;
+    int s1_mode_ = 0;
+    mutable std::uint64_t dists_ = 0, refused_ = 0;
     std::vector<std::vector<std::uint32_t>> by_cls_;
 };
 
@@ -351,6 +410,25 @@ class Model {
     // §13.40 M3: thread-time inside Filler::fill and in the planner's fact steps (ns), fills, K5 distributions, prompts
     // the planner wrote from facts.
     mutable std::atomic<std::uint64_t> fill_ns{0}, fills{0}, dists{0}, steps_ns{0}, planned{0};
+    // §13.42 Q2 (slots.hpp, docs/reports/PLAN_FILL.md): the fill's options; the slot types (--k5-plan-typed) and each
+    // store entity's type posterior (bind_types); words refused, skeletons dropped, fact steps refilled untyped.
+    FillOpts fo;
+    std::shared_ptr<SlotTypes> types;
+    mutable std::atomic<std::uint64_t> refused{0}, skel_dropped{0}, refilled{0};
+    const SlotTypes* bind_types(const wkn::K5& m) const {
+        if (!types) return nullptr;
+        std::call_once(types_once_, [&] {
+            types->bind(m);
+            ent_post_ = types->posteriors(types->observe(fs, m, false));
+        });
+        return types.get();
+    }
+    // An entity's type posterior (null without typed slots).
+    const float* post(std::uint32_t e) const {
+        if (!types || e == ~0u) return nullptr;
+        const std::size_t K = static_cast<std::size_t>(types->K);
+        return (static_cast<std::size_t>(e) + 1) * K <= ent_post_.size() ? ent_post_.data() + static_cast<std::size_t>(e) * K : nullptr;
+    }
 
     // The model file (k5_planner train's output) without the store; then the store (load_store).
     bool load(const std::string& path, std::string& err) {
@@ -385,13 +463,33 @@ class Model {
     }
 
     // Step 2: the relation's skeletons scored after context c (prepared): class 5-gram mean, the length model, and
-    // log2 of the skeleton's count. Returns the best k indices.
+    // log2 of the skeleton's count (S3: + fo.s3, today 1). Returns the best k indices. pS, pO (typed slots, §13.42
+    // Q2): a skeleton whose class codes next to a slot fit the slot's name below -tau is dropped, unless all would be.
     std::vector<std::size_t> best_skeletons(const wkn::K5& m, const st::Context& c, const std::vector<Skel>& sk, const std::vector<std::string>& S,
-                                            const std::vector<std::string>& O, std::size_t k, std::size_t exclude = ~std::size_t{0}) const {
+                                            const std::vector<std::string>& O, std::size_t k, std::size_t exclude = ~std::size_t{0},
+                                            const float* pS = nullptr, const float* pO = nullptr) const {
         const std::uint32_t cs = stats.cls(m.id(S[0])), co = stats.cls(m.id(O[0]));
+        std::vector<char> drop(sk.size(), 0);
+        if (types && (pS || pO)) {
+            std::size_t kept = 0;
+            std::pair<int, int> nb[4];
+            for (std::size_t i = 0; i < sk.size(); ++i) {
+                const auto& cd = sk[i].codes;
+                for (std::size_t j = 0; j < cd.size() && !drop[i]; ++j) {
+                    const int n = slot_neighbours(cd, j, nb);
+                    for (int q = 0; q < n && !drop[i]; ++q) {
+                        const float* pi = nb[q].first == 0 ? pS : pO;
+                        if (pi && types->class_fit(pi, nb[q].second, cd[j]) < -fo.tau) drop[i] = 1;
+                    }
+                }
+                kept += i != exclude && !drop[i];
+            }
+            if (kept == 0) std::fill(drop.begin(), drop.end(), 0);
+            else for (std::size_t i = 0; i < sk.size(); ++i) skel_dropped += i != exclude && drop[i];
+        }
         std::vector<std::pair<double, std::size_t>> sc;
         for (std::size_t i = 0; i < sk.size(); ++i) {
-            if (i == exclude) continue;
+            if (i == exclude || drop[i]) continue;
             std::vector<std::uint32_t> h;
             const std::size_t kk = std::min<std::size_t>(c.classes.size(), st::Stats::kCO - 1);
             h.assign(c.classes.end() - static_cast<std::ptrdiff_t>(kk), c.classes.end());
@@ -407,7 +505,7 @@ class Model {
             st::Sent shape;
             shape.tok.resize(ntok), shape.ended = true;
             const double score = lp / static_cast<double>(sk[i].codes.size()) + stats.len_lp(c.plen, st::len_bucket(shape)) / 4.0 +
-                                 0.25 * std::log2(1.0 + sk[i].count);
+                                 0.25 * std::log2(fo.s3 + sk[i].count);  // S3 (§13.42 Q2): add-k, today k = 1
             sc.push_back({score, i});
         }
         std::stable_sort(sc.begin(), sc.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
@@ -416,15 +514,35 @@ class Model {
         return out;
     }
 
-    // Steps 3-4's candidates: each skeleton filled after state s, with every expert's features (c prepared).
+    // Steps 3-4's candidates: each skeleton filled after state s, with every expert's features (c prepared). es, eo:
+    // the fact's subject and value (typed slots, §13.42 Q2; if no typed fill succeeds, the step is filled untyped).
     void candidates(const wkn::K5& m, const st::Experts& ex, const Filler& fl, const st::Context& c, const wkn::K5::State& s,
                     const std::vector<double>& assoc, const std::vector<Skel>& sk, const std::vector<std::size_t>& pick,
-                    const std::vector<std::string>& S, const std::vector<std::string>& O, std::vector<Cand>& out) const {
+                    const std::vector<std::string>& S, const std::vector<std::string>& O, std::vector<Cand>& out,
+                    std::uint32_t es = ~0u, std::uint32_t eo = ~0u) const {
         out.clear();
+        const float *pS = post(es), *pO = post(eo);
+        for (int pass = 0; pass < 2 && out.empty(); ++pass) {
+            if (pass == 1) {
+                if (!pS && !pO) break;
+                pS = pO = nullptr, ++refilled;
+            }
+            candidates_pass(ex, fl, c, s, assoc, sk, pick, S, O, out, pS, pO);
+        }
+        std::vector<const std::vector<std::uint32_t>*> ids;
+        for (const auto& cd : out) ids.push_back(&cd.fill.ids);
+        const auto u = mbr_ids(ids);
+        for (std::size_t i = 0; i < out.size(); ++i) out[i].f[kMbr] = u[i];
+        (void)m;
+    }
+    void candidates_pass(const st::Experts& ex, const Filler& fl, const st::Context& c, const wkn::K5::State& s,
+                         const std::vector<double>& assoc, const std::vector<Skel>& sk, const std::vector<std::size_t>& pick,
+                         const std::vector<std::string>& S, const std::vector<std::string>& O, std::vector<Cand>& out,
+                         const float* pS, const float* pO) const {
         for (const auto i : pick) {
             Cand cd;
             const auto t0 = std::chrono::steady_clock::now();
-            cd.fill = fl.fill(s, sk[i].codes, S, O);
+            cd.fill = fl.fill(s, sk[i].codes, S, O, pS, pO);
             fill_ns += static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - t0).count());
             ++fills;
             if (!cd.fill.ok) continue;
@@ -435,11 +553,21 @@ class Model {
             ex.features(c, z, cd.fill.ids, cd.fill.mean(), st::mean_assoc(assoc, cd.fill.ids), cd.f);
             out.push_back(std::move(cd));
         }
-        std::vector<const std::vector<std::uint32_t>*> ids;
-        for (const auto& cd : out) ids.push_back(&cd.fill.ids);
-        const auto u = mbr_ids(ids);
-        for (std::size_t i = 0; i < out.size(); ++i) out[i].f[kMbr] = u[i];
-        (void)m;
+    }
+    // S2 (§13.42 Q2): the mixer's distribution with each ranker's softmax at temperature T, mixed by the second layer.
+    void dist_temp(const st::Item& it, double T, std::vector<double>& P) const {
+        const std::size_t n = static_cast<std::size_t>(it.n);
+        P.assign(n, 0.0);
+        std::vector<double> q(n);
+        for (std::size_t r = 0; r < mx.r.size(); ++r) {
+            const int set = it.sel[mx.r[r].selector()];
+            double hi = -1e300;
+            for (std::size_t i = 0; i < n; ++i) hi = std::max(hi, q[i] = mx.r[r].score(set, it.z.data() + i * kNF) / T);
+            double z = 0;
+            for (double& x : q) z += (x = std::exp(x - hi));
+            const double w = mx.r.size() == 1 ? 1.0 : mx.v[r];
+            for (std::size_t i = 0; i < n; ++i) P[i] += w * q[i] / z;
+        }
     }
     // The gate's choice among cands (index), after context c.
     std::size_t choose(const st::Context& c, const std::vector<Cand>& cands) const {
@@ -455,7 +583,8 @@ class Model {
         for (std::size_t i = 0; i < cands.size(); ++i) row(cands[i].f, it.z.data() + i * kNF);
         st::selectors(c, it.sel);
         std::vector<double> P;
-        mx.dist(it, P);
+        if (fo.s2 != 1) dist_temp(it, fo.s2, P);  // S2 (§13.42 Q2)
+        else mx.dist(it, P);
         bool any = false;
         for (const auto& cd : cands) any = any || cd.fill.mean() >= floor;
         double bp = -1;
@@ -475,6 +604,8 @@ class Model {
  private:
     mutable std::once_flag once_;
     mutable st::TrainRuns tr_;
+    mutable std::once_flag types_once_;
+    mutable std::vector<float> ent_post_;
 };
 
 struct Plan {
@@ -579,6 +710,10 @@ class Writer final : public wkn::StructureWriter {
                      md.fills ? static_cast<double>(md.fill_ns.load()) / 1e6 / static_cast<double>(md.fills.load()) : 0.0,
                      static_cast<unsigned long long>(md.dists.load()), static_cast<double>(md.steps_ns.load()) / 1e9,
                      static_cast<unsigned long long>(md.planned.load()));
+        if (md.fo.any())  // §13.42 Q2
+            std::fprintf(stderr, "k5-plan: q2 %s: %llu class words refused next to typed slots, %llu skeletons dropped, %llu fact steps refilled untyped\n",
+                         md.fo.desc().c_str(), static_cast<unsigned long long>(md.refused.load()), static_cast<unsigned long long>(md.skel_dropped.load()),
+                         static_cast<unsigned long long>(md.refilled.load()));
     }
     std::string generate(const wkn::K5& m, std::string_view prompt, std::uint64_t seed, const wkn::Options& o, wkn::GenStats* gst) const override {
         if (m.vocab().size() <= 2) return {};
@@ -596,7 +731,7 @@ class Writer final : public wkn::StructureWriter {
         wkn::GenStats g;
         const auto t_steps = std::chrono::steady_clock::now();
         const st::Experts ex(md.stats, m, md.runs(m), &md.topics, &md.grid);
-        const Filler fl(m, o, md.beam, 3, md.fill_dba);
+        const Filler fl(m, o, md.beam, 3, md.fill_dba, &md.fo, md.bind_types(m));  // §13.42 Q2: fo and the slot types
         st::Context c;
         c.sents = st::split(wkn::tokens(prompt));
         c.n_prompt = c.sents.size();
@@ -613,8 +748,8 @@ class Writer final : public wkn::StructureWriter {
             const auto& S = md.fs.ent_tok(f.subj);
             const auto& O = md.fs.ent_tok(f.val);
             ex.prepare(c);
-            const auto pick = md.best_skeletons(m, c, *sk, S, O, kSkel);
-            md.candidates(m, ex, fl, c, s, assoc, *sk, pick, S, O, cands);
+            const auto pick = md.best_skeletons(m, c, *sk, S, O, kSkel, ~std::size_t{0}, md.post(f.subj), md.post(f.val));  // Q2: typed slots
+            md.candidates(m, ex, fl, c, s, assoc, *sk, pick, S, O, cands, f.subj, f.val);
             if (cands.empty()) continue;
             const std::size_t b = md.choose(c, cands);
             const auto& win = cands[b].fill;
@@ -638,6 +773,7 @@ class Writer final : public wkn::StructureWriter {
         }
         md.steps_ns += static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - t_steps).count());
         md.dists += fl.dists();
+        md.refused += fl.refused();
         ++md.planned;
         // K5's own gate writes on (the same streams as its gate; sentence numbers after the plan's).
         const int K = std::max(o.gate_k, 1);
@@ -697,10 +833,11 @@ class Writer final : public wkn::StructureWriter {
 };
 
 // cyphalm_trie: --k5-plan STOREDIR --k5-plan-model FILE [--k5-plan-gate full|k5] [--k5-plan-fill beam|dba]
-// [--k5-plan-beam N]; drops: the evidence ranges to drop. beam 0: the default (4).
+// [--k5-plan-beam N]; drops: the evidence ranges to drop. beam 0: the default (4). fo: §13.42 Q2's options
+// (--k5-plan-typed FILE, --k5-plan-typed-tau, --k5-plan-s1 [-mode], --k5-plan-s2, --k5-plan-s3, --k5-plan-s4; slots.hpp).
 inline bool apply_plan_flags(const std::string& store, const std::string& model, const std::string& gate,
                              const std::vector<std::pair<std::size_t, std::size_t>>& drops, wkn::Options& o, std::string& err,
-                             const std::string& fill = "beam", int beam = 0) {
+                             const std::string& fill = "beam", int beam = 0, const FillOpts& fo = FillOpts{}) {
     auto md = std::make_shared<Model>();
     if (model.empty()) return err = "--k5-plan needs --k5-plan-model FILE (k5_planner train)", false;
     if (gate != "full" && gate != "k5") return err = "--k5-plan-gate takes full or k5", false;
@@ -715,9 +852,19 @@ inline bool apply_plan_flags(const std::string& store, const std::string& model,
                  store.c_str(), md->fs.size(), md->fs.dropped(), md->fs.subjects(), md->fs.rels(), md->bank.skeletons(), md->bank.relations(),
                  gate.c_str(), md->trained ? "" : " (untrained: K5 alone)", md->floor);
     if (md->fill_dba || beam > 0) std::fprintf(stderr, "k5-plan: fill %s, beam %d\n", fill.c_str(), md->beam);
+    if (fo.any()) {  // §13.42 Q2 (docs/reports/PLAN_FILL.md)
+        md->fo = fo;
+        md->bank.s4 = fo.s4;
+        if (!fo.typed.empty()) {
+            md->types = std::make_shared<SlotTypes>();
+            if (!md->types->load(fo.typed, err)) return false;
+        }
+        std::fprintf(stderr, "k5-plan: q2 %s%s\n", fo.desc().c_str(), md->types ? (", " + std::to_string(md->types->K) + " types").c_str() : "");
+    }
     o.structure = std::make_shared<Writer>(md);
     o.structure_desc = "plan:" + store + "," + model + ",gate=" + gate;
     if (md->fill_dba || beam > 0) o.structure_desc += ",fill=" + fill + ",beam=" + std::to_string(md->beam);  // MERGE_FILL.md
+    if (fo.any()) o.structure_desc += ",q2:" + fo.desc();
     return true;
 }
 
