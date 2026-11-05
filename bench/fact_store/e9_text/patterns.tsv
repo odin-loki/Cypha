@@ -1,0 +1,1319 @@
+relation	pattern	train_subjects	train_sentences	checks	correct	unchecked	precision	wilson_lower	reliability	kept
+birth_place	^ [S] was born in [O] ,	404	536	119	109	10	0.915966	0.852202	0.909091	1
+birth_place	[S] was born in [O] ,	428	564	127	116	10	0.913386	0.85155	0.906977	1
+birth_place	[S] was born in [O]	556	800	184	165	15	0.896739	0.844359	0.892473	1
+birth_place	^ [S] was born in [O]	528	752	173	155	14	0.895954	0.841538	0.891429	1
+birth_place	[P] was born in [O]	164	224	53	48	11	0.90566	0.797463	0.890909	1
+birth_place	^ [P] was born in [O]	164	224	53	48	11	0.90566	0.797463	0.890909	1
+birth_place	[P] was born in [O] ,	108	140	34	31	9	0.911765	0.770395	0.888889	1
+birth_place	^ [P] was born in [O] ,	108	140	34	31	9	0.911765	0.770395	0.888889	1
+death_place	[P] died in [O]	104	124	32	28	6	0.875	0.719317	0.852941	1
+death_place	^ [P] died in [O]	104	124	32	28	6	0.875	0.719317	0.852941	1
+birth_date	^ [S] ( [O] -	1236	1432	317	309	118	0.974763	0.951	0.971787	1
+birth_date	^ [S] ( [O]	1316	1520	341	329	130	0.964809	0.939506	0.962099	1
+birth_date	[S] ( born [O] in	136	140	34	34	3	1	0.898485	0.972222	1
+birth_date	^ [S] ( born [O]	480	528	127	120	27	0.944882	0.890593	0.937984	1
+birth_date	^ [S] ( born [O] in	124	128	31	31	3	1	0.889745	0.969697	1
+birth_date	[S] ( [O] -	1356	1556	368	339	137	0.921196	0.889115	0.918919	1
+birth_date	[S] ( born [O]	536	600	148	134	28	0.905405	0.847484	0.9	1
+birth_date	[S] ( [O]	1448	1656	416	362	154	0.870192	0.834478	0.868421	1
+birth_date	^ [S] ( born [O] )	288	324	79	72	20	0.911392	0.828217	0.901235	1
+birth_date	[S] ( born [O] )	328	380	95	82	21	0.863158	0.779836	0.85567	1
+death_date	^ [S] ( <M> # , # - [O] )	944	1084	242	236	71	0.975207	0.946974	0.971311	1
+death_date	[S] ( <M> # , # - [O] )	1016	1160	262	254	77	0.969466	0.940915	0.965909	1
+death_date	^ [S] ( <M> # , # - [O]	968	1108	250	242	73	0.968	0.938138	0.964286	1
+death_date	[S] ( <M> # , # - [O]	1044	1188	271	261	79	0.9631	0.933419	0.959707	1
+death_date	[S] ( <M> # # - [O] )	108	140	27	27	7	1	0.875445	0.965517	1
+death_date	[S] ( # <M> # - [O]	92	104	23	23	3	1	0.856883	0.96	1
+death_date	[S] ( # <M> # - [O] )	92	104	23	23	3	1	0.856883	0.96	1
+death_date	[S] died on [O]	92	112	23	23	11	1	0.856883	0.96	1
+death_date	^ [S] ( <M> # # - [O] )	88	120	22	22	7	1	0.851345	0.958333	1
+death_date	^ [S] died on [O]	84	104	21	21	11	1	0.845361	0.956522	1
+death_date	[S] ( <M> # # - [O]	108	140	28	27	7	0.964286	0.822878	0.933333	1
+death_date	^ [S] ( # - [O] )	124	132	33	31	17	0.939394	0.803938	0.914286	1
+death_date	^ [S] ( <M> # # - [O]	88	120	23	22	7	0.956522	0.790088	0.92	1
+death_date	^ [S] ( # - [O]	128	136	35	32	18	0.914286	0.776207	0.891892	1
+birth_year	^ [S] ( [O]	1864	3216	467	466	4	0.997859	0.987972	0.995736	1
+birth_year	^ [S] ( [O] -	1720	2976	431	430	4	0.99768	0.986976	0.995381	1
+birth_year	^ [S] ( born [O]	616	1096	154	154	0	1	0.975663	0.99359	1
+birth_year	^ [S] ( born [O] )	396	688	99	99	0	1	0.962647	0.990099	1
+birth_year	[S] ( [O] -	1908	3308	499	477	6	0.955912	0.934151	0.954092	1
+birth_year	[S] ( born [O]	680	1216	176	170	0	0.965909	0.92763	0.960674	1
+birth_year	[S] ( born [O] in	148	280	37	37	0	1	0.905942	0.974359	1
+birth_year	^ [S] ( born [O] in	136	256	34	34	0	1	0.898485	0.972222	1
+birth_year	[S] ( [O]	2068	3576	564	518	6	0.91844	0.89292	0.916961	1
+birth_year	[S] ( born [O] )	440	772	116	110	0	0.948276	0.891732	0.940678	1
+birth_year	[S] ( born [O] ,	80	148	20	20	0	1	0.838875	0.954545	1
+birth_year	[S] ( c . [O]	116	172	31	29	2	0.935484	0.792814	0.909091	1
+birth_year	[S] ( c . [O] -	104	156	28	26	2	0.928571	0.773546	0.9	1
+birth_year	^ [S] ( c . [O]	100	152	27	25	1	0.925926	0.766304	0.896552	1
+birth_year	^ [S] ( c . [O] -	88	136	24	22	1	0.916667	0.741512	0.884615	1
+death_year	^ [S] ( <M> # , # - [O] )	1244	2172	312	311	1	0.996795	0.982071	0.993631	1
+death_year	[S] ( <M> # , # - [O] )	1344	2348	338	336	1	0.994083	0.978685	0.991176	1
+death_year	^ [S] ( <M> # , # - [O]	1280	2228	322	320	1	0.993789	0.97764	0.990741	1
+death_year	[S] ( <M> # , # - [O]	1384	2412	349	346	1	0.991404	0.975036	0.988604	1
+death_year	^ [S] ( # - [O] )	192	336	48	48	2	1	0.9259	0.98	1
+death_year	[S] ( <M> # # - [O]	140	244	35	35	0	1	0.901099	0.972973	1
+death_year	[S] ( <M> # # - [O] )	136	236	34	34	0	1	0.898485	0.972222	1
+death_year	[S] died on [O]	136	224	34	34	0	1	0.898485	0.972222	1
+death_year	^ [S] ( # - [O]	200	344	51	50	2	0.980392	0.896954	0.962264	1
+death_year	^ [S] died on [O]	128	208	32	32	0	1	0.892821	0.970588	1
+death_year	^ [S] ( <M> # # - [O]	120	204	30	30	0	1	0.886487	0.96875	1
+death_year	^ [S] ( <M> # # - [O] )	116	196	29	29	0	1	0.88303	0.967742	1
+death_year	[S] ( # <M> # - [O]	100	184	25	25	1	1	0.866808	0.962963	1
+death_year	[S] ( # <M> # - [O] )	100	184	25	25	1	1	0.866808	0.962963	1
+death_year	^ [S] died in [O]	84	128	21	21	0	1	0.845361	0.956522	1
+death_year	[S] ( c . # - [O]	80	148	20	20	0	1	0.838875	0.954545	1
+death_year	[S] died in [O]	112	176	29	28	1	0.965517	0.828245	0.935484	1
+language	[S] ( [O]	108	188	33	33	0	1	0.89573	0.971429	1
+language	[S] ( [O] :	100	172	30	30	0	1	0.886487	0.96875	1
+language	the [S] ( [O]	72	108	22	22	0	1	0.851345	0.958333	1
+language	the [S] ( [O] :	72	108	22	22	0	1	0.851345	0.958333	1
+capital	[P] capital is [O]	8	16	0	0	0	0	0	0.5	0
+capital	[P] capital is [O] .	8	16	0	0	0	0	0	0.5	0
+capital	[S] are [O]	6	6	1	0	0	0	0	0.333333	0
+capital	[S] are [O] ,	6	6	0	0	0	0	0	0.5	0
+capital	[S] is [O]	6	12	1	0	0	0	0	0.333333	0
+capital	[S] is [O] ,	6	12	0	0	0	0	0	0.5	0
+capital	^ [P] capital is [O]	8	16	0	0	0	0	0	0.5	0
+capital	^ [P] capital is [O] .	8	16	0	0	0	0	0	0.5	0
+largest_city	[P] capital is [O]	8	8	0	0	0	0	0	0.5	0
+largest_city	[P] capital is [O] .	8	8	0	0	0	0	0	0.5	0
+largest_city	[S] are [O]	6	6	1	0	0	0	0	0.333333	0
+largest_city	[S] are [O] ,	6	6	0	0	0	0	0	0.5	0
+largest_city	^ [P] capital is [O]	8	8	0	0	0	0	0	0.5	0
+largest_city	^ [P] capital is [O] .	8	8	0	0	0	0	0	0.5	0
+country	[S] is an [O]	36	36	10	10	4	1	0.722467	0.916667	0
+country	^ [S] is an [O]	36	36	10	10	2	1	0.722467	0.916667	0
+country	[S] is a [O]	24	24	7	7	5	1	0.64567	0.888889	0
+country	^ [S] is a [O]	20	20	5	5	5	1	0.565518	0.857143	0
+country	^ [S] was an [O]	20	20	5	5	1	1	0.565518	0.857143	0
+country	[S] is an [O] football	16	16	4	4	0	1	0.510109	0.833333	0
+country	[S] is the official language of [O]	16	32	4	4	0	1	0.510109	0.833333	0
+country	^ [S] is an [O] football	16	16	4	4	0	1	0.510109	0.833333	0
+country	^ [S] is the official language of [O]	16	32	4	4	0	1	0.510109	0.833333	0
+country	[S] was an [O]	24	24	7	6	1	0.857143	0.486872	0.777778	0
+country	[S] ) is a [O]	16	16	5	4	1	0.8	0.375535	0.714286	0
+country	[O] , [S]	28	32	33	8	103	0.242424	0.128317	0.257143	0
+country	[S] is [O]	12	12	11	3	4	0.272727	0.0974606	0.307692	0
+country	[S] in the [O]	15	15	2	1	4	0.5	0.0945312	0.5	0
+country	[O] , [S] is	6	6	5	1	6	0.2	0.0362241	0.285714	0
+country	( [S] ) is a [O]	6	6	0	0	0	0	0	0.5	0
+country	[O] , [S] was	6	6	1	0	11	0	0	0.333333	0
+country	[P] also depends on [O]	6	6	0	0	0	0	0	0.5	0
+country	[P] also depends on [O] for	6	6	0	0	0	0	0	0.5	0
+country	[S] is [O] '	6	6	1	0	1	0	0	0.333333	0
+country	[S] is one of [O]	6	6	0	0	1	0	0	0.5	0
+country	[S] is one of [O] '	6	6	0	0	0	0	0	0.5	0
+country	[S] is the [O]	6	6	1	0	1	0	0	0.333333	0
+country	[S] was a [O]	6	6	1	0	2	0	0	0.333333	0
+country	[S] was a long-running [O]	6	6	0	0	0	0	0	0.5	0
+country	^ [P] also depends on [O]	6	6	0	0	0	0	0	0.5	0
+country	^ [P] also depends on [O] for	6	6	0	0	0	0	0	0.5	0
+country	^ [S] is the [O]	6	6	0	0	0	0	0	0.5	0
+country	^ [S] was a long-running [O]	6	6	0	0	0	0	0	0.5	0
+country	of [O] , [S]	6	9	2	0	4	0	0	0.25	0
+country	the [O] , [S]	6	6	2	0	7	0	0	0.25	0
+country	the [O] , [S] was	6	6	0	0	2	0	0	0.5	0
+country	the [S] was a [O]	6	6	0	0	0	0	0	0.5	0
+location	[S] was born in [O] ,	12	12	5	3	135	0.6	0.230724	0.571429	0
+location	[S] was born in [O]	12	12	6	3	197	0.5	0.187616	0.5	0
+location	^ [S] was born in [O]	6	6	3	0	105	0	5.55112e-17	0.2	0
+location	[S] in [O]	6	9	4	0	48	0	0	0.166667	0
+location	[S] in [O] ,	6	9	1	0	21	0	0	0.333333	0
+location	^ [S] was born in [O] ,	6	6	2	0	73	0	0	0.25	0
+located_in	[S] is a city located in [O]	28	44	11	11	0	1	0.741167	0.923077	0
+located_in	^ [S] is a city located in [O]	28	44	11	11	0	1	0.741167	0.923077	0
+located_in	[S] is the county seat of [O]	20	32	8	8	0	1	0.675592	0.9	0
+located_in	[S] is a city located in [O] ,	24	24	6	6	0	1	0.609666	0.875	0
+located_in	^ [S] is a city located in [O] ,	24	24	6	6	0	1	0.609666	0.875	0
+located_in	^ [S] is the county seat of [O]	12	24	6	6	0	1	0.609666	0.875	0
+located_in	[S] is the county seat of [O] ,	16	20	5	5	0	1	0.565518	0.857143	0
+located_in	^ [S] is the county seat of [O] ,	12	16	4	4	0	1	0.510109	0.833333	0
+located_in	[S] is a town in [O]	28	36	9	7	0	0.777778	0.452589	0.727273	0
+located_in	^ [S] is a town in [O]	28	36	9	7	0	0.777778	0.452589	0.727273	0
+located_in	[S] is a city located in [O] .	12	12	3	3	0	1	0.438503	0.8	0
+located_in	[S] is the capital of the [O]	12	12	3	3	0	1	0.438503	0.8	0
+located_in	^ [S] is a city located in [O] .	12	12	3	3	0	1	0.438503	0.8	0
+located_in	[S] is a town in [O] ,	20	24	7	5	0	0.714286	0.358934	0.666667	0
+located_in	^ [S] is a town in [O] ,	20	24	7	5	0	0.714286	0.358934	0.666667	0
+located_in	of [O] , [S]	16	16	7	4	3	0.571429	0.250458	0.555556	0
+located_in	[S] is [O] '	16	20	8	4	0	0.5	0.215216	0.5	0
+located_in	[P] is the county seat of [O]	11	11	1	1	0	1	0.206549	0.666667	0
+located_in	[S] is a [O]	11	18	1	1	0	1	0.206549	0.666667	0
+located_in	[S] is the capital of [O]	11	11	1	1	0	1	0.206549	0.666667	0
+located_in	^ [P] is the county seat of [O]	11	11	1	1	0	1	0.206549	0.666667	0
+located_in	^ [S] is the capital of [O]	11	11	1	1	0	1	0.206549	0.666667	0
+located_in	[O] , [S]	40	56	48	12	23	0.25	0.149206	0.26	0
+located_in	[S] is [O]	16	20	17	5	1	0.294118	0.1328	0.315789	0
+located_in	[S] and [O]	24	28	40	8	27	0.2	0.105	0.214286	0
+located_in	in [O] , [S]	12	16	13	3	1	0.230769	0.0817953	0.266667	0
+located_in	[O] and [S]	8	8	15	2	11	0.133333	0.0373613	0.176471	0
+located_in	[O] , [S] is	6	6	5	1	3	0.2	0.0362241	0.285714	0
+located_in	[S] to [O]	6	6	7	1	1	0.142857	0.0256796	0.222222	0
+located_in	[O] , [S] was	6	9	3	0	0	0	5.55112e-17	0.2	0
+located_in	[S] and [O] ,	6	6	6	0	3	0	2.77556e-17	0.125	0
+located_in	[O] , the [S]	6	9	5	0	0	0	0	0.142857	0
+located_in	[O] in # , the [S]	6	9	0	0	0	0	0	0.5	0
+located_in	[O] in [S]	8	12	1	0	1	0	0	0.333333	0
+located_in	[P] is [O]	8	8	0	0	1	0	0	0.5	0
+located_in	[P] is [O] '	8	8	0	0	1	0	0	0.5	0
+located_in	[P] is the county seat of [O] ,	6	6	0	0	0	0	0	0.5	0
+located_in	[S] has [O]	6	15	0	0	0	0	0	0.5	0
+located_in	[S] has [O] '	6	15	0	0	0	0	0	0.5	0
+located_in	[S] is a city in southwestern [O]	6	6	0	0	0	0	0	0.5	0
+located_in	[S] is a city in southwestern [O] ,	6	6	0	0	0	0	0	0.5	0
+located_in	[S] is a town in [O] in	6	9	0	0	0	0	0	0.5	0
+located_in	[S] is an [O]	8	16	0	0	0	0	0	0.5	0
+located_in	[S] is located in [O]	6	6	0	0	0	0	0	0.5	0
+located_in	[S] is the capital city of [O]	6	6	0	0	0	0	0	0.5	0
+located_in	[S] is the county seat of [O] .	6	6	0	0	0	0	0	0.5	0
+located_in	[S] to [O] in	6	6	0	0	0	0	0	0.5	0
+located_in	[S] to the [O]	8	12	2	0	1	0	0	0.25	0
+located_in	^ [P] is [O]	8	8	0	0	1	0	0	0.5	0
+located_in	^ [P] is [O] '	8	8	0	0	1	0	0	0.5	0
+located_in	^ [P] is the county seat of [O] ,	6	6	0	0	0	0	0	0.5	0
+located_in	^ [S] has [O]	6	15	0	0	0	0	0	0.5	0
+located_in	^ [S] has [O] '	6	15	0	0	0	0	0	0.5	0
+located_in	^ [S] is a [O]	6	12	0	0	0	0	0	0.5	0
+located_in	^ [S] is a city in southwestern [O]	6	6	0	0	0	0	0	0.5	0
+located_in	^ [S] is a city in southwestern [O] ,	6	6	0	0	0	0	0	0.5	0
+located_in	^ [S] is a town in [O] in	6	9	0	0	0	0	0	0.5	0
+located_in	^ [S] is an [O]	8	16	0	0	0	0	0	0.5	0
+located_in	^ [S] is the capital city of [O]	6	6	0	0	0	0	0	0.5	0
+located_in	^ [S] is the capital of the [O]	6	6	0	0	0	0	0	0.5	0
+located_in	^ [S] is the county seat of [O] .	6	6	0	0	0	0	0	0.5	0
+located_in	both [S] and [O]	6	6	0	0	0	0	0	0.5	0
+located_in	in [S] and [O]	8	8	2	0	1	0	0	0.25	0
+located_in	the [O] in [S]	8	12	1	0	0	0	0	0.333333	0
+birth_place	[S] ( <M> # , # , [O]	32	36	9	9	3	1	0.700855	0.909091	0
+birth_place	[S] was born at [O]	32	36	8	8	1	1	0.675592	0.9	0
+birth_place	^ [S] was born at [O]	32	36	8	8	1	1	0.675592	0.9	0
+birth_place	^ [S] ( <M> # , # , [O]	24	28	7	7	3	1	0.64567	0.888889	0
+birth_place	[S] was born in [O] to	36	52	11	10	2	0.909091	0.622642	0.846154	0
+birth_place	born [S] in [O]	24	36	6	6	0	1	0.609666	0.875	0
+birth_place	[S] was born in [O] in	36	40	10	9	0	0.9	0.59585	0.833333	0
+birth_place	^ [S] was born in [O] in	36	40	10	9	0	0.9	0.59585	0.833333	0
+birth_place	[P] was born at [O]	20	20	5	5	0	1	0.565518	0.857143	0
+birth_place	[P] was born in [O] and	20	20	5	5	0	1	0.565518	0.857143	0
+birth_place	[S] ( <M> # , # , [O] ,	20	20	5	5	1	1	0.565518	0.857143	0
+birth_place	[S] ( born <M> # # in [O]	12	20	5	5	2	1	0.565518	0.857143	0
+birth_place	[S] was born at [O] ,	20	20	5	5	1	1	0.565518	0.857143	0
+birth_place	^ [P] was born at [O]	20	20	5	5	0	1	0.565518	0.857143	0
+birth_place	^ [P] was born in [O] and	20	20	5	5	0	1	0.565518	0.857143	0
+birth_place	^ [S] ( born <M> # # in [O]	12	20	5	5	2	1	0.565518	0.857143	0
+birth_place	^ [S] was born at [O] ,	20	20	5	5	1	1	0.565518	0.857143	0
+birth_place	born [S] in [O] ,	20	28	5	5	0	1	0.565518	0.857143	0
+birth_place	^ [S] was born in [O] to	28	40	9	8	2	0.888889	0.565	0.818182	0
+birth_place	[S] was born in [O] .	40	44	12	10	0	0.833333	0.551969	0.785714	0
+birth_place	^ [S] was born in [O] .	40	44	12	10	0	0.833333	0.551969	0.785714	0
+birth_place	^ [S] ( [O]	44	52	14	11	0	0.785714	0.524108	0.75	0
+birth_place	^ [S] ( [O] ,	36	44	11	9	0	0.818182	0.523019	0.769231	0
+birth_place	[P] was born in [O] to	16	24	4	4	0	1	0.510109	0.833333	0
+birth_place	[S] ( <M> # , # in [O] ,	12	16	4	4	0	1	0.510109	0.833333	0
+birth_place	[S] ( born <M> # # in [O] ,	12	16	4	4	1	1	0.510109	0.833333	0
+birth_place	[S] ( born in [O]	16	16	4	4	1	1	0.510109	0.833333	0
+birth_place	^ [P] was born in [O] to	16	24	4	4	0	1	0.510109	0.833333	0
+birth_place	^ [S] ( <M> # , # , [O] ,	16	16	4	4	1	1	0.510109	0.833333	0
+birth_place	^ [S] ( born <M> # # in [O] ,	12	16	4	4	1	1	0.510109	0.833333	0
+birth_place	^ [S] ( born in [O]	16	16	4	4	1	1	0.510109	0.833333	0
+birth_place	[S] ( [O] ,	36	44	12	9	0	0.75	0.467695	0.714286	0
+birth_place	[S] was born in [O] and	28	36	9	7	0	0.777778	0.452589	0.727273	0
+birth_place	^ [S] was born in [O] and	28	36	9	7	0	0.777778	0.452589	0.727273	0
+birth_place	^ [S] ( <M> # , # in [O] ,	12	16	3	3	0	1	0.438503	0.8	0
+birth_place	[S] was born in [O] on	20	28	6	5	1	0.833333	0.436497	0.75	0
+birth_place	[S] ( [O]	44	52	17	11	0	0.647059	0.413004	0.631579	0
+birth_place	[S] ( <M> # , # in [O]	12	16	5	4	1	0.8	0.375535	0.714286	0
+birth_place	^ [S] was born in [O] on	16	24	5	4	0	0.8	0.375535	0.714286	0
+birth_place	[S] on <M> # , # in [O]	11	18	2	2	0	1	0.34238	0.75	0
+birth_place	[S] was born in # in [O]	11	18	2	2	1	1	0.34238	0.75	0
+birth_place	[S] in [O] ,	40	52	18	10	4	0.555556	0.337164	0.55	0
+birth_place	[O] where [S] was	12	12	4	3	0	0.75	0.300642	0.666667	0
+birth_place	^ [S] ( <M> # , # in [O]	12	16	4	3	1	0.75	0.300642	0.666667	0
+birth_place	[O] where [S]	20	24	9	5	0	0.555556	0.266651	0.545455	0
+birth_place	[S] in [O]	48	64	29	12	5	0.413793	0.255132	0.419355	0
+birth_place	[P] lived in [O]	11	11	1	1	1	1	0.206549	0.666667	0
+birth_place	[S] ( <M> # , # , [O] -	11	11	1	1	2	1	0.206549	0.666667	0
+birth_place	[S] on <M> # , # in [O] ,	11	11	1	1	0	1	0.206549	0.666667	0
+birth_place	[S] was born in # in [O] ,	11	11	1	1	0	1	0.206549	0.666667	0
+birth_place	[S] was born in [O] (	11	15	1	1	1	1	0.206549	0.666667	0
+birth_place	^ [P] lived in [O]	11	11	1	1	1	1	0.206549	0.666667	0
+birth_place	^ [S] was born in [O] (	11	11	1	1	1	1	0.206549	0.666667	0
+birth_place	in [O] , [S]	72	84	92	20	9	0.217391	0.145367	0.223404	0
+birth_place	[O] , [S]	112	136	204	34	27	0.166667	0.121788	0.169903	0
+birth_place	, [O] , [S]	28	28	37	7	3	0.189189	0.0947998	0.205128	0
+birth_place	[O] , [S] was	20	24	33	6	5	0.181818	0.0861077	0.2	0
+birth_place	[S] returned to [O]	20	20	30	5	3	0.166667	0.0733654	0.1875	0
+birth_place	[O] , [S] '	8	8	5	1	1	0.2	0.0362241	0.285714	0
+birth_place	[S] returned to [O] and	11	11	5	1	0	0.2	0.0362241	0.285714	0
+birth_place	[P] died in [O]	12	12	33	3	5	0.0909091	0.0314039	0.114286	0
+birth_place	^ [P] died in [O]	12	12	33	3	5	0.0909091	0.0314039	0.114286	0
+birth_place	, [O] , [S] was	11	11	8	1	1	0.125	0.0224175	0.2	0
+birth_place	^ [S] returned to [O]	11	11	10	1	1	0.1	0.0178762	0.166667	0
+birth_place	in [O] , [S] was	8	12	10	1	0	0.1	0.0178762	0.166667	0
+birth_place	^ [S] returned to [O] and	8	8	3	0	0	0	5.55112e-17	0.2	0
+birth_place	of [O] , [S]	8	8	6	0	3	0	2.77556e-17	0.125	0
+birth_place	, [S] was back in [O]	6	6	0	0	0	0	0	0.5	0
+birth_place	, [S] was born in [O]	6	9	0	0	1	0	0	0.5	0
+birth_place	, [S] was born in [O] ,	6	9	0	0	0	0	0	0.5	0
+birth_place	[O] , [S] became	6	6	4	0	2	0	0	0.166667	0
+birth_place	[O] , [S] lived	6	6	0	0	0	0	0	0.5	0
+birth_place	[O] , [S] studied	6	6	2	0	0	0	0	0.25	0
+birth_place	[O] , where [S]	6	6	8	0	1	0	0	0.1	0
+birth_place	[O] in # , [S]	6	6	8	0	1	0	0	0.1	0
+birth_place	[O] where [S] '	6	9	0	0	0	0	0	0.5	0
+birth_place	[P] grew up in [O]	6	6	0	0	0	0	0	0.5	0
+birth_place	[P] lived in [O] until	6	6	0	0	0	0	0	0.5	0
+birth_place	[P] returned to [O]	6	6	13	0	1	0	0	0.0666667	0
+birth_place	[P] was born at [O] ,	8	8	0	0	0	0	0	0.5	0
+birth_place	[P] was born in [O] .	6	12	0	0	0	0	0	0.5	0
+birth_place	[P] was born in [O] in	6	6	1	0	1	0	0	0.333333	0
+birth_place	[P] was born in [O] near	6	6	0	0	0	0	0	0.5	0
+birth_place	[P] was born near [O]	8	12	0	0	0	0	0	0.5	0
+birth_place	[S] ' s hometown of [O]	6	6	0	0	0	0	0	0.5	0
+birth_place	[S] ( born in [O] on	6	6	0	0	0	0	0	0.5	0
+birth_place	[S] died in [O]	6	6	22	0	0	0	0	0.0416667	0
+birth_place	[S] left [O]	6	6	5	0	1	0	0	0.142857	0
+birth_place	[S] left [O] to	6	6	0	0	0	0	0	0.5	0
+birth_place	[S] was back in [O]	6	6	1	0	0	0	0	0.333333	0
+birth_place	[S] was born at [O] in	8	12	0	0	0	0	0	0.5	0
+birth_place	[S] was born in # in [O] .	6	6	0	0	0	0	0	0.5	0
+birth_place	[S] was born in [O] as	6	6	0	0	0	0	0	0.5	0
+birth_place	[S] was born in the town of [O]	6	9	0	0	0	0	0	0.5	0
+birth_place	[S] was born in the village of [O]	6	6	0	0	0	0	0	0.5	0
+birth_place	[S] was born in the village of [O] ,	6	6	0	0	0	0	0	0.5	0
+birth_place	^ [P] grew up in [O]	6	6	0	0	0	0	0	0.5	0
+birth_place	^ [P] lived in [O] until	6	6	0	0	0	0	0	0.5	0
+birth_place	^ [P] returned to [O]	6	6	13	0	1	0	0	0.0666667	0
+birth_place	^ [P] was born at [O] ,	8	8	0	0	0	0	0	0.5	0
+birth_place	^ [P] was born in [O] .	6	12	0	0	0	0	0	0.5	0
+birth_place	^ [P] was born in [O] in	6	6	1	0	1	0	0	0.333333	0
+birth_place	^ [P] was born in [O] near	6	6	0	0	0	0	0	0.5	0
+birth_place	^ [P] was born near [O]	8	12	0	0	0	0	0	0.5	0
+birth_place	^ [S] ( <M> # , # , [O] -	6	6	0	0	1	0	0	0.5	0
+birth_place	^ [S] ( born in [O] on	6	6	0	0	0	0	0	0.5	0
+birth_place	^ [S] was born at [O] in	8	12	0	0	0	0	0	0.5	0
+birth_place	^ [S] was born in # in [O]	6	9	0	0	1	0	0	0.5	0
+birth_place	^ [S] was born in # in [O] ,	6	6	0	0	0	0	0	0.5	0
+birth_place	^ [S] was born in [O] as	6	6	0	0	0	0	0	0.5	0
+birth_place	^ [S] was born in the town of [O]	6	9	0	0	0	0	0	0.5	0
+birth_place	^ [S] was born in the village of [O]	6	6	0	0	0	0	0	0.5	0
+birth_place	^ [S] was born in the village of [O] ,	6	6	0	0	0	0	0	0.5	0
+birth_place	born [S] on <M> # , # in [O]	6	9	0	0	0	0	0	0.5	0
+birth_place	born [S] on <M> # , # in [O] ,	6	6	0	0	0	0	0	0.5	0
+birth_place	in [O] , [S] lived	6	6	0	0	0	0	0	0.5	0
+birth_place	of [O] where [S]	6	6	0	0	0	0	0	0.5	0
+birth_place	to [O] , where [S]	6	6	2	0	0	0	0	0.25	0
+death_place	[P] died at [O]	36	36	9	9	1	1	0.700855	0.909091	0
+death_place	^ [P] died at [O]	36	36	9	9	1	1	0.700855	0.909091	0
+death_place	[S] died in [O] ,	64	88	18	16	2	0.888889	0.672002	0.85	0
+death_place	[P] died in [O] ,	36	48	11	10	0	0.909091	0.622642	0.846154	0
+death_place	^ [P] died in [O] ,	36	48	11	10	0	0.909091	0.622642	0.846154	0
+death_place	^ [S] died in [O] ,	52	76	15	13	2	0.866667	0.62118	0.823529	0
+death_place	[S] died in [O]	92	128	32	25	3	0.78125	0.61245	0.764706	0
+death_place	^ [S] died in [O]	76	108	27	20	3	0.740741	0.553214	0.724138	0
+death_place	[P] died at [O] on	16	16	4	4	1	1	0.510109	0.833333	0
+death_place	^ [P] died at [O] on	16	16	4	4	1	1	0.510109	0.833333	0
+death_place	[P] died in [O] .	24	24	7	6	2	0.857143	0.486872	0.777778	0
+death_place	^ [P] died in [O] .	24	24	7	6	2	0.857143	0.486872	0.777778	0
+death_place	, [S] died in [O]	12	12	3	3	0	1	0.438503	0.8	0
+death_place	[P] died in [O] in	20	20	7	5	0	0.714286	0.358934	0.666667	0
+death_place	^ [P] died in [O] in	20	20	7	5	0	0.714286	0.358934	0.666667	0
+death_place	[S] died in [O] on	12	12	5	3	0	0.6	0.230724	0.571429	0
+death_place	, [S] moved to [O]	16	16	9	4	4	0.444444	0.188779	0.454545	0
+death_place	[S] moved to [O]	20	20	17	5	11	0.294118	0.1328	0.315789	0
+death_place	[S] went to [O]	12	16	11	3	2	0.272727	0.0974606	0.307692	0
+death_place	[P] returned to [O]	20	24	24	5	7	0.208333	0.0924483	0.230769	0
+death_place	^ [P] returned to [O]	20	24	24	5	7	0.208333	0.0924483	0.230769	0
+death_place	in [O] , [S] was	12	20	14	3	3	0.214286	0.0757139	0.25	0
+death_place	in [O] , [S]	36	52	67	9	34	0.134328	0.0723109	0.144928	0
+death_place	[P] was born in [O]	24	24	45	6	19	0.133333	0.0625715	0.148936	0
+death_place	^ [P] was born in [O]	24	24	45	6	19	0.133333	0.0625715	0.148936	0
+death_place	^ [S] was born in [O]	40	44	126	11	61	0.0873016	0.0494468	0.09375	0
+death_place	[S] was born in [O]	40	44	133	11	66	0.0827068	0.0468084	0.0888889	0
+death_place	[O] , [S]	48	64	159	12	72	0.0754717	0.0436975	0.0807453	0
+death_place	[O] , [S] was	12	20	28	3	10	0.107143	0.0371184	0.133333	0
+death_place	[P] was born in [O] ,	12	12	28	3	15	0.107143	0.0371184	0.133333	0
+death_place	^ [P] was born in [O] ,	12	12	28	3	15	0.107143	0.0371184	0.133333	0
+death_place	^ [S] was born in [O] ,	24	28	86	6	43	0.0697674	0.0323654	0.0795455	0
+death_place	[S] was born in [O] ,	24	28	91	6	46	0.0659341	0.0305663	0.0752688	0
+death_place	[S] returned to [O]	11	21	15	1	10	0.0666667	0.0118669	0.117647	0
+death_place	, [S] returned to [O]	6	15	3	0	1	0	5.55112e-17	0.2	0
+death_place	[P] returned to [O] in	6	6	3	0	2	0	5.55112e-17	0.2	0
+death_place	[S] ' s [O]	6	6	3	0	3	0	5.55112e-17	0.2	0
+death_place	^ [P] returned to [O] in	6	6	3	0	2	0	5.55112e-17	0.2	0
+death_place	^ [S] was born in [O] on	6	6	3	0	0	0	5.55112e-17	0.2	0
+death_place	[O] , and [S]	6	6	6	0	1	0	2.77556e-17	0.125	0
+death_place	to [O] , [S]	6	6	6	0	4	0	2.77556e-17	0.125	0
+death_place	, [S] ' s [O]	6	6	0	0	0	0	0	0.5	0
+death_place	, [S] died in [O] ,	6	6	0	0	0	0	0	0.5	0
+death_place	, [S] moved to [O] in	6	6	0	0	1	0	0	0.5	0
+death_place	, [S] went to [O]	6	9	4	0	1	0	0	0.166667	0
+death_place	[P] died at [O] in	6	6	0	0	0	0	0	0.5	0
+death_place	[P] died in [O] on	6	9	0	0	1	0	0	0.5	0
+death_place	[P] moved to [O]	8	8	0	0	3	0	0	0.5	0
+death_place	[P] remained in [O]	6	6	1	0	0	0	0	0.333333	0
+death_place	[P] studied in [O]	6	6	1	0	1	0	0	0.333333	0
+death_place	[P] studied in [O] under	6	6	0	0	0	0	0	0.5	0
+death_place	[S] ' s death in [O]	6	9	0	0	0	0	0	0.5	0
+death_place	[S] ' s death in [O] ,	6	9	0	0	0	0	0	0.5	0
+death_place	[S] ( [O]	6	6	5	0	0	0	0	0.142857	0
+death_place	[S] came to [O]	6	6	4	0	0	0	0	0.166667	0
+death_place	[S] died at his home in [O]	6	6	0	0	0	0	0	0.5	0
+death_place	[S] moved to [O] ,	6	6	2	0	3	0	0	0.25	0
+death_place	[S] moved to [O] in	6	6	2	0	2	0	0	0.25	0
+death_place	[S] returned to [O] and	8	12	1	0	2	0	0	0.333333	0
+death_place	[S] was back in [O]	6	9	1	0	0	0	0	0.333333	0
+death_place	[S] was born in [O] on	6	6	4	0	0	0	0	0.166667	0
+death_place	[S] was elected mayor of [O]	8	16	0	0	0	0	0	0.5	0
+death_place	^ [P] died at [O] in	6	6	0	0	0	0	0	0.5	0
+death_place	^ [P] died in [O] on	6	9	0	0	1	0	0	0.5	0
+death_place	^ [P] moved to [O]	8	8	0	0	3	0	0	0.5	0
+death_place	^ [P] remained in [O]	6	6	1	0	0	0	0	0.333333	0
+death_place	^ [P] studied in [O]	6	6	1	0	1	0	0	0.333333	0
+death_place	^ [P] studied in [O] under	6	6	0	0	0	0	0	0.5	0
+death_place	^ [S] died in [O] on	6	6	2	0	0	0	0	0.25	0
+death_place	^ [S] was elected mayor of [O]	8	16	0	0	0	0	0	0.5	0
+birth_date	^ [S] ( born [O] ,	64	72	16	16	2	1	0.806392	0.944444	0
+birth_date	born [S] on [O]	48	64	12	12	1	1	0.757506	0.928571	0
+birth_date	[S] ( born [O] ,	68	76	18	17	2	0.944444	0.742427	0.9	0
+birth_date	^ [S] ( b . [O]	40	40	10	10	3	1	0.722467	0.916667	0
+birth_date	[S] on [O] )	32	48	8	8	0	1	0.675592	0.9	0
+birth_date	born [S] on [O] )	32	48	8	8	0	1	0.675592	0.9	0
+birth_date	or [S] ( [O]	32	32	8	8	2	1	0.675592	0.9	0
+birth_date	[S] ( [O] in	28	28	7	7	2	1	0.64567	0.888889	0
+birth_date	[S] ) ( [O]	28	28	7	7	6	1	0.64567	0.888889	0
+birth_date	or [S] ( [O] -	28	28	7	7	2	1	0.64567	0.888889	0
+birth_date	[S] ( [O] ,	40	44	11	10	6	0.909091	0.622642	0.846154	0
+birth_date	^ [S] ( [O] in	24	24	6	6	2	1	0.609666	0.875	0
+birth_date	^ [S] ( b . [O] )	24	24	6	6	3	1	0.609666	0.875	0
+birth_date	^ [S] was born on [O]	36	40	10	9	7	0.9	0.59585	0.833333	0
+birth_date	[S] , ( born [O]	20	20	5	5	0	1	0.565518	0.857143	0
+birth_date	[S] was born in [O] in	20	28	5	5	3	1	0.565518	0.857143	0
+birth_date	^ [S] was born in [O]	20	28	5	5	4	1	0.565518	0.857143	0
+birth_date	^ [S] ( [O] ,	32	36	9	8	3	0.888889	0.565	0.818182	0
+birth_date	[S] ( b . [O]	40	40	12	10	3	0.833333	0.551969	0.785714	0
+birth_date	[S] was born on [O]	40	44	12	10	7	0.833333	0.551969	0.785714	0
+birth_date	[S] on [O]	56	72	19	14	5	0.736842	0.512084	0.714286	0
+birth_date	[S] ( b . [O] in	16	16	4	4	0	1	0.510109	0.833333	0
+birth_date	[S] ) ( [O] -	16	16	4	4	4	1	0.510109	0.833333	0
+birth_date	[S] was born on [O] in	16	16	4	4	4	1	0.510109	0.833333	0
+birth_date	^ [S] ( b . [O] in	16	16	4	4	0	1	0.510109	0.833333	0
+birth_date	^ [S] was born in [O] in	16	24	4	4	3	1	0.510109	0.833333	0
+birth_date	^ [S] was born on [O] in	16	16	4	4	4	1	0.510109	0.833333	0
+birth_date	[S] was born in [O]	32	40	10	8	4	0.8	0.490162	0.75	0
+birth_date	[S] ( b . [O] )	24	24	7	6	3	0.857143	0.486872	0.777778	0
+birth_date	[S] ) ( [O] ,	12	12	3	3	1	1	0.438503	0.8	0
+birth_date	[S] ) ( born [O]	12	12	3	3	2	1	0.438503	0.8	0
+birth_date	[S] , ( born [O] in	12	12	3	3	0	1	0.438503	0.8	0
+birth_date	general [S] ( born [O]	12	16	3	3	0	1	0.438503	0.8	0
+birth_date	[S] , ( [O]	20	20	6	5	7	0.833333	0.436497	0.75	0
+birth_date	[S] , ( [O] -	16	16	5	4	7	0.8	0.375535	0.714286	0
+birth_date	[S] was born on [O] ,	16	20	5	4	1	0.8	0.375535	0.714286	0
+birth_date	^ [S] , ( [O]	16	16	5	4	3	0.8	0.375535	0.714286	0
+birth_date	[P] was born on [O]	20	24	7	5	0	0.714286	0.358934	0.666667	0
+birth_date	^ [P] was born on [O]	20	24	7	5	0	0.714286	0.358934	0.666667	0
+birth_date	[S] ( c . [O]	12	16	4	3	29	0.75	0.300642	0.666667	0
+birth_date	[S] ( c . [O] -	12	16	4	3	26	0.75	0.300642	0.666667	0
+birth_date	^ [S] , ( [O] -	12	12	4	3	3	0.75	0.300642	0.666667	0
+birth_date	^ [S] was born on [O] ,	12	16	4	3	1	0.75	0.300642	0.666667	0
+birth_date	) [S] ( [O]	12	12	5	3	1	0.6	0.230724	0.571429	0
+birth_date	) [S] ( [O] -	12	12	5	3	1	0.6	0.230724	0.571429	0
+birth_date	[P] was born on [O] in	11	11	1	1	0	1	0.206549	0.666667	0
+birth_date	[S] ( # <M> , [O]	15	18	1	1	1	1	0.206549	0.666667	0
+birth_date	[S] ( # <M> , [O] -	11	14	1	1	1	1	0.206549	0.666667	0
+birth_date	[S] , cbe ( born [O]	11	18	1	1	0	1	0.206549	0.666667	0
+birth_date	[S] , cbe ( born [O] )	11	18	1	1	0	1	0.206549	0.666667	0
+birth_date	[S] on [O] in	11	11	1	1	1	1	0.206549	0.666667	0
+birth_date	^ [P] was born on [O] in	11	11	1	1	0	1	0.206549	0.666667	0
+birth_date	^ [S] ( # <M> , [O]	11	14	1	1	1	1	0.206549	0.666667	0
+birth_date	^ [S] , ( born [O]	11	11	1	1	0	1	0.206549	0.666667	0
+birth_date	^ [S] , cbe ( born [O]	11	18	1	1	0	1	0.206549	0.666667	0
+birth_date	^ [S] , cbe ( born [O] )	11	18	1	1	0	1	0.206549	0.666667	0
+birth_date	. [S] ( born [O]	6	6	0	0	0	0	0	0.5	0
+birth_date	. [S] ( born [O] )	6	6	0	0	0	0	0	0.5	0
+birth_date	[P] was born on [O] at	8	12	0	0	0	0	0	0.5	0
+birth_date	[S] ( , [O]	6	6	0	0	0	0	0	0.5	0
+birth_date	[S] ( , [O] -	6	6	0	0	0	0	0	0.5	0
+birth_date	[S] ) ( born [O] )	6	6	0	0	1	0	0	0.5	0
+birth_date	[S] , born [O]	6	6	0	0	1	0	0	0.5	0
+birth_date	[S] , om , frs ( [O]	8	8	0	0	0	0	0	0.5	0
+birth_date	[S] , om , frs ( [O] -	8	8	0	0	0	0	0	0.5	0
+birth_date	[S] , pc ( [O]	8	16	0	0	0	0	0	0.5	0
+birth_date	[S] , pc ( [O] -	8	16	0	0	0	0	0	0.5	0
+birth_date	[S] cbe ( born [O]	6	6	0	0	0	0	0	0.5	0
+birth_date	[S] cbe ( born [O] )	6	6	0	0	0	0	0	0.5	0
+birth_date	[S] on [O] ,	6	6	0	0	0	0	0	0.5	0
+birth_date	[S] tennō ) ( [O]	8	8	0	0	6	0	0	0.5	0
+birth_date	[S] tennō ) ( [O] -	8	8	0	0	6	0	0	0.5	0
+birth_date	[S] was born [O]	6	6	0	0	1	0	0	0.5	0
+birth_date	[S] was born [O] ,	6	6	0	0	0	0	0	0.5	0
+birth_date	[S] was born in [O] and	6	6	0	0	0	0	0	0.5	0
+birth_date	[S] was born on [O] at	6	6	0	0	0	0	0	0.5	0
+birth_date	^ [P] was born on [O] at	8	12	0	0	0	0	0	0.5	0
+birth_date	^ [S] ( # <M> , [O] -	6	9	0	0	1	0	0	0.5	0
+birth_date	^ [S] ( , [O]	6	6	0	0	0	0	0	0.5	0
+birth_date	^ [S] ( , [O] -	6	6	0	0	0	0	0	0.5	0
+birth_date	^ [S] ( c . [O]	6	9	1	0	14	0	0	0.333333	0
+birth_date	^ [S] ( c . [O] -	6	9	1	0	13	0	0	0.333333	0
+birth_date	^ [S] , ( born [O] in	6	6	0	0	0	0	0	0.5	0
+birth_date	^ [S] , om , frs ( [O]	8	8	0	0	0	0	0	0.5	0
+birth_date	^ [S] , om , frs ( [O] -	8	8	0	0	0	0	0	0.5	0
+birth_date	^ [S] , pc ( [O]	8	16	0	0	0	0	0	0.5	0
+birth_date	^ [S] , pc ( [O] -	8	16	0	0	0	0	0	0.5	0
+birth_date	^ [S] cbe ( born [O]	6	6	0	0	0	0	0	0.5	0
+birth_date	^ [S] cbe ( born [O] )	6	6	0	0	0	0	0	0.5	0
+birth_date	^ [S] was born [O]	6	6	0	0	1	0	0	0.5	0
+birth_date	^ [S] was born [O] ,	6	6	0	0	0	0	0	0.5	0
+birth_date	^ [S] was born on [O] at	6	6	0	0	0	0	0	0.5	0
+birth_date	admiral [S] ( [O]	6	6	0	0	0	0	0	0.5	0
+birth_date	admiral [S] ( [O] -	6	6	0	0	0	0	0	0.5	0
+birth_date	as [S] ( [O]	6	6	0	0	0	0	0	0.5	0
+birth_date	as [S] ( [O] -	6	6	0	0	0	0	0	0.5	0
+birth_date	born [S] on [O] ,	6	6	0	0	0	0	0	0.5	0
+birth_date	born [S] on [O] in	6	6	0	0	0	0	0	0.5	0
+birth_date	general [S] ( born [O] )	6	9	0	0	0	0	0	0.5	0
+birth_date	or [S] ) ( [O]	6	6	0	0	1	0	0	0.5	0
+birth_date	or [S] ) ( [O] ,	6	6	0	0	0	0	0	0.5	0
+death_date	^ [S] ( # <M> # - [O]	72	84	18	18	2	1	0.824121	0.95	0
+death_date	^ [S] ( # <M> # - [O] )	72	84	18	18	2	1	0.824121	0.95	0
+death_date	[S] ( c . # - [O]	56	64	14	14	6	1	0.784689	0.9375	0
+death_date	[S] ( c . # - [O] )	56	64	14	14	5	1	0.784689	0.9375	0
+death_date	^ [S] ( c . # - [O]	48	56	12	12	3	1	0.757506	0.928571	0
+death_date	^ [S] ( c . # - [O] )	48	56	12	12	2	1	0.757506	0.928571	0
+death_date	[S] died on [O] ,	44	60	11	11	4	1	0.741167	0.923077	0
+death_date	^ [S] died on [O] ,	44	60	11	11	4	1	0.741167	0.923077	0
+death_date	[S] died in [O]	64	64	18	16	12	0.888889	0.672002	0.85	0
+death_date	[P] died on [O]	44	44	12	11	4	0.916667	0.64612	0.857143	0
+death_date	^ [P] died on [O]	44	44	12	11	4	0.916667	0.64612	0.857143	0
+death_date	^ [S] died in [O]	44	44	12	11	9	0.916667	0.64612	0.857143	0
+death_date	[S] tennō ) ( # - [O]	28	28	7	7	4	1	0.64567	0.888889	0
+death_date	[S] tennō ) ( # - [O] )	28	28	7	7	4	1	0.64567	0.888889	0
+death_date	[S] ( # - [O]	160	168	56	40	26	0.714286	0.585247	0.706897	0
+death_date	[S] ( # - [O] )	152	160	53	38	25	0.716981	0.584297	0.709091	0
+death_date	[P] died in [O]	60	68	19	15	8	0.789474	0.566657	0.761905	0
+death_date	^ [P] died in [O]	60	68	19	15	8	0.789474	0.566657	0.761905	0
+death_date	- [O] ) , also known as [S]	20	20	5	5	2	1	0.565518	0.857143	0
+death_date	- [O] ) , better known as [S]	20	32	5	5	1	1	0.565518	0.857143	0
+death_date	[O] ) , also known as [S]	20	20	5	5	3	1	0.565518	0.857143	0
+death_date	[O] ) , better known as [S]	20	32	5	5	1	1	0.565518	0.857143	0
+death_date	[S] died in [O] at	16	16	4	4	1	1	0.510109	0.833333	0
+death_date	[S] died on [O] in	16	16	4	4	2	1	0.510109	0.833333	0
+death_date	- [O] ) , also known as [S] and	12	12	3	3	0	1	0.438503	0.8	0
+death_date	[O] ) , also known as [S] and	12	12	3	3	0	1	0.438503	0.8	0
+death_date	[P] died in [O] of	12	12	3	3	0	1	0.438503	0.8	0
+death_date	[P] died on [O] at	12	12	3	3	1	1	0.438503	0.8	0
+death_date	[S] ) ( # - [O]	12	16	3	3	2	1	0.438503	0.8	0
+death_date	[S] ) ( # - [O] )	12	16	3	3	2	1	0.438503	0.8	0
+death_date	^ [P] died in [O] of	12	12	3	3	0	1	0.438503	0.8	0
+death_date	^ [P] died on [O] at	12	12	3	3	1	1	0.438503	0.8	0
+death_date	[S] died in [O] ,	20	20	6	5	4	0.833333	0.436497	0.75	0
+death_date	) [S] ( <M> # , # - [O]	16	16	5	4	1	0.8	0.375535	0.714286	0
+death_date	) [S] ( <M> # , # - [O] )	16	16	5	4	1	0.8	0.375535	0.714286	0
+death_date	[O] , [S] died	20	20	7	5	2	0.714286	0.358934	0.666667	0
+death_date	[P] died in [O] ,	16	16	7	4	3	0.571429	0.250458	0.555556	0
+death_date	^ [P] died in [O] ,	16	16	7	4	3	0.571429	0.250458	0.555556	0
+death_date	- [O] ) , better known as [S] ,	15	26	1	1	1	1	0.206549	0.666667	0
+death_date	[O] ) , better known as [S] ,	15	26	1	1	1	1	0.206549	0.666667	0
+death_date	[P] died in [O] .	11	14	1	1	1	1	0.206549	0.666667	0
+death_date	[S] ' s death in [O]	11	19	1	1	0	1	0.206549	0.666667	0
+death_date	[S] ' s death in [O] ,	11	19	1	1	0	1	0.206549	0.666667	0
+death_date	[S] ( died [O]	11	11	1	1	0	1	0.206549	0.666667	0
+death_date	[S] ( died [O] )	11	11	1	1	0	1	0.206549	0.666667	0
+death_date	[S] died on [O] at	11	11	1	1	1	1	0.206549	0.666667	0
+death_date	^ [P] died in [O] .	11	14	1	1	1	1	0.206549	0.666667	0
+death_date	^ [S] died in [O] at	11	11	1	1	0	1	0.206549	0.666667	0
+death_date	^ [S] died on [O] at	11	11	1	1	1	1	0.206549	0.666667	0
+death_date	or [S] ( <M> # # - [O]	11	11	1	1	0	1	0.206549	0.666667	0
+death_date	or [S] ( <M> # # - [O] )	11	11	1	1	0	1	0.206549	0.666667	0
+death_date	on [O] , [S] died	11	11	2	1	1	0.5	0.0945312	0.5	0
+death_date	on [O] , [S]	36	36	66	9	120	0.136364	0.0734332	0.147059	0
+death_date	[O] , [S] '	12	24	33	3	27	0.0909091	0.0314039	0.114286	0
+death_date	[O] , [S]	76	108	497	19	605	0.0382294	0.0246086	0.0400802	0
+death_date	in [O] , [S]	32	52	344	8	373	0.0232558	0.0118302	0.0260116	0
+death_date	[P] reigned from # to [O]	6	6	3	0	0	0	5.55112e-17	0.2	0
+death_date	^ [P] reigned from # to [O]	6	6	3	0	0	0	5.55112e-17	0.2	0
+death_date	[O] , [S] went	6	6	6	0	3	0	2.77556e-17	0.125	0
+death_date	in [O] , [S] '	6	15	12	0	11	0	2.77556e-17	0.0714286	0
+death_date	" [S] ( <M> # , # - [O]	6	6	0	0	0	0	0	0.5	0
+death_date	" [S] ( <M> # , # - [O] )	6	6	0	0	0	0	0	0.5	0
+death_date	- [O] ) ( also [S]	6	6	0	0	0	0	0	0.5	0
+death_date	- [O] ) , also known as [S] ,	6	6	0	0	0	0	0	0.5	0
+death_date	- [O] ) , called [S]	8	12	0	0	1	0	0	0.5	0
+death_date	- [O] ) , commonly known as [S]	6	6	0	0	0	0	0	0.5	0
+death_date	- [O] ) , commonly known as [S] ,	6	6	0	0	0	0	0	0.5	0
+death_date	- [O] ) , nicknamed [S]	6	9	0	0	0	0	0	0.5	0
+death_date	- [O] ) , nicknamed [S] ,	6	9	0	0	0	0	0	0.5	0
+death_date	- [O] ) was the founder of the [S]	8	8	0	0	0	0	0	0.5	0
+death_date	[O] ) ( also [S]	6	6	0	0	0	0	0	0.5	0
+death_date	[O] ) , also known as [S] ,	6	6	0	0	0	0	0	0.5	0
+death_date	[O] ) , called [S]	8	12	0	0	1	0	0	0.5	0
+death_date	[O] ) , commonly known as [S]	6	6	0	0	1	0	0	0.5	0
+death_date	[O] ) , commonly known as [S] ,	6	6	0	0	1	0	0	0.5	0
+death_date	[O] ) , nicknamed [S]	6	9	0	0	0	0	0	0.5	0
+death_date	[O] ) , nicknamed [S] ,	6	9	0	0	0	0	0	0.5	0
+death_date	[O] ) [S]	6	6	2	0	4	0	0	0.25	0
+death_date	[O] ) was the founder of the [S]	8	8	0	0	0	0	0	0.5	0
+death_date	[O] , [S] was	6	9	45	0	55	0	0	0.0212766	0
+death_date	[P] died [O]	6	6	0	0	0	0	0	0.5	0
+death_date	[P] died in [O] and	6	6	0	0	1	0	0	0.5	0
+death_date	[P] died on [O] ,	8	8	0	0	0	0	0	0.5	0
+death_date	[P] died on [O] .	6	6	1	0	1	0	0	0.333333	0
+death_date	[S] ( # ? - [O]	6	9	0	0	0	0	0	0.5	0
+death_date	[S] ( # ? - [O] )	6	9	0	0	0	0	0	0.5	0
+death_date	[S] ( # or # - [O]	6	6	0	0	0	0	0	0.5	0
+death_date	[S] ( # or # - [O] )	6	6	0	0	0	0	0	0.5	0
+death_date	[S] ( <M> # , # - [O] ;	6	6	0	0	0	0	0	0.5	0
+death_date	[S] ( <M> , # - [O]	6	6	0	0	1	0	0	0.5	0
+death_date	[S] ( <M> , # - [O] )	6	6	0	0	1	0	0	0.5	0
+death_date	[S] ( d . [O]	8	8	2	0	3	0	0	0.25	0
+death_date	[S] ( d . [O] )	8	8	2	0	3	0	0	0.25	0
+death_date	[S] ) ( c . # - [O]	6	6	0	0	0	0	0	0.5	0
+death_date	[S] ) ( c . # - [O] )	6	6	0	0	0	0	0	0.5	0
+death_date	[S] , ( # - [O]	6	6	0	0	1	0	0	0.5	0
+death_date	[S] , ( # - [O] )	6	6	0	0	1	0	0	0.5	0
+death_date	[S] died [O]	8	12	0	0	1	0	0	0.5	0
+death_date	[S] died [O] at	8	12	0	0	0	0	0	0.5	0
+death_date	[S] died in [O] from	6	6	0	0	0	0	0	0.5	0
+death_date	[S] died on [O] and	12	12	0	0	1	0	0	0.5	0
+death_date	[S] passed away in [O]	8	8	0	0	1	0	0	0.5	0
+death_date	^ [P] died [O]	6	6	0	0	0	0	0	0.5	0
+death_date	^ [P] died in [O] and	6	6	0	0	1	0	0	0.5	0
+death_date	^ [P] died on [O] ,	8	8	0	0	0	0	0	0.5	0
+death_date	^ [P] died on [O] .	6	6	1	0	1	0	0	0.333333	0
+death_date	^ [S] ( # ? - [O]	6	9	0	0	0	0	0	0.5	0
+death_date	^ [S] ( # ? - [O] )	6	9	0	0	0	0	0	0.5	0
+death_date	^ [S] ( # or # - [O]	6	6	0	0	0	0	0	0.5	0
+death_date	^ [S] ( # or # - [O] )	6	6	0	0	0	0	0	0.5	0
+death_date	^ [S] ( <M> # , # - [O] ;	6	6	0	0	0	0	0	0.5	0
+death_date	^ [S] ( <M> , # - [O]	6	6	0	0	1	0	0	0.5	0
+death_date	^ [S] ( <M> , # - [O] )	6	6	0	0	1	0	0	0.5	0
+death_date	^ [S] ( d . [O]	8	8	0	0	3	0	0	0.5	0
+death_date	^ [S] ( d . [O] )	8	8	0	0	3	0	0	0.5	0
+death_date	^ [S] ( died [O]	6	6	0	0	0	0	0	0.5	0
+death_date	^ [S] ( died [O] )	6	6	0	0	0	0	0	0.5	0
+death_date	^ [S] died [O]	8	12	0	0	1	0	0	0.5	0
+death_date	^ [S] died [O] at	8	12	0	0	0	0	0	0.5	0
+death_date	^ [S] died in [O] ,	8	8	0	0	1	0	0	0.5	0
+death_date	^ [S] died in [O] from	6	6	0	0	0	0	0	0.5	0
+death_date	^ [S] died on [O] and	12	12	0	0	1	0	0	0.5	0
+death_date	^ [S] died on [O] in	6	6	0	0	2	0	0	0.5	0
+death_date	as [S] ( <M> # , # - [O]	6	6	0	0	0	0	0	0.5	0
+death_date	as [S] ( <M> # , # - [O] )	6	6	0	0	0	0	0	0.5	0
+death_date	in [O] , [S] died	6	6	0	0	0	0	0	0.5	0
+death_date	of [O] , [S]	6	12	18	0	22	0	0	0.05	0
+death_date	or [S] ( # - [O]	6	6	0	0	1	0	0	0.5	0
+death_date	or [S] ( <M> # , # - [O]	8	8	0	0	0	0	0	0.5	0
+death_date	or [S] ( <M> # , # - [O] )	8	8	0	0	0	0	0	0.5	0
+death_date	saint [S] ( # - [O]	8	8	0	0	0	0	0	0.5	0
+death_date	saint [S] ( # - [O] )	8	8	0	0	0	0	0	0.5	0
+death_date	when [S] died in [O]	12	12	0	0	2	0	0	0.5	0
+death_date	when [S] died in [O] ,	8	8	0	0	2	0	0	0.5	0
+birth_year	^ [S] ( born [O] ,	72	136	18	18	0	1	0.824121	0.95	0
+birth_year	^ [S] was born on [O]	68	100	17	17	0	1	0.815682	0.947368	0
+birth_year	[S] , ( [O]	52	84	13	13	0	1	0.771905	0.933333	0
+birth_year	^ [S] ( b . [O]	52	92	13	13	0	1	0.771905	0.933333	0
+birth_year	born [S] on [O]	52	96	13	13	0	1	0.771905	0.933333	0
+birth_year	[S] , ( [O] -	48	76	12	12	0	1	0.757506	0.928571	0
+birth_year	^ [S] ( [O] ,	48	84	12	12	0	1	0.757506	0.928571	0
+birth_year	[S] was born on [O]	72	108	19	18	0	0.947368	0.753613	0.904762	0
+birth_year	[S] tennō ) ( [O]	44	72	11	11	0	1	0.741167	0.923077	0
+birth_year	[S] tennō ) ( [O] -	44	72	11	11	0	1	0.741167	0.923077	0
+birth_year	[S] ( [O] ,	60	104	17	16	0	0.941176	0.73018	0.894737	0
+birth_year	or [S] ( [O]	40	76	10	10	0	1	0.722467	0.916667	0
+birth_year	[S] ( [O] in	36	64	9	9	0	1	0.700855	0.909091	0
+birth_year	^ [S] ( b . [O] )	36	60	9	9	0	1	0.700855	0.909091	0
+birth_year	or [S] ( [O] -	36	68	9	9	0	1	0.700855	0.909091	0
+birth_year	[S] ) ( [O] -	32	60	8	8	0	1	0.675592	0.9	0
+birth_year	[S] on [O] )	32	64	8	8	0	1	0.675592	0.9	0
+birth_year	[S] was born on [O] in	32	48	8	8	0	1	0.675592	0.9	0
+birth_year	^ [S] ( [O] in	32	56	8	8	0	1	0.675592	0.9	0
+birth_year	^ [S] , ( [O]	32	56	8	8	0	1	0.675592	0.9	0
+birth_year	^ [S] was born on [O] in	32	48	8	8	0	1	0.675592	0.9	0
+birth_year	born [S] on [O] )	32	64	8	8	0	1	0.675592	0.9	0
+birth_year	[S] ) ( [O]	48	88	13	12	0	0.923077	0.66686	0.866667	0
+birth_year	^ [S] , ( [O] -	28	48	7	7	0	1	0.64567	0.888889	0
+birth_year	[S] ( b . [O]	52	92	15	13	0	0.866667	0.62118	0.823529	0
+birth_year	) [S] ( [O]	24	40	6	6	0	1	0.609666	0.875	0
+birth_year	) [S] ( [O] -	24	40	6	6	0	1	0.609666	0.875	0
+birth_year	[S] ( ca . [O]	24	40	6	6	0	1	0.609666	0.875	0
+birth_year	[S] was born on [O] ,	24	36	6	6	0	1	0.609666	0.875	0
+birth_year	[S] ( b . [O] )	36	60	10	9	0	0.9	0.59585	0.833333	0
+birth_year	[S] ( # <M> , [O]	20	36	5	5	0	1	0.565518	0.857143	0
+birth_year	[S] ( [O] ?	20	36	5	5	0	1	0.565518	0.857143	0
+birth_year	[S] ) ( born [O]	20	32	5	5	0	1	0.565518	0.857143	0
+birth_year	[S] , ( born [O]	20	36	5	5	0	1	0.565518	0.857143	0
+birth_year	^ [S] ( [O] ?	20	36	5	5	0	1	0.565518	0.857143	0
+birth_year	^ [S] ( ca . [O]	20	32	5	5	0	1	0.565518	0.857143	0
+birth_year	^ [S] was born on [O] ,	20	28	5	5	0	1	0.565518	0.857143	0
+birth_year	^ [S] was born in [O]	32	52	9	8	0	0.888889	0.565	0.818182	0
+birth_year	[S] was born in [O] in	28	48	8	7	0	0.875	0.529112	0.8	0
+birth_year	[S] was born in [O]	44	76	14	11	0	0.785714	0.524108	0.75	0
+birth_year	[S] ( # <M> , [O] -	16	28	4	4	0	1	0.510109	0.833333	0
+birth_year	[S] ( b . [O] in	16	32	4	4	0	1	0.510109	0.833333	0
+birth_year	[S] ( ca . [O] -	16	24	4	4	0	1	0.510109	0.833333	0
+birth_year	[S] ) ( [O] ,	16	28	4	4	0	1	0.510109	0.833333	0
+birth_year	[S] ) ( born [O] )	16	24	4	4	0	1	0.510109	0.833333	0
+birth_year	[S] on [O] in	16	28	4	4	0	1	0.510109	0.833333	0
+birth_year	^ [S] ( # <M> , [O]	16	28	4	4	0	1	0.510109	0.833333	0
+birth_year	^ [S] ( b . [O] in	16	32	4	4	0	1	0.510109	0.833333	0
+birth_year	^ [S] ( ca . [O] -	16	24	4	4	0	1	0.510109	0.833333	0
+birth_year	or [S] ) ( [O]	16	28	4	4	0	1	0.510109	0.833333	0
+birth_year	^ [S] was born in [O] in	24	40	7	6	0	0.857143	0.486872	0.777778	0
+birth_year	[S] on [O]	64	116	24	16	0	0.666667	0.467063	0.653846	0
+birth_year	[S] ( ) ( [O]	12	20	3	3	0	1	0.438503	0.8	0
+birth_year	[S] ( ) ( [O] -	12	20	3	3	0	1	0.438503	0.8	0
+birth_year	[S] ( <M> , [O]	12	20	3	3	0	1	0.438503	0.8	0
+birth_year	[S] ( <M> , [O] -	12	20	3	3	0	1	0.438503	0.8	0
+birth_year	[S] , ( born [O] in	12	24	3	3	0	1	0.438503	0.8	0
+birth_year	[S] was born [O]	12	16	3	3	0	1	0.438503	0.8	0
+birth_year	^ [S] ( # <M> , [O] -	12	20	3	3	0	1	0.438503	0.8	0
+birth_year	^ [S] ( ) ( [O]	12	20	3	3	0	1	0.438503	0.8	0
+birth_year	^ [S] ( ) ( [O] -	12	20	3	3	0	1	0.438503	0.8	0
+birth_year	^ [S] ( <M> , [O]	12	20	3	3	0	1	0.438503	0.8	0
+birth_year	^ [S] ( <M> , [O] -	12	20	3	3	0	1	0.438503	0.8	0
+birth_year	^ [S] was born [O]	12	16	3	3	0	1	0.438503	0.8	0
+birth_year	general [S] ( born [O]	12	24	3	3	0	1	0.438503	0.8	0
+birth_year	[P] was born on [O]	20	40	7	5	0	0.714286	0.358934	0.666667	0
+birth_year	[S] , born [O]	20	28	7	5	0	0.714286	0.358934	0.666667	0
+birth_year	^ [P] was born on [O]	20	40	7	5	0	0.714286	0.358934	0.666667	0
+birth_year	[P] was born on [O] in	11	22	1	1	0	1	0.206549	0.666667	0
+birth_year	[S] , born [O] in	11	15	1	1	0	1	0.206549	0.666667	0
+birth_year	[S] , cbe ( born [O]	11	22	1	1	0	1	0.206549	0.666667	0
+birth_year	[S] , cbe ( born [O] )	11	22	1	1	0	1	0.206549	0.666667	0
+birth_year	[S] on [O] ,	11	15	1	1	0	1	0.206549	0.666667	0
+birth_year	[S] was born in [O] and	11	18	1	1	0	1	0.206549	0.666667	0
+birth_year	[S] was born on [O] at	11	18	1	1	0	1	0.206549	0.666667	0
+birth_year	^ [P] was born on [O] in	11	22	1	1	0	1	0.206549	0.666667	0
+birth_year	^ [S] , ( born [O]	11	18	1	1	0	1	0.206549	0.666667	0
+birth_year	^ [S] , born [O]	11	15	1	1	0	1	0.206549	0.666667	0
+birth_year	^ [S] , cbe ( born [O]	11	22	1	1	0	1	0.206549	0.666667	0
+birth_year	^ [S] , cbe ( born [O] )	11	22	1	1	0	1	0.206549	0.666667	0
+birth_year	^ [S] was born on [O] at	11	18	1	1	0	1	0.206549	0.666667	0
+birth_year	born [S] on [O] ,	11	15	1	1	0	1	0.206549	0.666667	0
+birth_year	( [S] ) ( born [O]	6	6	0	0	0	0	0	0.5	0
+birth_year	( [S] ) ( born [O] )	6	6	0	0	0	0	0	0.5	0
+birth_year	, [S] ( [O]	6	9	1	0	0	0	0	0.333333	0
+birth_year	, [S] ( born [O]	6	9	0	0	0	0	0	0.5	0
+birth_year	. [S] ( born [O]	6	12	0	0	0	0	0	0.5	0
+birth_year	. [S] ( born [O] )	6	12	0	0	0	0	0	0.5	0
+birth_year	: [S] ) ( [O]	6	9	1	0	0	0	0	0.333333	0
+birth_year	[O] , [S]	8	12	783	0	14	0	0	0.00127389	0
+birth_year	[P] was born on [O] at	8	16	0	0	0	0	0	0.5	0
+birth_year	[S] ( , [O]	6	12	0	0	0	0	0	0.5	0
+birth_year	[S] ( , [O] -	6	12	0	0	0	0	0	0.5	0
+birth_year	[S] ( [O] (	6	6	0	0	0	0	0	0.5	0
+birth_year	[S] ( [O] /	6	6	0	0	0	0	0	0.5	0
+birth_year	[S] ( [O] or	6	9	0	0	0	0	0	0.5	0
+birth_year	[S] ( born on [O]	6	9	0	0	0	0	0	0.5	0
+birth_year	[S] ( ipa : ) ( [O]	6	9	0	0	0	0	0	0.5	0
+birth_year	[S] ( ipa : ) ( [O] -	6	9	0	0	0	0	0	0.5	0
+birth_year	[S] ) ( c . [O]	6	12	0	0	0	0	0	0.5	0
+birth_year	[S] ) ( c . [O] -	6	12	0	0	0	0	0	0.5	0
+birth_year	[S] , ( c . [O]	6	6	0	0	0	0	0	0.5	0
+birth_year	[S] , ( c . [O] -	6	6	0	0	0	0	0	0.5	0
+birth_year	[S] , [O]	8	12	4	0	0	0	0	0.166667	0
+birth_year	[S] , om , frs ( [O]	8	16	0	0	0	0	0	0.5	0
+birth_year	[S] , om , frs ( [O] -	8	16	0	0	0	0	0	0.5	0
+birth_year	[S] , pc ( [O]	8	12	0	0	0	0	0	0.5	0
+birth_year	[S] , pc ( [O] -	8	12	0	0	0	0	0	0.5	0
+birth_year	[S] cbe ( born [O]	6	12	0	0	0	0	0	0.5	0
+birth_year	[S] cbe ( born [O] )	6	12	0	0	0	0	0	0.5	0
+birth_year	[S] tennō ) ( c . [O]	8	16	0	0	0	0	0	0.5	0
+birth_year	[S] tennō ) ( c . [O] -	8	16	0	0	0	0	0	0.5	0
+birth_year	[S] was born [O] ,	6	9	0	0	0	0	0	0.5	0
+birth_year	[S] was born around [O]	6	9	0	0	0	0	0	0.5	0
+birth_year	^ [P] was born on [O] at	8	16	0	0	0	0	0	0.5	0
+birth_year	^ [S] ( , [O]	6	12	0	0	0	0	0	0.5	0
+birth_year	^ [S] ( , [O] -	6	12	0	0	0	0	0	0.5	0
+birth_year	^ [S] ( [O] (	6	6	0	0	0	0	0	0.5	0
+birth_year	^ [S] ( [O] /	6	6	0	0	0	0	0	0.5	0
+birth_year	^ [S] ( [O] or	6	9	0	0	0	0	0	0.5	0
+birth_year	^ [S] ( born on [O]	6	9	0	0	0	0	0	0.5	0
+birth_year	^ [S] , ( born [O] in	6	12	0	0	0	0	0	0.5	0
+birth_year	^ [S] , born [O] in	8	12	0	0	0	0	0	0.5	0
+birth_year	^ [S] , om , frs ( [O]	8	16	0	0	0	0	0	0.5	0
+birth_year	^ [S] , om , frs ( [O] -	8	16	0	0	0	0	0	0.5	0
+birth_year	^ [S] , pc ( [O]	8	12	0	0	0	0	0	0.5	0
+birth_year	^ [S] , pc ( [O] -	8	12	0	0	0	0	0	0.5	0
+birth_year	^ [S] cbe ( born [O]	6	12	0	0	0	0	0	0.5	0
+birth_year	^ [S] cbe ( born [O] )	6	12	0	0	0	0	0	0.5	0
+birth_year	^ [S] was born [O] ,	6	9	0	0	0	0	0	0.5	0
+birth_year	^ [S] was born around [O]	6	9	0	0	0	0	0	0.5	0
+birth_year	^ [S] was born in [O] and	6	9	0	0	0	0	0	0.5	0
+birth_year	admiral [S] ( [O]	6	12	0	0	0	0	0	0.5	0
+birth_year	admiral [S] ( [O] -	6	12	0	0	0	0	0	0.5	0
+birth_year	and [S] ( [O]	6	6	1	0	0	0	0	0.333333	0
+birth_year	as [S] ( [O]	6	12	0	0	0	0	0	0.5	0
+birth_year	as [S] ( [O] -	6	12	0	0	0	0	0	0.5	0
+birth_year	as [S] , ( [O]	6	9	0	0	0	0	0	0.5	0
+birth_year	as [S] , ( [O] -	6	9	0	0	0	0	0	0.5	0
+birth_year	born [S] , [O]	8	12	0	0	0	0	0	0.5	0
+birth_year	born [S] on [O] in	6	12	0	0	0	0	0	0.5	0
+birth_year	general [S] ( born [O] )	6	12	0	0	0	0	0	0.5	0
+birth_year	honourable [S] ( [O]	6	12	0	0	0	0	0	0.5	0
+birth_year	honourable [S] ( [O] -	6	12	0	0	0	0	0	0.5	0
+birth_year	in [O] , [S]	8	12	532	0	11	0	0	0.00187266	0
+birth_year	name [S] ( [O]	6	9	0	0	0	0	0	0.5	0
+birth_year	name [S] ( [O] -	6	9	0	0	0	0	0	0.5	0
+birth_year	or [S] ( c . [O]	6	9	0	0	1	0	0	0.5	0
+birth_year	or [S] ( c . [O] -	6	9	0	0	1	0	0	0.5	0
+birth_year	or [S] ) ( [O] ,	6	12	0	0	0	0	0	0.5	0
+birth_year	or [S] ) ( [O] -	6	9	0	0	0	0	0	0.5	0
+birth_year	saint [S] ( [O]	8	16	0	0	0	0	0	0.5	0
+birth_year	saint [S] ( [O] -	8	16	0	0	0	0	0	0.5	0
+death_year	[S] ( c . # - [O] )	76	140	19	19	0	1	0.831821	0.952381	0
+death_year	^ [S] ( # <M> # - [O]	76	140	19	19	1	1	0.831821	0.952381	0
+death_year	^ [S] ( # <M> # - [O] )	76	140	19	19	1	1	0.831821	0.952381	0
+death_year	[S] died on [O] ,	60	100	15	15	0	1	0.796117	0.941176	0
+death_year	^ [S] ( c . # - [O]	60	116	15	15	0	1	0.796117	0.941176	0
+death_year	^ [S] died on [O] ,	60	100	15	15	0	1	0.796117	0.941176	0
+death_year	^ [S] ( c . # - [O] )	56	108	14	14	0	1	0.784689	0.9375	0
+death_year	[P] died on [O]	60	96	16	15	0	0.9375	0.716713	0.888889	0
+death_year	^ [P] died on [O]	60	96	16	15	0	0.9375	0.716713	0.888889	0
+death_year	[S] ( # - [O]	244	420	77	61	5	0.792208	0.688796	0.78481	0
+death_year	[S] ( # - [O] )	232	404	73	58	5	0.794521	0.688263	0.786667	0
+death_year	[O] ) , also known as [S]	32	56	8	8	0	1	0.675592	0.9	0
+death_year	- [O] ) , also known as [S]	28	48	7	7	0	1	0.64567	0.888889	0
+death_year	[S] tennō ) ( # - [O]	40	68	11	10	0	0.909091	0.622642	0.846154	0
+death_year	[S] tennō ) ( # - [O] )	40	68	11	10	0	0.909091	0.622642	0.846154	0
+death_year	) [S] ( <M> # , # - [O]	24	44	6	6	0	1	0.609666	0.875	0
+death_year	) [S] ( <M> # , # - [O] )	24	44	6	6	0	1	0.609666	0.875	0
+death_year	- [O] ) , better known as [S]	24	44	6	6	0	1	0.609666	0.875	0
+death_year	[O] ) , better known as [S]	24	44	6	6	0	1	0.609666	0.875	0
+death_year	[S] died on [O] in	24	40	6	6	0	1	0.609666	0.875	0
+death_year	[P] died in [O]	80	136	25	20	2	0.8	0.60869	0.777778	0
+death_year	^ [P] died in [O]	80	136	25	20	2	0.8	0.60869	0.777778	0
+death_year	[S] died in [O] ,	36	60	10	9	0	0.9	0.59585	0.833333	0
+death_year	- [O] ) , better known as [S] ,	20	36	5	5	0	1	0.565518	0.857143	0
+death_year	[O] ) , better known as [S] ,	20	36	5	5	0	1	0.565518	0.857143	0
+death_year	[S] ) ( # - [O]	20	36	5	5	0	1	0.565518	0.857143	0
+death_year	[S] ) ( # - [O] )	20	36	5	5	0	1	0.565518	0.857143	0
+death_year	[S] died in [O] at	20	36	5	5	0	1	0.565518	0.857143	0
+death_year	^ [S] ( d . [O]	20	36	5	5	0	1	0.565518	0.857143	0
+death_year	^ [S] ( d . [O] )	20	36	5	5	0	1	0.565518	0.857143	0
+death_year	on [O] , [S] died	20	32	5	5	0	1	0.565518	0.857143	0
+death_year	when [S] died in [O]	20	32	5	5	0	1	0.565518	0.857143	0
+death_year	[O] , [S] died	32	52	9	8	0	0.888889	0.565	0.818182	0
+death_year	[P] died in [O] .	16	28	4	4	0	1	0.510109	0.833333	0
+death_year	[P] died on [O] at	16	28	4	4	0	1	0.510109	0.833333	0
+death_year	[S] , ( # - [O]	16	28	4	4	0	1	0.510109	0.833333	0
+death_year	[S] , ( # - [O] )	16	28	4	4	0	1	0.510109	0.833333	0
+death_year	[S] died in [O] in	16	20	4	4	0	1	0.510109	0.833333	0
+death_year	[S] died in [O] of	16	16	4	4	0	1	0.510109	0.833333	0
+death_year	[S] died on [O] .	16	20	4	4	0	1	0.510109	0.833333	0
+death_year	[S] died on [O] at	16	28	4	4	0	1	0.510109	0.833333	0
+death_year	^ [P] died in [O] .	16	28	4	4	0	1	0.510109	0.833333	0
+death_year	^ [P] died on [O] at	16	28	4	4	0	1	0.510109	0.833333	0
+death_year	^ [S] died in [O] in	16	20	4	4	0	1	0.510109	0.833333	0
+death_year	^ [S] died in [O] of	16	16	4	4	0	1	0.510109	0.833333	0
+death_year	^ [S] died on [O] .	16	20	4	4	0	1	0.510109	0.833333	0
+death_year	^ [S] died on [O] at	16	28	4	4	0	1	0.510109	0.833333	0
+death_year	^ [S] died on [O] in	16	24	4	4	0	1	0.510109	0.833333	0
+death_year	when [S] died in [O] ,	16	24	4	4	0	1	0.510109	0.833333	0
+death_year	- [O] ) , also known as [S] and	12	24	3	3	0	1	0.438503	0.8	0
+death_year	[O] ) , also known as [S] and	12	24	3	3	0	1	0.438503	0.8	0
+death_year	[P] died in [O] and	12	16	3	3	0	1	0.438503	0.8	0
+death_year	[P] died in [O] of	12	24	3	3	0	1	0.438503	0.8	0
+death_year	[S] ( <M> , # - [O]	12	20	3	3	0	1	0.438503	0.8	0
+death_year	[S] ( <M> , # - [O] )	12	20	3	3	0	1	0.438503	0.8	0
+death_year	[S] , ( <M> # # - [O]	12	16	3	3	0	1	0.438503	0.8	0
+death_year	[S] , ( <M> # # - [O] )	12	16	3	3	0	1	0.438503	0.8	0
+death_year	^ [P] died in [O] and	12	16	3	3	0	1	0.438503	0.8	0
+death_year	^ [P] died in [O] of	12	24	3	3	0	1	0.438503	0.8	0
+death_year	^ [S] ( <M> , # - [O]	12	20	3	3	0	1	0.438503	0.8	0
+death_year	^ [S] ( <M> , # - [O] )	12	20	3	3	0	1	0.438503	0.8	0
+death_year	^ [S] , ( <M> # # - [O]	12	16	3	3	0	1	0.438503	0.8	0
+death_year	^ [S] , ( <M> # # - [O] )	12	16	3	3	0	1	0.438503	0.8	0
+death_year	or [S] ( # - [O]	12	20	3	3	0	1	0.438503	0.8	0
+death_year	or [S] ( c . # - [O]	12	20	3	3	0	1	0.438503	0.8	0
+death_year	or [S] ( c . # - [O] )	12	20	3	3	0	1	0.438503	0.8	0
+death_year	[P] died on [O] .	16	20	5	4	0	0.8	0.375535	0.714286	0
+death_year	^ [P] died on [O] .	16	20	5	4	0	0.8	0.375535	0.714286	0
+death_year	[P] died in [O] ,	24	40	9	6	1	0.666667	0.354202	0.636364	0
+death_year	^ [P] died in [O] ,	24	40	9	6	1	0.666667	0.354202	0.636364	0
+death_year	[S] ( d . [O]	20	36	8	5	0	0.625	0.305742	0.6	0
+death_year	[S] ( d . [O] )	20	36	8	5	0	0.625	0.305742	0.6	0
+death_year	[P] reigned from # to [O]	12	24	5	3	0	0.6	0.230724	0.571429	0
+death_year	^ [P] reigned from # to [O]	12	24	5	3	0	0.6	0.230724	0.571429	0
+death_year	- [O] ) , also known as [S] ,	11	18	1	1	0	1	0.206549	0.666667	0
+death_year	- [O] ) , called [S]	11	22	1	1	0	1	0.206549	0.666667	0
+death_year	- [O] ) , nicknamed [S]	11	18	1	1	0	1	0.206549	0.666667	0
+death_year	- [O] ) , nicknamed [S] ,	11	18	1	1	0	1	0.206549	0.666667	0
+death_year	[O] ) , also known as [S] ,	11	18	1	1	0	1	0.206549	0.666667	0
+death_year	[O] ) , called [S]	11	22	1	1	0	1	0.206549	0.666667	0
+death_year	[O] ) , nicknamed [S]	11	18	1	1	0	1	0.206549	0.666667	0
+death_year	[O] ) , nicknamed [S] ,	11	18	1	1	0	1	0.206549	0.666667	0
+death_year	[S] ' s death in [O]	11	22	1	1	0	1	0.206549	0.666667	0
+death_year	[S] ' s death in [O] ,	11	22	1	1	0	1	0.206549	0.666667	0
+death_year	[S] ( # ? - [O] )	11	22	1	1	0	1	0.206549	0.666667	0
+death_year	[S] ( <M> # , # - [O] ;	11	15	1	1	0	1	0.206549	0.666667	0
+death_year	[S] ( <M> # - [O]	11	19	1	1	0	1	0.206549	0.666667	0
+death_year	[S] ( <M> # - [O] )	11	19	1	1	0	1	0.206549	0.666667	0
+death_year	[S] ( died [O]	15	26	1	1	0	1	0.206549	0.666667	0
+death_year	[S] ( died [O] )	15	26	1	1	0	1	0.206549	0.666667	0
+death_year	[S] ) ( c . # - [O]	11	18	1	1	0	1	0.206549	0.666667	0
+death_year	[S] died [O]	11	19	1	1	0	1	0.206549	0.666667	0
+death_year	[S] died on [O] and	15	27	1	1	0	1	0.206549	0.666667	0
+death_year	^ [S] ( # ? - [O] )	11	22	1	1	0	1	0.206549	0.666667	0
+death_year	^ [S] ( <M> # , # - [O] ;	11	15	1	1	0	1	0.206549	0.666667	0
+death_year	^ [S] ( died [O]	11	18	1	1	0	1	0.206549	0.666667	0
+death_year	^ [S] ( died [O] )	11	18	1	1	0	1	0.206549	0.666667	0
+death_year	^ [S] died [O]	11	19	1	1	0	1	0.206549	0.666667	0
+death_year	^ [S] died in [O] ,	15	27	1	1	0	1	0.206549	0.666667	0
+death_year	^ [S] died in [O] at	15	26	1	1	0	1	0.206549	0.666667	0
+death_year	^ [S] died on [O] and	15	27	1	1	0	1	0.206549	0.666667	0
+death_year	or [S] ( <M> # # - [O]	11	22	1	1	0	1	0.206549	0.666667	0
+death_year	or [S] ( <M> # # - [O] )	11	22	1	1	0	1	0.206549	0.666667	0
+death_year	on [O] , [S]	72	116	80	18	82	0.225	0.147332	0.231707	0
+death_year	on [O] , [S] was	16	24	12	4	16	0.333333	0.13812	0.357143	0
+death_year	[O] , [S] ,	12	16	11	3	12	0.272727	0.0974606	0.307692	0
+death_year	[S] ( # ? - [O]	11	22	2	1	0	0.5	0.0945312	0.5	0
+death_year	^ [S] ( # ? - [O]	11	22	2	1	0	0.5	0.0945312	0.5	0
+death_year	[O] , [S]	128	236	637	32	389	0.0502355	0.0358063	0.0516432	0
+death_year	[O] , [S] '	16	28	46	4	14	0.0869565	0.0343359	0.104167	0
+death_year	[O] , [S] was	28	48	107	7	69	0.0654206	0.0320483	0.0733945	0
+death_year	[O] , [S] went	11	19	10	1	1	0.1	0.0178762	0.166667	0
+death_year	in [O] , [S]	40	76	446	10	257	0.0224215	0.0122236	0.0245536	0
+death_year	of [O] , [S]	11	22	29	1	26	0.0344828	0.00611321	0.0645161	0
+death_year	in [O] , [S] was	6	12	35	0	25	0	6.93889e-18	0.027027	0
+death_year	" [S] ( <M> # , # - [O]	6	12	0	0	0	0	0	0.5	0
+death_year	" [S] ( <M> # , # - [O] )	6	12	0	0	0	0	0	0.5	0
+death_year	- [O] ) ( also [S]	6	12	0	0	0	0	0	0.5	0
+death_year	- [O] ) , born [S]	6	9	0	0	0	0	0	0.5	0
+death_year	- [O] ) , commonly known as [S]	6	12	0	0	0	0	0	0.5	0
+death_year	- [O] ) , commonly known as [S] ,	6	12	0	0	0	0	0	0.5	0
+death_year	- [O] ) was the founder of the [S]	8	16	0	0	0	0	0	0.5	0
+death_year	[O] ) ( also [S]	6	12	0	0	0	0	0	0.5	0
+death_year	[O] ) , born [S]	6	9	0	0	0	0	0	0.5	0
+death_year	[O] ) , commonly known as [S]	6	12	0	0	1	0	0	0.5	0
+death_year	[O] ) , commonly known as [S] ,	6	12	0	0	1	0	0	0.5	0
+death_year	[O] ) [S]	6	12	5	0	1	0	0	0.142857	0
+death_year	[O] ) was the founder of the [S]	8	16	0	0	0	0	0	0.5	0
+death_year	[P] died [O]	6	12	0	0	0	0	0	0.5	0
+death_year	[P] died in london on [O]	6	9	0	0	0	0	0	0.5	0
+death_year	[P] died of a heart attack on [O]	6	6	0	0	0	0	0	0.5	0
+death_year	[P] died on [O] ,	8	16	0	0	0	0	0	0.5	0
+death_year	[P] died on [O] and	6	9	0	0	0	0	0	0.5	0
+death_year	[P] died there in [O]	6	6	0	0	0	0	0	0.5	0
+death_year	[P] died there on [O]	6	9	0	0	0	0	0	0.5	0
+death_year	[P] funeral was held on [O]	8	16	0	0	0	0	0	0.5	0
+death_year	[P] funeral was held on [O] at	8	16	0	0	0	0	0	0.5	0
+death_year	[P] reigned from # to [O] .	6	12	1	0	0	0	0	0.333333	0
+death_year	[S] ( # / # - [O]	6	9	0	0	0	0	0	0.5	0
+death_year	[S] ( # / # - [O] )	6	9	0	0	0	0	0	0.5	0
+death_year	[S] ( # bc - [O]	6	9	0	0	0	0	0	0.5	0
+death_year	[S] ( # or # - [O]	6	12	0	0	0	0	0	0.5	0
+death_year	[S] ( # or # - [O] )	6	12	0	0	0	0	0	0.5	0
+death_year	[S] ( <M> # , # - [O] ,	6	12	0	0	0	0	0	0.5	0
+death_year	[S] ( <M> # , # - [O] ?	8	12	1	0	0	0	0	0.333333	0
+death_year	[S] ( c . # bc - [O]	6	9	0	0	0	0	0	0.5	0
+death_year	[S] ( ca . # - [O]	6	12	0	0	0	0	0	0.5	0
+death_year	[S] ( ca . # - [O] )	6	12	0	0	0	0	0	0.5	0
+death_year	[S] ) ( c . # - [O] )	6	12	0	0	0	0	0	0.5	0
+death_year	[S] died [O] at	8	16	0	0	0	0	0	0.5	0
+death_year	[S] died in [O] and	6	9	0	0	0	0	0	0.5	0
+death_year	[S] died in [O] from	6	12	0	0	0	0	0	0.5	0
+death_year	[S] died of a heart attack in [O]	6	9	0	0	0	0	0	0.5	0
+death_year	[S] passed away in [O]	8	16	0	0	1	0	0	0.5	0
+death_year	^ [P] died [O]	6	12	0	0	0	0	0	0.5	0
+death_year	^ [P] died in london on [O]	6	9	0	0	0	0	0	0.5	0
+death_year	^ [P] died of a heart attack on [O]	6	6	0	0	0	0	0	0.5	0
+death_year	^ [P] died on [O] ,	8	16	0	0	0	0	0	0.5	0
+death_year	^ [P] died on [O] and	6	9	0	0	0	0	0	0.5	0
+death_year	^ [P] died there in [O]	6	6	0	0	0	0	0	0.5	0
+death_year	^ [P] died there on [O]	6	9	0	0	0	0	0	0.5	0
+death_year	^ [P] funeral was held on [O]	8	16	0	0	0	0	0	0.5	0
+death_year	^ [P] funeral was held on [O] at	8	16	0	0	0	0	0	0.5	0
+death_year	^ [P] reigned from # to [O] .	6	12	1	0	0	0	0	0.333333	0
+death_year	^ [S] ( # / # - [O]	6	9	0	0	0	0	0	0.5	0
+death_year	^ [S] ( # / # - [O] )	6	9	0	0	0	0	0	0.5	0
+death_year	^ [S] ( # bc - [O]	6	9	0	0	0	0	0	0.5	0
+death_year	^ [S] ( # or # - [O]	6	12	0	0	0	0	0	0.5	0
+death_year	^ [S] ( # or # - [O] )	6	12	0	0	0	0	0	0.5	0
+death_year	^ [S] ( <M> # , # - [O] ,	6	12	0	0	0	0	0	0.5	0
+death_year	^ [S] ( <M> # - [O]	6	9	0	0	0	0	0	0.5	0
+death_year	^ [S] ( <M> # - [O] )	6	9	0	0	0	0	0	0.5	0
+death_year	^ [S] ( c . # bc - [O]	6	9	0	0	0	0	0	0.5	0
+death_year	^ [S] ( ca . # - [O]	6	12	0	0	0	0	0	0.5	0
+death_year	^ [S] ( ca . # - [O] )	6	12	0	0	0	0	0	0.5	0
+death_year	^ [S] , ( # - [O]	8	16	0	0	0	0	0	0.5	0
+death_year	^ [S] , ( # - [O] )	8	16	0	0	0	0	0	0.5	0
+death_year	^ [S] died [O] at	8	16	0	0	0	0	0	0.5	0
+death_year	^ [S] died in [O] and	6	9	0	0	0	0	0	0.5	0
+death_year	^ [S] died in [O] from	6	12	0	0	0	0	0	0.5	0
+death_year	as [S] ( <M> # , # - [O]	6	12	0	0	0	0	0	0.5	0
+death_year	as [S] ( <M> # , # - [O] )	6	12	0	0	0	0	0	0.5	0
+death_year	in [O] , [S] '	6	12	19	0	4	0	0	0.047619	0
+death_year	in [O] , [S] died	6	12	0	0	0	0	0	0.5	0
+death_year	on [O] , [S] went	6	9	1	0	0	0	0	0.333333	0
+death_year	or [S] ( # - [O] )	6	9	0	0	0	0	0	0.5	0
+death_year	or [S] ( <M> # , # - [O]	8	16	0	0	0	0	0	0.5	0
+death_year	or [S] ( <M> # , # - [O] )	8	16	0	0	0	0	0	0.5	0
+death_year	or [S] ) ( # - [O]	6	9	0	0	0	0	0	0.5	0
+death_year	or [S] ) ( # - [O] )	6	9	0	0	0	0	0	0.5	0
+death_year	saint [S] ( # - [O]	8	16	0	0	0	0	0	0.5	0
+death_year	saint [S] ( # - [O] )	8	16	0	0	0	0	0	0.5	0
+founded	^ [S] was founded in [O]	48	64	13	12	6	0.923077	0.66686	0.866667	0
+founded	[S] was founded in [O]	56	72	16	14	9	0.875	0.639772	0.833333	0
+founded	[S] was founded on [O]	24	44	6	6	0	1	0.609666	0.875	0
+founded	^ [S] was founded on [O]	24	44	6	6	0	1	0.609666	0.875	0
+founded	[S] was founded in [O] by	32	44	9	8	5	0.888889	0.565	0.818182	0
+founded	^ [S] was founded in [O] by	28	40	8	7	4	0.875	0.529112	0.8	0
+founded	[P] was founded in [O]	28	36	9	7	1	0.777778	0.452589	0.727273	0
+founded	^ [P] was founded in [O]	28	36	9	7	1	0.777778	0.452589	0.727273	0
+founded	[P] was founded in [O] by	12	16	3	3	1	1	0.438503	0.8	0
+founded	^ [P] was founded in [O] by	12	16	3	3	1	1	0.438503	0.8	0
+founded	[S] on [O] ,	16	20	7	4	8	0.571429	0.250458	0.555556	0
+founded	[P] was founded on [O]	11	14	1	1	0	1	0.206549	0.666667	0
+founded	[S] was founded in [O] in	11	11	1	1	0	1	0.206549	0.666667	0
+founded	^ [P] was founded on [O]	11	14	1	1	0	1	0.206549	0.666667	0
+founded	[O] as [S]	12	20	7	3	7	0.428571	0.15822	0.444444	0
+founded	[S] on [O]	24	32	21	6	37	0.285714	0.138139	0.304348	0
+founded	[S] in [O] ,	20	20	22	5	36	0.227273	0.10123	0.25	0
+founded	of [O] , the [S]	12	12	11	3	1	0.272727	0.0974606	0.307692	0
+founded	[P] was established in [O]	11	14	2	1	1	0.5	0.0945312	0.5	0
+founded	^ [P] was established in [O]	11	14	2	1	1	0.5	0.0945312	0.5	0
+founded	[S] in [O]	44	48	89	11	106	0.123596	0.0704352	0.131868	0
+founded	the [S] in [O]	12	16	16	3	3	0.1875	0.065916	0.222222	0
+founded	[S] ( [O]	11	11	4	1	502	0.25	0.0455873	0.333333	0
+founded	[S] ( [O] )	11	11	4	1	46	0.25	0.0455873	0.333333	0
+founded	[O] the [S]	16	20	43	4	13	0.0930233	0.0367716	0.111111	0
+founded	[O] , the [S]	28	28	97	7	35	0.0721649	0.0353942	0.0808081	0
+founded	in [O] , [S]	32	32	178	8	781	0.0449438	0.022947	0.05	0
+founded	[O] , [S]	44	44	310	11	1183	0.0354839	0.0199271	0.0384615	0
+founded	[O] , [S] became	11	11	17	1	50	0.0588235	0.0104604	0.105263	0
+founded	[S] in [O] .	11	11	26	1	30	0.0384615	0.00682198	0.0714286	0
+founded	[S] on [O] .	6	6	3	0	11	0	5.55112e-17	0.2	0
+founded	of [S] in [O]	6	6	7	0	12	0	5.55112e-17	0.111111	0
+founded	[O] , making [S]	6	6	0	0	0	0	0	0.5	0
+founded	[O] , the [S] is	6	6	0	0	0	0	0	0.5	0
+founded	[O] , the [S] was	6	6	5	0	1	0	0	0.142857	0
+founded	[O] by the [S]	8	8	1	0	1	0	0	0.333333	0
+founded	[O] by the [S] act	8	8	0	0	1	0	0	0.5	0
+founded	[O] the [S] became	6	6	0	0	1	0	0	0.5	0
+founded	[P] was established in [O] as	6	9	0	0	1	0	0	0.5	0
+founded	[P] was founded on [O] ,	8	8	0	0	0	0	0	0.5	0
+founded	[P] was written in [O]	6	6	0	0	0	0	0	0.5	0
+founded	[S] , was founded in [O]	6	6	0	0	0	0	0	0.5	0
+founded	[S] , was founded in [O] as	6	6	0	0	0	0	0	0.5	0
+founded	[S] act of [O]	8	8	1	0	1	0	0	0.333333	0
+founded	[S] began in [O]	6	9	1	0	1	0	0	0.333333	0
+founded	[S] formed in [O]	6	6	0	0	0	0	0	0.5	0
+founded	[S] formed in [O] ,	6	6	0	0	0	0	0	0.5	0
+founded	[S] was developed in [O]	6	6	0	0	0	0	0	0.5	0
+founded	[S] was founded on [O] ,	8	12	0	0	0	0	0	0.5	0
+founded	[S] was founded on [O] by	6	12	0	0	0	0	0	0.5	0
+founded	[S] was originally founded in [O]	8	8	0	0	0	0	0	0.5	0
+founded	[S] was originally founded in [O] by	8	8	0	0	0	0	0	0.5	0
+founded	^ [P] was established in [O] as	6	9	0	0	1	0	0	0.5	0
+founded	^ [P] was founded on [O] ,	8	8	0	0	0	0	0	0.5	0
+founded	^ [P] was written in [O]	6	6	0	0	0	0	0	0.5	0
+founded	^ [S] ( [O]	6	6	1	0	305	0	0	0.333333	0
+founded	^ [S] ( [O] )	6	6	1	0	7	0	0	0.333333	0
+founded	^ [S] began in [O]	6	6	0	0	1	0	0	0.5	0
+founded	^ [S] was founded in [O] in	6	6	0	0	0	0	0	0.5	0
+founded	^ [S] was founded on [O] ,	8	12	0	0	0	0	0	0.5	0
+founded	^ [S] was founded on [O] by	6	12	0	0	0	0	0	0.5	0
+founded	^ [S] was originally founded in [O]	8	8	0	0	0	0	0	0.5	0
+founded	^ [S] was originally founded in [O] by	8	8	0	0	0	0	0	0.5	0
+founded	in [O] , [S] became	8	8	10	0	39	0	0	0.0833333	0
+founded	in [O] , the [S]	6	6	38	0	15	0	0	0.025	0
+founded	in [O] by the [S]	8	8	1	0	1	0	0	0.333333	0
+founded	in [O] by the [S] act	8	8	0	0	1	0	0	0.5	0
+founded	in [O] the [S]	6	6	13	0	4	0	0	0.0666667	0
+founded	in [O] the [S] became	6	6	0	0	1	0	0	0.5	0
+founded	of [O] , the [S] was	6	6	0	0	0	0	0	0.5	0
+founded	on [O] , [S]	6	6	23	0	126	0	0	0.04	0
+founded	the [S] act of [O]	8	8	1	0	1	0	0	0.333333	0
+founded	the [S] in [O] ,	6	6	4	0	2	0	0	0.166667	0
+founded	the [S] on [O]	8	12	1	0	0	0	0	0.333333	0
+founded	the [S] on [O] ,	8	8	0	0	0	0	0	0.5	0
+author	[S] is a science fiction novel by [O]	16	16	4	4	0	1	0.510109	0.833333	0
+author	^ [S] is a science fiction novel by [O]	16	16	4	4	0	1	0.510109	0.833333	0
+author	[S] is a science fiction novel by [O] ,	12	12	3	3	0	1	0.438503	0.8	0
+author	^ [S] is a science fiction novel by [O] ,	12	12	3	3	0	1	0.438503	0.8	0
+author	[O] ' s [S]	20	32	7	5	32	0.714286	0.358934	0.666667	0
+author	[S] is a novel by [O]	12	12	4	3	0	0.75	0.300642	0.666667	0
+author	^ [S] is a novel by [O]	12	12	4	3	0	0.75	0.300642	0.666667	0
+author	[O] ' s [S] ,	11	11	1	1	4	1	0.206549	0.666667	0
+author	[P] was [O]	6	6	0	0	13	0	0	0.5	0
+author	[P] was [O] '	6	6	0	0	3	0	0	0.5	0
+author	[S] is a novel by [O] ,	6	6	0	0	0	0	0	0.5	0
+author	[S] is a poem by [O]	8	8	0	0	0	0	0	0.5	0
+author	^ [O] ' s [S]	6	6	0	0	6	0	0	0.5	0
+author	^ [O] ' s [S] ,	6	6	0	0	2	0	0	0.5	0
+author	^ [P] was [O]	6	6	0	0	13	0	0	0.5	0
+author	^ [P] was [O] '	6	6	0	0	3	0	0	0.5	0
+author	^ [S] is a novel by [O] ,	6	6	0	0	0	0	0	0.5	0
+author	^ [S] is a poem by [O]	8	8	0	0	0	0	0	0.5	0
+author	and [O] ' s [S]	8	8	0	0	2	0	0	0.5	0
+director	[P] was directed by [O] ,	12	12	3	3	0	1	0.438503	0.8	0
+director	^ [P] was directed by [O] ,	12	12	3	3	0	1	0.438503	0.8	0
+director	[P] was directed by [O]	24	36	9	6	0	0.666667	0.354202	0.636364	0
+director	^ [P] was directed by [O]	24	36	9	6	0	0.666667	0.354202	0.636364	0
+director	[P] was directed by [O] and	11	22	2	1	0	0.5	0.0945312	0.5	0
+director	^ [P] was directed by [O] and	11	22	2	1	0	0.5	0.0945312	0.5	0
+director	[O] ' s [S]	8	24	2	0	27	0	0	0.25	0
+director	[S] was directed by [O]	6	15	0	0	0	0	0	0.5	0
+director	[S] was directed by [O] ,	6	15	0	0	0	0	0	0.5	0
+founder	[S] was founded in # by [O]	20	20	7	5	2	0.714286	0.358934	0.666667	0
+founder	^ [S] was founded in # by [O]	20	20	7	5	2	0.714286	0.358934	0.666667	0
+founder	[S] and [O]	6	6	5	0	151	0	0	0.142857	0
+founder	[S] was founded in # by [O] ,	6	6	0	0	0	0	0	0.5	0
+founder	^ [S] was founded in # by [O] ,	6	6	0	0	0	0	0	0.5	0
+creator	[O] ' s [S]	11	11	2	1	26	0.5	0.0945312	0.5	0
+creator	[P] was created by [O]	6	9	1	0	0	0	0	0.333333	0
+creator	[P] was created by [O] and	6	9	0	0	0	0	0	0.5	0
+creator	[S] was designed by [O]	6	6	0	0	0	0	0	0.5	0
+creator	^ [P] was created by [O]	6	9	1	0	0	0	0	0.333333	0
+creator	^ [P] was created by [O] and	6	9	0	0	0	0	0	0.5	0
+spouse	[S] ' s wife , [O]	12	12	3	3	2	1	0.438503	0.8	0
+spouse	, [S] married [O] .	20	20	6	5	2	0.833333	0.436497	0.75	0
+spouse	[S] married [O] in	20	20	6	5	2	0.833333	0.436497	0.75	0
+spouse	^ [S] married [O]	36	44	13	9	9	0.692308	0.423693	0.666667	0
+spouse	[S] married [O]	88	96	40	22	22	0.55	0.398291	0.547619	0
+spouse	^ [S] married [O] in	16	16	5	4	2	0.8	0.375535	0.714286	0
+spouse	[S] married [O] .	20	20	7	5	3	0.714286	0.358934	0.666667	0
+spouse	, [S] married [O]	36	36	18	9	9	0.5	0.29031	0.5	0
+spouse	[P] married [O]	36	40	21	9	8	0.428571	0.2447	0.434783	0
+spouse	^ [P] married [O]	36	40	21	9	8	0.428571	0.2447	0.434783	0
+spouse	[S] married [O] ,	28	28	17	7	7	0.411765	0.216111	0.421053	0
+spouse	[P] married [O] ,	15	15	1	1	2	1	0.206549	0.666667	0
+spouse	^ [P] married [O] ,	15	15	1	1	2	1	0.206549	0.666667	0
+spouse	# [S] married [O] ,	12	12	6	3	1	0.5	0.187616	0.5	0
+spouse	, [S] met [O]	12	12	7	3	4	0.428571	0.15822	0.444444	0
+spouse	# [S] married [O]	12	12	8	3	1	0.375	0.136844	0.4	0
+spouse	, [S] married [O] ,	12	12	9	3	2	0.333333	0.120584	0.363636	0
+spouse	[S] met [O]	12	12	9	3	10	0.333333	0.120584	0.363636	0
+spouse	[S] and [O]	11	11	77	1	41	0.012987	0.00229622	0.0253165	0
+spouse	, [S] met [O] ,	6	6	3	0	1	0	5.55112e-17	0.2	0
+spouse	[O] , [S]	8	8	188	0	179	0	0	0.00526316	0
+spouse	[P] first wife was [O]	6	6	1	0	0	0	0	0.333333	0
+spouse	[P] first wife was [O] ,	6	6	1	0	0	0	0	0.333333	0
+spouse	[P] is married to [O]	6	6	0	0	1	0	0	0.5	0
+spouse	[P] is married to [O] ,	6	6	0	0	1	0	0	0.5	0
+spouse	[P] married [O] in	6	6	2	0	3	0	0	0.25	0
+spouse	[P] married [O] on	6	9	1	0	1	0	0	0.333333	0
+spouse	[S] ' s wife , [O] ,	6	6	0	0	2	0	0	0.5	0
+spouse	[S] and [O] .	6	6	19	0	13	0	0	0.047619	0
+spouse	[S] and his wife , [O]	6	6	0	0	1	0	0	0.5	0
+spouse	[S] and his wife , [O] ,	6	6	0	0	1	0	0	0.5	0
+spouse	[S] married actress [O]	6	6	1	0	1	0	0	0.333333	0
+spouse	[S] met [O] ,	6	6	4	0	2	0	0	0.166667	0
+spouse	[S] wed [O]	6	6	0	0	0	0	0	0.5	0
+spouse	^ [P] first wife was [O]	6	6	1	0	0	0	0	0.333333	0
+spouse	^ [P] first wife was [O] ,	6	6	1	0	0	0	0	0.333333	0
+spouse	^ [P] is married to [O]	6	6	0	0	1	0	0	0.5	0
+spouse	^ [P] is married to [O] ,	6	6	0	0	1	0	0	0.5	0
+spouse	^ [P] married [O] in	6	6	2	0	3	0	0	0.25	0
+spouse	^ [P] married [O] on	6	9	1	0	1	0	0	0.333333	0
+spouse	^ [S] wed [O]	6	6	0	0	0	0	0	0.5	0
+successor	[S] ' s successor , [O]	6	12	0	0	2	0	0	0.5	0
+successor	[S] ' s successor , [O] ,	6	12	0	0	2	0	0	0.5	0
+developer	[S] , [O]	16	32	17	5	591	0.294118	0.1328	0.315789	0
+developer	[O] ' s [S]	12	12	8	0	71	0	0	0.1	0
+developer	[O] released [S]	6	9	0	0	7	0	0	0.5	0
+developer	[O] released [S] #	6	9	0	0	0	0	0	0.5	0
+developer	the [S] , [O]	6	9	0	0	26	0	0	0.5	0
+genre	[S] is a [O]	76	140	25	19	13	0.76	0.565703	0.740741	0
+genre	^ [S] is a [O]	72	132	24	18	12	0.75	0.551006	0.730769	0
+genre	[S] are a [O]	12	20	4	4	0	1	0.510109	0.833333	0
+genre	[S] is a [O] novel	16	32	4	4	0	1	0.510109	0.833333	0
+genre	[S] was inducted into the [O] and	16	48	4	4	0	1	0.510109	0.833333	0
+genre	^ [S] is a [O] novel	16	32	4	4	0	1	0.510109	0.833333	0
+genre	^ [S] was inducted into the [O] and	16	48	4	4	0	1	0.510109	0.833333	0
+genre	[S] is a [O] role-playing	16	28	5	4	0	0.8	0.375535	0.714286	0
+genre	^ [S] is a [O] role-playing	16	28	5	4	0	0.8	0.375535	0.714286	0
+genre	^ [S] is a # [O]	16	32	8	5	3	0.625	0.305742	0.6	0
+genre	[S] is a # [O]	16	32	9	5	5	0.555556	0.266651	0.545455	0
+genre	[S] was inducted into the [O]	16	48	8	4	0	0.5	0.215216	0.5	0
+genre	^ [S] was inducted into the [O]	16	48	8	4	0	0.5	0.215216	0.5	0
+genre	[O] , [S]	24	28	24	6	39	0.25	0.119994	0.269231	0
+genre	[O] of [S]	12	12	18	3	40	0.166667	0.0583658	0.2	0
+genre	[S] ' s [O]	20	24	50	5	64	0.1	0.0434758	0.115385	0
+genre	the [O] of [S]	6	6	3	0	9	0	5.55112e-17	0.2	0
+genre	[O] of [S] ,	6	6	2	0	5	0	0	0.25	0
+genre	[S] ( # ) is a [O]	6	9	0	0	0	0	0	0.5	0
+genre	[S] ( # ) is a [O] novel	6	9	0	0	0	0	0	0.5	0
+genre	[S] ) is a [O]	6	9	0	0	0	0	0	0.5	0
+genre	[S] , was an american [O]	6	15	0	0	0	0	0	0.5	0
+genre	[S] are a [O] band	6	9	0	0	0	0	0	0.5	0
+genre	[S] is a # [O] directed	6	9	0	0	0	0	0	0.5	0
+genre	[S] is a fantasy [O]	6	9	0	0	0	0	0	0.5	0
+genre	[S] is a free [O]	6	9	0	0	0	0	0	0.5	0
+genre	[S] is a free [O] program	6	9	0	0	0	0	0	0.5	0
+genre	^ [S] ( # ) is a [O]	6	9	0	0	0	0	0	0.5	0
+genre	^ [S] ( # ) is a [O] novel	6	9	0	0	0	0	0	0.5	0
+genre	^ [S] are a [O]	6	9	0	0	0	0	0	0.5	0
+genre	^ [S] is a # [O] directed	6	9	0	0	0	0	0	0.5	0
+genre	^ [S] is a fantasy [O]	6	9	0	0	0	0	0	0.5	0
+genre	^ [S] is a free [O]	6	9	0	0	0	0	0	0.5	0
+genre	^ [S] is a free [O] program	6	9	0	0	0	0	0	0.5	0
+genre	in [O] , [S]	6	9	0	0	2	0	0	0.5	0
+genre	the [O] of [S] ,	6	6	0	0	2	0	0	0.5	0
+language	[S] residents age # and older speak [O]	16	64	8	8	2	1	0.675592	0.9	0
+language	[S] residents age # and older speak [O] at	16	64	8	8	2	1	0.675592	0.9	0
+language	of [S] residents age # and older speak [O]	16	64	8	8	2	1	0.675592	0.9	0
+language	of [S] residents age # and older speak [O] at	16	64	8	8	2	1	0.675592	0.9	0
+language	^ [S] ( [O]	20	48	7	7	0	1	0.64567	0.888889	0
+language	or [S] ( [O]	20	28	6	6	0	1	0.609666	0.875	0
+language	or [S] ( [O] :	20	28	6	6	0	1	0.609666	0.875	0
+language	^ [S] ( [O] :	12	32	4	4	0	1	0.510109	0.833333	0
+language	( [O] : republica de [S]	11	11	1	1	0	1	0.206549	0.666667	0
+language	( [O] : republica de [S] ,	11	11	1	1	0	1	0.206549	0.666667	0
+language	[O] : republica de [S]	11	11	1	1	0	1	0.206549	0.666667	0
+language	[O] : republica de [S] ,	11	11	1	1	0	1	0.206549	0.666667	0
+language	[O] : [S]	6	18	0	0	0	0	0	0.5	0
+language	[O] spoken in [S]	6	18	0	0	0	0	0	0.5	0
+language	[S] ( [O] /	6	12	0	0	0	0	0	0.5	0
+language	[S] , the [O]	6	9	0	0	0	0	0	0.5	0
+language	[S] are [O]	8	16	2	0	0	0	0	0.25	0
+language	[S] are [O] and	8	16	0	0	0	0	0	0.5	0
+language	^ [S] ( [O] /	6	12	0	0	0	0	0	0.5	0
+language	in [S] are [O]	8	16	2	0	0	0	0	0.25	0
+language	in [S] are [O] and	8	16	0	0	0	0	0	0.5	0
+occupation	[S] was a greek [O]	12	24	4	4	0	1	0.510109	0.833333	0
+occupation	^ [S] was a greek [O]	12	24	4	4	0	1	0.510109	0.833333	0
+occupation	a [O] , [S]	40	60	14	10	1	0.714286	0.453509	0.6875	0
+occupation	[S] , [O] ,	12	16	3	3	0	1	0.438503	0.8	0
+occupation	[S] ( born # ) is a [O]	16	24	5	4	1	0.8	0.375535	0.714286	0
+occupation	[S] the [O]	20	48	12	7	1	0.583333	0.319511	0.571429	0
+occupation	^ [S] was a [O]	20	24	8	5	2	0.625	0.305742	0.6	0
+occupation	a [O] , [S] was	12	16	4	3	0	0.75	0.300642	0.666667	0
+occupation	[S] , was an american [O]	16	28	6	4	1	0.666667	0.299993	0.625	0
+occupation	on [S] the [O]	12	20	7	4	0	0.571429	0.250458	0.555556	0
+occupation	[O] , [S] was	32	60	18	8	1	0.444444	0.245595	0.45	0
+occupation	^ [S] was the [O] of	12	16	5	3	0	0.6	0.230724	0.571429	0
+occupation	[O] , [S]	88	168	76	23	12	0.302632	0.210913	0.307692	0
+occupation	[S] was appointed [O]	16	24	12	5	0	0.416667	0.19326	0.428571	0
+occupation	[S] was the [O]	20	28	12	5	1	0.416667	0.19326	0.428571	0
+occupation	^ [S] was the [O]	12	16	6	3	0	0.5	0.187616	0.5	0
+occupation	[S] was the [O] of	16	20	10	4	1	0.4	0.16818	0.416667	0
+occupation	[S] , [O]	20	28	16	5	1	0.3125	0.141646	0.333333	0
+occupation	[S] is a [O]	16	20	12	4	0	0.333333	0.13812	0.357143	0
+occupation	[S] was a [O]	24	28	22	6	5	0.272727	0.131508	0.291667	0
+occupation	[S] was appointed [O] of	11	14	5	2	0	0.4	0.117621	0.428571	0
+occupation	[P] was [O]	11	14	11	1	2	0.0909091	0.0162322	0.153846	0
+occupation	^ [P] was [O]	11	14	11	1	2	0.0909091	0.0162322	0.153846	0
+occupation	[P] became a [O]	6	6	3	0	0	0	5.55112e-17	0.2	0
+occupation	[P] is the [O]	6	6	3	0	0	0	5.55112e-17	0.2	0
+occupation	[P] served as [O]	6	6	3	0	0	0	5.55112e-17	0.2	0
+occupation	[P] was [O] of	8	8	7	0	2	0	5.55112e-17	0.111111	0
+occupation	[S] as [O]	6	21	3	0	0	0	5.55112e-17	0.2	0
+occupation	^ [P] became a [O]	6	6	3	0	0	0	5.55112e-17	0.2	0
+occupation	^ [P] is the [O]	6	6	3	0	0	0	5.55112e-17	0.2	0
+occupation	^ [P] served as [O]	6	6	3	0	0	0	5.55112e-17	0.2	0
+occupation	^ [P] was [O] of	8	8	7	0	2	0	5.55112e-17	0.111111	0
+occupation	an [O] , [S]	6	6	3	0	0	0	5.55112e-17	0.2	0
+occupation	, [S] was more than a [O]	6	9	0	0	0	0	0	0.5	0
+occupation	[O] , [S] is	6	18	0	0	0	0	0	0.5	0
+occupation	[O] and [S]	6	9	1	0	0	0	0	0.333333	0
+occupation	[P] is best known as the [O]	6	6	0	0	0	0	0	0.5	0
+occupation	[P] is best known as the [O] of	6	6	0	0	0	0	0	0.5	0
+occupation	[P] is the [O] of	6	6	2	0	0	0	0	0.25	0
+occupation	[P] served as [O] of	6	6	2	0	0	0	0	0.25	0
+occupation	[P] was a [O]	6	9	5	0	3	0	0	0.142857	0
+occupation	[P] was succeeded as [O]	6	6	0	0	0	0	0	0.5	0
+occupation	[P] was the second [O]	6	9	1	0	0	0	0	0.333333	0
+occupation	[P] was the son of [O]	6	6	4	0	1	0	0	0.166667	0
+occupation	[P] worked as a [O]	6	9	1	0	0	0	0	0.333333	0
+occupation	[S] ' s [O]	6	6	18	0	1	0	0	0.05	0
+occupation	[S] ' s activity as a [O]	6	15	0	0	0	0	0	0.5	0
+occupation	[S] ( born # ) is a [O] of	6	9	0	0	0	0	0	0.5	0
+occupation	[S] ) is an american [O]	6	9	0	0	0	0	0	0.5	0
+occupation	[S] ) is an american [O] ,	6	9	0	0	0	0	0	0.5	0
+occupation	[S] ) was a [O]	6	12	0	0	1	0	0	0.5	0
+occupation	[S] , is an [O]	6	18	0	0	0	0	0	0.5	0
+occupation	[S] , was a british [O]	6	9	1	0	0	0	0	0.333333	0
+occupation	[S] , was an american [O] ,	6	12	0	0	1	0	0	0.5	0
+occupation	[S] , was an american [O] and	6	9	0	0	0	0	0	0.5	0
+occupation	[S] as the [O]	8	8	1	0	0	0	0	0.333333	0
+occupation	[S] decided to become a [O]	6	9	0	0	0	0	0	0.5	0
+occupation	[S] is a [O] ,	6	6	0	0	0	0	0	0.5	0
+occupation	[S] is an american [O]	6	12	0	0	0	0	0	0.5	0
+occupation	[S] is best known as the [O]	6	6	0	0	0	0	0	0.5	0
+occupation	[S] is best known as the [O] of	6	6	0	0	0	0	0	0.5	0
+occupation	[S] the first [O]	6	6	0	0	0	0	0	0.5	0
+occupation	[S] took over as [O]	6	9	0	0	0	0	0	0.5	0
+occupation	[S] was [O]	6	9	4	0	0	0	0	0.166667	0
+occupation	[S] was a [O] ,	6	9	1	0	0	0	0	0.333333	0
+occupation	[S] was a greek [O] who	6	12	0	0	0	0	0	0.5	0
+occupation	[S] was more than a [O]	6	9	0	0	0	0	0	0.5	0
+occupation	[S] was the first [O]	6	9	0	0	0	0	0	0.5	0
+occupation	^ [P] is best known as the [O]	6	6	0	0	0	0	0	0.5	0
+occupation	^ [P] is best known as the [O] of	6	6	0	0	0	0	0	0.5	0
+occupation	^ [P] is the [O] of	6	6	2	0	0	0	0	0.25	0
+occupation	^ [P] served as [O] of	6	6	2	0	0	0	0	0.25	0
+occupation	^ [P] was a [O]	6	9	5	0	3	0	0	0.142857	0
+occupation	^ [P] was succeeded as [O]	6	6	0	0	0	0	0	0.5	0
+occupation	^ [P] was the second [O]	6	9	1	0	0	0	0	0.333333	0
+occupation	^ [P] was the son of [O]	6	6	4	0	1	0	0	0.166667	0
+occupation	^ [P] worked as a [O]	6	9	1	0	0	0	0	0.333333	0
+occupation	^ [S] ( born # ) is a [O]	6	9	0	0	1	0	0	0.5	0
+occupation	^ [S] , [O]	6	6	2	0	0	0	0	0.25	0
+occupation	^ [S] , [O] ,	6	6	0	0	0	0	0	0.5	0
+occupation	^ [S] decided to become a [O]	6	9	0	0	0	0	0	0.5	0
+occupation	^ [S] is a [O]	6	9	5	0	0	0	0	0.142857	0
+occupation	^ [S] is an american [O]	6	12	0	0	0	0	0	0.5	0
+occupation	^ [S] is best known as the [O]	6	6	0	0	0	0	0	0.5	0
+occupation	^ [S] is best known as the [O] of	6	6	0	0	0	0	0	0.5	0
+occupation	^ [S] was a [O] ,	6	9	0	0	0	0	0	0.5	0
+occupation	^ [S] was a greek [O] who	6	12	0	0	0	0	0	0.5	0
+occupation	^ [S] was the first [O]	6	9	0	0	0	0	0	0.5	0
+occupation	a [O] , [S] is	6	12	0	0	0	0	0	0.5	0
+occupation	as [O] , [S]	6	15	2	0	2	0	0	0.25	0
+occupation	as [S] ) is an american [O]	6	9	0	0	0	0	0	0.5	0
+occupation	as [S] ) is an american [O] ,	6	9	0	0	0	0	0	0.5	0
+occupation	as [S] , was an american [O]	6	9	0	0	0	0	0	0.5	0
+occupation	name [S] , was a british [O]	6	9	0	0	0	0	0	0.5	0
+occupation	of [S] the [O]	8	12	0	0	1	0	0	0.5	0
+occupation	that [S] was the [O]	6	9	0	0	1	0	0	0.5	0
+nationality	[S] ( [O]	32	68	21	14	64	0.666667	0.453735	0.652174	0
+nationality	[P] was [O]	16	20	6	5	8	0.833333	0.436497	0.75	0
+nationality	^ [P] was [O]	16	20	6	5	8	0.833333	0.436497	0.75	0
+nationality	^ [S] ( [O]	24	52	16	10	51	0.625	0.38641	0.611111	0
+nationality	[S] , was an [O]	16	40	9	6	11	0.666667	0.354202	0.636364	0
+nationality	[S] ( [O] :	20	40	16	9	45	0.5625	0.331786	0.555556	0
+nationality	[S] , was a [O]	12	24	9	5	3	0.555556	0.266651	0.545455	0
+nationality	^ [S] ( [O] :	12	24	11	5	36	0.454545	0.212713	0.461538	0
+nationality	[S] was [O]	11	18	3	2	8	0.666667	0.20766	0.6	0
+nationality	[S] ' s [O]	36	56	42	9	39	0.214286	0.117058	0.227273	0
+nationality	[O] , [S]	20	24	44	5	24	0.113636	0.0495278	0.130435	0
+nationality	, [S] was [O]	6	9	0	0	2	0	0	0.5	0
+nationality	, [S] was [O] .	6	9	0	0	0	0	0	0.5	0
+nationality	[O] art , [S]	6	12	0	0	0	0	0	0.5	0
+nationality	[O] art , [S] '	6	12	0	0	0	0	0	0.5	0
+nationality	[O] author [S]	6	12	0	0	0	0	0	0.5	0
+nationality	[O] civil war , [S]	6	9	0	0	0	0	0	0.5	0
+nationality	[P] father was a [O]	6	12	0	0	0	0	0	0.5	0
+nationality	[P] next [O]	6	6	0	0	0	0	0	0.5	0
+nationality	[P] was the first [O]	6	12	1	0	2	0	0	0.333333	0
+nationality	[P] was the first [O] to	6	12	0	0	2	0	0	0.5	0
+nationality	[S] ' s first [O]	6	6	1	0	0	0	0	0.333333	0
+nationality	[S] , an [O]	6	12	0	0	1	0	0	0.5	0
+nationality	[S] , is a [O]	6	9	0	0	0	0	0	0.5	0
+nationality	[S] , was a [O] author	6	12	0	0	1	0	0	0.5	0
+nationality	[S] , was an [O] poet	6	12	0	0	0	0	0	0.5	0
+nationality	[S] , was an american [O]	8	16	0	0	1	0	0	0.5	0
+nationality	[S] joined the [O]	6	18	0	0	2	0	0	0.5	0
+nationality	[S] was [O] .	6	9	0	0	1	0	0	0.5	0
+nationality	^ [P] father was a [O]	6	12	0	0	0	0	0	0.5	0
+nationality	^ [P] next [O]	6	6	0	0	0	0	0	0.5	0
+nationality	^ [P] was the first [O]	6	12	1	0	2	0	0	0.333333	0
+nationality	^ [P] was the first [O] to	6	12	0	0	2	0	0	0.5	0
+nationality	^ [S] ' s [O]	6	9	5	0	12	0	0	0.142857	0
+nationality	^ [S] ' s first [O]	6	6	1	0	0	0	0	0.333333	0
+nationality	^ [S] joined the [O]	6	12	0	0	0	0	0	0.5	0
+nationality	as [S] , was an [O]	6	12	0	0	1	0	0	0.5	0
+nationality	as [S] , was an american [O]	8	16	0	0	0	0	0	0.5	0
+nationality	in [O] , [S]	6	6	2	0	1	0	0	0.25	0
+nationality	the [O] civil war , [S]	6	9	0	0	0	0	0	0.5	0
+party	[O] nominated [S]	6	12	0	0	0	0	0	0.5	0
+party	[O] nominated [S] as	6	12	0	0	0	0	0	0.5	0
+party	[S] became leader of the [O]	6	9	0	0	0	0	0	0.5	0
+party	the [O] nominated [S]	6	12	0	0	0	0	0	0.5	0
+party	the [O] nominated [S] as	6	12	0	0	0	0	0	0.5	0
+class	[S] are [O]	12	12	3	3	0	1	0.438503	0.8	0
+class	^ [S] are [O]	6	6	0	0	0	0	0	0.5	0
+inventor	[S] , named after [O]	6	6	0	0	0	0	0	0.5	0
