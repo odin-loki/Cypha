@@ -1748,3 +1748,22 @@ The test split is read once per adopted change.
 - one test read only for an adopted arm.
 
 The MCMC sampler (session 3) can use the learned mix as its energy.
+
+### 13.34 Blind reading of the new writers (registered 2026-11-05, before the ratings)
+
+- **Arms**, the seed-0 dev GEN files from `wip/k5-discourse` and `wip/k5-mcmc`:
+  - B0, K5's default (= §13.31's new K5);
+  - T2, T2b and T2c: LDA topic rescaling at B 1, 1.5 and 2;
+  - M3: gate 16 with consensus (MBR);
+  - E1b: paragraph MCMC with the entity grid, final temperature 0.8;
+  - the human continuation.
+- **Raters:** the same 50 dev prompts as §13.31. Four new blind Claude raters, two per prompt, with no tools and no key. Seven texts per prompt in random order, each cut near 460 characters, each rated 1–10.
+- **Rule:** an arm reads better than B0 if its mean paired difference from B0 over the 50 prompts (two raters averaged) is above 0, its 95% bootstrap interval excludes 0, and both rater pairs agree on the sign.
+- **Predictions:**
+  - B0 near §13.31's 2.1;
+  - T2 +0.3 to +0.8;
+  - T2b about the same as T2;
+  - T2c below T2b, because stuffing costs readability;
+  - M3 about +0.2;
+  - E1b about 0;
+  - human about 8.5.
