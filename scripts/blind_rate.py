@@ -5,7 +5,10 @@ Two steps, with the raters in between:
 
   make   builds rater packets and a key from GEN files (cyphalm_trie sample / scripts/gen_eval.sh output):
            scripts/blind_rate.py make --out DIR --ids bench/blind/llm_rating/prompts.json \
-               --arm B0=path/B0.gen.txt --arm T2=path/T2.gen.txt [--human] [--mode rate|pair] [--baseline B0] [--seed S]
+               --arm B0=path/B0.gen.txt --arm T2=path/T2.gen.txt [--human] [--mode rate|pair] [--baseline B0] [--seed S] \
+               [--cut N]
+         --cut N: each continuation is cut at a word boundary near N characters (default 460; §13.42's long reading
+                  uses 1500); the rater prompt states the length.
          mode rate: each item shows the prompt and every arm (plus the human text with --human) in random order, A, B, ...;
                     raters give 1-10 each. Two raters per prompt: raters 1-2 see the first half of the prompts, 3-4 the
                     second (each with its own order and labels).
@@ -72,7 +75,7 @@ RATE_PROMPT = """You are a careful, independent reader rating short text continu
 Read exactly one file with the Read tool: {packet}
 Do not open, list or search any other file, and do not run commands. Use only that file.
 
-The file has {n} items. Each item is a PROMPT (the start of a Wikipedia-style passage) and {k} continuations, {labs}, from different sources, in random order. Every continuation is cut at about 460 characters; a trailing "…" is that cut, not a flaw.
+The file has {n} items. Each item is a PROMPT (the start of a Wikipedia-style passage) and {k} continuations, {labs}, from different sources, in random order. Every continuation is cut at about {cut:,} characters; a trailing "…" is that cut, not a flaw.
 
 Rate each continuation from 1 to 10, as a reader would, on how well it reads as coherent prose that continues the prompt:
 - 1: word salad, not sentences.
@@ -89,7 +92,7 @@ PAIR_PROMPT = """You are a careful, independent reader comparing short text cont
 Read exactly one file with the Read tool: {packet}
 Do not open, list or search any other file, and do not run commands. Use only that file.
 
-The file has {n} items. Each item is a PROMPT (the start of a Wikipedia-style passage) and two continuations, A and B, from different sources, in random order. Every continuation is cut at about 460 characters; a trailing "…" is that cut, not a flaw.
+The file has {n} items. Each item is a PROMPT (the start of a Wikipedia-style passage) and two continuations, A and B, from different sources, in random order. Every continuation is cut at about {cut:,} characters; a trailing "…" is that cut, not a flaw.
 
 For each item, choose the continuation that reads better as coherent prose continuing the prompt: sentences that make sense, connect to each other and stay on the prompt's subject. Text that keeps repeating the prompt's keywords without saying anything coherent is not better for it. Odd character codes or spacing count only as far as they hurt readability. If you truly cannot prefer one, answer "tie", but choose whenever you have any preference.
 
@@ -126,7 +129,7 @@ def make(a):
                 n += 1
                 out.append(f"### Item {n}\nPROMPT: {prompt}")
                 for lab, (arm, t) in zip(LABELS, texts):
-                    out.append(f"{lab}: {cut(t)}")
+                    out.append(f"{lab}: {cut(t, a.cut)}")
                     key[f"R{r + 1}/{n}/{lab}"] = {"arm": arm, "dev": i}
                 out.append("")
             else:
@@ -141,7 +144,7 @@ def make(a):
                     n += 1
                     out.append(f"### Item {n}\nPROMPT: {prompt}")
                     for lab, (arm, t) in zip("AB", pair):
-                        out.append(f"{lab}: {cut(t)}")
+                        out.append(f"{lab}: {cut(t, a.cut)}")
                         key[f"R{r + 1}/{n}/{lab}"] = {"arm": arm, "dev": i}
                     out.append("")
         path = os.path.join(a.out, f"R{r + 1}.txt")
@@ -156,9 +159,9 @@ def make(a):
             if a.mode == "rate":
                 labs = ", ".join(LABELS[:k])
                 fields = ", ".join(f'"{x}": s' for x in LABELS[:k])
-                f.write(f"## Rater {r + 1}\n\n" + RATE_PROMPT.format(packet=packet, n=items, k=k, labs=labs, fields=fields) + "\n\n")
+                f.write(f"## Rater {r + 1}\n\n" + RATE_PROMPT.format(packet=packet, n=items, k=k, labs=labs, fields=fields, cut=a.cut) + "\n\n")
             else:
-                f.write(f"## Rater {r + 1}\n\n" + PAIR_PROMPT.format(packet=packet, n=items) + "\n\n")
+                f.write(f"## Rater {r + 1}\n\n" + PAIR_PROMPT.format(packet=packet, n=items, cut=a.cut) + "\n\n")
     print(f"wrote 4 packets, KEY.json, key.b64 and RATER_PROMPT.md to {a.out}")
 
 
@@ -230,6 +233,7 @@ def main():
     m.add_argument("--mode", choices=["rate", "pair"], default="rate")
     m.add_argument("--baseline", default=None, help="pair mode: the arm every other arm is compared with")
     m.add_argument("--seed", type=int, default=20261105)
+    m.add_argument("--cut", type=int, default=460, help="cut each continuation near N characters (GENERATION_PLAN §13.42 Q3: 1500 for the long reading)")
     s = sub.add_parser("score")
     s.add_argument("--dir", required=True)
     s.add_argument("--baseline", required=True)

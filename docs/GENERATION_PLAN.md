@@ -2158,3 +2158,95 @@ Timings only from old and new started together on the same thread count. A job t
 - every full `context8k` takes one shared lock (`flock ~/.cypha_full.lock`), so only one runs on the PC at a time. T1's final pair of tuned and default runs shares one turn of the lock, so the two are started together.
 
 Every branch first merges `origin/main` (M1 and M2 are exact, so P1 and every baseline are unchanged), then finishes its registered checks. The rules and predictions of §13.40–13.43 stand.
+
+### 13.46 Fix: the planner plans only from facts CyphaLM read (registered 2026-11-06, before any run; Odin: "If you know what to fix. Please do fix it.")
+
+**The fault** (found by Q1, §13.42): the default store `e9_aug` holds 17,907 Wikidata seeds (`source` = `wikidata`). They were meant only as supervision for `pattern_learn` (D4), but the planner states them as facts. That breaks rule 1: CyphaLM does every task, and its facts come from its own reading. All of them have `byte_offset` 0, so `--plan-drop` never removes them, including facts about the prompt page's own subject. 26 of P1's 50 main-entity plans rest on them alone. **§13.38's planner results (raters 0.635 against K5; test SCRIBE v2 0.561) were partly built on these facts, and are marked so.**
+
+**The fix:**
+- `bench/fact_store/e9_text/` is `e9_aug` without the Wikidata seeds.
+- Only `seeds.tsv` changes. The prose facts `facts_f2.tsv` were read from the text by F2's patterns and stay. The `--plan-drop` and the overlap guards are unchanged.
+- The default store of `sample --k5` becomes `e9_text` (arm **P1t**). The model and gate are unchanged.
+
+**The re-check:**
+- Dev, seed 0, 250 prompts:
+  - P1t's coverage by path;
+  - SCRIBE v2 and v3.1;
+  - copy32.
+- Deciding judge: pairwise blind raters, P1t against K5 (`--no-k5-plan`), the §13.38 rule, the same 50 prompts and four fresh raters, packets committed first.
+- If P1t reads better than K5, it stays the default, and GEN-A test is read once for P1t. If not, the default goes back to K5 alone until a text-only planner wins.
+
+**Q1–Q3:** their arms and baselines move to text-only stores. They are compared against P1t, not P1.
+
+**Predictions:**
+- main-entity coverage about 24 of 250 (Q1's count);
+- SCRIBE v2 within ±0.02 of P1's 0.532;
+- raters: P1t against K5 still above 0.5, but lower than P1's 0.635, since fewer prompts get a plan (about 0.58);
+- the interval may include 0.5.
+
+**§13.46 result** (2026-11-06):
+- **P1t** (the planner on the text-only store `e9_text`), dev, seed 0, 250 prompts:
+  - paths: main entity 24, co-occurring entities 53, plain K5 173;
+  - SCRIBE v2 0.511 [0.481, 0.542], v3.1 0.511 [0.491, 0.532];
+  - copy32 0.039, no 13-word copies;
+  - 3:25 wall, 630 MB.
+- **Blind pairwise raters, P1t against K5** (packets committed first, 5df1569): **0.610 [0.560, 0.670]**, rater pairs 0.64 and 0.58. On the 11 rated prompts where P1t's text differs from K5's, it wins 1.00.
+- **P1t reads better than K5. It stays the default.**
+- **The one test read** (GEN-A test, 250 prompts): SCRIBE v2 **0.537 [0.505, 0.564]** (K5 0.524; P1 with the Wikidata seeds 0.561), v3.1 0.528 [0.509, 0.547], copy32 0.039, no 13-word copies.
+- **Q1 against P1t** (packets committed first, same commit): **0.530 [0.450, 0.610]**, rater pairs 0.52 and 0.54, so no difference. Q1 has a plan for more prompts, but its extra fact sentences do not read better while the fill around them stays weak. **Q1 is not adopted.** Its flags (`--k5-plan-find 2`, `--k5-plan-fallback pattern`, `--k5-plan-filter`) and its text-only store `e9_v2` are kept for the combination with Q2 and Q3.
+- **Predictions:**
+  - main-entity coverage about 24: **hit** (24);
+  - SCRIBE v2 within ±0.02 of 0.532: **miss** (−0.021);
+  - raters above 0.5 but below 0.635, about 0.58: **hit** (0.610);
+  - "the interval may include 0.5": it does not.
+- **Q1's own results** ([PLAN_FACTS](reports/PLAN_FACTS.md), branch `wip/plan-facts`):
+  - main-entity coverage 62 of 250 with `e9_v2` and the better entity finder, plus 78 through the pattern fallback;
+  - the gibberish filter: precision 0.80 [0.38, 0.96], recall 0.36 [0.15, 0.65], sensible kept 0.993;
+  - by blind labels, 8.1% of store facts are gibberish.
+  - §13.42 Q1 predictions: coverage ≥80 **miss** (62); filter removes ≥70% **miss** (36%); keeps ≥90% **hit**; about 30% gibberish **miss** (8%); raters prefer Q1 **miss** (even, against P1t).
+
+**§13.42 Q3 result** (2026-11-06; [PLAN_DISCOURSE](reports/PLAN_DISCOURSE.md); `--k5-plan-discourse on`, off by default, byte-identical when off):
+- **What it does:** after P1's facts, the plan continues through linked entities, up to 2 hops, with a focus weight and a ban on repeating a fact. Gap 0 was chosen on the smoke runs, so no free K5 sentence between facts.
+- **Dev, text-only store, against P1t:**
+  - SCRIBE v2 0.606 [0.572, 0.642] (P1t 0.511), v3.1 0.573 (0.511);
+  - copy32 0.039;
+  - on-subject share 0.648 (0.316);
+  - facts per planned prompt 5.29 (2.32);
+  - repeated facts 4 of 407.
+- **Blind pairwise against P1t** (packets committed first, cce2ac0):
+  - **460 characters: 0.590 [0.540, 0.640]**, rater pairs 0.60 and 0.58; where the text differs (11 prompts), 0.91;
+  - **long, 1,500 characters: 0.580 [0.500, 0.680]**, rater pairs above 0.5; where it differs (7 prompts), 0.79.
+- **By the rule, Q3 reads better than P1t at 460 characters. It is adopted**, to be combined with the other winners before it becomes the default (§13.42: one test read, for the combination only). The long reading does not clear the rule: its interval touches 0.5.
+- **Predictions:** long reading above 0.6 **miss** (0.58, interval to 0.50); about even at 460 **miss**, in the good direction (0.59).
+- **What is weak:**
+  - only 77 of 250 prompts get a plan;
+  - the fill around each fact is still K5's and often false;
+  - the co-occurring path reads like a list of people.
+
+**§13.42 Q2 result and the combination** (2026-11-06; [PLAN_FILL](reports/PLAN_FILL.md), branch `wip/plan-fill`; flags off by default, byte-identical when off):
+- **Typed slots** (`--k5-plan-typed`, 12 slot types fitted by EM on `e9_text`) halve slot type errors on dev by the second rule (0.33 → 0.16), and cut them 28% by the first. Smoothing in four places (S1–S4) changes little: the chosen arm Q2 is typed + S1 (K5 order 3 at 0.05) + S3 (add-5). SCRIBE v2 0.511, the same as P1t.
+- **Blind pairwise against P1t** (packets committed first, `wip/plan-fill`):
+  - **Q2T 0.510 [0.460, 0.560]**, rater pairs 0.54 and 0.48;
+  - **Q2 0.500 [0.450, 0.550]**, rater pairs 0.50 and 0.50.
+  - Only 9 of the 50 rated prompts differ from P1t. **No difference. Q2 is not adopted.**
+- **Predictions:**
+  - slot type errors down at least 50%: **hit** on the second rule, **miss** on the first (−28%);
+  - one smoothing place helps: **miss**;
+  - raters prefer Q2: **miss** (even).
+- **The combination of the winners** (§13.42): Q1 and Q2 tie P1t, so **the only winner is Q3**, and the combination is Q3 alone. It has already been rated against P1t (0.590 [0.540, 0.640]).
+- **So, following §13.42:**
+  - Q3 becomes the default: `sample --k5` turns `--k5-plan-discourse on` on with the default store, and `--k5-plan-discourse off` gives P1t back;
+  - checked by `cmp`: the default must equal Q3t's dev GEN file, and `off` must equal P1t's;
+  - then GEN-A test is read once, for this arm.
+- **Combination predictions:**
+  - raters prefer it to P1 above 0.6: **miss** (0.590 against P1t);
+  - test SCRIBE v2 at least 0.561: scored after the read.
+
+**The combination's result** (2026-11-06):
+- **The default is now the discourse planner:** `sample --k5` = the planner on `e9_text` + `--k5-plan-discourse on`.
+- **Checks:**
+  - on all 250 dev prompts, the default's samples equal Q3t's dev GEN file, and `--k5-plan-discourse off` equals P1t's (`cmp`, MODEL line aside);
+  - the selftest passes.
+- **The one test read** (GEN-A test, 250 prompts): SCRIBE v2 **0.631 [0.595, 0.665]**, v3.1 0.592 [0.566, 0.619], copy32 0.041, no 13-word copies. For comparison: P1t 0.537, K5 0.524.
+- **Prediction** test SCRIBE v2 at least 0.561: **hit** (0.631).
+- **SCRIBE rewards topic words** (§13.34), so its rise is not the evidence. The evidence is the blind raters: Q3 against P1t 0.590 [0.540, 0.640], and P1t against K5 0.610.
