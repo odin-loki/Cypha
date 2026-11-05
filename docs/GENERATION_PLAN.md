@@ -2015,3 +2015,58 @@ Timings only from old and new started together on the same thread count. A job t
 - O3: exact; small: under 3% time. The hot paths are arithmetic, not logic. Reports how many Boolean functions it found and their minimised sizes.
 - O4: the ported job at least 5× faster.
 - O5: exact; the LSTM stage down at least 40%; the n-gram stage down at least 10%.
+
+### 13.42 Tuning, and fixing the planner's weak points (registered 2026-11-05, before any run; Odin's PC)
+
+**Odin:** "You know what I did for cypha core that helped a lot for it was tuning it … tuned all these experts/mixers on a meg of data and kept them like that". And for the planner: "fix its weaknesses. Extract more entities/facts for it to work with. Keep it focussed but let it drift a little and long context. Filter out rubbish facts, meaning the gibberish ones. Now we have too little smoothing. Just a little smoothing in the right place." And: "Do those other things too. Do all in sub agents."
+
+**Jobs (subagents in their own worktrees; new code goes in new files where it can, to avoid clashes):**
+
+| Job | Branch | What |
+|---|---|---|
+| T1 tune prediction | `wip/tune-predict` | tune every expert's and mixer's settings on 1 MB, then keep them |
+| Q1 facts | `wip/plan-facts` | more entities and facts, the relations-pattern fallback, a filter for gibberish facts |
+| Q2 fill | `wip/plan-fill` | typed slots (a place slot takes a place, a year slot a year) and a little smoothing in the right place |
+| Q3 discourse | `wip/plan-discourse` | stay on the subject but drift a little through related entities, longer context, write past the facts |
+| T2 tune writing | later | tune K5's and the planner's settings once Q1–Q3 land |
+
+**T1 rules:**
+- Settings: those that already have flags (learning rates, table bits, orders, LSTM size and rates, `--full-mix-params`, `--meta-mix-params`, SSE rates, and so on).
+- Search: coordinate search with a few random restarts, scored by bits per byte on a 1 MB tuning slice from enwik8's training part, disjoint from `context8k`'s holdout. Where the mixers allow it, the experts' outputs are dumped once and replayed (`--full-mix-dump`, full-mix-replay).
+- Then **one** full default run of the chosen set on the standard holdout.
+- Kept if `context8k_bpc` is below 1.4962, time rises at most 20%, and peak RAM at most 20% (Odin: "big and medium wins only").
+- Answers (`qa`) must not get worse. The defaults change only after M1, M2 and O5 land, so their exactness checks are not disturbed.
+
+**Q1 rules:**
+- Leakage guards as §13.38 (overlap pages skipped whole; `--plan-drop`).
+- **Coverage:** main-entity path on the 250 dev prompts (`fs_coverage`).
+- **Gibberish filter:**
+  - built from CyphaLM's own statistics: pattern support, type checks on the object (a year is a year, a place is a known place, a name is a capitalised noun phrase), the object's shape, agreement between patterns;
+  - judged on a random sample of 300 store facts that four blind Claude raters label "sensible" or "gibberish";
+  - the filter's thresholds are chosen on half of the sample and measured on the other half.
+
+**Q2 rules:**
+- Typed slots always on in its arms.
+- Smoothing is tried in four places, each one alone and at small amounts:
+  - S1, the fill's next-word distribution (blend a little of K5's class model, or a lower order);
+  - S2, the gate's softmax (a temperature above 1);
+  - S3, the skeleton choice (add-k on skeleton counts);
+  - S4, the fact choice in the plan.
+- Chosen on dev by automatic measures: names intact, relation cue kept, type errors in slots, SCRIBE v3.1. The best one goes to the raters.
+
+**Q3 rules:**
+- The plan continues through linked entities (co-occurring and related in the store) with a focus weight, so the paragraph keeps to the subject but can move a little.
+- The fill and gate see the whole paragraph so far.
+- Judged on the usual 460-character reading and on a **long reading**: 25 dev prompts, about 1,500 characters each, pairwise against P1 (`blind_rate.py` gains a `--cut` option).
+
+**Deciding judge:** pairwise blind raters against P1 (today's default), the §13.38 rule, for each of Q1, Q2 and Q3, then for the combination of the winners. One GEN-A test read, only for the adopted combination.
+
+**Predictions:**
+- T1: `context8k_bpc` down 0.01 to 0.03; time and RAM within the limits.
+- Q1:
+  - main-entity coverage from 50 to at least 80 of 250;
+  - the filter removes at least 70% of gibberish facts and keeps at least 90% of sensible ones;
+  - the share of store facts the raters call gibberish is about 30% today.
+- Q2: slot type errors down at least 50%. One smoothing place helps (most likely S1 or S2); the raters prefer Q2 to P1.
+- Q3: the raters prefer Q3 to P1 on the long reading (win share above 0.6); about even on the 460-character reading.
+- The combination: the raters prefer it to P1 (above 0.6), and test SCRIBE v2 at least 0.561.
