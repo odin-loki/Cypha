@@ -14,6 +14,8 @@ These files were written and committed before any label was read.
 
 **The labels.** Four blind Claude raters label each fact "sensible" or "gibberish" (`LABEL_PROMPT.md`). A fact's label is the majority of the four. A 2–2 tie is left out of the choice and of precision and recall, and counted.
 
+**The label files** (2026-11-06, run by the lead session): `labels_R1.tsv` … `labels_R4.tsv`, 300 lines each, "N<TAB>sensible|gibberish". **Label rule, stated before the labels were used:** gibberish if 3 or 4 of the 4 raters say gibberish; sensible if 3 or 4 say sensible; a 2–2 tie is reported on its own and left out of the choice and the measure (as above; `fs_filter`'s `label_of`).
+
 **The choice** (`fs_filter choose STORE KEY OUT LABELS... --stats ~/k5s_data/S10.stats`, choose half only). Each rule family of `fact_filter.hpp` is tried alone, at each of its thresholds. A family is turned on, at the threshold with the largest (gibberish flagged − sensible flagged), only if that number is above 0, so its flags are mostly gibberish. Families: shape, self, year, place (support 1, 2, 3, 5), person (1, 2), name, lex (support 1, 2, 3, 5, 10), taxon, agree, xrel, spread (2, 3, 5, 10 occupations), p (min P 0.6, 0.8, 0.9). `--stats` is the planner model's own statistics file: the place rule reads the relations expert's name types from it, as the planner does.
 
 **Rule revisions before any label** (2026-11-06, after listing what each rule flags over the whole store, `fs_filter stats … --list`; the packet and key are unchanged, re-drawn byte for byte):
