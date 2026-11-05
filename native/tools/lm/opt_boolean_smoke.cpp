@@ -2,10 +2,11 @@
 //   copy_pred      the SSE2 scan that skips j it cannot use, against the old loop over every j (n, prediction, source)
 //   copy_bucket    the table, against the chain of compares, for n in [-1000, 1000]
 //   trie::quantize, trie::used_count  counted compares, against the binary search (every count up to 2^26, and more)
-//   similar_top_k  the sorted buffer, against std::partial_sort
+//   similar_top_k  packed keys (radix sort, nth_element and sort, or partial_sort by k), against std::partial_sort
 //   upper_index    the branchless binary search, against std::upper_bound
 //   SimilarContext::bucket, ClassContext::bucket  sums of compare results, against the chains (NaN included)
 //   gate_class.hpp     the byte tables, against the library calls and string compares they replace, on all 256 bytes
+//   mix::byte_class, mix::path_bits  (online/mix_core.hpp) the table and the masked step, against the chain and the branch
 // Exit 0 when all agree.
 //
 // Author: Odin Loch
@@ -15,6 +16,7 @@
 #include "cypha/lm/gate_class.hpp"
 #include "cypha/lm/packed_trie.hpp"
 #include "cypha/lm/similar_context.hpp"
+#include "cypha/online/mix_core.hpp"
 
 #include <algorithm>
 #include <bit>
@@ -62,6 +64,19 @@ int sim_bucket_old(const cl::SimilarContext::Hit& h) {
 int cls_bucket_old(const cl::ClassContext::Hit& h) {
     const int cb = h.total <= 1 ? 0 : h.total <= 3 ? 1 : h.total <= 15 ? 2 : 3;
     return h.order * 4 + cb;
+}
+// mix_core.hpp's path_bits before O3, unchanged.
+void path_bits_old(const double* D, unsigned y, double out[8]) {
+    unsigned lo = 0, size = 256;
+    for (int j = 0; j < 8; ++j) {
+        const unsigned h = size / 2;
+        double s0 = 0, s1 = 0;
+        for (unsigned s = lo; s < lo + h; ++s) s0 += D[s];
+        for (unsigned s = lo + h; s < lo + size; ++s) s1 += D[s];
+        out[j] = s0 + s1 > 0 ? s1 / (s0 + s1) : 0.5;
+        if ((y >> (7 - j)) & 1) lo += h;
+        size = h;
+    }
 }
 
 int fails = 0;
@@ -205,8 +220,12 @@ int main() {
     // similar_context.hpp: similar_top_k against std::partial_sort, with many equal dots (and repeated pairs).
     {
         std::size_t nt = 0;
+        // k from 0 to n and past it, so every path is taken (partial_sort below 256; nth_element and sort from 256; the
+        // radix sort when k is at least a quarter of n), and the default expert's size (k 8192 of 12,000).
         for (int t = 0; t < 4000; ++t) {
-            const std::size_t n = rng() % 3000, k = std::min<std::size_t>(n, rng() % 70);
+            const std::size_t n = t % 400 == 7 ? 12000 : rng() % 3000;
+            const std::size_t kr = t % 400 == 7 ? 8192 : t % 3 == 0 ? rng() % 70 : t % 3 == 1 ? rng() % (n + 1) : n / 4 + rng() % (n + 9);
+            const std::size_t k = std::min<std::size_t>(n, kr);
             const int span = 1 + static_cast<int>(rng() % 200);
             std::vector<std::pair<int, std::uint32_t>> a(n);
             for (auto& x : a) {
@@ -218,7 +237,7 @@ int main() {
             auto b = a;
             std::partial_sort(b.begin(), b.begin() + static_cast<std::ptrdiff_t>(k), b.end(),
                               [](auto& x, auto& y) { return x.first > y.first || (x.first == y.first && x.second < y.second); });
-            cl::similar_top_k(a, k);
+            cl::similar_top_k(a, kr);  // a k past the list's size is cut to it, as search does before the call
             if (!std::equal(a.begin(), a.begin() + static_cast<std::ptrdiff_t>(k), b.begin())) fail("similar_top_k", t, static_cast<long long>(n), static_cast<long long>(k));
             ++nt;
         }
@@ -244,9 +263,10 @@ int main() {
         }
         std::fprintf(stderr, "opt_boolean_smoke: upper_index on %zu searches\n", nu);
     }
-    // The expressions of the patches for files other jobs own (docs/reports/opt_boolean_patches/), against the code
-    // they replace: InfiniGram's length and count buckets (cyphalm_trie.cpp), the meta mix's match log
-    // (meta_mixer.hpp), the n-gram's bit position and slot claim (online_ngram.hpp), path_bits' step (full_mixer.hpp).
+    // The expressions of the patches for files other jobs own (docs/reports/opt_boolean_patches/), and of one change made
+    // in place inside a class, against the code they replace: InfiniGram's length and count buckets (cyphalm_trie.cpp,
+    // patch), the meta mix's match log (meta_mixer.hpp, in place), the n-gram's bit position and slot claim
+    // (online_ngram.hpp, patch), path_bits' step (mix_core.hpp, in place; also checked whole below).
     for (int n = -100; n <= 20000; ++n) {
         const int o = n < 4 ? 0 : n < 8 ? 1 : n < 16 ? 2 : n < 32 ? 3 : n < 64 ? 4 : n < 128 ? 5 : 6;
         const int b = n < 4 ? 0 : std::min(6, static_cast<int>(std::bit_width(static_cast<unsigned>(n))) - 2);
@@ -276,15 +296,27 @@ int main() {
             b1 = static_cast<std::uint16_t>(b1 & keep), bn = static_cast<std::uint16_t>(bn & keep), bck = static_cast<std::uint8_t>(c);
             if (a1 != b1 || an != bn || ack != bck) fail("claim patch", ck, c, 0);
         }
-    for (unsigned y = 0; y < 256; ++y)
-        for (int j = 0; j < 8; ++j)
-            for (unsigned lo : {0u, 7u, 128u}) {
-                const unsigned h = 1u << (7 - j);
-                unsigned a = lo, b = lo;
-                if ((y >> (7 - j)) & 1) a += h;
-                b += h & (0u - ((y >> (7 - j)) & 1u));
-                if (a != b) fail("path_bits patch", y, j, lo);
+    // mix_core.hpp (changed in place): byte_class on every byte against the chain of library calls; path_bits on random
+    // distributions (some with empty halves, so the 0.5 case is taken) against the old loop, compared bit for bit.
+    for (int c = 0; c < 256; ++c) {
+        const auto u = static_cast<unsigned char>(c);
+        const int old = std::isspace(u) ? 0 : std::isalpha(u) ? 1 : std::isdigit(u) ? 2 : std::strchr("[]{}<>|&=", u) && u ? 3 : 4;
+        if (cypha::online::mix::byte_class(u) != old) fail("mix::byte_class", c, old, cypha::online::mix::byte_class(u));
+    }
+    {
+        std::uniform_real_distribution<double> ud(0.0, 1.0);
+        for (int t = 0; t < 2000; ++t) {
+            double D[256];
+            for (double& d : D) d = (t % 3 == 0 && rng() % 4 == 0) ? 0.0 : ud(rng);
+            if (t % 7 == 0) std::fill(D + 128, D + 256, 0.0);
+            for (unsigned y = 0; y < 256; ++y) {
+                double a[8], b[8];
+                path_bits_old(D, y, a);
+                cypha::online::mix::path_bits(D, y, b);
+                if (std::memcmp(a, b, sizeof a) != 0) fail("mix::path_bits", t, y, 0);
             }
+        }
+    }
     std::fprintf(stderr, "opt_boolean_smoke: copy_pred on %zu positions; %s\n", positions, fails ? "FAIL" : "pass");
     return fails ? 1 : 0;
 }

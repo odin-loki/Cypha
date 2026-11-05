@@ -1,16 +1,16 @@
 diff --git a/native/include/cypha/lm/word_kn.hpp b/native/include/cypha/lm/word_kn.hpp
-index 169be74..eea4be4 100644
+index 09885f8..cfeea2c 100644
 --- a/native/include/cypha/lm/word_kn.hpp
 +++ b/native/include/cypha/lm/word_kn.hpp
-@@ -65,6 +65,7 @@
- #include <vector>
+@@ -67,6 +67,7 @@
  
+ #include "cypha/lm/count_index.hpp"  // GENERATION_PLAN §13.40 M1: K5's counts and copy cap
  #include "cypha/lm/entity_grid.hpp"  // K5_DISCOURSE.md
 +#include "cypha/lm/gate_class.hpp"   // O3 (OPT_BOOLEAN.md): the gates' stop and markup tests as 256-bit sets
  #include "cypha/lm/lda.hpp"          // K5_DISCOURSE.md
  #include "cypha/lm/mbr.hpp"          // K5_DISCOURSE.md
  
-@@ -1315,10 +1316,10 @@ class K5 {
+@@ -1430,10 +1431,10 @@ class K5 {
                          const std::size_t nb = c.out.size() - b0;
                          const std::string& t = vocab_[w];
                          if (nb >= o.gate_max) break;
@@ -23,7 +23,7 @@ index 169be74..eea4be4 100644
                      const double nb = static_cast<double>(std::max<std::size_t>(c.out.size() - b0, 1)), n = static_cast<double>(std::max<std::size_t>(nw, 1));
                      const double score = o.gate_wf * slp / n + o.gate_wp * spmi / n - o.gate_wm * static_cast<double>(mk) / nb;
                      ++g.gate_cands;
-@@ -1370,7 +1371,7 @@ class K5 {
+@@ -1485,7 +1486,7 @@ class K5 {
              const std::size_t nb = c.out.size() - b0;
              const std::string& t = vocab_[w];
              if (nb >= o.gate_max) break;
@@ -32,7 +32,7 @@ index 169be74..eea4be4 100644
          }
          ++g.gate_cands;
      }
-@@ -1466,10 +1467,10 @@ class K5 {
+@@ -1581,10 +1582,10 @@ class K5 {
                      if (use_eg) toks.push_back(t);
                      const std::size_t nb = c.out.size() - b0;
                      if (nb >= o.gate_max) break;

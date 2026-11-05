@@ -13,7 +13,7 @@ Author: Odin Loch
 CTRL_SPACE = {9, 10, 11, 12, 13, 32}  # C locale isspace
 
 
-def byte_class(b):  # full_mixer.hpp fx::byte_class, content_mixer.hpp OnlineFinal::byte_class (C locale)
+def byte_class(b):  # online/mix_core.hpp mix::byte_class (the mixers' gates; C locale)
     if b in CTRL_SPACE:
         return 0
     if 65 <= b <= 90 or 97 <= b <= 122:
@@ -121,36 +121,36 @@ def eq8(m):  # a == b over two bytes (copy_pred's scan, OnlineNgram::claim's slo
 
 ENTRIES = [
     # name, where, owner, runs, n, nout, f, valid, current form, implementation
-    ("byte_class", "online/full_mixer.hpp:121 fx::byte_class; online/content_mixer.hpp:332", "M2 (owned)",
+    ("byte_class", "online/mix_core.hpp:46 mix::byte_class (full mix, meta mix, content mixer)", "free (M2 landed)",
      "4 per byte", 8, 3, byte_class, None,
-     "isspace, isalpha, isdigit, strchr: up to 4 library calls and 4 tests", "256-byte table (patch)"),
-    ("copy_bucket", "lm/copy_expert.hpp:35", "free", "3-5 per byte", 7, 3, copy_bucket,
+     "isspace, isalpha, isdigit, strchr: up to 4 library calls and 4 tests", "256-byte table (done)"),
+    ("copy_bucket", "lm/copy_expert.hpp:79", "free", "3-5 per byte", 7, 3, copy_bucket,
      lambda n: n == 0 or 3 <= n <= 64,
      "a chain of 7 compares", "66-entry table with a clamp (done)"),
-    ("len_bucket", "tools/lm/cyphalm_trie.cpp:877 (InfiniGram bucket)", "context8k driver (owned)",
+    ("len_bucket", "tools/lm/cyphalm_trie.cpp:878 (InfiniGram bucket)", "O2 (owned)",
      "10 per byte", 14, 3, len_bucket, lambda n: n <= 8192,
      "a chain of 6 compares", "n < 4 ? 0 : min(6, bit_width(n) - 2) (patch)"),
-    ("count_bucket", "tools/lm/cyphalm_trie.cpp:878", "context8k driver (owned)", "10 per byte", 5, 2, count_bucket5, None,
+    ("count_bucket", "tools/lm/cyphalm_trie.cpp:879", "O2 (owned)", "10 per byte", 5, 2, count_bucket5, None,
      "a chain of 3 compares on a 64-bit count", "(t > 1) + (t > 3) + (t > 15) (patch)"),
-    ("sim_bucket", "lm/similar_context.hpp:618", "free", "2 per byte", 11, 7, sim_bucket, sim_valid,
+    ("sim_bucket", "lm/similar_context.hpp:702", "free", "2 per byte", 11, 7, sim_bucket, sim_valid,
      "three chains of 4, 3 and 2 compares, then arithmetic", "sums of compare results (done)"),
-    ("cls_bucket", "lm/class_context.hpp:135", "free", "3 per byte", 7, 4, cls_bucket, None,
+    ("cls_bucket", "lm/class_context.hpp:137", "free", "3 per byte", 7, 4, cls_bucket, None,
      "a chain of 3 compares, then order * 4 + it", "order * 4 + (t > 1) + (t > 3) + (t > 15) (done)"),
-    ("copy_state", "online/full_mixer.hpp:600 (cst)", "M2 (owned)", "8 per byte", 3, 2, cst, None,
+    ("copy_state", "online/full_mixer.hpp:394 (cst)", "free", "8 per byte", 3, 2, cst, None,
      "two nested ifs", "unchanged: already minimal, and the branch skips a log"),
     ("bit_position", "online/online_ngram.hpp:162", "O5 (owned)", "255 per byte", 8, 3, bitpos, lambda c: c >= 1,
      "a loop of up to 8 shifts and tests", "bit_width(c0) - 1 (patch)"),
-    ("match_log2", "online/meta_mixer.hpp:265 (mlen_)", "M2 (owned)", "1 per byte", 14, 4, mlen, lambda n: n <= 8192,
-     "a loop of up to 15 shifts and tests", "min(15, bit_width(ig_n + 1) - 1) (patch)"),
-    ("byte_equal", "lm/copy_expert.hpp:25 (copy_pred's window scan); online/online_ngram.hpp:230 (claim)", "free / O5",
+    ("match_log2", "online/meta_mixer.hpp:182 (mlen_)", "free (M2 landed)", "1 per byte", 14, 4, mlen, lambda n: n <= 8192,
+     "a loop of up to 15 shifts and tests", "min(15, bit_width(ig_n + 1) - 1) (done)"),
+    ("byte_equal", "lm/copy_expert.hpp:32 (copy_pred's window scan); online/online_ngram.hpp:229 (claim)", "free / O5",
      "16,384 per byte x 3 calls (copy); 6 per bit (claim)", 16, 1, eq8, None,
      "one compare and branch per window position",
      "copy: SSE2 compares into a 64-bit mask, walked from the top bit, positions that cannot win skipped (done); claim: masks (patch)"),
-    ("sentence_end", "lm/word_kn.hpp:1318, 1373, 1469 (K5's gate)", "M1 (owned)", "1 per word", 9, 1, sent_end, None,
+    ("sentence_end", "lm/word_kn.hpp:1433, 1488, 1584 (K5's gate)", "O6 (owned)", "1 per word", 9, 1, sent_end, None,
      "4 string compares", "size 1 and a 256-bit set (patch)"),
-    ("markup", "lm/word_kn.hpp:1321, 1472; lm/planner/writer.hpp:655", "M1 / free", "1 per written byte per draft", 8, 1,
-     markup, None, "string_view::find over 11 bytes", "256-bit set (done in writer.hpp; patch in word_kn.hpp)"),
-    ("fact_preference", "lm/planner/writer.hpp:514 (make_plan)", "free", "per fact of the main entity, once per prompt",
+    ("markup", "lm/word_kn.hpp:1436, 1587; lm/planner/writer.hpp:656", "O6 / Q2 (owned)", "1 per written byte per draft", 8, 1,
+     markup, None, "string_view::find over 11 bytes", "256-bit set (patches)"),
+    ("fact_preference", "lm/planner/writer.hpp:514 (make_plan)", "Q2 (owned)", "per fact of the main entity, once per prompt",
      5, 1, fact_pref, fact_valid, "(F1 && !B1) || (EQ && FT && !BT)", "unchanged: already minimal"),
 ]
 
@@ -161,15 +161,15 @@ def cand_order(m):
     return int(G or (E and L))
 
 
-ENTRIES.append(("candidate_order", "lm/similar_context.hpp:901 (search's partial_sort)", "free",
-                "about 2,300 candidates x log 32 per byte", 3, 1, cand_order, lambda m: not (bits(m, 0) and bits(m, 1)),
+ENTRIES.append(("candidate_order", "lm/similar_context.hpp:982 (search's partial_sort)", "free",
+                "per query: about 10,000 candidates, k 8192 (the default)", 3, 1, cand_order, lambda m: not (bits(m, 0) and bits(m, 1)),
                 "x.first > y.first || (x.first == y.first && x.second < y.second), inside a heap",
-                "one 64-bit compare of packed keys, in a sorted buffer (done)"))
+                "one 64-bit key per pair; radix sort when k >= n/4, else nth_element or partial_sort on keys (done)"))
 
 # Functions of a 32-bit count, given as ranges per output bit: [lo, hi) where the bit is 1. Minimised by Espresso
 # from cubes (aligned blocks of the ranges) and checked at the ranges' edges and at random counts.
 WIDE = [
-    ("used_count_choice", "lm/packed_trie.hpp:114 (used_count, Mode::Synth)", "free", "per follower of 3 nodes per training byte",
+    ("used_count_choice", "lm/packed_trie.hpp:156 (used_count, Mode::Synth)", "free", "per follower of 3 nodes per training byte",
      32, [[(65, 1 << 32)], [(2, 65)]],
      "if (c == 0) 0; if (c < 2) 0; if (c <= 64) c; else the ladder (outputs: bit 1 ladder, bit 0 c itself)",
      "both values made, one kept by a mask; the ladder by counted compares (done)"),
@@ -237,7 +237,7 @@ def run(bm, md=False):
               "Minimal SOP per output bit | Minimal SOP total | Method | Current code | O3 form |")
         print("|---|---|---|---|---:|---:|---:|---:|---|---:|---|---|---|")
         for r in rows:
-            print("| " + " | ".join(str(x) for x in r) + " |")
+            print("| " + " | ".join(str(x).replace("|", "\\|") for x in r) + " |")  # a | inside a cell is escaped
     else:
         for r in rows:
             print("\t".join(str(x) for x in r))

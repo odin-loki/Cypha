@@ -23,6 +23,7 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cctype>
 #include <cmath>
 #include <cstdint>
@@ -176,9 +177,9 @@ class MetaMixer : public fx::StepHook {
         bc1_ = mix::byte_class(static_cast<unsigned char>(in.prev));
         bc2_ = mix::byte_class(static_cast<unsigned char>(in.prev2));
         cb_ = cyphalm::copy_bucket(in.cn);
-        int lg = 0;
-        for (int n = in.ig_n + 1; n > 1 && lg < 15; n >>= 1) ++lg;
-        mlen_ = lg;
+        // O3: floor(log2(ig_n + 1)) capped at 15 (the old loop of shifts), from the bit width; 0 when ig_n + 1 <= 1
+        const int n1 = in.ig_n + 1;
+        mlen_ = n1 > 1 ? std::min(15, static_cast<int>(std::bit_width(static_cast<unsigned>(n1))) - 1) : 0;
         // M2G: the geometric mixer at each rate (the 1x member is the full mix's own B), mixed per byte
         const int nr = static_cast<int>(scales_.size());
         double PM[256] = {};

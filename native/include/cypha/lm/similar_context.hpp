@@ -54,6 +54,7 @@
 #include <cstdint>
 #include <cstring>
 #include <fstream>
+#include <functional>
 #include <random>
 #include <string>
 #include <unordered_map>
@@ -65,31 +66,67 @@ namespace cypha::cyphalm {
 // O3 (GENERATION_PLAN §13.41; docs/reports/OPT_BOOLEAN.md): cand[0, k) as std::partial_sort by (dot down, then slot up)
 // leaves it: the k first in that order, sorted. The order is total (pairs equal in both parts are equal), so the k first
 // are one list whatever the method. Each pair becomes one 64-bit key, larger first, so the two-part compare
-// (a > b || (a == b && c < d), already a minimal sum of products) is one compare. The k largest keys are kept in a sorted
-// buffer: a key not above the buffer's least is passed over, which after the first few is nearly always, so that branch
-// is predictable; a key that gets in finds its place by counting the larger keys, without branches. std::partial_sort's
-// heap branched on every sift and missed about one branch in four in context8k.
+// (a > b || (a == b && c < d), already a minimal sum of products) is one compare of integers. Then, by the share of the
+// list that is kept:
+// - k at least a quarter of the list (the default expert: k 8192 of about 10,000 candidates): an LSD radix sort of all
+//   keys, 11 bits a pass, passes over bits that are the same in every key skipped. No branch on the data; about 5x
+//   faster than std::partial_sort's heap at that size.
+// - k from 256: std::nth_element, then std::sort of the k first, on the keys.
+// - smaller k: std::partial_sort on the keys.
+// The first O3 form (a sorted buffer, inserting by counting) was branch-free too, but its work grows as k times the list:
+// at k 8192 it doubled context8k's instructions and made it 29% slower, with 55% fewer branch misses.
+// cand[k, end) is left as it was, not permuted; the caller reads only cand[0, k).
 inline void similar_top_k(std::vector<std::pair<int, std::uint32_t>>& cand, std::size_t k) {
+    const std::size_t n = cand.size();
+    k = std::min(k, n);
     if (k == 0) return;
     const auto key = [](const std::pair<int, std::uint32_t>& x) {
         return (static_cast<std::uint64_t>(static_cast<std::uint32_t>(x.first) ^ 0x80000000u) << 32) |
                static_cast<std::uint64_t>(0xffffffffu - x.second);
     };
-    thread_local std::vector<std::uint64_t> buf;
-    buf.assign(k, 0);
-    std::size_t m = 0;
-    for (const auto& x : cand) {
-        const std::uint64_t v = key(x);
-        if (m == k && v <= buf[k - 1]) continue;
-        std::size_t pos = 0;
-        for (std::size_t j = 0; j < m; ++j) pos += buf[j] > v ? 1 : 0;
-        for (std::size_t j = m < k ? m : k - 1; j > pos; --j) buf[j] = buf[j - 1];
-        buf[pos] = v;
-        m += m < k ? 1 : 0;
+    const auto unkey = [](std::uint64_t v) {
+        return std::pair<int, std::uint32_t>{static_cast<int>(static_cast<std::uint32_t>(v >> 32) ^ 0x80000000u),
+                                             0xffffffffu - static_cast<std::uint32_t>(v & 0xffffffffu)};
+    };
+    thread_local std::vector<std::uint64_t> a, b;
+    a.resize(n);
+    if (4 * k >= n && n >= 256) {
+        // ascending on ~key is descending on key
+        b.resize(n);
+        std::uint64_t any = 0, every = ~std::uint64_t{0};
+        for (std::size_t i = 0; i < n; ++i) {
+            const std::uint64_t v = ~key(cand[i]);
+            a[i] = v;
+            any |= v;
+            every &= v;
+        }
+        const std::uint64_t vary = any ^ every;
+        std::uint32_t cnt[2048];
+        for (int sh = 0; sh < 64; sh += 11) {
+            if (((vary >> sh) & 2047u) == 0) continue;
+            std::memset(cnt, 0, sizeof cnt);
+            for (std::size_t i = 0; i < n; ++i) ++cnt[(a[i] >> sh) & 2047u];
+            std::uint32_t at = 0;
+            for (std::uint32_t& c : cnt) {
+                const std::uint32_t t = c;
+                c = at;
+                at += t;
+            }
+            for (std::size_t i = 0; i < n; ++i) b[cnt[(a[i] >> sh) & 2047u]++] = a[i];
+            a.swap(b);
+        }
+        for (std::size_t j = 0; j < k; ++j) cand[j] = unkey(~a[j]);
+        return;
     }
-    for (std::size_t j = 0; j < k; ++j)
-        cand[j] = {static_cast<int>(static_cast<std::uint32_t>(buf[j] >> 32) ^ 0x80000000u),
-                   0xffffffffu - static_cast<std::uint32_t>(buf[j] & 0xffffffffu)};
+    for (std::size_t i = 0; i < n; ++i) a[i] = key(cand[i]);
+    const auto kk = static_cast<std::ptrdiff_t>(k);
+    if (k >= 256) {
+        if (k < n) std::nth_element(a.begin(), a.begin() + kk, a.end(), std::greater<>());
+        std::sort(a.begin(), a.begin() + kk, std::greater<>());
+    } else {
+        std::partial_sort(a.begin(), a.begin() + kk, a.end(), std::greater<>());
+    }
+    for (std::size_t j = 0; j < k; ++j) cand[j] = unkey(a[j]);
 }
 
 // O3: std::upper_bound(a.begin(), a.end(), x) - a.begin() for a sorted a, by a binary search with no branch on the

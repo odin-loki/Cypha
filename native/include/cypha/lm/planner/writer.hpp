@@ -21,7 +21,6 @@
 ///
 /// Author: Odin Loch
 
-#include "cypha/lm/gate_class.hpp"
 #include "cypha/lm/planner/facts.hpp"
 #include "cypha/lm/planner/skeleton.hpp"
 #include "cypha/lm/structure/experts.hpp"
@@ -654,7 +653,7 @@ class Writer final : public wkn::StructureWriter {
                 m.draft(s, seed, sent, k, o, cs[static_cast<std::size_t>(k)], words, lp, gk);
                 const auto& out = cs[static_cast<std::size_t>(k)].out;
                 std::size_t mk = 0;
-                for (std::size_t i = s.out.size(); i < out.size(); ++i) mk += is_gate_markup(out[i]);  // O3: a 256-bit set
+                for (std::size_t i = s.out.size(); i < out.size(); ++i) mk += std::string_view("[]{}|=<>&*#").find(out[i]) != std::string_view::npos;
                 const double nb = static_cast<double>(std::max<std::size_t>(out.size() - s.out.size(), 1));
                 const double sc = o.gate_wp * st::mean_assoc(assoc, words) - o.gate_wm * static_cast<double>(mk) / nb;
                 if (k == 0 || sc > bsc) bsc = sc, best = k;

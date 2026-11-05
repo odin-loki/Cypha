@@ -1,8 +1,8 @@
 diff --git a/native/tools/lm/cyphalm_trie.cpp b/native/tools/lm/cyphalm_trie.cpp
-index 808bd80..1985e14 100644
+index 15088e8..b247719 100644
 --- a/native/tools/lm/cyphalm_trie.cpp
 +++ b/native/tools/lm/cyphalm_trie.cpp
-@@ -295,6 +295,7 @@
+@@ -296,6 +296,7 @@
  #include "cypha/online/meta_mixer.hpp"  // META_MIXING.md: context8k --meta-mix
  #include "cypha/online/online_ngram.hpp"
  
@@ -10,7 +10,7 @@ index 808bd80..1985e14 100644
  #include <cctype>
  #include <chrono>
  #include <ctime>
-@@ -874,8 +875,10 @@ int cmd_probe(const Args& a) {
+@@ -875,8 +876,10 @@ int cmd_probe(const Args& a) {
  
  // ---------------------------------------------------------------- context8k
  
