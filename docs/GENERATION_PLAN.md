@@ -1971,3 +1971,11 @@ Nobody touches `native/tools/trie_stream_train.cpp` or `scripts/run_train.sh`.
 - M2: exact; code down at least 25% across the four mixers; time within ±3%.
 - M3: F1 planner fill time down at least 30%, SCRIBE within ±0.02 of P1, raters about even with P1; F2 at about P1's time, raters prefer F2 to P1 (wider beam, better fills).
 - M4: exact; gate time down at least 20%.
+
+**§13.40 M3 result** (2026-11-05; [MERGE_FILL](reports/MERGE_FILL.md); `--k5-plan-fill dba`, `--k5-plan-beam N`, off by default, byte-identical when off):
+- Today's fill was never grid beam search (the fact's slots are fixed), so dynamic beam allocation has nothing to save at the same beam. F1 (beam 4): fill time +2.6%; F2 (beam 8): +89% fill time, +2% sampling time.
+- Dev SCRIBE v2: P1 0.532, F1 0.535, F2 0.523; v3.1 0.537 / 0.546 / 0.541.
+- **Blind pairwise raters against P1** (packets committed first, b09da2d): **F1 0.420 [0.350, 0.490]**, rater pairs 0.48 and 0.36: it reads worse. At beam 4 it runs long names together. **F2 0.530 [0.470, 0.590]**, rater pairs 0.54 and 0.52: no difference. Where the text differs from P1's: F1 0.23 [0.07, 0.47] (15 prompts), F2 0.61 [0.39, 0.82] (14).
+- **Not adopted. No test read.**
+- Predictions: F1 fill time −30% **miss** (+2.6%); F1 SCRIBE within ±0.02 **hit**; F1 raters about even **miss** (worse); F2 at P1's time **miss** (+89% fill, +2% overall); raters prefer F2 **miss** (even).
+- The saving left on the table is elsewhere: a forced name token needs only its own probability, and a fact's 8 skeletons share their first distribution. Neither is built.
