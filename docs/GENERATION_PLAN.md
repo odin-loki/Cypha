@@ -2101,3 +2101,60 @@ Timings only from old and new started together on the same thread count. A job t
 **T1 adds now (flags only, no code):** a sensitivity curve for each tuned setting on the 1 MB slice, bits per byte at θ* × {0.5, 0.7, 0.85, 1.15, 1.4, 2}. This gives σ and *b*.
 
 **For writing (T2, later):** the same idea for K5's and the planner's continuous settings (nucleus, gate temperature, smoothing amounts), judged by the blind raters.
+
+**§13.40 M1 result** (2026-11-05; [MERGE_COUNTS](reports/MERGE_COUNTS.md)): **exact, kept, on by default.**
+- One suffix array (`lm/count_index.hpp`, on the vendored libsais) now gives K5 its counts, the 12-word copy cap, the 13-token run check and prompt word positions. SCRIBE's MATCH uses the same index. Byte KN and word KN share one Kneser–Ney core.
+- **Same output under `cmp`:** K5 alone and the planner on 250 dev prompts (GEN, stdout, both SCRIBE reports); a harness of 20,000 contexts and 160k word probabilities; small `context8k`; the byte sampler. Also re-checked after merging with M3.
+- **K5's peak RAM 297 → 146 MB (−51%)**, the planner's 769 → 631 MB (−18%); time unchanged; code +377 lines.
+- Byte KN counted from the suffix array is exact and 5–12× faster to build, but needs 2–5× the RAM while building, so it stays behind `CYPHA_BKN_COUNTS=index`.
+- Predictions: exact **hit**; RAM −30% **hit** (−51%); time within +50% **hit**.
+
+**§13.40 M2 result** (2026-11-05; [MERGE_MIXERS](reports/MERGE_MIXERS.md)): **exact, kept.**
+- `online/mix_core.hpp` holds the shared maths: exponentiated gradient, fixed share, geometric and logistic mixing, APM. The content mixer, full mix, meta mixer and structure ranker all call it.
+- **Same output under `cmp`:** small `context8k` (default, `--no-meta-mix`, `--no-full-mix`); the planner's and `--k5-struct`'s dev GEN files; the mixer replays.
+- Code: the four mixer files −18.6%, −2.8% counting `mix_core`. Time +0.6% to +1.8% (one run each on a loaded PC); RAM unchanged.
+- Predictions: exact **hit**; code −25% **miss**; time within ±3% **hit**.
+
+### 13.44 Stopped on Odin's word (2026-11-05, about 21:30)
+
+**Odin:** "Stop what your doing and git commit and push." Then: "Dont use the GPU."
+
+**What is on main, verified:**
+- the planner on by default (§13.39);
+- M1 and M2 (§13.40), both exact;
+- M3 (not adopted).
+
+**Stopped mid-way.** Each job's work is committed and pushed on its own branch, unverified. None is on main.
+
+| Job | Branch | State when stopped |
+|---|---|---|
+| M4 grouped gate experts | `wip/merge-gate` | report started; exactness not finished |
+| O1 fast build, PGO | `wip/opt-build` | CMake option and PGO script; checks not finished |
+| O2 expert pipeline | `wip/opt-pipeline` | code; small checks in progress |
+| O3 Boolean minimisation | `wip/opt-boolean` | own minimiser, truth tables, branch-free gates, patches for other jobs' files; not verified |
+| O4 GPU port | `wip/opt-gpu` | report started; **no more GPU work** (Odin) |
+| O5 LSTM AVX-512, n-gram prefetch | `wip/opt-simd` | code; full-run checks not finished |
+| O6 lazy exact nucleus | `wip/opt-nucleus` | just started; nothing committed |
+| T1 prediction tuning | `wip/tune-predict` | search driver; small-slice screening in progress |
+| Q1 facts and gibberish filter | `wip/plan-facts` | entity aliases, fallback, fact filter, `e9_v2` store, labelling packet (raters not run) |
+| Q2 typed slots and smoothing | `wip/plan-fill` | `slots.hpp`, smoothing flags; byte-identity runs not finished |
+| Q3 discourse | `wip/plan-discourse` | `discourse.hpp`, measures; dev runs not finished |
+
+- Not started: O7, O8 (§13.41 wave 3), T1b (§13.43), T2 (§13.42).
+- The blind-rating keys stay out of git as plain JSON; only `key.b64` is committed.
+- **To resume a job:** check out its branch, read its report stub, and finish its registered checks. Nothing from these branches goes to main until its checks pass.
+
+### 13.45 Resuming all jobs (2026-11-06; Odin: "Do all. You pick." and "Dont use the GPU.")
+
+**Order:**
+- **Wave A, now:** Q1, Q2, Q3 (the planner's text quality first); T1 (tuning); O5 (needed by T1b).
+- **Wave B, as slots free:** O1, O2, M4, O3, O6.
+- **Wave C:** O7, O8, T1b, T2; then the combination of the planner winners, the blind raters, and one test read.
+- **O4 (GPU) is closed:** no GPU work, on Odin's word. Its branch `wip/opt-gpu` keeps the report and code.
+
+**Machine limits, after yesterday's WSL crash:**
+- at most 4 threads per run;
+- no run starts while `free -g` shows under 10 GB available;
+- every full `context8k` takes one shared lock (`flock ~/.cypha_full.lock`), so only one runs on the PC at a time. T1's final pair of tuned and default runs shares one turn of the lock, so the two are started together.
+
+Every branch first merges `origin/main` (M1 and M2 are exact, so P1 and every baseline are unchanged), then finishes its registered checks. The rules and predictions of §13.40–13.43 stand.
