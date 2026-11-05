@@ -421,8 +421,9 @@ struct Args {
     // --full-mix-params k=v,...
     bool full_mix = true;
     std::string full_mix_dump, full_mix_params;
-    // META_MIXING.md: --meta-mix (meta mixers beside the full mix's arms; off by default), --meta-mix-params k=v,...
-    bool meta_mix = false;
+    // META_MIXING.md: the meta mixers beside the full mix's arms (on by default since R1 held its rule; --no-meta-mix turns
+    // them off), --meta-mix-params k=v,...; meta_mix_asked: --meta-mix or --meta-mix-params was given
+    bool meta_mix = true, meta_mix_asked = false;
     std::string meta_mix_params;
     std::vector<std::pair<std::string, std::string>> k5_opts;  // docs/reports/K5_UPGRADES.md: every other --k5-... flag
 };
@@ -520,8 +521,9 @@ Args parse(int argc, char** argv, int from) {
         else if (s == "--no-full-mix") a.full_mix = false;              // FULL_DISTRIBUTION_MIXING.md: the lines before it
         else if (s == "--full-mix-dump") a.full_mix_dump = next(), a.full_mix = true;
         else if (s == "--full-mix-params") a.full_mix_params = next(), a.full_mix = true;
-        else if (s == "--meta-mix") a.meta_mix = true;                  // META_MIXING.md (off by default)
-        else if (s == "--meta-mix-params") a.meta_mix_params = next(), a.meta_mix = true;
+        else if (s == "--meta-mix") a.meta_mix = a.meta_mix_asked = true;  // META_MIXING.md (the default)
+        else if (s == "--no-meta-mix") a.meta_mix = false;                // META_MIXING.md: the full mix's lines only
+        else if (s == "--meta-mix-params") a.meta_mix_params = next(), a.meta_mix = a.meta_mix_asked = true;
         else if (s == "--ngram") a.ngram = true;                        // ONLINE_LEARNING_UPGRADES
         else if (s == "--no-ngram") a.ngram = false;                    // ONLINE_LEARNING_UPGRADES: B0's lines
         else if (s == "--ngram-orders") a.ngram_orders = next(), a.ngram = true;
@@ -1215,7 +1217,8 @@ struct FullMixRun {
             std::fprintf(stderr, "meta_mix state_bytes %zu\n", mm->bytes());
         }
     }
-    double headline_bpc() const { return fm->bpc(1, head); }
+    double headline_bpc() const { return mm ? mm->bpc(1, mhead) : fm->bpc(1, head); }
+    std::string headline_src() const { return mm ? "meta_mix " + MP.headline : "full_mix " + P.headline; }
 };
 
 int cmd_context8k(const Args& a) {
@@ -1228,7 +1231,7 @@ int cmd_context8k(const Args& a) {
                      "no --doc-boost (--no-full-mix silences this)\n";
         full_mix = false;
     }
-    if (a.meta_mix && !full_mix) std::cerr << "meta mix off: it runs beside the full mix (META_MIXING.md)\n";
+    if (a.meta_mix_asked && a.meta_mix && !full_mix) std::cerr << "meta mix off: it runs beside the full mix (META_MIXING.md)\n";
     Config cfg = a.cfg;
     std::vector<std::uint8_t> data;
     double w[6];
@@ -1442,7 +1445,7 @@ int cmd_context8k(const Args& a) {
     if (keep) snaps.emplace_back(base.begin(), base.end());
     std::string chain = "trie_plus_context_8192";
     // FULL_DISTRIBUTION_MIXING.md: context8k_bpc, the last line, is the best line this run printed: the full mix's
-    // headline arm, else online_final_bpc, else the last chain line.
+    // headline arm (the meta mix's M1Gs when it runs, META_MIXING.md), else online_final_bpc, else the last chain line.
     double ctx_bpc = 0;
     std::string ctx_src;
     auto chain_line = [&](const char* part) {
@@ -1800,7 +1803,7 @@ int cmd_context8k(const Args& a) {
     }
     if (fmr) {
         fmr->finish(base);
-        ctx_bpc = fmr->headline_bpc(), ctx_src = "full_mix " + fmr->P.headline;
+        ctx_bpc = fmr->headline_bpc(), ctx_src = fmr->headline_src();  // META_MIXING.md: the meta mix's M1Gs when on
     }
 
     const int edges[] = {4, 8, 16, 32, 64, 256, 1024, 8193};

@@ -141,3 +141,76 @@ If it fails, the meta mix stays behind `--meta-mix`, off by default. Every arm i
 - P4: M2ABs is between −0.001 and −0.004.
 - P5: M3L and M3Ls do not beat M1Gs.
 - P6: the cost: wall within +15% of MA's (the meta mixers run on the main thread, which waits for the LSTM); peak RSS about +400 to +600 MB.
+
+## R1: the registered read
+
+MA (main e9b9823, `context8k`) and R1 (`context8k --meta-mix`, commit f846a4d) ran side by side, at a load of about 20–30 from other sessions.
+
+| Arm | First half | Second half | Against ABs 1.5051 | Against the full-mix arm it extends |
+|---|---:|---:|---:|---|
+| ABs (the full mix, today's headline) | 1.5272 | 1.5051 | | |
+| M1 | 1.5274 | 1.5059 | +0.0008 | A 1.5247: −0.0188 |
+| M1s | 1.5245 | 1.5032 | −0.0019 | As 1.5189: −0.0157 |
+| M1Bs | 1.5179 | 1.4963 | −0.0088 | ABs: −0.0088 |
+| M2A | 1.5414 | 1.5207 | +0.0156 | A 1.5247: −0.0040 |
+| M2As | 1.5360 | 1.5150 | +0.0099 | As 1.5189: −0.0039 |
+| M2G (before SSE) | 1.5530 | 1.5297 | +0.0246 | B 1.5312: −0.0015 |
+| M2Gs | 1.5385 | 1.5154 | +0.0103 | Bs 1.5169: −0.0015 |
+| M2ABs | 1.5252 | 1.5041 | −0.0010 | ABs: −0.0010 |
+| M3 (fixed share) | 1.5185 | 1.4971 | −0.0080 | |
+| M3L (logistic master) | 1.5231 | 1.4976 | −0.0075 | |
+| M3Ls | 1.5276 | 1.5037 | −0.0014 | |
+| M3s | 1.5239 | 1.5036 | −0.0015 | |
+| **M1Gs (headline)** | **1.5173** | **1.4962** | **−0.0089** | ABs: −0.0089 |
+
+MA's full-mix arms (second half): F 1.5793, Fs 1.5545, A 1.5247, As 1.5189, Rs 1.5484, B 1.5312, Bs 1.5169, ABs 1.5051.
+
+The masters' last weights:
+- M3: 0.51 on M1s and 0.48 on M1Bs;
+- M1 over rates: 0.66 on ×2;
+- M2A: spread, most on ×1/4 and ×1/2;
+- M2G: 0.44 on ×1.
+
+| Run | Wall | Peak RSS |
+|---|---:|---:|
+| MA, main | 2914 s | 1150 MB |
+| R1, `--meta-mix` | 3085 s (+5.9%) | 1555 MB (+405 MB) |
+
+The meta mixers' state is 461 MB. Most of it is M1's five rate copies (each with three 65,536-set tables) and six more SSE stages. The full mix's main thread now does more work (bit loop 279 s against 98 s in D0) and waits less for the LSTM (314 s against 1166 s).
+
+**The rule:**
+1. M1Gs is 1.4962, 0.0089 below 1.5051 (the limit was 1.5001). **Holds.**
+2. Every line before the `meta_mix` lines equals MA's, TALLY and GEN included (`diff`: only the 15 new lines). Arm F is 1.5793, the same as `online_final_bpc`. MA's output equals N1's (main's default in FULL_DISTRIBUTION_MIXING.md) byte for byte. **Holds.**
+3. R0 (this branch, no flag) against MA: see below.
+4. `cyphalm_trie selftest` passes.
+5. The cost is stated above.
+
+**Predictions:**
+- P1 (M1Gs −0.007 to −0.012): hit, −0.0089.
+- P2 (M1Bs within 0.001 of M1Gs): hit, 0.0001.
+- P3 (M3 within 0.002 of M1Bs, not beating M1Gs): hit (0.0008 behind M1Bs).
+- P4 (M2ABs −0.001 to −0.004): hit at the edge, −0.0010.
+- P5 (M3L and M3Ls not beating M1Gs): hit. M3L came closer on the second half (−0.0075) than on the first (−0.0041).
+- P6 (wall within +15%, RSS +400 to +600 MB): hit, +5.9% and +405 MB.
+
+What it means:
+- **PAQ's wider first layer is where meta mixing pays here.** M1, mixed with B, gives almost all of the gain.
+- **A mixture over learning rates pays a little.** M2A beats A by 0.004 and M2Gs beats Bs by 0.0015, but joined, M2ABs is only 0.001 better than ABs. The rates tuned on the first half were already near the best. Over M1 (m1r 1) it adds about 0.001 (T30 against T20).
+- **Fixed share over the arms finds no better switching.** It tracks the best arm and stays just behind it.
+
+## R0, and the meta mix on by default
+
+**R0** (this branch at f846a4d, `context8k` with no flag) ran after MA and R1. Its output equals MA's byte for byte (`cmp`): 3536 s, 1153 MB. **Rule 3 holds, so every part of the rule holds.**
+
+So, as registered, M1Gs is now `context8k`'s default:
+- the meta mix runs by default beside the full mix. `--no-meta-mix` turns it off.
+- `context8k_bpc` comes from M1Gs: **1.4962 (meta_mix M1Gs)** on this PC.
+- `--meta-mix` is still accepted. It is now the default.
+- Where the full mix switches itself off, the meta mix is off too. It prints a note only when `--meta-mix` or `--meta-mix-params` was asked for. So `glnx_prep.sh` (`--no-full-mix`) is unchanged.
+- `cypha_report_card` reads `context8k_bpc` first (`kCtxPref`), so the card's `context8k` number becomes M1Gs's.
+
+The checks of the switch, on the new binary:
+
+| Run | What | Wall | Peak RSS | Lines |
+|---|---|---:|---:|---|
+| D1 | `context8k` (meta mix on by default) | 3419 s | 1556 MB | = R1's, except the last line: `context8k_bpc 1.4962 (meta_mix M1Gs)` against R1's `1.5051 (full_mix ABs)` |
