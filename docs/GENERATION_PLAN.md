@@ -2222,3 +2222,22 @@ Every branch first merges `origin/main` (M1 and M2 are exact, so P1 and every ba
   - only 77 of 250 prompts get a plan;
   - the fill around each fact is still K5's and often false;
   - the co-occurring path reads like a list of people.
+
+**§13.42 Q2 result and the combination** (2026-11-06; [PLAN_FILL](reports/PLAN_FILL.md), branch `wip/plan-fill`; flags off by default, byte-identical when off):
+- **Typed slots** (`--k5-plan-typed`, 12 slot types fitted by EM on `e9_text`) halve slot type errors on dev by the second rule (0.33 → 0.16), and cut them 28% by the first. Smoothing in four places (S1–S4) changes little: the chosen arm Q2 is typed + S1 (K5 order 3 at 0.05) + S3 (add-5). SCRIBE v2 0.511, the same as P1t.
+- **Blind pairwise against P1t** (packets committed first, `wip/plan-fill`):
+  - **Q2T 0.510 [0.460, 0.560]**, rater pairs 0.54 and 0.48;
+  - **Q2 0.500 [0.450, 0.550]**, rater pairs 0.50 and 0.50.
+  - Only 9 of the 50 rated prompts differ from P1t. **No difference. Q2 is not adopted.**
+- **Predictions:**
+  - slot type errors down at least 50%: **hit** on the second rule, **miss** on the first (−28%);
+  - one smoothing place helps: **miss**;
+  - raters prefer Q2: **miss** (even).
+- **The combination of the winners** (§13.42): Q1 and Q2 tie P1t, so **the only winner is Q3**, and the combination is Q3 alone. It has already been rated against P1t (0.590 [0.540, 0.640]).
+- **So, following §13.42:**
+  - Q3 becomes the default: `sample --k5` turns `--k5-plan-discourse on` on with the default store, and `--k5-plan-discourse off` gives P1t back;
+  - checked by `cmp`: the default must equal Q3t's dev GEN file, and `off` must equal P1t's;
+  - then GEN-A test is read once, for this arm.
+- **Combination predictions:**
+  - raters prefer it to P1 above 0.6: **miss** (0.590 against P1t);
+  - test SCRIBE v2 at least 0.561: scored after the read.
