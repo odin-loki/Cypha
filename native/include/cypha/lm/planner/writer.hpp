@@ -718,6 +718,7 @@ inline bool apply_plan_flags(const std::string& store, const std::string& model,
     md->gate_k5 = gate == "k5";
     md->fill_dba = fill == "dba";
     if (beam > 0) md->beam = beam;
+    md->fs.set_stats(&md->stats);  // PLAN_FACTS: read only by --k5-plan-filter's place rule
     if (!md->fs.load(store, drops, err)) return false;
     std::fprintf(stderr, "k5-plan: store %s: %zu facts (%zu dropped), %zu subjects, %zu relations; bank %zu skeletons over %zu relations; gate %s%s; floor %.3f\n",
                  store.c_str(), md->fs.size(), md->fs.dropped(), md->fs.subjects(), md->fs.rels(), md->bank.skeletons(), md->bank.relations(),

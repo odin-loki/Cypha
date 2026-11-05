@@ -14,7 +14,15 @@ These files were written and committed before any label was read.
 
 **The labels.** Four blind Claude raters label each fact "sensible" or "gibberish" (`LABEL_PROMPT.md`). A fact's label is the majority of the four. A 2–2 tie is left out of the choice and of precision and recall, and counted.
 
-**The choice** (`fs_filter choose`, choose half only). Each rule family of `fact_filter.hpp` is tried alone, at each of its thresholds. A family is turned on, at the threshold with the largest (gibberish flagged − sensible flagged), only if that number is above 0, so its flags are mostly gibberish. Families: shape, self, year, place (support 1, 2, 3, 5), person (1, 2), name, lex (support 1, 2, 3, 5, 10), taxon, agree, xrel, p (min P 0.6, 0.8, 0.9).
+**The choice** (`fs_filter choose STORE KEY OUT LABELS... --stats ~/k5s_data/S10.stats`, choose half only). Each rule family of `fact_filter.hpp` is tried alone, at each of its thresholds. A family is turned on, at the threshold with the largest (gibberish flagged − sensible flagged), only if that number is above 0, so its flags are mostly gibberish. Families: shape, self, year, place (support 1, 2, 3, 5), person (1, 2), name, lex (support 1, 2, 3, 5, 10), taxon, agree, xrel, spread (2, 3, 5, 10 occupations), p (min P 0.6, 0.8, 0.9). `--stats` is the planner model's own statistics file: the place rule reads the relations expert's name types from it, as the planner does.
+
+**Rule revisions before any label** (2026-11-06, after listing what each rule flags over the whole store, `fs_filter stats … --list`; the packet and key are unchanged, re-drawn byte for byte):
+- xrel flagged 442 "nationality English" facts because "English" is more often a language; nationality and language now are not compared, and an infobox or table field (which names its relation) is not flagged;
+- self no longer applies to developer, publisher and owner ("Microsoft Word" developer "Microsoft");
+- taxon accepted only one capitalised word, so "class bird" was flagged; it now flags a digit, more than 2 words or a non-letter start ("Windows Me" family "Windows 9x");
+- place also counts a value as a known place if the relations expert types it as a place (it mostly follows "in", "at", ...);
+- year no longer flags ancient lives that run backwards because "BC" is missing (Empedocles 490–430);
+- a new family, spread: a nationality read with fewer than N distinct occupations over the store (the occupation read in the same category: "Baroque" composers, "Film" actors, "Batman": category words read as nationalities).
 
 **The store** `bench/fact_store/e9_v2` is fixed from here on: the filter's code may not change once a label is read, and the store may not change at all, or the sample would no longer be a sample of it.
 

@@ -114,13 +114,14 @@ int planner_paths(const std::string& dir, const std::string& prompts, const std:
     pln::FactStore fs;
     pln::SkelBank bank;
     std::string err;
-    if (!fs.load(dir, drops, err) || !bank.load(bank_path, err)) {
-        std::cerr << err << "\n";
-        return 1;
-    }
     cypha::cyphalm::structure::Stats stats;
     const bool fb = !stats_path.empty();
     if (fb && !stats.load(stats_path, err)) {
+        std::cerr << err << "\n";
+        return 1;
+    }
+    if (fb) fs.set_stats(&stats);  // as the planner: the filter's place rule reads the model's statistics
+    if (!fs.load(dir, drops, err) || !bank.load(bank_path, err)) {
         std::cerr << err << "\n";
         return 1;
     }

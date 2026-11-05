@@ -239,7 +239,7 @@ class FactStore {
         if (!opt_.filter.empty()) {
             FilterParams fp;
             if (!fp.read(opt_.filter, err)) return false;
-            FactFilter ff(fp);
+            FactFilter ff(fp, stats_);
             ff.prepare(rows);
             for (std::size_t i = 0; i < rows.size(); ++i) {
                 const std::uint32_t fl = ff.flags(i);
@@ -382,6 +382,8 @@ class FactStore {
     std::size_t filtered() const { return filtered_; }
     const std::map<std::string, std::size_t>& filter_reasons() const { return filter_reason_; }
     const FactOptions& options() const { return opt_; }
+    // The structure statistics the filter's place rule reads (the planner model's; set before load). Unused without a filter.
+    void set_stats(const structure::Stats* st) { stats_ = st; }
 
     // An entity ID by its surface (case-insensitive tokens), or ~0u.
     std::uint32_t find(const std::string& s) const {
@@ -444,6 +446,7 @@ class FactStore {
     std::size_t dropped_ = 0;
     // PLAN_FACTS
     FactOptions opt_;
+    const structure::Stats* stats_ = nullptr;
     std::unordered_map<std::uint64_t, std::uint32_t> alias_;  // alias key -> subject
     std::size_t filtered_ = 0;
     std::map<std::string, std::size_t> filter_reason_;

@@ -5,9 +5,12 @@
 //       and --plan-drop, default the GEN-A prompts' bytes, dropped): OUTDIR/labels_packet.txt (numbered "subject — relation — object" lines, nothing
 //       else) and OUTDIR/key.tsv (where each fact came from, and its half: the first N/2 of a second seeded order
 //       choose the thresholds, the rest measure them).
-//   fs_filter choose  STOREDIR KEY OUTPARAMS LABELS...   thresholds from the "choose" half (rule below)
-//   fs_filter measure STOREDIR KEY PARAMS LABELS...      precision and recall on the "measure" half (Wilson 95%)
-//   fs_filter stats   STOREDIR PARAMS [--plan-drop LO:HI]  facts the filter leaves out, by rule and relation
+//   fs_filter choose  STOREDIR KEY OUTPARAMS LABELS... --stats S10.stats   thresholds from the "choose" half (rule below)
+//   fs_filter measure STOREDIR KEY PARAMS LABELS... --stats S10.stats      precision and recall on the "measure" half (Wilson 95%)
+//   fs_filter stats   STOREDIR PARAMS --stats S10.stats [--plan-drop LO:HI] [--list OUT.tsv]  facts the filter leaves
+//       out, by rule and relation (--list: each left-out fact with its reasons)
+// --stats: the structure statistics the planner's model reads (its "stats" line); the place rule uses their name types,
+// so choose, measure and stats need the same file as the planner.
 // LABELS: one file per rater, lines "N<TAB>sensible|gibberish" (also "N. label" or "N label"). A fact's label is the
 // raters' majority; a tie is left out of the choice and of precision and recall (and counted). The filter's positive
 // class is gibberish: precision = flagged facts that are gibberish / flagged; recall = gibberish facts flagged / all
@@ -15,8 +18,8 @@
 // Choice rule (fixed before any label was read): each rule family (fact_filter.hpp) alone, at each of its thresholds,
 // flags some choose-half facts; a family is turned on, at the threshold with the largest (gibberish flagged - sensible
 // flagged), only if that number is above 0 (its flags are mostly gibberish). Families: shape, self, year, place
-// (place_support 1, 2, 3, 5), person (1, 2), name, lex (lex_support 1, 2, 3, 5, 10), taxon, agree, xrel, p (min_p
-// 0.6, 0.8, 0.9).
+// (place_support 1, 2, 3, 5), person (1, 2), name, lex (lex_support 1, 2, 3, 5, 10), taxon, agree, xrel, spread
+// (spread_min 2, 3, 5, 10), p (min_p 0.6, 0.8, 0.9).
 // Build: g++ -std=c++20 -O2 -I native/include scripts/fs_filter.cpp -o fs_filter
 // Author: Odin Loch
 #include <algorithm>
@@ -162,12 +165,31 @@ void report(const char* what, const Counts& c) {
 }
 }  // namespace
 
-int main(int argc, char** argv) {
+int main(int argc0, char** argv0) {
+    // --stats FILE may stand anywhere; it is taken out before the positional arguments are read
+    std::vector<char*> av;
+    std::string stats_path;
+    for (int i = 0; i < argc0; ++i) {
+        if (std::string(argv0[i]) == "--stats" && i + 1 < argc0) {
+            stats_path = argv0[++i];
+            continue;
+        }
+        av.push_back(argv0[i]);
+    }
+    const int argc = static_cast<int>(av.size());
+    char** argv = av.data();
     if (argc < 3) {
         std::cerr << "usage: fs_filter sample|choose|measure|stats ... (see the header)\n";
         return 2;
     }
     const std::string mode = argv[1], dir = argv[2];
+    cypha::cyphalm::structure::Stats stats;
+    if (mode != "sample") {
+        std::string err;
+        if (stats_path.empty()) return std::cerr << "fs_filter " << mode << " needs --stats FILE (the planner model's statistics)\n", 2;
+        if (!stats.load(stats_path, err)) return std::cerr << err << "\n", 1;
+    }
+    const cypha::cyphalm::structure::Stats* st = mode == "sample" ? nullptr : &stats;
     if (mode == "sample") {
         if (argc < 4) return 2;
         const std::string outdir = argv[3];
@@ -206,14 +228,18 @@ int main(int argc, char** argv) {
     }
     if (mode == "stats") {
         if (argc < 4) return 2;
-        std::string drop;
-        for (int i = 4; i + 1 < argc; i += 2)
+        std::string drop, list;
+        for (int i = 4; i + 1 < argc; i += 2) {
             if (std::string(argv[i]) == "--plan-drop") drop = argv[i + 1];
+            if (std::string(argv[i]) == "--list") list = argv[i + 1];
+        }
         const auto L = load_rows(dir, drop);
+        std::ofstream lo;
+        if (!list.empty()) lo.open(list), lo << "subject\trelation\tvalue\tsource\treasons\n";
         pl::FilterParams fp;
         std::string err;
         if (!fp.read(argv[3], err)) return std::cerr << err << "\n", 1;
-        pl::FactFilter ff(fp);
+        pl::FactFilter ff(fp, st);
         ff.prepare(L.rows);
         std::map<std::string, std::array<std::size_t, 2>> by_rel;
         std::map<std::string, std::size_t> by_reason;
@@ -224,8 +250,10 @@ int main(int argc, char** argv) {
             ++c[0];
             if (!f) continue;
             ++c[1], ++out;
+            std::string why;
             for (int b = 0; b < pl::FactFilter::kNReason; ++b)
-                if (f & (1u << b)) ++by_reason[pl::FactFilter::reason_name(b)];
+                if (f & (1u << b)) ++by_reason[pl::FactFilter::reason_name(b)], why += (why.empty() ? "" : ",") + std::string(pl::FactFilter::reason_name(b));
+            if (lo) lo << L.rows[i].subj << '\t' << L.rows[i].rel << '\t' << L.rows[i].val << '\t' << L.rows[i].src << '\t' << why << '\n';
         }
         std::printf("store %s: %zu facts, filter leaves out %zu (%.3f)\n", dir.c_str(), L.rows.size(), out, double(out) / double(L.rows.size()));
         for (const auto& [r, n] : by_reason) std::printf("  rule %-7s %zu\n", r.c_str(), n);
@@ -242,7 +270,7 @@ int main(int argc, char** argv) {
             pl::FilterParams fp;
             std::string err;
             if (!fp.read(argv[4], err)) return std::cerr << err << "\n", 1;
-            pl::FactFilter ff(fp);
+            pl::FactFilter ff(fp, st);
             ff.prepare(L.rows);
             report("measure half", count(keys, "measure", lab, ff));
             report("choose half (seen)", count(keys, "choose", lab, ff));
@@ -267,7 +295,7 @@ int main(int argc, char** argv) {
             pl::FilterParams p;
         };
         pl::FilterParams none;
-        none.shape = none.self = none.year = none.place = none.person = none.name = none.lex = none.taxon = none.agree = none.xrel = 0;
+        none.shape = none.self = none.year = none.place = none.person = none.name = none.lex = none.taxon = none.agree = none.xrel = none.spread = 0;
         none.min_p = 0;
         std::vector<std::vector<Opt>> fams;
         auto one = [&](const char* fam, auto set) {
@@ -295,6 +323,11 @@ int main(int argc, char** argv) {
         fams.push_back({one("xrel", [](pl::FilterParams& p) { p.xrel = 1; })});
         {
             std::vector<Opt> v;
+            for (const int s : {2, 3, 5, 10}) v.push_back(one("spread", [s](pl::FilterParams& p) { p.spread = 1, p.spread_min = s; }));
+            fams.push_back(v);
+        }
+        {
+            std::vector<Opt> v;
             for (const double m : {0.6, 0.8, 0.9}) v.push_back(one("p", [m](pl::FilterParams& p) { p.min_p = m; }));
             fams.push_back(v);
         }
@@ -303,11 +336,13 @@ int main(int argc, char** argv) {
             int best_net = 0;
             const Opt* best = nullptr;
             for (const auto& o : fam) {
-                pl::FactFilter ff(o.p);
+                pl::FactFilter ff(o.p, st);
                 ff.prepare(L.rows);
                 const Counts c = count(keys, "choose", lab, ff);
                 const int net = c.tp - c.fp;
-                std::printf("  %-6s %s-> gibberish flagged %d, sensible flagged %d, net %d\n", o.family, "", c.tp, c.fp, net);
+                const auto& q = o.p;
+                const double th = q.place ? q.place_support : q.lex ? q.lex_support : q.spread ? q.spread_min : q.person ? q.person : q.min_p;
+                std::printf("  %-6s %-4g -> gibberish flagged %d, sensible flagged %d, net %d\n", o.family, th, c.tp, c.fp, net);
                 if (net > best_net) best_net = net, best = &o;
             }
             if (!best) continue;
@@ -322,11 +357,12 @@ int main(int argc, char** argv) {
             if (q.taxon) chosen.taxon = 1;
             if (q.agree) chosen.agree = 1;
             if (q.xrel) chosen.xrel = 1;
+            if (q.spread) chosen.spread = 1, chosen.spread_min = q.spread_min;
             if (q.min_p > 0) chosen.min_p = q.min_p;
         }
         std::ofstream(argv[4]) << chosen.str();
         std::printf("chosen:\n%s", chosen.str().c_str());
-        pl::FactFilter ff(chosen);
+        pl::FactFilter ff(chosen, st);
         ff.prepare(L.rows);
         report("choose half, the chosen filter", count(keys, "choose", lab, ff));
         return 0;
