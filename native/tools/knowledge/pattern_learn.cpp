@@ -14932,6 +14932,8 @@ int main(int argc, char** argv) {
         return 2;
     }
     std::fill(g_phi, g_phi + 64, -1.0);
+    std::size_t pr_lo = 0, pr_hi = static_cast<std::size_t>(-1);  // --page-range
+    std::unordered_set<std::size_t> skip_tb;                       // --skip-pages
     A.enwik = argv[1];
     A.outdir = argv[2];
     for (int i = 3; i < argc; ++i) {
@@ -14981,6 +14983,23 @@ int main(int argc, char** argv) {
         else if (a == "--f2b-read-test") f2b::g_gold_split = f2b::g_read_test = true;
         else if (a == "--signals-pools" && i + 1 < argc) A.signals.pools = argv[++i];  // S4d
         else if (a == "--signals-A" && i + 1 < argc) A.signals.A = std::atof(argv[++i]);  // S4d
+        // FACT_STORE_SCALE (GENERATION_PLAN §13.38 A): input options only, the learning rules are untouched.
+        // --page-range LO:HI reads only the pages whose text starts in bytes [LO, HI) of the dump (offsets stay the
+        // dump's own, e.g. enwik9's); --skip-pages FILE skips every page whose text start offset is the first number
+        // of a line of FILE (the overlap guard's pages, scripts/fs_skip_pages.cpp).
+        else if (a == "--page-range" && i + 1 < argc) {
+            const string r = argv[++i];
+            const std::size_t c = r.find(':');
+            if (c == string::npos) { std::fprintf(stderr, "--page-range wants LO:HI\n"); return 2; }
+            pr_lo = std::strtoull(r.substr(0, c).c_str(), nullptr, 10);
+            pr_hi = std::strtoull(r.substr(c + 1).c_str(), nullptr, 10);
+        }
+        else if (a == "--skip-pages" && i + 1 < argc) {
+            std::ifstream sf(argv[++i]);
+            if (!sf) { std::fprintf(stderr, "cannot read %s\n", argv[i]); return 1; }
+            for (string l; std::getline(sf, l);)
+                if (!l.empty() && std::isdigit(static_cast<unsigned char>(l[0]))) skip_tb.insert(std::strtoull(l.c_str(), nullptr, 10));
+        }
     }
     if (g_raw && (f2b::g_xa || f2b_gen_on())) { std::fprintf(stderr, "--f2b-xa, --f2b-wild and --f2b-classes read cleaned tokens, not --raw\n"); return 2; }
     if (!A.reach.empty() && A.shard.dev.empty()) { std::fprintf(stderr, "--reach needs --dev\n"); return 2; }
@@ -14998,6 +15017,19 @@ int main(int argc, char** argv) {
     if (g_raw) say("F2R raw mode: patterns are the dump's own bytes between the two mentions");
     long total = 0, redirects = 0;
     vector<PageRef> pages = list_pages(data, total, redirects);
+    if (pr_lo > 0 || pr_hi != static_cast<std::size_t>(-1) || !skip_tb.empty()) {  // --page-range, --skip-pages
+        std::size_t out_range = 0, skipped = 0;
+        vector<PageRef> kept;
+        for (PageRef& pg : pages) {
+            if (pg.tb < pr_lo || pg.tb >= pr_hi) { ++out_range; continue; }
+            if (skip_tb.count(pg.tb)) { ++skipped; continue; }
+            kept.push_back(std::move(pg));
+        }
+        pages.swap(kept);
+        std::snprintf(buf, sizeof buf, "page filter: range [%zu, %zu) articles outside %zu, skipped by --skip-pages %zu (list %zu), kept %zu",
+                      pr_lo, pr_hi, out_range, skipped, skip_tb.size(), pages.size());
+        say(buf);
+    }
     std::unordered_map<string, int> page_of;
     for (std::size_t i = 0; i < pages.size(); ++i) page_of[pages[i].title] = static_cast<int>(i);
     std::snprintf(buf, sizeof buf, "pages in dump %ld, redirects %ld, main-namespace articles %zu", total, redirects, pages.size());
