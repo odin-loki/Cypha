@@ -2459,7 +2459,8 @@ set_tests_properties(native_ecs_lci_test PROPERTIES TIMEOUT 120)
 # Header-only library include/cypha/eval/scribe.hpp. tools/eval/scribe.cpp replaced tools/scribe_ladder.cpp on 2026-10-28
 # (v1 ladder numbers reproduced to the printed digit with --profile v1). Ladders and scoring need corpora and are
 # run by hand (docs/reports/SCRIBE_V2.md); the self-test needs no corpus.
-add_executable(scribe tools/eval/scribe.cpp)
+# MATCH's pack index is CyphaLM's count index (include/cypha/lm/count_index.hpp, GENERATION_PLAN §13.40 M1): libsais.
+add_executable(scribe tools/eval/scribe.cpp third_party/libsais/libsais.c)
 target_include_directories(scribe PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
 find_package(Threads REQUIRED)  # SCRIBE v3 builds its pack suffix array and features on std::thread
 target_link_libraries(scribe PRIVATE Threads::Threads)
@@ -2606,8 +2607,9 @@ target_link_libraries(opt_boolean_smoke PRIVATE Threads::Threads)
 add_test(NAME native_opt_boolean_smoke COMMAND "$<TARGET_FILE:opt_boolean_smoke>")
 set_tests_properties(native_opt_boolean_smoke PROPERTIES TIMEOUT 300)
 # docs/reports/K5_PLANNER.md: the planner's offline steps (skeleton mining, gate training) for sample --k5-plan.
-add_executable(k5_planner tools/lm/k5_planner.cpp)
-target_include_directories(k5_planner PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
+# K5's counts come from a suffix array (include/cypha/lm/count_index.hpp, GENERATION_PLAN §13.40 M1): libsais.
+add_executable(k5_planner tools/lm/k5_planner.cpp third_party/libsais/libsais.c)
+target_include_directories(k5_planner PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include" "${CMAKE_CURRENT_SOURCE_DIR}/third_party/libsais")
 cypha_mingw_apply_exe_link_options(k5_planner)
 target_link_libraries(k5_planner PRIVATE Threads::Threads)
 add_test(NAME native_k5_planner_selftest COMMAND "$<TARGET_FILE:k5_planner>" selftest)
