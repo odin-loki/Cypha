@@ -1,0 +1,18 @@
+stated fact sentences 179
+names intact: 147 of 179 (0.821 [0.759, 0.870])
+names side by side: 11 of 179 (0.061 [0.035, 0.107])
+slot type errors, rule 1 (any asserted position unfit): 27 of 66 checked names (0.409 [0.299, 0.530]); 25 of 179 sentences (0.140)
+slot type errors, rule 2 (no asserted position fits): 11 of 66 checked names (0.167 [0.096, 0.274]); 11 of 179 sentences (0.061)
+rule 2 errors by asserted position: located_in:S 8, birth_year:S 2, predecessor:O 1
+  Food writing (type 2) as located_in:S: Food writing is one of the most important and innovative Food and feed groups in the world .
+  Johannes Nicolaus Brønsted (type 2) as located_in:S: Johannes Nicolaus Br ø nsted is one of the most important and innovative Physical and feed groups in the world .
+  Jennifer Knapp (type 2) as located_in:S: Jennifer Knapp is one of the most important and innovative Christian and feed groups in the world .
+  Karl Weyprecht (type 2) as located_in:S: Karl Weyprecht is one of the most important and innovative Earth and orbit groups in the world .
+  Georg von Neumayer (type 2) as located_in:S: Georg von Neumayer is one of Europe's most popular and influential Earth and orbit books in the war .
+  Chester A. Arthur (type 10) as located_in:S: Chester A . Arthur is one of Europe's most popular and influential american and feed groups in the war .
+  philosopher (type 8) as birth_year:S: He have been many versions of ammonia working for the events of the Greek philosopher Aristotle in the 16 th century BC .
+  Constantine III (type 3) as birth_year:S: S . Senator King Arthur in 2004 and set up by King Constantine III .
+  Alfonso XI of Castile (type 0) as predecessor:O: He was the son of Alfonso XI of Castile ( 1312 - 572 ) , French theologian .
+  Valentine Baker (type 2) as located_in:S: Valentine Baker is one of the most important and innovative British and feed groups in the world .
+  Jennifer Knapp (type 2) as located_in:S: Jennifer Knapp is one of the most important and innovative Christian and feed groups in the world .
+fact sentences unlike the base's: 104 of 179 (0.581 [0.508, 0.651]); prompts with a change 52 of 77

@@ -1,0 +1,4 @@
+Q2 choice rule, written 2026-11-06 04:54:01 before reading any smoothing arm (S1-S4) numbers:
+For each arm, D = (names intact share - Q2T) + (relation cue share - Q2T) - (rule-2 slot type error share - Q2T) + (SCRIBE v3.1 pooled - Q2T).
+The amount of each place is the one with the larger D. A place helps if its D > 0. The two places with the largest D > 0 are run together.
+The chosen Q2 arm is the arm with the largest D (singles and the pair). If no place has D > 0, Q2 = the best single place anyway, reported as not helping.

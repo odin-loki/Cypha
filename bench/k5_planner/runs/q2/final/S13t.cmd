@@ -1,0 +1,1 @@
+S13t /home/odin/q2_src /home/odin/build_q2 --k5-plan-typed bench/k5_planner/model/slots_e9t.txt --k5-plan-typed-fit log --k5-plan-typed-tau 1 --k5-plan-model bench/k5_planner/model/plan_q2.model --k5-plan-s1 0.05 --k5-plan-s1-mode low --k5-plan-s3 5

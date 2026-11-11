@@ -1,0 +1,2 @@
+k5-plan: store /mnt/d/cypha_llm/fact_store_e9/e9_text: 56084 facts (2383 dropped), 22718 subjects, 30 relations; bank 2593 skeletons over 30 relations; gate full; floor -8.490
+k5-plan: fill beam (beam 4): 1519 fills in 14.15 thread-s (9.317 ms each), 90300 K5 distributions; planner fact steps 21.03 thread-s over 77 prompts

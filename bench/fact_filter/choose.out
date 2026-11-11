@@ -1,0 +1,46 @@
+  shape  0    -> gibberish flagged 1, sensible flagged 0, net 1
+  self   0    -> gibberish flagged 0, sensible flagged 0, net 0
+  year   0    -> gibberish flagged 0, sensible flagged 0, net 0
+  place  1    -> gibberish flagged 0, sensible flagged 0, net 0
+  place  2    -> gibberish flagged 0, sensible flagged 6, net -6
+  place  3    -> gibberish flagged 0, sensible flagged 6, net -6
+  place  5    -> gibberish flagged 0, sensible flagged 6, net -6
+  person 1    -> gibberish flagged 0, sensible flagged 0, net 0
+  person 2    -> gibberish flagged 0, sensible flagged 6, net -6
+  name   0    -> gibberish flagged 0, sensible flagged 0, net 0
+  lex    1    -> gibberish flagged 0, sensible flagged 0, net 0
+  lex    2    -> gibberish flagged 0, sensible flagged 7, net -7
+  lex    3    -> gibberish flagged 1, sensible flagged 9, net -8
+  lex    5    -> gibberish flagged 1, sensible flagged 14, net -13
+  lex    10   -> gibberish flagged 4, sensible flagged 16, net -12
+  taxon  0    -> gibberish flagged 0, sensible flagged 0, net 0
+  agree  0    -> gibberish flagged 0, sensible flagged 0, net 0
+  xrel   0    -> gibberish flagged 0, sensible flagged 0, net 0
+  spread 2    -> gibberish flagged 2, sensible flagged 0, net 2
+  spread 3    -> gibberish flagged 3, sensible flagged 0, net 3
+  spread 5    -> gibberish flagged 4, sensible flagged 0, net 4
+  spread 10   -> gibberish flagged 4, sensible flagged 1, net 3
+  p      0.6  -> gibberish flagged 0, sensible flagged 0, net 0
+  p      0.8  -> gibberish flagged 1, sensible flagged 1, net 0
+  p      0.9  -> gibberish flagged 2, sensible flagged 2, net 0
+chosen:
+shape 1
+self 0
+year 0
+place 0
+person 0
+name 0
+lex 0
+taxon 0
+agree 0
+xrel 0
+spread 1
+place_support 2
+lex_support 2
+spread_min 5
+min_p 0
+choose half, the chosen filter: 149 facts with a majority label (13 gibberish, 136 sensible), 1 ties (0 of them flagged)
+  precision (flagged that are gibberish) 4 / 4 = 1.000 [0.510, 1.000]
+  recall (gibberish flagged)             4 / 13 = 0.308 [0.127, 0.576]
+  sensible kept                          136 / 136 = 1.000 [0.973, 1.000]
+  gibberish share of the labelled facts  13 / 149 = 0.087 [0.052, 0.144]

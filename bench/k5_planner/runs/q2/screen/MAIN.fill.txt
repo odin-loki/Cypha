@@ -1,0 +1,19 @@
+stated fact sentences 246
+names intact: 206 of 246 (0.837 [0.786, 0.878])
+names side by side: 10 of 246 (0.041 [0.022, 0.073])
+slot type errors, rule 1 (any asserted position unfit): 48 of 80 checked names (0.600 [0.490, 0.700]); 43 of 246 sentences (0.175)
+slot type errors, rule 2 (no asserted position fits): 33 of 80 checked names (0.412 [0.311, 0.522]); 32 of 246 sentences (0.130)
+rule 2 errors by asserted position: located_in:S 12, birth_year:S 7, birth_year:O 3, nationality:O 3, birth_place:S 3, death_place:O 2, location:O 2, birth_place:O 2, class:S 2, family:O 2, death_year:S 2, located_in:O 2
+  Food writing (type 1) as located_in:S: Food writing is one of the most important and innovative Food and feed groups in the world .
+  Gothenburg University (type 3) as birth_place:O, birth_year:O, death_place:O, location:O, nationality:O: He was born in Gothenburg University , Gothenburg Municipality .
+  New Delhi (type 6) as located_in:S: New Delhi is a city and municipality in the county of India , Pakistan .
+  Bruno Fuligni (type 0) as class:S, family:O: The term became the subject of the high - stationed french - language family Bruno Fuligni in 2004 .
+  Terracina (type 5) as predecessor:S: Terracina was the son of the god of modern society , Galba .
+  Hong Kong (type 6) as birth_year:S, occupation:O: As to be derived from the Hong Kong , born in China , India .
+  China (type 6) as birth_year:O: As to be derived from the Hong Kong , born in China , India .
+  Solaris Operating Environment (type 3) as nationality:O: This are also known as a movie of the Solaris Operating Environment film Unix .
+  Knight (type 9) as birth_year:S: This have been many versions of ammonia working for the events of the Greek Knight Falstaff in the 16 th century BC .
+  Paul Klee (type 2) as located_in:S: Paul Klee is located in Bern in Asia , Europe , and began up with a similar role in writing cultures .
+  Monarch (type 5) as birth_year:S, death_year:S: In 2005 , Hezekiah is called Monarch in its place .
+  Tokyo (type 6) as birth_place:S: It is the second largest city in Japan , where Tokyo .
+fact sentences unlike the base's: 0 of 246 (0.000 [0.000, 0.015]); prompts with a change 0 of 93

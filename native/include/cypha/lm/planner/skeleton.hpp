@@ -143,14 +143,15 @@ class SkelBank {
             }
         }
         for (const auto& [a, mp] : trans_)
-            for (const auto& [b, n] : mp) out_[a] += n;
+            for (const auto& [b, n] : mp) out_[a] += n, in_[b] += n, all_ += n;
         return true;
     }
     const std::vector<Skel>* of(const std::string& rel) const {
         const auto it = by_rel_.find(rel);
         return it == by_rel_.end() || it->second.empty() ? nullptr : &it->second;
     }
-    // log2 P(b | a) over relations, add-half smoothed over the relations with skeletons.
+    // log2 P(b | a) over relations, add-half smoothed over the relations with skeletons. s4 > 0 (§13.42 Q2, S4: the
+    // plan's fact choice): (1 - s4) of it and s4 of b's marginal over all transitions, add-half smoothed alike.
     double trans_lp(const std::string& a, const std::string& b) const {
         const double R = static_cast<double>(by_rel_.size()) + 1;
         double n = 0, tot = 0;
@@ -158,8 +159,12 @@ class SkelBank {
             if (const auto jt = it->second.find(b); jt != it->second.end()) n = static_cast<double>(jt->second);
             tot = static_cast<double>(out_.at(a));
         }
-        return std::log2((n + 0.5) / (tot + 0.5 * R));
+        if (s4 <= 0) return std::log2((n + 0.5) / (tot + 0.5 * R));
+        const auto ib = in_.find(b);
+        const double nb = ib == in_.end() ? 0.0 : static_cast<double>(ib->second);
+        return std::log2((1 - s4) * (n + 0.5) / (tot + 0.5 * R) + s4 * (nb + 0.5) / (static_cast<double>(all_) + 0.5 * R));
     }
+    double s4 = 0;  // --k5-plan-s4 (slots.hpp FillOpts)
     std::size_t relations() const { return by_rel_.size(); }
     std::size_t skeletons() const {
         std::size_t n = 0;
@@ -172,7 +177,8 @@ class SkelBank {
     std::map<std::string, std::map<std::vector<std::uint16_t>, std::uint32_t>> raw_;
     std::map<std::string, std::vector<Skel>> by_rel_;
     std::map<std::string, std::map<std::string, std::uint64_t>> trans_;
-    std::map<std::string, std::uint64_t> out_;
+    std::map<std::string, std::uint64_t> out_, in_;  // transitions from a relation; into one (S4)
+    std::uint64_t all_ = 0;
 };
 
 // Walks the documents (lines) of text that start in [lo, hi): each document's sentences (K5's tokens, cut as K5's

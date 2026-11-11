@@ -1,0 +1,4 @@
+k5-plan: store /mnt/d/cypha_llm/fact_store_e9/e9_text: 56084 facts (2383 dropped), 22718 subjects, 30 relations; bank 2593 skeletons over 30 relations; gate full; floor -8.692
+k5-plan: q2 typed=bench/k5_planner/model/slots_e9t.txt,tau=1,fit=log, 12 types
+k5-plan: fill beam (beam 4): 1591 fills in 14.07 thread-s (8.847 ms each), 90033 K5 distributions; planner fact steps 21.32 thread-s over 77 prompts
+k5-plan: q2 typed=bench/k5_planner/model/slots_e9t.txt,tau=1,fit=log: 7292 class words refused next to typed slots, 8069 skeletons dropped, 12 fact steps refilled untyped

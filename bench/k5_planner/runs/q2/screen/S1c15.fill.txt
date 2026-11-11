@@ -1,0 +1,19 @@
+stated fact sentences 248
+names intact: 208 of 248 (0.839 [0.788, 0.879])
+names side by side: 15 of 248 (0.060 [0.037, 0.097])
+slot type errors, rule 1 (any asserted position unfit): 55 of 90 checked names (0.611 [0.508, 0.705]); 49 of 248 sentences (0.198)
+slot type errors, rule 2 (no asserted position fits): 33 of 90 checked names (0.367 [0.274, 0.470]); 33 of 248 sentences (0.133)
+rule 2 errors by asserted position: located_in:S 12, birth_year:S 6, death_year:S 5, founded:S 4, predecessor:S 2, class:S 2, birth_year:O 2, located_in:O 2, genre:O 1, class:O 1, order:S 1, genre:S 1
+  Food writing (type 1) as located_in:S: Food writing is one of the most important and famous Food and feed groups in the world .
+  New Delhi (type 6) as located_in:S: New Delhi is a city and municipality in the county of India , Pakistan .
+  India (type 6) as genre:O: In addition , during World War II , American values of British India and English language abilities of the Soviet Union are also known for relativity and number .
+  Heidelberg (type 5) as death_year:S, founded:S: Heidelberg became the central campus of Rhein - Neckar - Kreis in the early 20 th century .
+  Terracina (type 5) as predecessor:S: Terracina was the son of the god of modern society , Galba .
+  English language (type 9) as class:O: Some authorities have developed about the year , and he did not exist in the same English language speakers of International Criminal Court .
+  Solaris Operating Environment (type 3) as class:S, order:S: Solaris Operating Environment is a family of the Unix family .
+  Francia (type 5) as predecessor:S: Francia was the son of the god of modern society , Charlemagne .
+  Douglas Gordon (type 2) as class:S, family:O, family:S, genre:S, language:S: Douglas Gordon are a cappella rock band , bordered in 2000 in England , Scotland .
+  Knight (type 9) as birth_year:S: This have been many versions of mathematics leading for the events of the Greek Knight Falstaff in the 16 th century BC .
+  Monarch (type 5) as birth_year:S: He have been many versions of mathematics leading for the events of the Greek Monarch Hezekiah in the 16 th century BC .
+  Jerusalem (type 6) as birth_year:O: Hezekiah was a 16 MHz century mathematician , born in Jerusalem , England .
+fact sentences unlike the base's: 194 of 248 (0.782 [0.727, 0.829]); prompts with a change 86 of 93
