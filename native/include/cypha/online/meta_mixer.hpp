@@ -53,18 +53,29 @@ using mix::FixedShare;
 using mix::squash;
 using mix::stretch_eps;
 
-inline bool meta_use_avx512() {
-#if CYPHA_META_AVX512
-    static const bool on = [] {
+/// Which kernels M1's bank runs: 0 the scalar loops, 1 SSE2 (two lanes, every x86-64), 2 AVX-512 (when the CPU has
+/// it). CYPHA_META_SIMD=scalar|sse2|avx512 chooses; CYPHA_META_AVX512=0 is scalar. All three give the same numbers.
+inline int meta_simd_mode() {
+    static const int mode = [] {
+        int m = 2;
         if (const char* e = std::getenv("CYPHA_META_AVX512"))
-            if (std::atoi(e) == 0) return false;
+            if (std::atoi(e) == 0) m = 0;
+        if (const char* e = std::getenv("CYPHA_META_SIMD")) {
+            const std::string v = e;
+            m = v == "scalar" ? 0 : v == "sse2" ? 1 : 2;
+        }
+#if CYPHA_META_AVX512
         __builtin_cpu_init();
-        return __builtin_cpu_supports("avx512f") != 0;
-    }();
-    return on;
+        if (m == 2 && !__builtin_cpu_supports("avx512f")) m = 1;
 #else
-    return false;
+        if (m == 2) m = 1;
 #endif
+#if !CYPHA_META_AVX512
+        if (m == 1) m = 0;
+#endif
+        return m;
+    }();
+    return mode;
 }
 
 #if CYPHA_META_AVX512
@@ -102,6 +113,53 @@ CYPHA_META_T512 inline void meta_update512(float* row, int n, int R, const doubl
         _mm512_mask_storeu_ps(w, mk, _mm512_castps256_ps512(v));
     }
 }
+
+#endif
+#if CYPHA_META_AVX512
+// SSE2: two lanes (two rates) a vector, so the core keeps its full clock (AVX-512 lowers it). Rates 2q and 2q + 1;
+// with an odd R the last vector holds one rate (its other lane is 0 and never read).
+inline __m128d meta_mul2(__m128d a, __m128d b) {
+    __m128d p = _mm_mul_pd(a, b);
+    __asm__("" : "+x"(p));
+    return p;
+}
+inline __m128d meta_load2(const float* w, bool one) {
+    return _mm_cvtps_pd(one ? _mm_load_ss(w) : _mm_castpd_ps(_mm_load_sd(reinterpret_cast<const double*>(w))));
+}
+template <int G>
+inline void meta_dots_sse2(float* const* rows, int n, int R, const double* x, double* d) {
+    const int np = (R + 1) / 2;
+    __m128d a[G][4];
+    for (int g = 0; g < G; ++g)
+        for (int q = 0; q < 4; ++q) a[g][q] = _mm_setzero_pd();
+    for (int i = 0; i < n; ++i) {
+        const __m128d xi = _mm_set1_pd(x[i]);
+        for (int g = 0; g < G; ++g) {
+            const float* w = rows[g] + static_cast<std::size_t>(i) * R;
+            for (int q = 0; q < np; ++q) a[g][q] = _mm_add_pd(a[g][q], meta_mul2(meta_load2(w + 2 * q, 2 * q + 1 == R), xi));
+        }
+    }
+    for (int g = 0; g < G; ++g)
+        for (int q = 0; q < np; ++q) _mm_storeu_pd(d + g * 8 + 2 * q, a[g][q]);
+}
+inline void meta_update_sse2(float* row, int n, int R, const double* x, const double* err8) {
+    const int np = (R + 1) / 2;
+    __m128d e[4];
+    for (int q = 0; q < np; ++q) e[q] = _mm_loadu_pd(err8 + 2 * q);
+    for (int i = 0; i < n; ++i) {
+        float* w = row + static_cast<std::size_t>(i) * R;
+        const __m128d xi = _mm_set1_pd(x[i]);
+        for (int q = 0; q < np; ++q) {
+            const __m128 u = _mm_cvtpd_ps(_mm_mul_pd(e[q], xi));
+            if (2 * q + 1 == R) {
+                _mm_store_ss(w + 2 * q, _mm_add_ss(_mm_load_ss(w + 2 * q), u));
+            } else {
+                const __m128 v = _mm_add_ps(_mm_castpd_ps(_mm_load_sd(reinterpret_cast<const double*>(w + 2 * q))), u);
+                _mm_store_sd(reinterpret_cast<double*>(w + 2 * q), _mm_castps_pd(v));
+            }
+        }
+    }
+}
 #endif
 
 /// M1 at each of M2's rates, as one bank (OPT_META_SIMD.md, GENERATION_PLAN §13.41 O8). Mixer r is mix_core.hpp's
@@ -126,7 +184,7 @@ class M1Bank {
         d_.resize(static_cast<std::size_t>(m_) * 8);
         p1_.resize(static_cast<std::size_t>(m_) * 8);
         s1_.resize(static_cast<std::size_t>(m_) * 8);
-        simd_ = meta_use_avx512();
+        simd_ = meta_simd_mode();
     }
     int rates() const { return R_; }
     /// x: n stretched inputs; ctx: one context per layer-1 set; c2: layer 2's context. p[r]: mixer r's P(bit = 1).
@@ -153,8 +211,12 @@ class M1Bank {
             for (int r = 0; r < R_; ++r) err[r] = (bit - p1_[static_cast<std::size_t>(k) * 8 + r]) * lr1_[static_cast<std::size_t>(r)];
             float* row = rows_[k];
 #if CYPHA_META_AVX512
-            if (simd_) {
+            if (simd_ == 2) {
                 meta_update512(row, n_, R_, x_, err);
+                continue;
+            }
+            if (simd_ == 1) {
+                meta_update_sse2(row, n_, R_, x_, err);
                 continue;
             }
 #endif
@@ -178,11 +240,17 @@ class M1Bank {
     // d_[k 8 + r]: set k's dot product in mixer r.
     void dots() {
 #if CYPHA_META_AVX512
-        if (simd_) {
+        if (simd_ == 2) {
             int k = 0;
             for (; k + 4 <= m_; k += 4) meta_dots512<4>(&rows_[k], n_, R_, x_, &d_[static_cast<std::size_t>(k) * 8]);
             for (; k + 2 <= m_; k += 2) meta_dots512<2>(&rows_[k], n_, R_, x_, &d_[static_cast<std::size_t>(k) * 8]);
             for (; k < m_; ++k) meta_dots512<1>(&rows_[k], n_, R_, x_, &d_[static_cast<std::size_t>(k) * 8]);
+            return;
+        }
+        if (simd_ == 1) {
+            int k = 0;
+            for (; k + 2 <= m_; k += 2) meta_dots_sse2<2>(&rows_[k], n_, R_, x_, &d_[static_cast<std::size_t>(k) * 8]);
+            for (; k < m_; ++k) meta_dots_sse2<1>(&rows_[k], n_, R_, x_, &d_[static_cast<std::size_t>(k) * 8]);
             return;
         }
 #endif
@@ -206,7 +274,7 @@ class M1Bank {
     double p2_[8] = {};
     const double* x_ = nullptr;
     int c2_ = 0;
-    bool simd_ = false;
+    int simd_ = 0;
 };
 
 /// k=v,k=v (lists inside a value use ':'). Defaults are the registered ones, chosen on the holdout's first half by
