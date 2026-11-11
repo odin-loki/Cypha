@@ -2362,3 +2362,8 @@ Every branch first merges `origin/main` (M1 and M2 are exact, so P1 and every ba
   - the text drifts after one or two sentences: no plan holds the paragraph past the facts;
   - the planned sentences are fluent but still invent details ("Brian Henderson was a New Zealand politician and writer who lives in Ottawa, Ontario"). H1b stops the invented numbers but costs fluency, and the raters do not reward it;
   - a quarter of the written bytes lie in 32-byte spans of the training text (within Odin's 12-word cap).
+
+### 13.49 T1 and T1b resumed (2026-11-12; interim, not kept)
+
+- **T1** ([TUNE_PREDICT](reports/TUNE_PREDICT.md), branch `wip/tune-predict`, a3e3439c). The rest of the plan was registered first. The new binary (main plus O5) gives the same output as the old one under `cmp`, so earlier trials stand. Within the +20% RAM limit, the expert search reached **1.7305** on the 1 MB slice (default 1.7501) at 1551 MB: `--bkn 10:4:2:1 --doc cache,cand=2048 --lstm-window 8 --ngram-cap 15 --ngram-lr 0.00125 --ngram-orders 1,2,3,4,5,6,7,8,12,16`. Round 2 of the search is still running on the PC (`~/t1r/expert_resume.sh`). Still to do: the mixers on the tuned experts, the 6 MiB check, the sensitivity table and the final pair. No prediction is scored yet.
+- **T1b** ([TUNE_ADAPT](reports/TUNE_ADAPT.md), branch `wip/tune-adapt`, 692e2f16). The code is in `online/hyper_adapt.hpp` with `context8k --hyper-adapt`, off by default; with the flag off, the output is unchanged under `cmp`. The method was registered before any run. No arm has run: T1b needs T1's tuned values and sensitivity table first.
