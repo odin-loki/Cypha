@@ -38,6 +38,40 @@ Exact means `cmp` equal: the GEN file, the `sample` stdout, both SCRIBE reports 
 
 Measures: K5's sampling time (stderr's `k5: generated N bytes in X s`), `sample`'s wall time and peak RAM (`/usr/bin/time -v`), and how many steps `fast_pick` made (check mode counts them).
 
-## Results
+## Results (2026-11-12)
 
-(to come)
+**O6 is exact.** Every check is `cmp` equal. Both setups also reproduce the lead's files: old's 7 MB planner GEN file equals §13.48's D0, and old's 337 MB planner GEN file equals W1b (MODEL line aside).
+
+| Check | What was compared | Result |
+|---|---|---|
+| 1. 7 MB, the planner | GEN file, stdout, SCRIBE v2 and v3.1, summary; stderr (timing removed, sorted) | `cmp` equal (8 of 8 files) |
+| 2. 7 MB, `--no-k5-plan` | the same | `cmp` equal (8 of 8) |
+| 3. 337 MB, the planner (W1b) | the same | `cmp` equal (8 of 8) |
+| 4. 337 MB, `--no-k5-plan` | the same | `cmp` equal (8 of 8) |
+| 5. `CYPHA_K5_NUCLEUS=check` on 1 and 2 | both picks at every step | no difference (rc 0); each count line says `fast_pick` chose at every step so far (5 lines of 65,536 steps); GEN files equal to 1's and 2's |
+| 6. `cyphalm_trie selftest` | — | pass, old and new |
+| 7. `context8k` small: default, `--no-meta-mix`, `--no-full-mix` | stdout (260, 245, 233 lines; 1.7501, 1.7633, 1.8384) | `cmp` equal |
+
+The stderr logs are compared sorted because `sample` prints its PLAN lines from 4 threads in whatever order they finish.
+
+**Speed** (old and new started together, 4 CPUs each, `K5_THREADS=4`; other sessions loaded the PC, load 20–42):
+
+| Setup | K5 sampling, old → new | `sample` wall, old → new | `sample` user CPU, old → new | Peak RAM, old → new |
+|---|---:|---:|---:|---:|
+| 7 MB, the planner | 147.6 → 61.3 s (**−58%**) | 172 → 88 s (−49%) | 604 → 205 s (−66%) | 616 → 623 MB |
+| 7 MB, `--no-k5-plan` | 201.4 → 66.2 s (**−67%**) | 226 → 91 s (−60%) | 693 → 183 s (−74%) | 144 → 148 MB |
+| 337 MB, the planner | 267.4 → 178.7 s (**−33%**) | 465 → 367 s (−21%) | 891 → 505 s (−43%) | 11,015 → 11,022 MB |
+| 337 MB, `--no-k5-plan` | 148.0 → 44.8 s (**−70%**) | 333 → 226 s (−32%) | 768 → 352 s (−54%) | 3,748 → 3,754 MB |
+
+- K5 sampling is stderr's line `k5: generated 150000 bytes in X s`. The `sample` wall also holds building K5 (at 337 MB about 3 minutes, unchanged).
+- **337 MB with the planner gains least.** There the planner arm takes about 120–130 s more of K5's time than `--no-k5-plan`, in both binaries. That work is not the draw that O6 changes.
+- `context8k` does not use K5. Its small runs took the same time (wall 11:27 → 11:33, 9:56 → 9:47, 7:41 → 7:42).
+- RAM: about 7 MB more (the word pieces' table and the scratch).
+
+**Prediction** (§13.41): exact; K5 sampling time down at least 50%.
+- Exact: **hit.**
+- At least 50%: **hit** on the registered setup, today's default (7 MB, the planner): −58%; −67% without the planner. At 337 MB: −70% without the planner, but **−33% with it (a miss there)**.
+
+**Kept.** O6 is always on: it makes the same choice, faster. `CYPHA_K5_NUCLEUS=full` brings back the old path; `=check` runs both. Not on main: that is the lead's call.
+
+Runs: `/mnt/d/cypha_llm/opt/o6/` (`gen/` the pairs with their `.cmp`, `ctx/`, `logs/runs.log`, `bin/` the scripts).
