@@ -1,0 +1,19 @@
+stated fact sentences 249
+names intact: 209 of 249 (0.839 [0.789, 0.880])
+names side by side: 15 of 249 (0.060 [0.037, 0.097])
+slot type errors, rule 1 (any asserted position unfit): 47 of 80 checked names (0.588 [0.478, 0.689]); 42 of 249 sentences (0.169)
+slot type errors, rule 2 (no asserted position fits): 32 of 80 checked names (0.400 [0.300, 0.510]); 31 of 249 sentences (0.124)
+rule 2 errors by asserted position: located_in:S 11, birth_year:S 7, death_year:S 5, author:O 3, birth_place:S 3, located_in:O 2, predecessor:S 1, occupation:O 1, birth_year:O 1, nationality:O 1, family:S 1, language:S 1
+  Food writing (type 1) as located_in:S: Food writing is one of the most important and innovative Food and feed groups in the world .
+  New Delhi (type 6) as located_in:S: New Delhi is a city and municipality in the county of India , Pakistan .
+  Terracina (type 5) as predecessor:S: Terracina was the son of the god of modern society , Galba .
+  Hong Kong (type 6) as birth_year:S, occupation:O: As to be derived from the Hong Kong , born in China , India .
+  China (type 6) as birth_year:O: As to be derived from the Hong Kong , born in China , India .
+  Solaris Operating Environment (type 3) as nationality:O: This are also known as a movie of the Solaris Operating Environment film Unix .
+  Paris (type 6) as author:O, death_year:S: i . 162 ) . In the course of this work , he went back to the limit in the field of Paris published by Andr é Gide .
+  Paris (type 6) as author:O, death_year:S: v . 105 ) . In the spring of this influence , he went up to the change in the state of Paris published glorifying Claude Monet .
+  Paris (type 6) as author:O, death_year:S: v . 105 ) . For the bibliography of this position , he went out to the show in the body of Paris published dramatised Brigitte Bardot .
+  Douglas Gordon (type 2) as class:S, family:O, family:S, genre:S, language:S: Douglas Gordon are a cappella rock band , bordered in 2000 in England , Scotland .
+  Knight (type 9) as birth_year:S: This have been many versions of ammonia working for the events of the Greek Knight Falstaff in the 16 th century BC .
+  Paul Klee (type 2) as located_in:S: Paul Klee is located in Bern in Asia , Europe , and began up with a similar role in writing cultures .
+fact sentences unlike the base's: 64 of 249 (0.257 [0.207, 0.315]); prompts with a change 37 of 93
