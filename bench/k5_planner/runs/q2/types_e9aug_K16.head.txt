@@ -1,0 +1,2 @@
+types: 38049 entities, 62 positions, 258 head classes, 16 types; log-likelihood -314486.9, BIC 684818.2 (48.2 s)
+context: 867707 mentions of store entities in [0, 100000000); words kept per offset (at least 10 mentions): -2 6711 -1 2536 +1 4492 +2 5711

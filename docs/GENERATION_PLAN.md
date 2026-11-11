@@ -2204,3 +2204,82 @@ Every branch first merges `origin/main` (M1 and M2 are exact, so P1 and every ba
   - the gibberish filter: precision 0.80 [0.38, 0.96], recall 0.36 [0.15, 0.65], sensible kept 0.993;
   - by blind labels, 8.1% of store facts are gibberish.
   - §13.42 Q1 predictions: coverage ≥80 **miss** (62); filter removes ≥70% **miss** (36%); keeps ≥90% **hit**; about 30% gibberish **miss** (8%); raters prefer Q1 **miss** (even, against P1t).
+
+**§13.42 Q3 result** (2026-11-06; [PLAN_DISCOURSE](reports/PLAN_DISCOURSE.md); `--k5-plan-discourse on`, off by default, byte-identical when off):
+- **What it does:** after P1's facts, the plan continues through linked entities, up to 2 hops, with a focus weight and a ban on repeating a fact. Gap 0 was chosen on the smoke runs, so no free K5 sentence between facts.
+- **Dev, text-only store, against P1t:**
+  - SCRIBE v2 0.606 [0.572, 0.642] (P1t 0.511), v3.1 0.573 (0.511);
+  - copy32 0.039;
+  - on-subject share 0.648 (0.316);
+  - facts per planned prompt 5.29 (2.32);
+  - repeated facts 4 of 407.
+- **Blind pairwise against P1t** (packets committed first, cce2ac0):
+  - **460 characters: 0.590 [0.540, 0.640]**, rater pairs 0.60 and 0.58; where the text differs (11 prompts), 0.91;
+  - **long, 1,500 characters: 0.580 [0.500, 0.680]**, rater pairs above 0.5; where it differs (7 prompts), 0.79.
+- **By the rule, Q3 reads better than P1t at 460 characters. It is adopted**, to be combined with the other winners before it becomes the default (§13.42: one test read, for the combination only). The long reading does not clear the rule: its interval touches 0.5.
+- **Predictions:** long reading above 0.6 **miss** (0.58, interval to 0.50); about even at 460 **miss**, in the good direction (0.59).
+- **What is weak:**
+  - only 77 of 250 prompts get a plan;
+  - the fill around each fact is still K5's and often false;
+  - the co-occurring path reads like a list of people.
+
+**§13.42 Q2 result and the combination** (2026-11-06; [PLAN_FILL](reports/PLAN_FILL.md), branch `wip/plan-fill`; flags off by default, byte-identical when off):
+- **Typed slots** (`--k5-plan-typed`, 12 slot types fitted by EM on `e9_text`) halve slot type errors on dev by the second rule (0.33 → 0.16), and cut them 28% by the first. Smoothing in four places (S1–S4) changes little: the chosen arm Q2 is typed + S1 (K5 order 3 at 0.05) + S3 (add-5). SCRIBE v2 0.511, the same as P1t.
+- **Blind pairwise against P1t** (packets committed first, `wip/plan-fill`):
+  - **Q2T 0.510 [0.460, 0.560]**, rater pairs 0.54 and 0.48;
+  - **Q2 0.500 [0.450, 0.550]**, rater pairs 0.50 and 0.50.
+  - Only 9 of the 50 rated prompts differ from P1t. **No difference. Q2 is not adopted.**
+- **Predictions:**
+  - slot type errors down at least 50%: **hit** on the second rule, **miss** on the first (−28%);
+  - one smoothing place helps: **miss**;
+  - raters prefer Q2: **miss** (even).
+- **The combination of the winners** (§13.42): Q1 and Q2 tie P1t, so **the only winner is Q3**, and the combination is Q3 alone. It has already been rated against P1t (0.590 [0.540, 0.640]).
+- **So, following §13.42:**
+  - Q3 becomes the default: `sample --k5` turns `--k5-plan-discourse on` on with the default store, and `--k5-plan-discourse off` gives P1t back;
+  - checked by `cmp`: the default must equal Q3t's dev GEN file, and `off` must equal P1t's;
+  - then GEN-A test is read once, for this arm.
+- **Combination predictions:**
+  - raters prefer it to P1 above 0.6: **miss** (0.590 against P1t);
+  - test SCRIBE v2 at least 0.561: scored after the read.
+
+**The combination's result** (2026-11-06):
+- **The default is now the discourse planner:** `sample --k5` = the planner on `e9_text` + `--k5-plan-discourse on`.
+- **Checks:**
+  - on all 250 dev prompts, the default's samples equal Q3t's dev GEN file, and `--k5-plan-discourse off` equals P1t's (`cmp`, MODEL line aside);
+  - the selftest passes.
+- **The one test read** (GEN-A test, 250 prompts): SCRIBE v2 **0.631 [0.595, 0.665]**, v3.1 0.592 [0.566, 0.619], copy32 0.041, no 13-word copies. For comparison: P1t 0.537, K5 0.524.
+- **Prediction** test SCRIBE v2 at least 0.561: **hit** (0.631).
+- **SCRIBE rewards topic words** (§13.34), so its rise is not the evidence. The evidence is the blind raters: Q3 against P1t 0.590 [0.540, 0.640], and P1t against K5 0.610.
+
+**Q1 and Q2 merged as flags, off by default** (2026-11-06; branch `wip/merge-q1q2`, from `wip/plan-facts` and `wip/plan-fill`):
+- Main now holds Q1's flags (`--k5-plan-find 2`, `--k5-plan-fallback pattern`, `--k5-plan-filter`), its store `e9_v2`, `bench/fact_filter/` and `scripts/fs_*`, and Q2's (`--k5-plan-typed`, `--k5-plan-typed-fit`, `--k5-plan-typed-tau`, `--k5-plan-s1`–`s4`, `lm/planner/slots.hpp`, `plan_q2.model`, `slots_e9t.txt`), so they can be combined later. The default store `e9_text` and the default discourse planner are unchanged.
+- **Checks** (`cmp` on all 250 dev prompts, MODEL line aside, 4 threads): the default equals Q3t's dev GEN file; `--k5-plan-discourse off` equals P1t's; `--no-k5-plan` equals K5's (`K5_base`); Q1's flags equal `Q1_e9v2`; Q2's flags with `--k5-plan-discourse off` equal `Q2_typed_s1s3`. Dev SCRIBE v2: 0.606, 0.511, 0.498, 0.520, 0.511. Selftests pass: `cyphalm_trie`, `scribe` (120/120), `k5_planner` (with the Q2 checks), `cypha_report_card` (29/29).
+- Q1's and Q2's flags act on the single-step writer: with the default store, Q2 needs `--k5-plan-discourse off`; Q1 names its store, so the discourse writer stays off.
+
+### 13.47 Wrapped up on Odin's word (2026-11-06; "Wrap it up now. Commit and push.")
+
+**On main, verified:**
+- **Writing:** the discourse planner on the text-only store is the default (§13.42, §13.46).
+  - Blind raters prefer it to P1t (0.590), and P1t to K5 (0.610).
+  - Test SCRIBE v2 0.631 (K5 0.524).
+  - Q1 and Q2 are flags, off by default (`4b255e0`).
+- **Speed and lightness, all exact:**
+  - M1, the count index: K5's RAM −51%;
+  - M2, one mixer library;
+  - O5, LSTM AVX-512 and the n-gram: LSTM stage −56%, n-gram −45%; `context8k_bpc` 1.4962 reproduced.
+- M3 is a flag, not adopted.
+
+**Stopped mid-way.** Each job's work is committed and pushed on its own branch, unverified. None is on main.
+
+| Job | Branch | Where it stopped |
+|---|---|---|
+| T1 tune prediction | `wip/tune-predict` | best on the 1 MB slice within the RAM limit **1.7337** (default 1.7501; `--bkn 10:4:2:1`, `--ngram-cap 15`, `--ngram-lr 0.0025`, `--lstm-window 12`, more); mixers alone 1.7449. Not yet confirmed on 6 MiB (S0 default 1.5796), no final pair, no sensitivity table |
+| O1 fast build | `wip/opt-build` | CMake option and PGO script; exactness pair not finished |
+| O2 expert pipeline | `wip/opt-pipeline` | code; exactness pairs not finished |
+| O3 Boolean | `wip/opt-boolean` | own minimiser, tables, branch-free gates; not verified |
+| O6 lazy nucleus | `wip/opt-nucleus` | code in progress; not verified |
+| M4 grouped gate | `wip/merge-gate` | exactness runs not finished |
+
+- **Not started:** O7, O8 (§13.41 wave 3), T1b (§13.43), T2 (§13.42).
+- **Closed:** O4, the GPU (Odin).
+- **To resume:** check out the branch, read its report draft, finish its registered checks. Nothing goes to main until they pass.

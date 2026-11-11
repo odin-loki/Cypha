@@ -1,0 +1,2 @@
+k5-plan: store bench/fact_store/e9_aug: 70569 facts (2383 dropped), 24891 subjects, 31 relations; bank 2593 skeletons over 30 relations; gate full; floor -8.490
+k5-plan: fill beam (beam 4): 2037 fills in 17.00 thread-s (8.347 ms each), 130298 K5 distributions; planner fact steps 23.32 thread-s over 93 prompts

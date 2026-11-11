@@ -1,0 +1,19 @@
+stated fact sentences 247
+names intact: 209 of 247 (0.846 [0.796, 0.886])
+names side by side: 15 of 247 (0.061 [0.037, 0.098])
+slot type errors, rule 1 (any asserted position unfit): 54 of 87 checked names (0.621 [0.516, 0.715]); 48 of 247 sentences (0.194)
+slot type errors, rule 2 (no asserted position fits): 30 of 87 checked names (0.345 [0.253, 0.449]); 30 of 247 sentences (0.121)
+rule 2 errors by asserted position: located_in:S 13, birth_year:S 5, death_year:S 4, founded:S 3, predecessor:S 2, located_in:O 2, predecessor:O 2, genre:O 1, order:S 1, class:S 1, birth_year:O 1
+  Food writing (type 1) as located_in:S: Food writing is one of the most important and innovative Food and feed groups in the world .
+  New Delhi (type 6) as located_in:S: New Delhi is a city and municipality in the county of India , Pakistan .
+  India (type 6) as genre:O: In addition , during World War II , American values of British India and English language abilities of the Soviet Union are also known for relativity and number .
+  Heidelberg (type 5) as death_year:S, founded:S: Heidelberg became the central campus of Rhein - Neckar - Kreis in the early 20 th century .
+  Terracina (type 5) as predecessor:S: Terracina was the son of the god of modern society , Galba .
+  Ken Livingstone (type 1) as located_in:S: Ken Livingstone has a rich cultural influence as a politician and doctor .
+  Solaris Operating Environment (type 3) as class:S, order:S: Solaris Operating Environment is a family of the Unix family .
+  Francia (type 5) as predecessor:S: Francia was the son of the god of modern society , Charlemagne .
+  Knight (type 9) as birth_year:S: This have been many versions of mathematics leading from the activities of the Greek Knight Falstaff in the 16 th century BC .
+  Monarch (type 5) as birth_year:S, death_year:S: In 1969 , Hezekiah is called Monarch in its place .
+  Karl Weyprecht (type 1) as located_in:S: Karl Weyprecht is one of the most important and innovative Earth and orbit groups in the world .
+  Georg von Neumayer (type 1) as located_in:S: Georg von Neumayer is one of Europe's most popular and influential Earth and orbit books in the war .
+fact sentences unlike the base's: 179 of 247 (0.725 [0.666, 0.777]); prompts with a change 81 of 93
