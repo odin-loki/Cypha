@@ -30,3 +30,31 @@
 - Expected by this registration: the M1 bank is most of the meta mix's cost (70 dot products of about 30 inputs per bit, against 16 for M2A), so −50% is in reach only if gathers are not needed; the side-by-side layout avoids them. My own guess: −40% to −60%.
 
 **Machine:** threads as O5 ran them (the LSTM 4, the n-gram 4, the defaults); no run starts while `free -g` shows under 10 GB available; the full run takes `flock ~/.cypha_full.lock`.
+
+## First runs (2026-11-12, 10:04–10:41)
+
+Old is main 9cbd277 (`~/j3/b_main`), new is eb84f91 (`~/j3/b_o8`). The PC's load average was 15–30 (other sessions).
+
+**Exact.** All `cmp` equal:
+- small `context8k` default, 3 rounds, and `--no-meta-mix`, 3 rounds (stdout, old against new);
+- small `--no-full-mix` (old against new);
+- the new binary's scalar path (`CYPHA_META_AVX512=0`), small default, against old;
+- the planner's dev GEN file and `--no-k5-plan`'s (GEN file, `sample` stdout; SCRIBE tables and summaries equal apart from the label).
+
+**But slower.** The full mix's own seconds (sum of the six parts), 4 runs started together each round:
+
+| Round | Old, default | New, default | Old, no meta | New, no meta | Meta-mix time, old → new |
+|---|---:|---:|---:|---:|---:|
+| 1 | 79.2 | 81.9 | 34.6 | 34.8 | 44.6 → 47.1 (+5.6%) |
+| 2 | 69.1 | 71.4 | 30.3 | 30.0 | 38.8 → 41.4 (+6.7%) |
+| 3 | 74.9 | 83.9 | 30.1 | 33.5 | 44.8 → 50.4 (+12.5%) |
+
+- The bit loop (where M1 runs) fell 10–14% in rounds 1 and 2. But the parts that run no new code grew: the geometric mixers ("geo") by 4–6 s, the chain and the final layer by 5–15%.
+- The likely cause: AVX-512 lowers this Xeon's clock while its wide units are busy, and the whole thread then runs slower. The meta mix's dot products are short (about 30 inputs), so the clock drops for a small gain.
+- So the registered O8 is exact but **meta-mix time +6.7% (median)**, not −50%.
+
+## Amendment O8b (registered 2026-11-12, before its runs)
+
+- **O8b:** the same bank and layout, with SSE2 kernels (two rates a 128-bit vector; 3 vectors for the 5 rates). SSE2 is part of every x86-64 CPU and does not lower the clock. `CYPHA_META_SIMD=scalar|sse2|avx512` chooses the kernel (all three must give the same numbers).
+- **Runs:** 3 rounds of 5 small runs started together: old default, new default with `avx512`, with `sse2`, with `scalar` (the new layout, no vectors), and old `--no-meta-mix` (the meta-free baseline for all, since the code without the meta mix is the same). Meta-mix time = default − baseline. Exact: `cmp` of each new stdout with old's.
+- The kernel kept is the fastest of the three, if it is faster than old; it becomes the default. O8's rule and prediction stand (exact; meta-mix time down at least 50%). My guess for SSE2: −10% to −25%. The meta mix is not mostly M1's dot products.
