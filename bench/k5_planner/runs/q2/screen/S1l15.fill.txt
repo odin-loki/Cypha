@@ -1,0 +1,19 @@
+stated fact sentences 247
+names intact: 209 of 247 (0.846 [0.796, 0.886])
+names side by side: 15 of 247 (0.061 [0.037, 0.098])
+slot type errors, rule 1 (any asserted position unfit): 52 of 89 checked names (0.584 [0.480, 0.681]); 47 of 247 sentences (0.190)
+slot type errors, rule 2 (no asserted position fits): 29 of 89 checked names (0.326 [0.237, 0.429]); 29 of 247 sentences (0.117)
+rule 2 errors by asserted position: located_in:S 13, birth_year:S 6, death_year:S 4, predecessor:S 2, located_in:O 2, predecessor:O 2, genre:O 1, founded:S 1, class:O 1
+  Food writing (type 1) as located_in:S: Food writing is one of the most important and innovative Food and feed groups in the world .
+  New Delhi (type 6) as located_in:S: New Delhi is a city and municipality in the county of India , Pakistan .
+  India (type 6) as genre:O: In addition , during World War II , American values of British India and English language abilities of the Soviet Union are also known for relativity and number .
+  Jacques Tardi (type 2) as located_in:S: Jacques Tardi is one of the most important and innovative french and feed groups in the world .
+  Heidelberg (type 5) as death_year:S, founded:S: Heidelberg became the central campus of Rhein - Neckar - Kreis in the early 20 th century .
+  Terracina (type 5) as predecessor:S: Terracina was the son of the god of modern society , Galba .
+  Confucius (type 1) as located_in:S: Confucius is one of the most important and innovative Chinese and feed groups in the world .
+  English language (type 9) as class:O: Some authorities have developed about the year , and he did not exist in the same English language speakers of International Criminal Court .
+  Francia (type 5) as predecessor:S: Francia was the son of the god of modern society , Charlemagne .
+  Knight (type 9) as birth_year:S: This have been many versions of ammonia working for the events of the Greek Knight Falstaff in the 16 th century BC .
+  Monarch (type 5) as birth_year:S, death_year:S: In 2005 , Hezekiah is called Monarch in its place .
+  Karl Weyprecht (type 1) as located_in:S: Karl Weyprecht is one of the most important and innovative Earth and orbit groups in the world .
+fact sentences unlike the base's: 165 of 247 (0.668 [0.607, 0.724]); prompts with a change 75 of 93

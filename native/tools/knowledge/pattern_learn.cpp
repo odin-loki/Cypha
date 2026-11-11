@@ -153,6 +153,10 @@
 //   the grader that knows Wikidata's names and places (tables from scripts/fresh_slots.py grader), calibration on S8d's set
 //   and the fresh dev pools, variant M (>= 10 positives) chosen on dev, and S8's gate read once on the test pools.
 //
+// PLAN_FACTS (2026-11-05, docs/reports/PLAN_FACTS.md, GENERATION_PLAN §13.42 Q1; off by default, outputs unchanged without it):
+//   --lead-class adds one relation, is_a: each page's lead ("'''Loki''' is the [[god]] of mischief") gives a text seed
+//   (Loki, is_a, god), source "lead"; F2 learns, gates and applies is_a prose patterns like any lexicon relation's.
+//
 // Build: g++ -O2 -std=c++20 -I native/include native/tools/knowledge/pattern_learn.cpp -o pattern_learn
 // Usage: pattern_learn <enwik8> <outdir> [--cv] [--folds K] [--min-train N] [--base-rate A] [--sample N] [--seed S]
 //          [--wikidata FILE [--wikidata-gold-only]] [--phi FILE] [--shard FILE --dev DEV --test TEST [--slice-end B] [--holdout-from B]]
@@ -839,8 +843,12 @@ const RelDef kRel[] = {
     {"publisher", T_NAME, 0.60, true},      {"owner", T_NAME, 0.80, true},               {"genre", T_LEX, 0.10, true},
     {"language", T_LEX, 0.20, true},        {"currency", T_LEX, 0.90, false},            {"occupation", T_LEX, 0.10, true},
     {"nationality", T_LEX, 0.50, true},     {"party", T_LEX, 0.50, true},                {"family", T_LEX, 0.95, false},
-    {"order", T_LEX, 0.95, false},          {"class", T_LEX, 0.95, false},           {"inventor", T_PERSON, 0.50, true}};
-constexpr int kNRel = static_cast<int>(sizeof(kRel) / sizeof(kRel[0]));
+    {"order", T_LEX, 0.95, false},          {"class", T_LEX, 0.95, false},           {"inventor", T_PERSON, 0.50, true},
+    // PLAN_FACTS (GENERATION_PLAN §13.42 Q1): relations that exist only with their flag (kNRel counts them only then)
+    {"is_a", T_LEX, 0.30, true}};
+constexpr int kNRelAll = static_cast<int>(sizeof(kRel) / sizeof(kRel[0]));
+constexpr int kNRelBase = kNRelAll - 1;  // without the flagged relations: every output as before
+int kNRel = kNRelBase;                   // --lead-class: kNRelAll
 int rel_index(const string& n) {
     for (int i = 0; i < kNRel; ++i) if (n == kRel[i].name) return i;
     return -1;
@@ -1700,6 +1708,117 @@ void category_seeds(const string& title, const string& raw, std::size_t base, Pa
     }
 }
 
+// PLAN_FACTS (GENERATION_PLAN §13.42 Q1), --lead-class: the class a page's lead names, a seed of is_a. The lead is the
+// first prose line that holds a bold phrase; templates and parentheses are dropped; after the bold phrase, the first
+// copula (is, was, are, were) opens a phrase that must start with an article (a, an, the) and ends at the first
+// preposition, relative word, conjunction or punctuation. Its head is its last link if that link's display is a common
+// noun (lowercase first letter, letters, spaces and hyphens only, 3-40 bytes, at most 4 words), followed by nothing but
+// -ed, -ing or -ly words. "'''Loki''' is the [[god]] of mischief" -> (Loki, is_a, god). Source "category" (a text seed
+// read from the page's markup), template "lead". Read once per page in pass 1, like the category seeds.
+bool g_lead_class = false;
+void lead_class_seed(const string& title, const string& raw, std::size_t base) {
+    const int r = rel_index("is_a");
+    if (r < 0) return;
+    int depth = 0, table_depth = 0;
+    for (std::size_t pos = 0; pos <= raw.size();) {
+        std::size_t nl = raw.find('\n', pos);
+        if (nl == npos) nl = raw.size();
+        string nc = xml_decode(raw.substr(pos, nl - pos));
+        erase_refs(nc);
+        const string t = trim(nc);
+        const int delta = count_of(nc, "{{") - count_of(nc, "}}");
+        if (t.compare(0, 2, "{|") == 0) ++table_depth;
+        const bool table_end = t.compare(0, 2, "|}") == 0;
+        const bool skip = depth > 0 || table_depth > 0 || t.empty() || t[0] == '|' || t[0] == '!' || t[0] == '=' || t[0] == '*' ||
+                          t[0] == '#' || t[0] == ':' || t[0] == ';' || t[0] == '<' || t[0] == '{' || starts_with(t, "[[Category") ||
+                          starts_with(t, "[[category") || starts_with(t, "__") || starts_with(t, "[[Image:") || starts_with(t, "[[image:");
+        const bool hatnote = t.compare(0, 2, "''") == 0 && t.find("'''") == npos;  // ''For the rank, see ...''
+        if (!skip && !hatnote) {
+            if (t.find("'''") == npos) return;  // the first prose line has no bold phrase: no lead to read
+            string s = t;
+            remove_templates(s);
+            {  // parentheses outside links dropped
+                string o;
+                int par = 0, br = 0;
+                for (std::size_t i = 0; i < s.size(); ++i) {
+                    if (s.compare(i, 2, "[[") == 0) ++br;
+                    if (s.compare(i, 2, "]]") == 0) br = std::max(0, br - 1);
+                    if (br == 0 && s[i] == '(') { ++par; continue; }
+                    if (br == 0 && s[i] == ')' && par > 0) { --par; continue; }
+                    if (par == 0) o += s[i];
+                }
+                s = o;
+            }
+            const std::size_t b0 = s.find("'''");
+            const std::size_t b1 = b0 == npos ? npos : s.find("'''", b0 + 3);
+            if (b1 == npos) return;
+            // units after the bold phrase: links (display, true) and words (false)
+            struct U { string w; bool link = false; };
+            vector<U> u;
+            for (std::size_t i = b1 + 3; i < s.size() && u.size() < 40;) {
+                if (s.compare(i, 2, "[[") == 0) {
+                    const std::size_t e = s.find("]]", i + 2);
+                    if (e == npos) break;
+                    const string inner = s.substr(i + 2, e - i - 2);
+                    const std::size_t bar = inner.rfind('|');
+                    u.push_back({trim(bar == npos ? inner : inner.substr(bar + 1)), true});
+                    i = e + 2;
+                    while (i < s.size() && std::isalpha(static_cast<unsigned char>(s[i]))) ++i;  // [[continent]]s
+                    continue;
+                }
+                const unsigned char c = static_cast<unsigned char>(s[i]);
+                if (c == ' ' || c == '\'') { ++i; continue; }
+                if (std::ispunct(c) && c != '-') { u.push_back({string(1, static_cast<char>(c)), false}); ++i; continue; }
+                std::size_t e = i;
+                while (e < s.size() && s[e] != ' ' && s.compare(e, 2, "[[") != 0 &&
+                       !(std::ispunct(static_cast<unsigned char>(s[e])) && s[e] != '-'))
+                    ++e;
+                u.push_back({s.substr(i, e - i), false});
+                i = e;
+            }
+            std::size_t k = 0;
+            while (k < u.size() && k < 12 && !(!u[k].link && (u[k].w == "is" || u[k].w == "was" || u[k].w == "are" || u[k].w == "were"))) ++k;
+            if (k >= u.size() || k >= 12 || k + 1 >= u.size()) return;
+            const string art = lower(u[k + 1].w);
+            if (u[k + 1].link || (art != "a" && art != "an" && art != "the")) return;
+            static const std::unordered_set<string> stop = {"of", "in", "on", "at", "by", "for", "from", "to", "with", "that", "which", "who",
+                                                            "whose", "where", "and", "or", "but", "as", "near", "since", "during", "after",
+                                                            "before", "between", "than", "into", "within", "whom", "when", "while"};
+            std::size_t e = k + 2;
+            while (e < u.size() && e < k + 10) {
+                if (!u[e].link && (u[e].w.size() == 1 && std::ispunct(static_cast<unsigned char>(u[e].w[0])))) break;
+                if (!u[e].link && stop.count(lower(u[e].w))) break;
+                ++e;
+            }
+            std::size_t h = e;
+            while (h > k + 2 && !u[h - 1].link) {
+                const string& w = u[h - 1].w;
+                const auto ends = [&](const char* x) { const std::size_t n = std::strlen(x); return w.size() > n + 2 && w.compare(w.size() - n, n, x) == 0; };
+                if (!(ends("ed") || ends("ing") || ends("ly"))) return;
+                --h;
+            }
+            if (h <= k + 2 || !u[h - 1].link) return;
+            const string& d = u[h - 1].w;
+            if (d.size() < 3 || d.size() > 40 || !std::islower(static_cast<unsigned char>(d[0]))) return;
+            int words = 1;
+            for (const unsigned char c : d) {
+                if (c == ' ') ++words;
+                else if (!std::isalpha(c) && c != '-') return;
+            }
+            if (words > 4) return;
+            Obj o;
+            o.surf = d;
+            o.k1 = o.k2 = norm_ent(d);
+            add_seed(title, r, o, 2, "lead", base + pos);
+            return;
+        }
+        depth = std::max(0, depth + delta);
+        if (table_end) table_depth = std::max(0, table_depth - 1);
+        if (nl >= raw.size()) break;
+        pos = nl + 1;
+    }
+}
+
 void lead_type(const vector<Sent>& sents, PageFlags& fl) {
     static const std::unordered_set<string> PL = {"city", "town", "village", "country", "state", "province", "region", "island", "river", "lake", "mountain",
                                                   "municipality", "county", "capital", "republic", "kingdom", "territory", "nation", "district", "canton",
@@ -1839,6 +1958,7 @@ void scan_page(const string& data, const PageRef& pg, PageFlags& fl) {
         pos = nl + 1;
     }
     category_seeds(pg.title, raw, pg.tb, fl);
+    if (g_lead_class) lead_class_seed(pg.title, raw, pg.tb);  // PLAN_FACTS: --lead-class
     vector<Sent> ss;
     page_sentences(data, pg, ss, nullptr, 1);
     lead_type(ss, fl);
@@ -15000,6 +15120,9 @@ int main(int argc, char** argv) {
             for (string l; std::getline(sf, l);)
                 if (!l.empty() && std::isdigit(static_cast<unsigned char>(l[0]))) skip_tb.insert(std::strtoull(l.c_str(), nullptr, 10));
         }
+        // PLAN_FACTS (GENERATION_PLAN §13.42 Q1): --lead-class adds the relation is_a, seeded from each page's lead
+        // ("'''X''' is a [[Y]]", lead_class_seed); F2 then learns and gates its prose patterns as for any relation.
+        else if (a == "--lead-class") { g_lead_class = true; kNRel = kNRelAll; }
     }
     if (g_raw && (f2b::g_xa || f2b_gen_on())) { std::fprintf(stderr, "--f2b-xa, --f2b-wild and --f2b-classes read cleaned tokens, not --raw\n"); return 2; }
     if (!A.reach.empty() && A.shard.dev.empty()) { std::fprintf(stderr, "--reach needs --dev\n"); return 2; }
@@ -15099,7 +15222,8 @@ int main(int argc, char** argv) {
         say("  total seeds " + std::to_string(tot) + (wd ? " from the text + " + std::to_string(wd) + " from Wikidata" : "") + " over " + std::to_string(g_by_subj.size()) + " subject pages");
         std::ofstream f(A.outdir + "/seeds.tsv");
         f << "subject\trelation\tobject\tsource\ttemplate\tbyte_offset\n";
-        for (const Seed& sd : g_seeds) f << sd.subj << '\t' << kRel[sd.rel].name << '\t' << sd.o.surf << '\t' << kSrcName[sd.src] << '\t' << sd.tpl << '\t' << sd.off << '\n';
+        for (const Seed& sd : g_seeds)
+            f << sd.subj << '\t' << kRel[sd.rel].name << '\t' << sd.o.surf << '\t' << (sd.tpl == "lead" ? "lead" : kSrcName[sd.src]) << '\t' << sd.tpl << '\t' << sd.off << '\n';
     }
 
     // ---- passes 2-3: train on 80% of the subjects, test on 20%

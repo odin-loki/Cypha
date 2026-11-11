@@ -1,0 +1,62 @@
+types: 38049 entities, 62 positions, 258 head classes, 12 types; log-likelihood -323570.1, BIC 689020.9 (33.9 s)
+context: 867707 mentions of store entities in [0, 100000000); words kept per offset (at least 10 mentions): -2 6711 -1 2536 +1 4492 +2 5711
+type 0: prior 0.132, 5069 entities; spouse:O 0.18, successor:O 0.18, predecessor:O 0.17, director:O 0.11, creator:O 0.09; shape 7 (0.58)
+  members: Norwegian Nynorsk; Nintendo; Marvel Comics; Heavy Metal; Robert A. Heinlein; Apple Computer; Microsoft; Alternative Rock;
+  -2 best: directed 3.5 St 3.5 son 2.9 Dr 2.9 brother 2.7 father 2.5 reign 2.4 daughter 2.4 | worst: mid -4.5 7 -4.2 During -4.1 5 -4.1 31 -4.1 On -4.1
+  -1 best: King 3.8 Prince 3.7 Saint 3.5 Sir 3.3 St 3.2 son 3.2 President 3.2 Emperor 3.2 | worst: January -6.6 September -6.3 March -6.3 October -6.2 November -6.2 June -6.2
+  +1 best: III 3.8 I 3.6 V 3.3 II 3.2 de 3.1 X 3.0 party 2.7 died 2.5 | worst: s -8.4 th -7.9 % -6.7 km -5.8 million -5.6 BC -5.2
+type 1: prior 0.131, 4962 entities; occupation:S 0.99, birth_year:S 0.90, nationality:S 0.86, death_year:S 0.60, birth_place:S 0.33; shape 7 (0.67)
+  members: David Lynch; David Bowie; Bob Dylan; Francis Ford Coppola; Charlie Chaplin; Dennis Hopper; David Cronenberg; Frank Zappa;
+  -2 best: works 3.3 According 3.0 played 3.0 such 2.8 work 2.7 music 2.7 written 2.6 influence 2.5 | worst: On -3.8 1 -3.4 – -3.3 9 -3.3 7 -3.3 mid -3.3
+  -1 best: Sir 3.6 Emperor 3.0 included 3.0 by 2.8 President 2.8 like 2.6 Saint 2.6 include 2.4 | worst: In -5.3 January -4.9 December -4.7 May -4.7 March -4.7 October -4.6
+  +1 best: died 2.5 ’ 2.2 who 2.2 ( 2.0 used 1.8 took 1.8 The 1.8 also 1.7 | worst: th -6.4 s -6.4 % -5.3 – -4.6 km -4.5 million -4.2
+type 2: prior 0.128, 4908 entities; birth_year:S 0.96, death_year:S 0.62, birth_place:S 0.18, nationality:S 0.02; shape 7 (0.79)
+  members: Akira Kurosawa; David Lean; Bill Watterson; Danny Elfman; Victor Gollancz; Jim Furyk; Anne Rice; Colonel Sanders;
+  -2 best: directed 3.4 son 2.9 brother 2.6 daughter 2.5 his 2.5 led 2.5 According 2.3 written 2.3 | worst: On -4.2 in -2.9 University -2.8 1 -2.8 2 -2.8 – -2.8
+  -1 best: Sir 3.2 Emperor 3.0 General 2.9 by 2.7 son 2.6 like 2.3 named 2.2 married 2.1 | worst: In -5.4 in -4.8 January -4.3 September -4.1 May -4.0 December -4.0
+  +1 best: died 3.3 ( 2.6 then 2.5 who 2.0 ’ 2.0 led 2.0 was 1.8 took 1.8 | worst: s -6.4 th -5.8 % -4.7 years -4.1 km -3.9 million -3.6
+type 3: prior 0.126, 4897 entities; genre:S 0.30, country:S 0.26, founded:S 0.24, location:S 0.18, director:S 0.17; shape 11 (0.37)
+  members: Batman; United Kingdom general election, 1997; United Kingdom general election, 2001; United Kingdom general election, 1979; United Kingdom general election, 1992; DC Comics; United Kingdom general election, 1987; Caribbean Sea;
+  -2 best: version 2.9 album 2.2 film 2.1 game 2.0 such 1.9 2005 1.8 over 1.6 like 1.6 | worst: mid -4.3 17 -4.0 died -3.9 27 -3.9 28 -3.8 19 -3.8
+  -1 best: film 3.5 Super 3.3 s 2.0 like 1.9 original 1.8 called 1.7 popular 1.6 " 1.6 | worst: January -6.0 September -5.7 May -5.7 March -5.7 October -5.7 July -5.6
+  +1 best: 2 3.5 announced 2.5 series 2.5 World 2.2 television 1.9 Association 1.8 movie 1.8 team 1.8 | worst: th -7.4 % -6.3 km -5.4 BC -4.8 s -4.8 m -4.7
+type 4: prior 0.120, 4776 entities; located_in:S 1.00, capital:S 0.15, language:S 0.10, country:S 0.04, location:S 0.03; shape 6 (0.48)
+  members: Rhineland-Palatinate; Danube; Yangtze River; Belfast; Alabama River; Obwalden; Indus River; Indus;
+  -2 best: town 3.7 island 3.5 east 3.2 Battle 3.1 county 3.1 west 3.0 north 2.9 south 2.8 | worst: On -4.7 3 -4.0 10 -4.0 6 -3.9 2 -3.8 7 -3.7
+  -1 best: 2005 4.1 near 2.9 name 2.6 at 2.4 de 2.3 & 1.8 Lord 1.8 called 1.7 | worst: January -5.4 September -5.2 December -5.1 May -5.1 March -5.1 October -5.1
+  +1 best: region 2.8 Street 2.8 is 2.6 period 2.6 area 2.5 River 2.3 Park 2.3 Bay 2.1 | worst: th -6.9 s -6.8 % -5.8 years -5.1 km -4.9 million -4.6
+type 5: prior 0.090, 3411 entities; capital:O 0.16, family:O 0.16, occupation:O 0.11, nationality:O 0.09, birth_place:O 0.08; shape 6 (0.92)
+  members: English; American; French; Mammal; Writer; German; British; Reptile;
+  -2 best: Anglo 2.1 African 2.0 Indo 2.0 non 2.0 translated 2.0 anti 1.9 Spanish 1.9 Chinese 1.8 | worst: c -5.9 31 -5.5 25 -5.2 mid -5.2 p -5.2 28 -4.9
+  -1 best: Native 2.2 Best 2.1 Roman 2.0 traditional 2.0 White 1.9 an 1.9 many 1.9 English 1.8 | worst: April -8.2 May -8.2 February -8.1 December -8.0 January -8.0 September -7.8
+  +1 best: mythology 2.2 descent 2.2 word 2.2 army 2.2 America 2.2 Security 2.2 poet 2.1 Church 2.1 | worst: th -9.4 s -9.2 % -8.2 km -7.9 million -7.4 BC -7.3
+type 6: prior 0.076, 2592 entities; birth_place:O 0.34, located_in:O 0.27, location:O 0.18, death_place:O 0.17, located_in:S 0.13; shape 8 (0.33)
+  members: United States; Norway; Sweden; London; United Kingdom; Rome; Denmark; Netherlands;
+  -2 best: County 1.8 moved 1.8 parts 1.8 border 1.8 coast 1.8 Bank 1.8 Governor 1.8 state 1.8 | worst: mid -6.0 17 -5.4 c -5.3 p -5.3 On -5.1 24 -5.0
+  -1 best: southern 1.9 mainland 1.9 western 1.9 northern 1.9 Southern 1.8 eastern 1.8 central 1.8 outside 1.8 | worst: September -8.5 November -8.4 February -8.2 March -8.2 December -7.9 May -7.9
+  +1 best: State 1.8 Times 1.8 Supreme 1.7 Senate 1.6 where 1.6 since 1.5 Navy 1.4 City 1.4 | worst: th -10.2 s -9.9 % -9.0 km -8.1 million -7.6 BC -7.5
+type 7: prior 0.056, 2126 entities; class:S 0.99, order:S 0.99, family:S 0.87, family:O 0.07; shape 6 (0.56)
+  members: Anatidae; Corvidae; Scolopacidae; Passerine; Accipitridae; Felidae; Fabaceae; Poaceae;
+  -2 best: The 2.6 family 2.2 than 1.9 or 1.9 called 1.8 known 1.8 ' 1.8 " 1.7 | worst: University -3.2 during -3.0 born -2.8 On -2.7 In -2.5 died -2.4
+  -1 best: family 5.0 The 2.7 " 2.4 called 2.2 White 2.2 name 2.0 American 1.6 John 1.6 | worst: In -5.3 January -3.8 early -3.7 September -3.6 December -3.5 late -3.5
+  +1 best: family 3.0 can 2.8 species 2.6 Island 2.6 is 2.6 are 2.5 " 2.4 River 2.1 | worst: th -5.2 s -4.1 % -4.1 – -4.0 he -3.6 years -3.4
+type 8: prior 0.045, 1718 entities; death_year:O 0.84, birth_year:O 0.75, founded:O 0.19; shape 0 (1.00)
+  members: 1947; 2003; 1945; 1960; 2002; 1972; 1949; 1948;
+  -2 best: mid 1.4 p 1.4 c 1.3 31 1.3 28 1.3 17 1.3 29 1.3 26 1.3 | worst: St -7.2 non -6.3 anti -5.6 Indo -5.5 outside -5.3 Dr -4.9
+  -1 best: February 1.4 November 1.4 April 1.4 January 1.4 September 1.4 March 1.4 July 1.4 August 1.4 | worst: southern -7.4 Roman -7.3 North -7.3 South -7.1 New -7.0 President -6.9
+  +1 best: th 1.4 % 1.4 km 1.4 BC 1.4 s 1.4 st 1.4 mm 1.4 million 1.4 | worst: forces -7.4 Navy -7.4 River -7.0 mythology -6.6 culture -6.5 province -6.4
+type 9: prior 0.039, 1470 entities; genre:O 0.42, occupation:O 0.31, country:S 0.06, language:O 0.05, currency:O 0.04; shape 10 (0.65)
+  members: actor; writer; musician; poet; bird; novelist; politician; painter;
+  -2 best: use 2.3 S 2.0 language 2.0 into 1.7 made 1.7 music 1.5 a 1.4 its 1.4 | worst: 1 -2.6 On -2.6 born -2.4 during -1.7 3 -1.7 10 -1.6
+  -1 best: Roman 2.0 British 1.7 a 1.6 American 1.6 French 1.6 popular 1.3 . 1.3 the 1.3 | worst: January -2.7 In -2.7 September -2.5 December -2.5 May -2.5 March -2.5
+  +1 best: of 2.2 version 1.9 General 1.8 who 1.8 has 1.6 is 1.5 Grand 1.5 release 1.4 | worst: s -4.5 th -4.1 % -3.0 he -2.9 – -2.6 years -2.4
+type 10: prior 0.034, 1244 entities; birth_year:S 0.88, death_year:S 0.84, birth_place:S 0.09; shape 11 (0.93)
+  members: Lázaro Cárdenas; Benito Juárez; Bill O'Reilly (cricketer); Harman and Ising; Matthäus Merian; Miguel de la Madrid; Marguerite of Navarre; Robert the Magnificent;
+  -2 best: daughter 3.4 son 3.2 reign 2.7 his 2.6 wife 2.1 time 2.0 led 1.9 death 1.9 | worst: on -3.0 in -2.6 On -2.5 1 -2.3 born -2.2 during -1.9
+  -1 best: King 4.4 son 2.8 Emperor 2.7 married 2.6 Prince 2.6 under 2.4 by 2.1 when 2.0 | worst: in -4.3 a -4.0 the -3.8 In -3.5 January -2.6 early -2.5
+  +1 best: II 2.5 ( 2.2 died 2.2 had 2.0 who 2.0 then 1.8 ' 1.7 took 1.6 | worst: s -4.5 th -4.0 - -3.1 % -2.9 – -2.8 : -2.4
+type 11: prior 0.023, 876 entities; successor:S 1.00, predecessor:S 0.99, death_year:S 0.71, birth_year:S 0.63, birth_place:S 0.34; shape 11 (0.33)
+  members: Brigham Young; Andrew Johnson; Franklin Pierce; Charles Evans Hughes; Arthur Meighen; Benjamin Harrison; Bill Clinton; Franklin D. Roosevelt;
+  -2 best: son 2.3 reign 2.1 government 2.1 death 1.8 brother 1.8 his 1.8 wife 1.8 US 1.6 | worst: in -2.6 On -2.5 1 -2.4 is -2.3 born -2.2 In -2.2
+  -1 best: President 5.5 King 3.8 General 2.7 under 2.5 by 2.3 film 2.2 when 2.2 Sir 2.1 | worst: in -5.1 In -4.0 the -3.0 - -2.8 a -2.7 January -2.6
+  +1 best: ( 2.1 who 1.7 won 1.7 used 1.5 was 1.5 died 1.5 announced 1.4 took 1.4 | worst: s -4.4 th -3.9 % -2.9 – -2.8 - -2.6 years -2.3
