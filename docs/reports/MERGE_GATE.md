@@ -1,8 +1,10 @@
 # Merge M4: the gate's structure experts, grouped
 
-**Odin Loch** · 2026-11-06 · branch `wip/merge-gate` · GENERATION_PLAN §13.40 M4
+**Odin Loch** · 2026-11-06, checks rerun 2026-11-12 · branch `wip/merge-gate` · GENERATION_PLAN §13.40 M4
 
 **Outcome first.** The refactor is exact. Every expert's score is bit-identical, and the dev GEN files of the planner (the default, text-only store `e9_text`) and of `--k5-struct` are equal under `cmp`. Gate time falls by about 43% under the planner and about half under `--k5-struct` (the median of every run). Peak RAM falls 26 MB (planner) and 291 MB (`--k5-struct`). Wall time does not move beyond this PC's noise: the gate is a small part of either writer. The code grows by 30 lines (19 code lines).
+
+**2026-11-12.** The branch was merged with main 9cbd277 (Q1 and Q2 as flags; the discourse planner, Q3t, is the default; O5). Both dev GEN checks were run again on the merged tree, old and new started together: both are still equal under `cmp` (section "Recheck on main 9cbd277" below).
 
 All changes are in `native/include/cypha/lm/structure/experts.hpp`. No other file changed. The branch was merged with main 34da0ec (M1, M2, the text-only planner store) before the checks below, and every check was run again on the merged tree.
 
@@ -72,6 +74,26 @@ Old is main 34da0ec (`~/m4r/build_old`, run from a copy of main); new is this br
 There is no floating-point reordering anywhere. Every sum is taken over the same terms in the same order, and the sums that are whole numbers are exact.
 
 Before the merge with main (2026-11-05, against main 7265b3e, with the `e9_aug` store and W1's model `S210.R.chosen.model`), the same GEN checks were also equal.
+
+## Recheck on main 9cbd277 (2026-11-12)
+
+Main had moved on since 34da0ec: the discourse planner (Q3t) is the default writer, and Q1 and Q2 came in as flags. `experts.hpp` did not change on main, so the merge was clean. Old is main 9cbd277 (`~/j3/main`, built to `~/j3/b_main`); new is this branch merged with it, 799743a (`~/j3/m4`, built to `~/j3/b_m4`). Same compiler (GCC 13.3) and flags (CMake Release). The two pairs ran at the same time, each pair's old and new started together, 4 threads each (`K5_THREADS=4`). The PC's load average was about 15.
+
+| Check | Result |
+|---|---|
+| Default writer, the discourse planner on `e9_text`: `scripts/gen_eval.sh dev … --prompts 250 --k5 /mnt/d/cypha_llm/fuzzy/train.txt` | GEN file (200,638 bytes) and `sample` stdout **equal** (`cmp`); SCRIBE v2 and v3.1 tables and the summary equal apart from the run's label. SCRIBE v2 0.606 [0.572, 0.642], copy32 0.0385, both. |
+| The same GEN file against the checked-in `bench/k5_planner/Q3t_s0.gen.txt` (CRs stripped) | equal apart from the MODEL line (as §13.48 found for main itself) |
+| `--k5-struct ~/k5s_data/runs/S210.Rnok5.chosen.model` (W5), dev GEN file | GEN file (200,125 bytes) and stdout **equal** (`cmp`); SCRIBE tables and summary equal apart from the label |
+| The same GEN file against `bench/k5_structure/W5_s0.gen.txt` (CRs stripped) | **equal** |
+
+Sample step under `/usr/bin/time -v`:
+
+| Writer | Wall, old → new | CPU (user), old → new | K5 "generated … in", old → new | Peak RSS, old → new |
+|---|---:|---:|---:|---:|
+| Discourse planner (default) | 2:41.3 → 2:41.5 | 571.4 → 570.7 s | 140.3 → 139.6 s | 630 MB → 604 MB (−26 MB) |
+| `--k5-struct` | 3:45.4 → 3:41.3 | 816.5 → 802.9 s (−1.7%) | 201.4 → 197.3 s | 1,685 MB → 1,379 MB (−306 MB, −18%) |
+
+The gate timers below were not run again: `experts.hpp` is the same file, and the gate is under 1% of either writer's time.
 
 ## Gate time
 
@@ -144,12 +166,13 @@ Registered: "M4: exact; gate time down at least 20%."
 | Prediction | Result | Score |
 |---|---|---|
 | exact | every feature bit-identical on all of H (S10, S210, fresh and growing contexts); both dev GEN files equal under `cmp`, and equal to the checked-in P1t and W5 files | **hit** |
-| gate time down at least 20% | PRED_GATE | **hit** |
+| gate time down at least 20% | the gate's own time (prepare + features, summed over threads): median −42.9% wall and −42.7% CPU under the planner, −50.0% wall and −48.3% CPU under `--k5-struct` | **hit** |
 
-**The keep rule** (§13.40: kept if exact and it lowers RAM or time or code with nothing worse): it is exact, and it lowers gate time and RAM. It adds 19 code lines (2.3%). That is the one thing worse, and the lead decides whether it counts.
+**The keep rule** (§13.40: kept if exact and it lowers RAM or time or code with nothing worse): it is exact, and it lowers gate time and RAM. It adds 19 code lines (2.3%). That is the one thing worse, and the lead decides whether it counts. Rechecked on main 9cbd277 (2026-11-12): still exact, peak RAM −26 MB (planner) and −306 MB (`--k5-struct`).
 
 ## Files
 
 - `native/include/cypha/lm/structure/experts.hpp` (the only code change).
+- The 2026-11-12 recheck: `/mnt/d/cypha_llm/merge/m4/r1112/` (`P_*` the default writer, `S_*` `--k5-struct`, `old` and `new`, with `.sample.time`).
 - Runs on Odin's PC, `/mnt/d/cypha_llm/merge/m4/rerun/`: `gen/` (the `gen_eval` outputs of the exactness runs, with `.sample.time`), `gate/` and `gate2/` (the timer runs), `control/` (plain K5 and the class-query probe), `harness/` (the feature checks, the profile, the selftests), `v2/` (the dropped follower-total variant). The first runs, before the merge with main, are in `/mnt/d/cypha_llm/merge/m4/` (`P_*`, `S_*`, `gate/`, `layout/`).
 - Not committed (scratch tools): the harness `gate_bench.cpp` and its lap-timer variant, the timer patches (`mktimer2.py`, `m4_mkplantimer.py`), the class-query probe, the run scripts.
