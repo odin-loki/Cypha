@@ -91,6 +91,18 @@ M1 and M2 have landed, so the mixer changes that were patches before are now mad
 
 Left as they were: the full mix's copy state (already minimal, and its branch skips a log) and the planner's fact preference (already minimal, and it runs once per prompt).
 
+## Resumed (2026-11-12, before any run) · Odin Loch
+
+- `origin/main` (9cbd277: O5, Q1/Q2 flags, the planner's fact files) is merged in. No conflict.
+- **The patches.** O5 has landed on main, so `online/online_ngram.hpp` has no running owner. Its patch no longer applied (O5 rewrote the file), so it was redone by hand: the slot claim by masks, and `bit ? p : 1 - p` picked from a pair, in `code()`. O5's bit-position loop is gone from main, so that part has nothing to change. It is now in place on this branch.
+- **Left as patches:** `o2_cyphalm_trie.patch` (`tools/lm/cyphalm_trie.cpp`: O2 runs now and rewrites that file), `o6_word_kn.patch` (`lm/word_kn.hpp`: O6, and §13.48 runs now) and `q2_planner_writer.patch` (`lm/planner/writer.hpp`: §13.48 runs now; it no longer applies either).
+- **Checks** (old: main 9cbd277 from `git archive`; new: this branch; GCC 13, Release, Ninja). Each pair started together, each run on its own 4 CPUs by `taskset`:
+  - small `context8k`: the default, `--no-meta-mix`, `--no-full-mix`;
+  - dev GEN files (`cyphalm_trie sample`, as `scripts/gen_eval.sh dev` runs it, 250 prompts, `--k5 fuzzy/train.txt`): the planner (the default) and `--no-k5-plan`, GEN file and stdout;
+  - `ctest` `native_opt_boolean_smoke`;
+  - one full default `context8k` in its own turn of `flock ~/.cypha_full.lock`: `context8k_bpc` 1.4962 and stdout `cmp` equal to the old full run's (run with O2's pair).
+- Exact means `cmp` of the whole stdout. If any check differs, O3 is reported failed.
+
 ## Exactness
 
 TBD-EXACT

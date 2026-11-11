@@ -145,7 +145,8 @@ public:
                 const std::uint16_t c = sl.n;
                 double p, xq;
                 pstretch(sl.n1, c, p, xq);
-                po[q] *= bit ? p : 1 - p;
+                const double tq[2] = {1 - p, p};  // O3: bit ? p : 1 - p, picked from a pair by the bit (no branch)
+                po[q] *= tq[bit];
                 x[q] = xq;
                 if (c) seen = q + 1;
             }
@@ -154,7 +155,8 @@ public:
             double s = 0;
             for (int k = 0; k < K_; ++k) s += w[k] * x[k];
             const double p = std::clamp(gln_squash(s), 1e-5, 1 - 1e-5);
-            pm *= bit ? p : 1 - p;
+            const double tn[2] = {1 - p, p};  // O3: the same pick
+            pm *= tn[bit];
             if (learn) {
                 const double e = bit - p;
                 for (int k = 0; k < K_; ++k) w[k] = std::clamp(w[k] + p_.lr * e * x[k], -16.0, 16.0);
@@ -278,11 +280,12 @@ private:
 
     std::size_t slot(int q, unsigned c0) const { return kslot(kq_[static_cast<std::size_t>(q)], c0); }
     std::uint8_t check(int q, unsigned c0) const { return kcheck(kq_[static_cast<std::size_t>(q)], c0); }
+    // O3: without a branch (a slot taken over is unpredictable): the counts are kept when the check matches, else 0.
     static void claim(Slot& sl, std::uint8_t c) {
-        if (sl.ck != c) {
-            sl.ck = c;
-            sl.n1 = sl.n = 0;
-        }
+        const auto keep = static_cast<std::uint16_t>(0u - static_cast<unsigned>(sl.ck == c));
+        sl.n1 = static_cast<std::uint16_t>(sl.n1 & keep);
+        sl.n = static_cast<std::uint16_t>(sl.n & keep);
+        sl.ck = c;
     }
     void count(Slot& sl, unsigned bit) const {
         std::uint16_t c1 = sl.n1, c = sl.n;
