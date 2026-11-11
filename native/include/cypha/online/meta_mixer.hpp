@@ -35,11 +35,179 @@
 #include <string>
 #include <vector>
 
+// OPT_META_SIMD (GENERATION_PLAN §13.41 O8): M1's weight sets on AVX-512, compiled for that target only (GCC and Clang
+// on x86-64) and chosen at run time when the CPU has AVX-512F (CYPHA_META_AVX512=0 turns it off). Elsewhere the scalar
+// loops below run, with the same numbers.
+#if defined(__x86_64__) && (defined(__GNUC__) || defined(__clang__))
+#include <immintrin.h>
+#define CYPHA_META_AVX512 1
+#define CYPHA_META_T512 __attribute__((target("avx512f")))
+#else
+#define CYPHA_META_AVX512 0
+#endif
+
 namespace cypha::online::metamix {
 
 namespace fx = cypha::online::fullmix;
-using Mixer2 = mix::LogisticMixer<float>;  // PAQ8's mixer, layer-1 weights as float32 (half the memory of A's)
 using mix::FixedShare;
+using mix::squash;
+using mix::stretch_eps;
+
+inline bool meta_use_avx512() {
+#if CYPHA_META_AVX512
+    static const bool on = [] {
+        if (const char* e = std::getenv("CYPHA_META_AVX512"))
+            if (std::atoi(e) == 0) return false;
+        __builtin_cpu_init();
+        return __builtin_cpu_supports("avx512f") != 0;
+    }();
+    return on;
+#else
+    return false;
+#endif
+}
+
+#if CYPHA_META_AVX512
+// A product kept apart from the sum after it, so no fused multiply-add can join them: each product and each sum is
+// rounded on its own, as in the scalar code (OPT_SIMD.md's lstm_mul8).
+CYPHA_META_T512 inline __m512d meta_mul8(__m512d a, __m512d b) {
+    __m512d p = _mm512_mul_pd(a, b);
+    __asm__("" : "+v"(p));
+    return p;
+}
+// G weight sets at once. rows[g]: set g's row, R lanes (one per rate) for each input, input after input. Lane r of set
+// g gets 0 + w(0) x(0) + w(1) x(1) + ..., in order, each w a float widened to double: the scalar loop's sum.
+template <int G>
+CYPHA_META_T512 inline void meta_dots512(float* const* rows, int n, int R, const double* x, double* d) {
+    const __mmask16 mk = static_cast<__mmask16>((1u << R) - 1u);
+    __m512d a[G];
+    for (int g = 0; g < G; ++g) a[g] = _mm512_setzero_pd();
+    for (int i = 0; i < n; ++i) {
+        const __m512d xi = _mm512_set1_pd(x[i]);
+        for (int g = 0; g < G; ++g) {
+            const __m512 w = _mm512_maskz_loadu_ps(mk, rows[g] + static_cast<std::size_t>(i) * R);
+            a[g] = _mm512_add_pd(a[g], meta_mul8(_mm512_cvtps_pd(_mm512_castps512_ps256(w)), xi));
+        }
+    }
+    for (int g = 0; g < G; ++g) _mm512_storeu_pd(d + g * 8, a[g]);
+}
+// w += float(err x), lane by lane: the scalar update.
+CYPHA_META_T512 inline void meta_update512(float* row, int n, int R, const double* x, const double* err8) {
+    const __mmask16 mk = static_cast<__mmask16>((1u << R) - 1u);
+    const __m512d e = _mm512_loadu_pd(err8);
+    for (int i = 0; i < n; ++i) {
+        float* w = row + static_cast<std::size_t>(i) * R;
+        const __m256 u = _mm512_cvtpd_ps(_mm512_mul_pd(e, _mm512_set1_pd(x[i])));
+        const __m256 v = _mm256_add_ps(_mm512_castps512_ps256(_mm512_maskz_loadu_ps(mk, w)), u);
+        _mm512_mask_storeu_ps(w, mk, _mm512_castps256_ps512(v));
+    }
+}
+#endif
+
+/// M1 at each of M2's rates, as one bank (OPT_META_SIMD.md, GENERATION_PLAN §13.41 O8). Mixer r is mix_core.hpp's
+/// LogisticMixer<float> with rates lr1[r], lr2[r] and no decay: the same inputs and contexts, its own weights. The R
+/// mixers' weights for one set and one context lie side by side, input after input (w[((c n) + i) R + r]), so one
+/// AVX-512 vector holds the R weight sets of one selector and each lane keeps its own sum in order. Every number is
+/// the R separate mixers' (decay 0: the rate is lr0 exactly).
+class M1Bank {
+ public:
+    M1Bank(int inputs, const std::vector<int>& set_sizes, int init_input, std::vector<double> lr1, std::vector<double> lr2, double eps,
+           int l2_sets)
+        : n_(inputs), m_(static_cast<int>(set_sizes.size())), R_(static_cast<int>(lr1.size())), l2_(l2_sets), lr1_(std::move(lr1)),
+          lr2_(std::move(lr2)), eps_(eps), sizes_(set_sizes) {
+        for (int z : set_sizes) {
+            std::vector<float> w(static_cast<std::size_t>(z) * n_ * R_, 0.0f);
+            for (int c = 0; c < z; ++c)
+                for (int r = 0; r < R_; ++r) w[(static_cast<std::size_t>(c) * n_ + init_input) * R_ + r] = 1.0f;
+            w1_.push_back(std::move(w));
+        }
+        w2_.assign(static_cast<std::size_t>(R_) * l2_ * m_, 1.0 / m_);
+        rows_.resize(static_cast<std::size_t>(m_));
+        d_.resize(static_cast<std::size_t>(m_) * 8);
+        p1_.resize(static_cast<std::size_t>(m_) * 8);
+        s1_.resize(static_cast<std::size_t>(m_) * 8);
+        simd_ = meta_use_avx512();
+    }
+    int rates() const { return R_; }
+    /// x: n stretched inputs; ctx: one context per layer-1 set; c2: layer 2's context. p[r]: mixer r's P(bit = 1).
+    void p(const double* x, const int* ctx, int c2, double* p) {
+        x_ = x;
+        c2_ = c2;
+        for (int k = 0; k < m_; ++k) rows_[k] = &w1_[k][static_cast<std::size_t>(ctx[k]) * n_ * R_];
+        dots();
+        for (int r = 0; r < R_; ++r) {
+            const double* w2 = &w2_[(static_cast<std::size_t>(r) * l2_ + c2) * m_];
+            double dot2 = 0;
+            for (int k = 0; k < m_; ++k) {
+                const std::size_t a = static_cast<std::size_t>(k) * 8 + r;
+                p1_[a] = squash(d_[a]);
+                s1_[a] = stretch_eps(p1_[a], eps_);
+                dot2 += w2[k] * s1_[a];
+            }
+            p[r] = p2_[r] = squash(dot2);
+        }
+    }
+    void update(int bit) {
+        double err[8] = {};
+        for (int k = 0; k < m_; ++k) {
+            for (int r = 0; r < R_; ++r) err[r] = (bit - p1_[static_cast<std::size_t>(k) * 8 + r]) * lr1_[static_cast<std::size_t>(r)];
+            float* row = rows_[k];
+#if CYPHA_META_AVX512
+            if (simd_) {
+                meta_update512(row, n_, R_, x_, err);
+                continue;
+            }
+#endif
+            for (int i = 0; i < n_; ++i)
+                for (int r = 0; r < R_; ++r) row[static_cast<std::size_t>(i) * R_ + r] += static_cast<float>(err[r] * x_[i]);
+        }
+        for (int r = 0; r < R_; ++r) {
+            const double e2 = (bit - p2_[r]) * lr2_[static_cast<std::size_t>(r)];
+            double* w2 = &w2_[(static_cast<std::size_t>(r) * l2_ + c2_) * m_];
+            for (int k = 0; k < m_; ++k) w2[k] += e2 * s1_[static_cast<std::size_t>(k) * 8 + r];
+        }
+    }
+    /// The R mixers' bytes, as LogisticMixer<float>::bytes counts each.
+    std::size_t bytes() const {
+        std::size_t b = static_cast<std::size_t>(l2_) * m_ * 8;
+        for (int z : sizes_) b += static_cast<std::size_t>(z) * n_ * sizeof(float);
+        return b * static_cast<std::size_t>(R_);
+    }
+
+ private:
+    // d_[k 8 + r]: set k's dot product in mixer r.
+    void dots() {
+#if CYPHA_META_AVX512
+        if (simd_) {
+            int k = 0;
+            for (; k + 4 <= m_; k += 4) meta_dots512<4>(&rows_[k], n_, R_, x_, &d_[static_cast<std::size_t>(k) * 8]);
+            for (; k + 2 <= m_; k += 2) meta_dots512<2>(&rows_[k], n_, R_, x_, &d_[static_cast<std::size_t>(k) * 8]);
+            for (; k < m_; ++k) meta_dots512<1>(&rows_[k], n_, R_, x_, &d_[static_cast<std::size_t>(k) * 8]);
+            return;
+        }
+#endif
+        for (int k = 0; k < m_; ++k) {
+            const float* row = rows_[k];
+            for (int r = 0; r < R_; ++r) {
+                double d = 0;
+                for (int i = 0; i < n_; ++i) d += row[static_cast<std::size_t>(i) * R_ + r] * x_[i];
+                d_[static_cast<std::size_t>(k) * 8 + r] = d;
+            }
+        }
+    }
+    int n_, m_, R_, l2_;
+    std::vector<double> lr1_, lr2_;
+    double eps_;
+    std::vector<int> sizes_;
+    std::vector<std::vector<float>> w1_;
+    std::vector<double> w2_;
+    std::vector<float*> rows_;
+    std::vector<double> d_, p1_, s1_;
+    double p2_[8] = {};
+    const double* x_ = nullptr;
+    int c2_ = 0;
+    bool simd_ = false;
+};
 
 /// k=v,k=v (lists inside a value use ':'). Defaults are the registered ones, chosen on the holdout's first half by
 /// replay (META_MIXING.md, "Tuning"; T33). Before tuning: sel 0-10, l2 0, m1lr1 = lr1, m1r 0, m3a 1e-3, headline M3L.
@@ -131,10 +299,20 @@ class MetaMixer : public fx::StepHook {
         std::vector<int> sz;
         for (int s : sel_) sz.push_back(sizes[s]);
         const double l1 = M.m1lr1 > 0 ? M.m1lr1 : P.lr1, l2r = M.m1lr2 > 0 ? M.m1lr2 : P.lr2;
-        m1_ = std::make_unique<Mixer2>(nall_, sz, kAll_ - 1, l1, l2r, 0, P.eps, M.l2 ? 256 : 8);
-        if (M.m1r)
-            for (double sc : Params::list(M.scales))
-                m1r_.push_back(sc == 1.0 ? nullptr : std::make_unique<Mixer2>(nall_, sz, kAll_ - 1, l1 * sc, l2r * sc, 0, P.eps, M.l2 ? 256 : 8));
+        // M1 (PAQ8's mixer, layer-1 weights as float32) and, with m1r, M1 at each other rate: one bank, a mixer per rate
+        // in the order of scales (OPT_META_SIMD.md).
+        std::vector<double> r1 = {l1}, r2 = {l2r};
+        if (M.m1r) {
+            r1.clear(), r2.clear();
+            const auto scl = Params::list(M.scales);
+            for (std::size_t i = 0; i < scl.size(); ++i) {
+                if (scl[i] == 1.0) m1c_ = static_cast<int>(i);
+                r1.push_back(scl[i] == 1.0 ? l1 : l1 * scl[i]);
+                r2.push_back(scl[i] == 1.0 ? l2r : l2r * scl[i]);
+            }
+        }
+        m1_ = std::make_unique<M1Bank>(nall_, sz, kAll_ - 1, r1, r2, P.eps, M.l2 ? 256 : 8);
+        m1r_ = M.m1r != 0;
         m1s_ = std::make_unique<fx::Sse>(P);
         m1b_ = std::make_unique<fx::BitMixer>(2, std::vector<int>{8}, 0, P.lr1, P.lr2, 0, P.eps);
         m1g_ = std::make_unique<fx::BitMixer>(2, std::vector<int>{8}, 0, P.lr1, P.lr2, 0, P.eps);
@@ -241,12 +419,11 @@ class MetaMixer : public fx::StepHook {
             c1[k] = v;
         }
         const int c2 = M_.l2 ? static_cast<int>(c0) : j;
-        double pM1 = cl(m1_->p(xa, c1, c2));
         double p1r[8];
-        if (!m1r_.empty()) {
-            for (std::size_t r = 0; r < m1r_.size(); ++r) p1r[r] = m1r_[r] ? cl(m1r_[r]->p(xa, c1, c2)) : pM1;
-            pM1 = cl(fsM1_.mix(p1r));
-        }
+        m1_->p(xa, c1, c2, p1r);
+        for (int r = 0; r < m1_->rates(); ++r) p1r[r] = cl(p1r[r]);
+        double pM1 = p1r[m1c_];
+        if (m1r_) pM1 = cl(fsM1_.mix(p1r));
         const double pM1s = m1s_->p(pM1, in, c0, j);
         const int z0 = 0;
         const double x1b[2] = {st(pM1s), st(pBs)};
@@ -280,12 +457,9 @@ class MetaMixer : public fx::StepHook {
         lp_[6] += lg(pM2AB), lp_[7] += lg(pM3), lp_[8] += lg(pM3L), lp_[9] += lg(pM3Ls), lp_[10] += lg(pM3s), lp_[11] += lg(pM1G);
         lpGs_ += lg(pM2Gs);
         m1_->update(bit);
-        if (!m1r_.empty()) {
+        if (m1r_) {
             double q1[8];
-            for (std::size_t r = 0; r < m1r_.size(); ++r) {
-                if (m1r_[r]) m1r_[r]->update(bit);
-                q1[r] = bit ? p1r[r] : 1 - p1r[r];
-            }
+            for (int r = 0; r < m1_->rates(); ++r) q1[r] = bit ? p1r[r] : 1 - p1r[r];
             fsM1_.update(q1);
         }
         m1s_->update(bit);
@@ -341,8 +515,6 @@ class MetaMixer : public fx::StepHook {
         std::size_t b = m1_->bytes() + m1s_->bytes() * 6 + m1b_->bytes() + m2am_->bytes() + m2ab_->bytes() + m3l_->bytes();
         for (const auto& m : m2a_)
             if (m) b += m->bytes();
-        for (const auto& m : m1r_)
-            if (m) b += m->bytes();
         for (const auto& m : m2g_)
             if (m) b += m->bytes();
         return b;
@@ -358,7 +530,7 @@ class MetaMixer : public fx::StepHook {
         o << buf;
         std::string w = "meta_mix_weights M3";
         for (double v : fs3_.w) std::snprintf(buf, sizeof buf, " %.3f", v), w += buf;
-        if (!m1r_.empty()) {
+        if (m1r_) {
             w += " | M1";
             for (double v : fsM1_.w) std::snprintf(buf, sizeof buf, " %.3f", v), w += buf;
         }
@@ -378,8 +550,9 @@ class MetaMixer : public fx::StepHook {
     int lstm_at_ = -1, bc1_ = 0, bc2_ = 0, cb_ = 0, mlen_ = 0;
     std::uint32_t h3_ = 0, hw_ = 0;
     std::vector<int> sel_;
-    std::unique_ptr<Mixer2> m1_;
-    std::vector<std::unique_ptr<Mixer2>> m1r_;  // m1r=1: M1 at each rate (the 1x member is m1_)
+    std::unique_ptr<M1Bank> m1_;  // M1, and with m1r M1 at each rate (OPT_META_SIMD.md)
+    bool m1r_ = false;
+    int m1c_ = 0;                  // the 1x mixer's place in the bank
     std::unique_ptr<fx::Sse> m1s_, m2as_, m2gs_, m3ls_, m3s_;
     std::unique_ptr<fx::BitMixer> m1b_, m1g_, m2am_, m2ab_, m3l_;
     std::vector<double> scales_;
