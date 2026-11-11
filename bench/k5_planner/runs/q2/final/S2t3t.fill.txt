@@ -1,0 +1,19 @@
+stated fact sentences 179
+names intact: 147 of 179 (0.821 [0.759, 0.870])
+names side by side: 12 of 179 (0.067 [0.039, 0.114])
+slot type errors, rule 1 (any asserted position unfit): 29 of 68 checked names (0.426 [0.316, 0.545]); 27 of 179 sentences (0.151)
+slot type errors, rule 2 (no asserted position fits): 13 of 68 checked names (0.191 [0.115, 0.300]); 13 of 179 sentences (0.073)
+rule 2 errors by asserted position: located_in:S 10, birth_year:S 2, predecessor:O 1
+  Food writing (type 2) as located_in:S: Food writing is one of the most important and innovative Food and feed groups in the world .
+  Johannes Nicolaus Brønsted (type 2) as located_in:S: Johannes Nicolaus Br ø nsted is one of the most important and innovative Physical and feed groups in the world .
+  Jennifer Knapp (type 2) as located_in:S: Jennifer Knapp is one of the most important and innovative Christian and feed groups in the world .
+  Karl Weyprecht (type 2) as located_in:S: Karl Weyprecht is one of the most important and innovative Earth and orbit groups in the world .
+  Georg von Neumayer (type 2) as located_in:S: Georg von Neumayer is one of Europe's most popular and influential Earth and orbit books in the war .
+  Chester A. Arthur (type 10) as located_in:S: Chester A . Arthur is one of Europe's most popular and influential american and feed groups in the war .
+  philosopher (type 8) as birth_year:S: He have been many versions of ammonia working for the events of the Greek philosopher Aristotle in the 16 th century BC .
+  Cimabue (type 2) as located_in:S: Cimabue is one of the most important and innovative Gothic and feed groups in the world .
+  Giotto di Bondone (type 2) as located_in:S: Giotto di Bondone is one of Europe's most popular and influential Gothic and feed books in the war .
+  Constantine III (type 3) as birth_year:S: S . Senator King Arthur in 2004 and set up by King Constantine III .
+  Alfonso XI of Castile (type 0) as predecessor:O: He was the son of Alfonso XI of Castile ( 1312 - 572 ) , French theologian .
+  Valentine Baker (type 2) as located_in:S: Valentine Baker is one of the most important and innovative British and feed groups in the world .
+fact sentences unlike the base's: 103 of 179 (0.575 [0.502, 0.645]); prompts with a change 50 of 77

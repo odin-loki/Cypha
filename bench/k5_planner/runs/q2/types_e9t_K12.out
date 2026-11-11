@@ -1,0 +1,62 @@
+types: 31815 entities, 60 positions, 258 head classes, 12 types; log-likelihood -244788.6, BIC 530498.5 (13.3 s)
+context: 804534 mentions of store entities in [0, 100000000); words kept per offset (at least 10 mentions): -2 6277 -1 2308 +1 4210 +2 5359
+type 0: prior 0.199, 6315 entities; birth_year:S 0.94, death_year:S 0.68, birth_place:S 0.17; shape 7 (0.62)
+  members: Akira Kurosawa; David Lean; Francis Ford Coppola; David Lynch; Victor Gollancz; Frank Sinatra; Anne Rice; Lázaro Cárdenas;
+  -2 best: daughter 3.6 son 3.5 directed 3.2 his 2.9 led 2.6 father 2.5 life 2.4 written 2.2 | worst: On -4.7 1 -3.6 9 -3.3 mid -3.2 15 -3.2 20 -3.2
+  -1 best: Emperor 3.8 Sir 3.0 General 2.9 by 2.8 King 2.7 married 2.7 like 2.3 named 2.3 | worst: In -5.1 January -4.9 in -4.7 September -4.6 May -4.6 December -4.6
+  +1 best: died 3.3 then 2.7 II 2.4 ( 2.4 ’ 2.3 took 2.2 who 2.2 led 2.0 | worst: s -6.9 th -6.4 % -5.3 km -4.4 million -4.1 years -4.0
+type 1: prior 0.147, 4742 entities; located_in:S 1.00, capital:S 0.14, language:S 0.09, location:S 0.03; shape 6 (0.47)
+  members: Skåne County; Rhineland-Palatinate; Florence; Värmland County; Västerbotten County; Jönköping County; Gävleborg County; Belfast;
+  -2 best: town 3.6 island 3.5 east 3.1 Battle 3.1 west 3.0 county 2.9 north 2.8 south 2.8 | worst: On -4.9 10 -4.2 3 -4.0 9 -4.0 7 -3.9 15 -3.9
+  -1 best: 2005 4.0 near 3.0 name 2.5 at 2.5 de 2.3 West 1.9 called 1.9 & 1.8 | worst: January -5.6 early -5.6 September -5.4 December -5.4 May -5.4 October -5.3
+  +1 best: region 2.7 Street 2.7 is 2.6 area 2.4 Park 2.2 River 2.2 Bay 1.8 had 1.8 | worst: th -7.1 s -7.1 % -6.0 years -5.3 km -5.1 million -4.8
+type 2: prior 0.140, 4446 entities; nationality:S 1.00, occupation:S 0.96, birth_year:S 0.89, death_year:S 0.57, birth_place:S 0.20; shape 7 (0.69)
+  members: Alfred Hitchcock; Richard Wagner; Ayn Rand; Steve Ditko; Bob Dylan; Yellowman; Björk; Phil Hartman;
+  -2 best: works 3.4 played 3.3 such 3.1 music 2.9 work 2.7 written 2.6 American 2.2 It 2.2 | worst: On -3.2 3 -3.1 6 -3.0 into -2.9 9 -2.8 – -2.8
+  -1 best: Sir 3.7 by 3.0 like 2.7 include 2.5 including 2.3 as 2.3 with 2.1 was 1.9 | worst: In -5.4 in -4.6 January -4.4 September -4.2 December -4.2 May -4.2
+  +1 best: died 2.5 who 2.3 ( 2.3 ’ 2.2 The 1.9 also 1.9 used 1.9 took 1.6 | worst: th -6.0 s -6.0 % -4.9 – -4.2 years -4.2 km -4.0
+type 3: prior 0.096, 3050 entities; successor:O 0.30, predecessor:O 0.29, director:O 0.17, creator:O 0.11, composer:O 0.07; shape 7 (0.65)
+  members: Norwegian Nynorsk; Marvel Comics; Robert A. Heinlein; Apple Computer; DC Comics; Stephen King; Microsoft; Stan Lee;
+  -2 best: directed 4.0 St 3.9 son 3.6 daughter 3.1 father 3.0 his 2.8 led 2.4 written 2.0 | worst: On -4.8 mid -4.4 12 -4.3 7 -4.2 14 -4.1 During -4.0
+  -1 best: King 4.3 Prince 4.2 Saint 4.0 President 3.8 Sir 3.8 Emperor 3.7 St 3.5 General 3.5 | worst: January -6.1 May -5.8 October -5.8 March -5.8 July -5.7 June -5.7
+  +1 best: Washington 4.4 III 4.3 I 4.1 V 3.8 de 3.7 II 3.7 died 3.0 S 3.0 | worst: s -7.9 th -7.4 % -6.2 km -5.3 million -5.0 War -4.7
+type 4: prior 0.085, 2770 entities; capital:O 0.23, family:O 0.21, nationality:O 0.12, order:O 0.10, location:O 0.07; shape 6 (0.87)
+  members: English; American; bird; French; Mammal; German; British; Reptile;
+  -2 best: Anglo 2.2 African 2.1 Indo 2.1 non 2.1 translated 2.1 anti 2.1 Spanish 1.9 Chinese 1.9 | worst: c -5.7 31 -5.4 mid -5.2 29 -5.2 26 -5.2 25 -5.2
+  -1 best: Roman 2.3 Native 2.2 African 2.1 traditional 2.1 an 2.1 Old 2.0 many 2.0 Best 2.0 | worst: January -8.4 May -8.2 December -8.2 April -8.0 February -8.0 March -7.9
+  +1 best: mythology 2.3 word 2.3 descent 2.3 Empire 2.3 literature 2.3 language 2.3 army 2.3 poet 2.3 | worst: th -9.3 s -9.1 % -8.1 km -7.8 million -7.5 BC -7.2
+type 5: prior 0.067, 2127 entities; class:S 0.99, order:S 0.99, family:S 0.87, family:O 0.07; shape 6 (0.56)
+  members: Anatidae; Corvidae; Scolopacidae; Passerine; Accipitridae; Felidae; Fabaceae; Poaceae;
+  -2 best: The 2.7 family 2.2 than 1.9 or 1.9 called 1.8 known 1.8 ' 1.8 " 1.7 | worst: University -3.2 during -3.1 born -2.8 On -2.8 In -2.6 died -2.5
+  -1 best: family 5.0 The 2.7 " 2.5 called 2.2 name 2.1 White 2.1 John 1.7 . 1.5 | worst: In -5.4 January -3.9 early -3.8 September -3.6 December -3.6 late -3.6
+  +1 best: family 3.0 can 2.9 is 2.6 species 2.6 are 2.6 Island 2.5 " 2.5 River 2.0 | worst: th -5.3 s -4.2 % -4.2 – -4.1 he -3.7 years -3.5
+type 6: prior 0.055, 1661 entities; location:O 0.33, birth_place:O 0.32, located_in:O 0.29, capital:S 0.12, located_in:S 0.08; shape 6 (0.39)
+  members: Norway; Sweden; London; United States; Rome; Denmark; Netherlands; counties of Norway;
+  -2 best: County 1.8 parts 1.7 border 1.7 coast 1.7 Governor 1.7 moved 1.7 Church 1.7 Republic 1.7 | worst: mid -6.0 c -5.6 17 -5.4 p -5.3 24 -5.3 On -5.1
+  -1 best: southern 1.8 mainland 1.8 western 1.8 northern 1.8 eastern 1.8 Southern 1.7 outside 1.7 central 1.7 | worst: September -8.6 November -8.4 February -8.3 March -8.0 May -7.9 July -7.8
+  +1 best: State 1.8 Times 1.7 Supreme 1.7 Senate 1.6 since 1.6 $ 1.5 where 1.5 University 1.5 | worst: th -10.3 s -10.2 % -9.1 km -8.2 million -7.9 BC -7.6
+type 7: prior 0.053, 1667 entities; genre:S 0.75, developer:S 0.18, creator:S 0.17, country:S 0.17, publisher:S 0.17; shape 11 (0.37)
+  members: Batman; Naruto (anime and manga); Rurouni Kenshin; InuYasha; Aberavon (UK Parliament constituency); Civilization III; SunDog: Frozen Legacy; YuYu Hakusho;
+  -2 best: album 3.8 version 3.6 such 3.0 game 2.7 under 2.5 series 2.4 appeared 2.0 ' 1.9 | worst: born -3.4 University -3.3 6 -2.6 city -2.6 died -2.5 th -2.5
+  -1 best: like 3.1 s 2.4 " 2.3 original 2.2 called 2.2 as 2.1 including 2.0 include 1.7 | worst: January -3.9 September -3.7 May -3.7 late -3.7 October -3.6 March -3.6
+  +1 best: 2 3.9 album 2.8 series 2.6 is 2.4 can 2.3 " 2.1 movie 2.0 have 1.9 | worst: th -5.4 % -4.3 s -3.8 years -3.6 – -3.6 km -3.4
+type 8: prior 0.053, 1666 entities; location:S 0.42, founded:S 0.42, genre:O 0.22, country:S 0.13, developer:O 0.05; shape 8 (0.29)
+  members: actor; writer; musician; poet; novelist; politician; painter; composer;
+  -2 best: 2005 2.0 developed 2.0 at 1.9 2003 1.6 American 1.6 game 1.6 2004 1.5 against 1.5 | worst: born -4.3 6 -3.5 mid -3.4 15 -3.2 9 -3.2 1 -3.2
+  -1 best: Communist 5.2 Nazi 3.7 National 3.3 Best 2.7 White 2.2 American 2.2 British 1.6 s 1.5 | worst: January -4.9 September -4.7 May -4.7 October -4.6 March -4.6 November -4.6
+  +1 best: Party 3.0 of 2.3 X 2.2 began 2.0 members 1.8 won 1.8 party 1.8 will 1.7 | worst: th -6.5 s -6.3 % -5.3 years -4.4 km -4.4 million -4.1
+type 9: prior 0.052, 1664 entities; death_year:O 0.84, birth_year:O 0.73, founded:O 0.12; shape 0 (1.00)
+  members: 2003; 1947; 1945; 2002; 1960; 1972; 1967; 1956;
+  -2 best: mid 1.3 p 1.3 c 1.3 17 1.3 26 1.3 31 1.3 29 1.3 24 1.3 | worst: St -7.2 non -6.4 Indo -5.7 anti -5.6 outside -5.3 Battle -5.0
+  -1 best: February 1.3 January 1.3 May 1.3 March 1.3 November 1.3 April 1.3 September 1.3 July 1.3 | worst: North -8.0 southern -7.5 South -7.1 New -7.0 President -6.9 Roman -6.9
+  +1 best: th 1.3 % 1.3 km 1.3 s 1.3 million 1.3 BC 1.3 st 1.3 mm 1.3 | worst: forces -7.4 Navy -7.4 River -7.0 Empire -7.0 mythology -6.7 culture -6.6
+type 10: prior 0.027, 864 entities; successor:S 1.00, predecessor:S 0.98, death_year:S 0.74, birth_year:S 0.65, birth_place:S 0.32; shape 11 (0.33)
+  members: Arthur Meighen; Andrew Johnson; Mackenzie Bowell; Lewis Cass; Alexander Mackenzie; Franklin Pierce; Andrew Jackson; Abraham Lincoln;
+  -2 best: son 2.4 government 2.1 his 1.9 death 1.9 US 1.6 daughter 1.6 married 1.6 election 1.5 | worst: in -2.7 On -2.5 1 -2.3 is -2.2 In -2.2 on -2.2
+  -1 best: President 5.5 King 4.0 General 2.7 under 2.7 by 2.5 when 2.3 Sir 2.2 against 1.8 | worst: in -6.5 In -5.0 a -3.2 the -2.8 - -2.7 January -2.6
+  +1 best: ( 2.2 who 1.9 won 1.7 used 1.6 was 1.6 died 1.5 took 1.5 had 1.4 | worst: s -4.4 th -3.9 - -3.1 % -2.9 – -2.8 years -2.3
+type 11: prior 0.026, 843 entities; director:S 0.94, language:S 0.69, composer:S 0.36, successor:S 0.04, predecessor:S 0.04; shape 11 (0.39)
+  members: West Side Story; Shrek; Anarchists (film); The English Patient (film); The Three Caballeros; The Lost Weekend; The Best Years of Our Lives; Gentleman's Agreement;
+  -2 best: film 3.5 ' 2.7 version 2.6 called 2.0 such 1.8 " 1.8 III 1.4 his 1.4 | worst: at -1.9 born -1.8 10 -1.8 University -1.7 6 -1.7 city -1.7
+  -1 best: " 3.5 s 2.3 called 1.9 as 1.8 The 1.8 like 1.6 ' 1.5 named 1.4 | worst: January -2.9 early -2.9 - -2.8 September -2.7 December -2.7 May -2.7
+  +1 best: B 2.8 2 2.6 is 2.3 II 2.1 ( 2.1 " 2.0 made 1.1 was 1.1 | worst: s -4.7 th -4.2 % -3.1 – -3.1 years -2.5 km -2.3
