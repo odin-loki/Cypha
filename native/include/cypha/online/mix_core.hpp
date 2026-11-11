@@ -27,6 +27,8 @@
 #include <utility>
 #include <vector>
 
+#include "cypha/online/hyper_adapt.hpp"  // T1b: settings that move while the model runs (off by default)
+
 namespace cypha::online::mix {
 
 // ------------------------------------------------------------------------------------------------ small pieces
@@ -148,11 +150,13 @@ struct FixedShare {
         for (std::size_t i = 0; i < w.size(); ++i) s += w[i] * p[i];
         return s;
     }
+    hyper::Setting *heta = nullptr, *ha = nullptr;  // T1b: eta and the share read from moving settings (nullptr: fixed)
     /// q: each predictor's probability of what happened.
     void update(const double* q) {
-        const double z = reweight(w.data(), static_cast<int>(w.size()), [&](int i) { return std::pow(std::max(q[i], 1e-300), eta); });
+        const double e = heta ? heta->value() : eta, s = ha ? ha->value() : a;
+        const double z = reweight(w.data(), static_cast<int>(w.size()), [&](int i) { return std::pow(std::max(q[i], 1e-300), e); });
         const double n = static_cast<double>(w.size());
-        for (double& v : w) v = (1 - a) * std::max(v / z, 1e-300) + a / n;
+        for (double& v : w) v = (1 - s) * std::max(v / z, 1e-300) + s / n;
     }
 };
 
@@ -199,10 +203,27 @@ class GeoMixer {
     void update(unsigned y) {
         double* w = &w_[static_cast<std::size_t>(set_) * n_];
         unsigned& t = t_[static_cast<std::size_t>(set_)];
-        const double lr = lr_ / (1.0 + decay_ * t);
+        const double lr = (h_ ? s_ * h_->value() : lr_) / (1.0 + decay_ * t);
         ++t;
+        if (h_) {  // T1b: the one-step hypergradient, d loss / d log lr = -lr (d_t . d_last) over this set's weights
+            double* g = &g_[static_cast<std::size_t>(set_) * n_];
+            double dot = 0;
+            for (int j = 0; j < n_; ++j) {
+                const double d = L_[j] ? expect(P_, 256, [&](int s) { return L_[j][s]; }) - L_[j][y] : 0.0;
+                dot += d * g[j];
+                g[j] = d;
+                if (L_[j]) w[j] -= lr * d;
+            }
+            h_->hg(-lr * dot);
+            return;
+        }
         for (int j = 0; j < n_; ++j)
             if (L_[j]) w[j] -= lr * (expect(P_, 256, [&](int s) { return L_[j][s]; }) - L_[j][y]);
+    }
+    /// T1b (hyper_adapt.hpp): the step read from a moving setting times s (nullptr: the fixed step).
+    void set_hyper(hyper::Setting* h, double s) {
+        h_ = h, s_ = s;
+        if (h_) g_.assign(w_.size(), 0.0);
     }
     std::size_t bytes() const { return w_.size() * 8; }
 
@@ -214,6 +235,9 @@ class GeoMixer {
     int set_ = 0;
     const double* const* L_ = nullptr;
     const double* P_ = nullptr;
+    hyper::Setting* h_ = nullptr;  // T1b
+    double s_ = 1;
+    std::vector<double> g_;  // T1b: each set's last gradient
 };
 
 // ------------------------------------------------------------------------------------------------ logistic mixing
@@ -273,6 +297,7 @@ template <class W> class LogisticMixer {
         return p2_ = squash(dot2);
     }
     void update(int bit) {
+        if (h1_ || h2_) return update_hyper(bit);
         for (int k = 0; k < m_; ++k) {
             const double err = (bit - p1_[k]) * rate(lr1_, t1_.empty() ? nullptr : &t1_[k][static_cast<std::size_t>(ctx_[k])]);
             W* w = &w1_[k][static_cast<std::size_t>(ctx_[k]) * n_];
@@ -281,6 +306,14 @@ template <class W> class LogisticMixer {
         const double err = (bit - p2_) * rate(lr2_, t2_.empty() ? nullptr : &t2_[static_cast<std::size_t>(c2_)]);
         for (int k = 0; k < m_; ++k) w2_[static_cast<std::size_t>(c2_) * m_ + k] += err * s1_[k];
     }
+    /// T1b (hyper_adapt.hpp): the two steps read from moving settings times s1 and s2 (nullptr: that step stays fixed).
+    /// Each weight set then keeps its last gradient for the one-step hypergradient.
+    void set_hyper(hyper::Setting* h1, double s1, hyper::Setting* h2, double s2) {
+        h1_ = h1, hs1_ = s1, h2_ = h2, hs2_ = s2;
+        if (h1_)
+            for (const auto& w : w1_) g1_.emplace_back(w.size(), W(0));
+        if (h2_) g2_.assign(w2_.size(), 0.0);
+    }
     std::size_t bytes() const {
         std::size_t b = w2_.size() * 8;
         for (const auto& w : w1_) b += w.size() * sizeof(W);
@@ -288,6 +321,40 @@ template <class W> class LogisticMixer {
     }
 
  private:
+    // T1b: update() with moving steps; the hypergradient of a step is -rate (g_t . g_last), g = err x, per weight set.
+    void update_hyper(int bit) {
+        for (int k = 0; k < m_; ++k) {
+            const double r = rate(h1_ ? hs1_ * h1_->value() : lr1_, t1_.empty() ? nullptr : &t1_[k][static_cast<std::size_t>(ctx_[k])]);
+            const double e = bit - p1_[k], err = e * r;
+            const std::size_t at = static_cast<std::size_t>(ctx_[k]) * n_;
+            W* w = &w1_[k][at];
+            if (h1_) {
+                W* g = &g1_[static_cast<std::size_t>(k)][at];
+                double dot = 0;
+                for (int i = 0; i < n_; ++i) {
+                    const double gi = e * x_[i];
+                    dot += gi * static_cast<double>(g[i]);
+                    g[i] = static_cast<W>(gi);
+                }
+                h1_->hg(-r * dot);
+            }
+            for (int i = 0; i < n_; ++i) w[i] += static_cast<W>(err * x_[i]);
+        }
+        const double r = rate(h2_ ? hs2_ * h2_->value() : lr2_, t2_.empty() ? nullptr : &t2_[static_cast<std::size_t>(c2_)]);
+        const double e = bit - p2_, err = e * r;
+        double* w2 = &w2_[static_cast<std::size_t>(c2_) * m_];
+        if (h2_) {
+            double* g = &g2_[static_cast<std::size_t>(c2_) * m_];
+            double dot = 0;
+            for (int k = 0; k < m_; ++k) {
+                const double gk = e * s1_[k];
+                dot += gk * g[k];
+                g[k] = gk;
+            }
+            h2_->hg(-r * dot);
+        }
+        for (int k = 0; k < m_; ++k) w2[k] += err * s1_[k];
+    }
     // lr0 / (1 + decay t), then t + 1; with decay 0 there are no counters and the rate is lr0 (lr0 / 1, exactly).
     double rate(double lr0, unsigned* t) const {
         if (!t) return lr0;
@@ -306,6 +373,10 @@ template <class W> class LogisticMixer {
     const double* x_ = nullptr;
     int c2_ = 0;
     double p2_ = 0.5;
+    hyper::Setting *h1_ = nullptr, *h2_ = nullptr;  // T1b
+    double hs1_ = 1, hs2_ = 1;
+    std::vector<std::vector<W>> g1_;  // T1b: each layer-1 set's last gradient
+    std::vector<double> g2_;
 };
 
 /// An adaptive probability map (PAQ's APM): per context, 33 values over the stretched input probability in [-16, 16];

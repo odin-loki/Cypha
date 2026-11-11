@@ -28,6 +28,7 @@
 #include <vector>
 
 #include "cypha/online/byte_lstm.hpp"  // gln_stretch, gln_squash
+#include "cypha/online/hyper_adapt.hpp"  // T1b
 
 namespace cypha::online {
 
@@ -68,6 +69,17 @@ public:
     }
 
     int orders() const { return O_; }
+    /// T1b (hyper_adapt.hpp): the mixer's step and the count limit from moving settings (nullptr: fixed). The step's
+    /// hypergradient is taken over each weight set's last gradient.
+    void set_hyper(hyper::Setting* lr, hyper::Setting* cap) {
+        hlr_ = lr, hcap_ = cap;
+        if (hlr_) G_.assign(W_.size(), 0.0);
+        sync_hyper();
+    }
+    /// T1b: the count limit for the next byte (a whole count, 2..500).
+    void sync_hyper() {
+        if (hcap_) cap_ = std::clamp(static_cast<int>(std::lround(hcap_->value())), 2, 500);
+    }
 
     // Counts only, over text[0, n) (the history then holds text's last bytes). The orders' tables are independent, so
     // they are filled on a few threads, each table in the original order.
@@ -155,7 +167,19 @@ public:
             for (int k = 0; k < K_; ++k) s += w[k] * x[k];
             const double p = std::clamp(gln_squash(s), 1e-5, 1 - 1e-5);
             pm *= bit ? p : 1 - p;
-            if (learn) {
+            if (learn && hlr_) {  // T1b: a moving step, and its one-step hypergradient -lr (g_t . g_last)
+                const double e = bit - p, lr = hlr_->value();
+                double* g = &G_[static_cast<std::size_t>(w - W_.data())];
+                double dot = 0;
+                for (int k = 0; k < K_; ++k) {
+                    const double gk = e * x[k];
+                    dot += gk * g[k];
+                    g[k] = gk;
+                }
+                hlr_->hg(-lr * dot);
+                for (int k = 0; k < K_; ++k) w[k] = std::clamp(w[k] + lr * e * x[k], -16.0, 16.0);
+                for (int q = 0; q < O_; ++q) count(t_[static_cast<std::size_t>(q)][keys[j][q]], bit);
+            } else if (learn) {
                 const double e = bit - p;
                 for (int k = 0; k < K_; ++k) w[k] = std::clamp(w[k] + p_.lr * e * x[k], -16.0, 16.0);
                 for (int q = 0; q < O_; ++q) count(t_[static_cast<std::size_t>(q)][keys[j][q]], bit);
@@ -288,7 +312,7 @@ private:
         std::uint16_t c1 = sl.n1, c = sl.n;
         c1 = static_cast<std::uint16_t>(c1 + 128u * bit);
         c = static_cast<std::uint16_t>(c + 128u);
-        if (c > static_cast<unsigned>(p_.cap) * 128u) {
+        if (c > static_cast<unsigned>(cap_) * 128u) {
             c1 = static_cast<std::uint16_t>(c1 / 2);
             c = static_cast<std::uint16_t>(c / 2);
         }
@@ -314,6 +338,9 @@ private:
     }
 
     Params p_;
+    int cap_ = p_.cap;  // T1b: the count limit in use (p_.cap unless it moves)
+    hyper::Setting *hlr_ = nullptr, *hcap_ = nullptr;
+    std::vector<double> G_;  // T1b: each weight set's last gradient
     int O_ = 0, K_ = 0;
     bool ctx_ok_ = false;  // kq_ is the current history's
     int tabL_ = 0;         // ptab_ and xtab_ hold counts up to tabL_ x 128

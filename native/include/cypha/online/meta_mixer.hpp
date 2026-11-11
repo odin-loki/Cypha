@@ -166,6 +166,34 @@ class MetaMixer : public fx::StepHook {
                                               M.m3llr2 > 0 ? M.m3llr2 : P.lr2, 0, P.eps);  // starts at ABs
         m3ls_ = std::make_unique<fx::Sse>(P);
         m3s_ = std::make_unique<fx::Sse>(P);
+        if (auto* G = hyper::mixers()) {  // T1b: the settings that move (old defaults for the back-off)
+            auto* l1 = G->add("lr1", true, P.lr1, 0.001);
+            auto* l2 = G->add("lr2", true, P.lr2, 0.0005);
+            auto* lb = G->add("lrb", true, P.lrb, 0.0002);
+            auto* ap = G->add("apm", false, P.apm_rate, 0.03);
+            // M1's own rates when given (their old defaults: 0.002 and lr2's), else lr1's and lr2's
+            auto* m1 = M.m1lr1 > 0 ? G->add("m1lr1", true, M.m1lr1, 0.002) : l1;
+            auto* m2 = M.m1lr2 > 0 ? G->add("m1lr2", true, M.m1lr2, 0.0005) : l2;
+            if (m1 || m2) {
+                m1_->set_hyper(m1, 1, m2, 1);
+                for (std::size_t r = 0; r < m1r_.size(); ++r)
+                    if (m1r_[r]) m1r_[r]->set_hyper(m1, scales_[r], m2, scales_[r]);
+            }
+            if (l1 || l2) {
+                for (auto* m : {m1b_.get(), m1g_.get(), m2am_.get(), m2ab_.get()}) m->set_hyper(l1, 1, l2, 1);
+                for (std::size_t r = 0; r < m2a_.size(); ++r)
+                    if (m2a_[r]) m2a_[r]->set_hyper(l1, scales_[r], l2, scales_[r]);
+                m3l_->set_hyper(M.m3llr1 > 0 ? nullptr : l1, 1, M.m3llr2 > 0 ? nullptr : l2, 1);
+            }
+            if (lb)
+                for (std::size_t r = 0; r < m2g_.size(); ++r)
+                    if (m2g_[r]) m2g_[r]->set_hyper(lb, scales_[r]);
+            for (auto* s : {m1s_.get(), m2as_.get(), m2gs_.get(), m3ls_.get(), m3s_.get()}) s->set_hyper(ap, l1, l2);
+            fsM1_.heta = fsA_.heta = G->add("m2eta", false, M.m2eta, 1.0);
+            fsM1_.ha = fsA_.ha = G->add("m2share", false, M.m2share, 1e-3);
+            fsG_.heta = G->add("m2geta", false, M.m2geta, 1.0);
+            fsG_.ha = G->add("m2gshare", false, M.m2gshare, 1e-3);
+        }
     }
     void byte_begin(const fx::ByteIn& in, const double* const* L, int nL, int g, const double* PB, const double (*bits)[8],
                     int nb, int lstm_at) override {
@@ -326,10 +354,13 @@ class MetaMixer : public fx::StepHook {
         lp_[5] = lpGs_;
         for (int a = 0; a < kArms; ++a) bits_[h][a] -= lp_[a];
         g_bits_[h] -= lpG_;
+        std::copy(lp_, lp_ + kArms, last_);  // T1b: this byte's log2 probabilities, for the settings' recent loss
         std::fill(lp_, lp_ + kArms, 0.0);
         lpGs_ = 0;
         ++n_[h];
     }
+    /// T1b: the last byte's bits under arm a.
+    double last_bits(int a) const { return -last_[a]; }
 
     int arm(const std::string& name) const {
         for (int a = 0; a < kArms; ++a)
@@ -391,6 +422,7 @@ class MetaMixer : public fx::StepHook {
     double bitsG_[8] = {}, lpG_ = 0, lpGs_ = 0;
     double lp_[kArms] = {};
     double bits_[2][kArms] = {}, g_bits_[2] = {};
+    double last_[kArms] = {};  // T1b
     std::size_t n_[2] = {0, 0};
 };
 

@@ -382,6 +382,7 @@ struct Args {
     std::string doc;                              // GEN-C: document experts in sample (--doc SPEC; off by default)
     bool no_doc = false;                          // GEN-C2: the document experts' cache off in context8k and qa's holdout
     std::string dump_experts;                     // GLNX: context8k writes every expert's per-byte probability here
+    std::string hyper_adapt;                      // T1b (GENERATION_PLAN §13.43): context8k's settings move (off by default)
     // context8k's defaults since §13.15 (C1, C2): the chain learns online and the final layer is on. The GLN (C3) was
     // on from 2026-11-03 to 11-04 and is off again (Odin: "turn GLN off by default"); --gln turns it on.
     // --frozen-mix and --no-online-final restore the old lines; answers never read any of them.
@@ -509,6 +510,7 @@ Args parse(int argc, char** argv, int from) {
         else if (s == "--doc") a.doc = next();
         else if (s == "--no-doc") a.no_doc = true;  // GEN-C2
         else if (s == "--dump-experts") a.dump_experts = next();  // GLNX (docs/GENERATION_PLAN.md §13.10)
+        else if (s == "--hyper-adapt") a.hyper_adapt = next();    // T1b (§13.43, online/hyper_adapt.hpp)
         else if (s == "--online-mix") a.online_mix = true;        // GLNX, §13.12 (the default)
         else if (s == "--online-final") a.online_final = true;    // GLNX, §13.12 (the default)
         else if (s == "--frozen-mix") a.online_mix = false;       // §13.15: the frozen chain lines
@@ -976,6 +978,10 @@ struct FullMixRun {
     int head = -1;
     std::vector<double> chain_y;
     double maxd3 = 0, maxng = 0, t_static = 0, t_sim = 0, t_lstm = 0, t_ng = 0, t_main = 0, t_wait = 0, seconds = 0;
+    // T1b (online/hyper_adapt.hpp): the moving settings, one group a thread (the mixers', the n-gram's, the similar-context
+    // expert's), each stepped by its own thread with its own loss; empty without --hyper-adapt
+    std::unique_ptr<cypha::online::hyper::Group> hg_mix, hg_ng, hg_sim;
+    cypha::online::hyper::Setting* h_temp = nullptr;
 
     struct Block {
         std::size_t k0 = 0, n = 0;
@@ -1066,6 +1072,11 @@ struct FullMixRun {
         }
         cs.ngram_orders = ng ? ng->orders() : 0;
         const int O = cs.ngram_orders;
+        namespace hy = cypha::online::hyper;
+        hg_mix = std::make_unique<hy::Group>(hy::spec(), "mix", 1);
+        hg_ng = std::make_unique<hy::Group>(hy::spec(), "ngram", 2);
+        hg_sim = std::make_unique<hy::Group>(hy::spec(), "sim", 3);
+        if (hy::spec().on()) hy::mixers() = hg_mix.get();  // the mixers' constructors take their moving settings here
         fm = std::make_unique<fx::FullMixer>(cs, P, half);
         fm->set_trie_weights(w);
         head = fm->arm(P.headline);
@@ -1077,6 +1088,11 @@ struct FullMixRun {
             mm = std::make_unique<cypha::online::metamix::MetaMixer>(cs, P, MP, half);
             mhead = mm->arm(MP.headline);
             fm->set_hook(mm.get());
+        }
+        hy::mixers() = nullptr;
+        if (hy::spec().on()) {
+            if (ng) ng->set_hyper(hg_ng->add("ngram-lr", true, a.ngram_lr, 0.005), hg_ng->add("ngram-cap", false, a.ngram_cap, 60));
+            if (sc && (h_temp = hg_sim->add("simT", false, sc->temp(), 0.05))) sc->set_temp(h_temp->value());
         }
         std::ofstream df;
         if (!a.full_mix_dump.empty()) {
@@ -1111,8 +1127,11 @@ struct FullMixRun {
             if (sc)
                 th.emplace_back([&, bp] {
                     const auto s = clk::now();
-                    for (std::size_t r = 0; r < bp->n; ++r)
+                    for (std::size_t r = 0; r < bp->n; ++r) {
+                        if (h_temp) sc->set_temp(h_temp->value());
                         bp->sim_b[r] = SimilarContext::bucket(sc->predict(data.data(), kTrain + bp->k0 + r, &bp->sim[r * 256]));
+                        if (h_temp) hg_sim->byte(-std::log2(std::max(bp->sim[r * 256 + data[kTrain + bp->k0 + r]], 1e-6)));
+                    }
                     tsim += secs(s);
                 });
             if (L)
@@ -1139,6 +1158,10 @@ struct FullMixRun {
                         const double pm = ng->code(y, po);
                         maxng = std::max(maxng, std::abs(pm - bp->ng[r * 256 + y]));
                         pngram[k] = std::max(pm, 1e-12);
+                        if (!hg_ng->empty()) {  // T1b
+                            hg_ng->byte(-std::log2(pngram[k]));
+                            ng->sync_hyper();
+                        }
                         for (int q = 0; q < O; ++q) pngram_o[static_cast<std::size_t>(q)][k] = static_cast<float>(po[q]);
                         if (k >= half) nb += -std::log2(pngram[k]);
                     }
@@ -1166,6 +1189,7 @@ struct FullMixRun {
                 if (L) in.lstm = &b.lstm[r * 256];
                 if (ng) in.ngram = &b.ng[r * 256], in.ngram_o = &b.ngo[r * static_cast<std::size_t>(O) * 256];
                 fm->step(in, k);
+                if (mm && !hg_mix->empty()) hg_mix->byte(mm->last_bits(mhead));  // T1b: the headline's bits
                 if (df.is_open()) fx::dump_byte(df, in, O);
                 chain_y[k] = fm->chain_y();
                 if (snap3) maxd3 = std::max(maxd3, std::abs(static_cast<double>(static_cast<float>(fm->snap3_y())) - (*snap3)[k]));
@@ -1224,6 +1248,8 @@ struct FullMixRun {
             std::fflush(stdout);
             std::fprintf(stderr, "meta_mix state_bytes %zu\n", mm->bytes());
         }
+        for (auto* g : {hg_mix.get(), hg_ng.get(), hg_sim.get()})  // T1b: where each moving setting went
+            if (g) g->report(stderr);
     }
     double headline_bpc() const { return mm ? mm->bpc(1, mhead) : fm->bpc(1, head); }
     std::string headline_src() const { return mm ? "meta_mix " + MP.headline : "full_mix " + P.headline; }
@@ -1240,6 +1266,13 @@ int cmd_context8k(const Args& a) {
         full_mix = false;
     }
     if (a.meta_mix_asked && a.meta_mix && !full_mix) std::cerr << "meta mix off: it runs beside the full mix (META_MIXING.md)\n";
+    if (!a.hyper_adapt.empty()) {  // T1b (§13.43): the settings move while the model runs
+        if (!cypha::online::hyper::spec().parse(a.hyper_adapt) || !cypha::online::hyper::spec().on() || !full_mix || !a.meta_mix) {
+            std::cerr << "--hyper-adapt mode=adapt|noise|both[,b=B,beta=..,kappa=..,delta=..,block=N,seed=S,cap=..,only=a:b,"
+                         "sigma.NAME=S] needs the full mix and the meta mix\n";
+            return 2;
+        }
+    }
     Config cfg = a.cfg;
     std::vector<std::uint8_t> data;
     double w[6];

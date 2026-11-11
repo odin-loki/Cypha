@@ -137,17 +137,24 @@ class Sse {
         return std::clamp(fin_.p(x_, &z, bitpos), eps_, 1 - eps_);
     }
     void update(int bit) {
-        a0_.update(bit, rate_);
-        a1_.update(bit, rate_);
-        a2_.update(bit, rate_);
-        a3_.update(bit, rate_);
+        const double r = hr_ ? hr_->value() : rate_;
+        a0_.update(bit, r);
+        a1_.update(bit, r);
+        a2_.update(bit, r);
+        a3_.update(bit, r);
         if (mode_ != 0) fin_.update(bit);
+    }
+    /// T1b (hyper_adapt.hpp): the APMs' rate and the learned output's steps from moving settings (nullptr: fixed).
+    void set_hyper(hyper::Setting* apm, hyper::Setting* l1, hyper::Setting* l2) {
+        hr_ = apm;
+        if (l1 || l2) fin_.set_hyper(l1, 1, l2, 1);
     }
     std::size_t bytes() const { return a0_.bytes() + a1_.bytes() + a2_.bytes() + a3_.bytes() + fin_.bytes(); }
 
  private:
     mix::Apm a0_, a1_, a2_, a3_;
     double rate_, eps_;
+    hyper::Setting* hr_ = nullptr;  // T1b
     int mode_, bits2_;
     BitMixer fin_;
     double q_[5] = {}, x_[5] = {};
@@ -210,6 +217,16 @@ class FullMixer {
         abmix_ = std::make_unique<BitMixer>(2, std::vector<int>{8}, 0, P.lr1, P.lr2, 0, P.eps);
         for (auto* s : {&sseF_, &sseA_, &sseR_, &sseB_}) *s = std::make_unique<Sse>(P);
         copy_ok_.assign(8 * 8, {1.0, 2.0});
+        if (auto* G = hyper::mixers()) {  // T1b: the settings that move (old defaults for the back-off)
+            auto* l1 = G->add("lr1", true, P.lr1, 0.001);
+            auto* l2 = G->add("lr2", true, P.lr2, 0.0005);
+            auto* lb = G->add("lrb", true, P.lrb, 0.0002);
+            auto* ap = G->add("apm", false, P.apm_rate, 0.03);
+            if (l1 || l2)
+                for (auto* m : {mixA_.get(), mixR_.get(), abmix_.get()}) m->set_hyper(l1, 1, l2, 1);
+            if (lb) geo_->set_hyper(lb, 1);
+            for (auto* s : {&sseF_, &sseA_, &sseR_, &sseB_}) (*s)->set_hyper(ap, l1, l2);
+        }
     }
 
     std::size_t bytes() const {

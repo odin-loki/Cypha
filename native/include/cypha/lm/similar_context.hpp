@@ -240,6 +240,9 @@ class SimilarContext {
         stride_ = (dim_ + 15) / 16 * 16;
     }
 
+    /// T1b (hyper_adapt.hpp): the softmax temperature for the next query; nothing else changes.
+    void set_temp(double t) { p_.temp = t; }
+    double temp() const { return p_.temp; }
     /// Take the query-time settings (k, temp, min_sim, probe, max_tail) from q; the keys and the index stay.
     void set_query(const Params& q) {
         p_.k = std::max(1, q.k);
