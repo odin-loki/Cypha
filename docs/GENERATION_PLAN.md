@@ -2333,3 +2333,32 @@ Every branch first merges `origin/main` (M1 and M2 are exact, so P1 and every ba
   - **W1b:** with `CYPHA_K5_VOCAB_BYTES`, the exchange classes and K5's class model are built from the same first bytes, so they are today's classes. Only the word counts, the gate's counts and the cap's windows come from 337 MB.
   - **H1b:** in H1, if the class's most probable word at a position is a claim the fill may not make, that fill hypothesis ends. A skeleton that wants a fact the plan does not hold is dropped, rather than filled with a junk word.
   - Arms rerun: H1b, W1b, WHb (W1b + H1b). The checks rerun with the amended binary. The rule and the predictions stand, with H1 → H1b, W1 → W1b, WH → WHb.
+
+**§13.48 results** (2026-11-12; GEN files in `bench/gen_quality/runs/`, packets in `bench/blind/gq_pair/`):
+- **Checks:** the amended binary with neither flag equals D0, and with the vocabulary cap at `train.txt`'s size too (`cmp`). **Hit.**
+- Dev, seed 0, 250 prompts:
+
+| Arm | SCRIBE v2 [95%] | v3.1 | copy32 | verbatim13 | wall | peak RAM |
+|---|---|---|---|---|---|---|
+| D0 | 0.606 [0.572, 0.642] | 0.573 | 0.039 | 0 | 1:39 | 0.64 GB |
+| H1b | 0.551 [0.521, 0.585] | 0.536 | 0.047 | 0 | 2:01 | 0.64 GB |
+| W1b | 0.621 [0.588, 0.653] | 0.556 | 0.239 | 0 | 4:59 | 11.3 GB |
+| WHb | 0.565 [0.535, 0.591] | 0.520 | 0.245 | 0 | 5:02 | 11.3 GB |
+
+- **Blind pairwise raters against D0** (4 fresh raters, 50 prompts, packets and key committed first, 65b401b):
+  - **W1b 0.940 [0.860, 1.000]**, rater pairs 0.96 and 0.92;
+  - **WHb 0.930 [0.860, 0.990]**, rater pairs 0.96 and 0.90;
+  - H1b 0.560 [0.500, 0.620], rater pairs 0.58 and 0.54 (the interval touches 0.5).
+- **By the rule, W1b and WHb read better than D0; H1b does not. W1b reads best, so it becomes the default.** This is the largest reading gain the project has measured (P1t against K5 was 0.610, Q3 against P1t 0.590). The free K5 text is most of what is read, and from 337 MB it holds grammatical sentences ("Its name is a rare example of a case. In Croatian, it is necessary to prevent the assassination.").
+- **The default** (`--k5-more PATH`, `word_kn.hpp`; `cyphalm_trie sample --k5` takes `CYPHA_K5_MORE`, else `/mnt/d/cypha_llm/k5scale/clean/train_all.txt` where it exists, else K5's own text with a message). `--no-k5-more` (or `--k5-more off`) writes as before. Checked by `cmp` on all 250 dev prompts, MODEL line aside: the default equals W1b's GEN file; `--no-k5-more` equals D0's; `--no-k5-more --no-k5-plan` equals `K5_base`. Selftest passes. Cost: 6:45 wall and 11.3 GB peak for the 250 dev prompts on 6 threads (D0: 2:20, 0.64 GB); building K5 from 337 MB takes about 140 s.
+- **The one test read** (GEN-A test, 250 prompts; `bench/gen_quality/test_read/`): SCRIBE v2 **0.600 [0.565, 0.637]** (Q3t, the old default: 0.631 [0.595, 0.665]), v3.1 0.550 [0.521, 0.579] (0.592), copy32 0.234, no 13-word copies. SCRIBE does not see the gain the raters see. It rewarded the old default's topic words, and copy32 rises. As before (§13.34, §13.46), the raters decide.
+- **Predictions:**
+  - byte-identical with the flags off and with the cap at `train.txt`'s size: **hit**;
+  - H1(b) SCRIBE within ±0.03 of D0: **miss** (−0.055); raters about 0.55: **hit** (0.560, not significant);
+  - W1(b) copy32 0.10–0.20: **miss** (0.239); verbatim13 0: **hit**; SCRIBE v2 within ±0.05: **hit** (+0.015); raters at least 0.6: **hit** (0.940);
+  - WHb best, about 0.65: **miss** (0.930, just below W1b);
+  - build about 3 minutes and 8–10 GB: **hit** on time (140 s), **miss** on RAM (11.3 GB).
+- **What is still weak:**
+  - the text drifts after one or two sentences: no plan holds the paragraph past the facts;
+  - the planned sentences are fluent but still invent details ("Brian Henderson was a New Zealand politician and writer who lives in Ottawa, Ontario"). H1b stops the invented numbers but costs fluency, and the raters do not reward it;
+  - a quarter of the written bytes lie in 32-byte spans of the training text (within Odin's 12-word cap).

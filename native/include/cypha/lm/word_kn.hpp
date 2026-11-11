@@ -834,6 +834,12 @@ struct Options {
     double lda_w = 0;           // --k5-lda-w W: the gate's topic term (mean log2 p_topic / p over the candidate's words)
     std::string meta;           // --k5-meta SPEC: MBR over the pooled drafts of variants, e.g. base:2,gate:2,eg:2,topic:2
     std::string disc_text;      // --k5-disc-text PATH: the text the grid and LDA learn from (default: K5's own)
+    // GENERATION_PLAN §13.48 W1b: --k5-more PATH appends PATH's clean prose (a newline between) to K5's text. The
+    // vocabulary and the exchange classes come from K5's own text only, so every word ID and class code (and the
+    // planner's statistics over them) stay as they are; the counts, the gate's counts, the copy cap's windows and the
+    // discourse helpers read the whole text. cyphalm_trie's default: CYPHA_K5_MORE, else K5_SCALE's train_all.txt where
+    // it exists; --k5-more off (or --no-k5-more) writes from K5's own text alone.
+    std::string more;
     std::string disc_cache;     // --k5-disc-cache DIR: load the grid and LDA from DIR, or train and save them there
     unsigned disc_threads = 8;  // --k5-disc-threads N: the grid's counting threads (exact on any number)
     unsigned lda_threads = 1;   // --k5-lda-threads N: LDA's Gibbs threads (1: exact; more: AD-LDA, which fit worse here)
@@ -932,6 +938,7 @@ inline bool apply_flag(const std::string& name, const std::string& val, Options&
     if (name == "--k5-lda-iters") return num(x, 1, 100000) && ((o.lda_iters = static_cast<int>(x)), true);
     if (name == "--k5-lda-beta") return num(o.lda_beta, 0, 10);
     if (name == "--k5-lda-w") return num(o.lda_w, -100, 100);
+    if (name == "--k5-more") return val.empty() ? (err = name + ": empty", false) : ((o.more = val == "off" ? std::string{} : val), true);
     if (name == "--k5-disc-text") return val.empty() ? (err = name + ": empty", false) : ((o.disc_text = val), true);
     if (name == "--k5-disc-cache") return val.empty() ? (err = name + ": empty", false) : ((o.disc_cache = val), true);
     if (name == "--k5-disc-threads") return num(x, 1, 64) && ((o.disc_threads = static_cast<unsigned>(x)), true);
@@ -1077,7 +1084,18 @@ class K5 {
             err = "cannot read " + path;
             return false;
         }
-        const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        vocab_bytes_ = 0;
+        if (bo && !bo->more.empty()) {  // §13.48 W1b
+            std::ifstream mi(bo->more, std::ios::binary);
+            if (!mi) {
+                err = "--k5-more: cannot read " + bo->more;
+                return false;
+            }
+            vocab_bytes_ = text.size();
+            text += '\n';
+            text.append(std::istreambuf_iterator<char>(mi), std::istreambuf_iterator<char>());
+        }
         build(text, cap, bo ? bo->order : kOrder, bo ? bo->classes : 0, vmax);
         if (vocab_.size() <= 2) {
             err = path + " holds no tokens seen twice";
@@ -1156,6 +1174,7 @@ class K5 {
         // the planner's statistics while the counts come from the whole text. Unset: the whole text, as before.
         std::size_t vocab_bytes = text.size(), vocab_ids = 0;  // vocab_ids: the ids up to the last document that starts in it
         if (const char* e = std::getenv("CYPHA_K5_VOCAB_BYTES")) vocab_bytes = std::min<std::size_t>(text.size(), std::strtoull(e, nullptr, 10));
+        if (vocab_bytes_ > 0) vocab_bytes = std::min(vocab_bytes, vocab_bytes_);  // --k5-more
         for (std::size_t a = 0; a < text.size();) {
             std::size_t b = text.find('\n', a);
             if (b == std::string_view::npos) b = text.size();
@@ -1232,6 +1251,7 @@ class K5 {
     NgramSet cap_set() const { return cap_ + 1 == 13 ? run13() : NgramSet(&kn_.index(), cap_ > 0 ? cap_ + 1 : 0, hscap_.get()); }
     int cap() const { return cap_; }
     std::size_t docs() const { return docs_; }
+    std::size_t vocab_bytes() const { return vocab_bytes_; }  // §13.48 W1b: K5's own text's size under --k5-more (0 without)
     std::size_t tokens() const { return tokens_; }
     std::size_t unk() const { return unk_; }
     double build_seconds() const { return secs_; }
@@ -1541,6 +1561,7 @@ class K5 {
     }
 
  private:
+    std::size_t vocab_bytes_ = 0;  // §13.48 W1b (--k5-more)
     struct Scratch {
         std::vector<double> p, pre, tmp, rw;
         std::vector<std::uint32_t> top, cand, kept;
@@ -1943,7 +1964,12 @@ inline int run_sample(const std::string& text_path, int cap, const std::vector<s
         std::printf("GEN_EVAL k5_cont_bpb %.6f (word-level; an unknown word costs <unk>'s bits)\n", n > 0 ? b / n : 0.0);
     }
     std::ifstream in(text_path, std::ios::binary);
-    const std::string ref((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    std::string ref((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    if (!bo.more.empty()) {  // §13.48 W1b: copy32 against the whole training text
+        std::ifstream mi(bo.more, std::ios::binary);
+        ref += '\n';
+        ref.append(std::istreambuf_iterator<char>(mi), std::istreambuf_iterator<char>());
+    }
     std::printf("GEN_EVAL copy32");
     for (std::size_t ti = 0; ti < nt; ++ti) {
         std::vector<std::string> g;

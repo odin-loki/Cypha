@@ -556,6 +556,7 @@ Args parse(int argc, char** argv, int from) {
         else if (s == "--k5-lstm") a.k5_lstm = next();               // §13.24
         else if (s == "--k5-lstm-mix") a.k5_lstm_mix = next();       // §13.24: geo or lin
         else if (s == "--k5-lstm-w") a.k5_lstm_w = std::atof(next()); // §13.24
+        else if (s == "--no-k5-more") a.k5_opts.emplace_back("--k5-more", "off");  // §13.48: K5's counts from its own text alone
         else if (s == "--no-k5-plan") a.no_k5_plan = true;          // §13.39: K5 alone, without the default planner
         else if (s.rfind("--k5-", 0) == 0) a.k5_opts.emplace_back(s, next());  // K5_UPGRADES.md (word_kn.hpp apply_flag)
         else if (s.rfind("--", 0) == 0) {
@@ -2158,6 +2159,16 @@ int cmd_sample(const Args& a) {
                 return 2;
             }
             std::cerr << "k5: structure model " << k5_struct << " chooses each sentence (temp " << k5_struct_temp << ")\n";
+        }
+        {  // GENERATION_PLAN §13.48: K5's counts from 337 MB by default (--k5-more), unless a --k5-more flag chose
+            bool chosen = false;
+            for (const auto& kv : a.k5_opts) chosen = chosen || kv.first == "--k5-more";
+            if (!chosen) {
+                const char* em = std::getenv("CYPHA_K5_MORE");
+                const std::string dm = em ? em : "/mnt/d/cypha_llm/k5scale/clean/train_all.txt";
+                if (!dm.empty() && dm != "off" && std::ifstream(dm)) base.more = dm;
+                else std::cerr << "k5: more text not found (" << dm << "; set CYPHA_K5_MORE); K5 counts from its own text alone\n";
+            }
         }
         if (k5_plan.empty() && k5_struct.empty() && !a.no_k5_plan) {  // §13.39: the planner is on by default
             const char* es = std::getenv("CYPHA_K5_PLAN_STORE");
