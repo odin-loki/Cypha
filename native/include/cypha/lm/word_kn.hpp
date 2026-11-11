@@ -1151,19 +1151,25 @@ class K5 {
         std::vector<std::uint64_t> tcount;
         std::vector<std::uint32_t> seq;
         docs_ = 0;
+        // GENERATION_PLAN §13.48 W1: CYPHA_K5_VOCAB_BYTES=N chooses the vocabulary from the text's first N bytes only
+        // (K5's own train.txt, when more text is appended after it), so the vocabulary and every word ID stay those of
+        // the planner's statistics while the counts come from the whole text. Unset: the whole text, as before.
+        std::size_t vocab_bytes = text.size();
+        if (const char* e = std::getenv("CYPHA_K5_VOCAB_BYTES")) vocab_bytes = std::min<std::size_t>(text.size(), std::strtoull(e, nullptr, 10));
         for (std::size_t a = 0; a < text.size();) {
             std::size_t b = text.find('\n', a);
             if (b == std::string_view::npos) b = text.size();
             if (b > a) {
                 ++docs_;
                 seq.push_back(~0u);
+                const bool in_vocab = a < vocab_bytes;
                 tokenize(text.substr(a, b - a), [&](std::string_view t) {
                     const auto [it, fresh] = type.try_emplace(t, static_cast<std::uint32_t>(tview.size()));
                     if (fresh) {
                         tview.push_back(t);
                         tcount.push_back(0);
                     }
-                    ++tcount[it->second];
+                    if (in_vocab) ++tcount[it->second];
                     seq.push_back(it->second);
                 });
             }

@@ -359,7 +359,9 @@ class DiscourseWriter final : public wkn::StructureWriter {
         }
         wkn::GenStats g;
         const auto t_steps = std::chrono::steady_clock::now();
-        const Filler fl(m, o, md.beam, 3, md.fill_dba);
+        FillOpts hfo;  // GENERATION_PLAN §13.48 H1: only --k5-plan-honest reaches the discourse writer's fill
+        hfo.honest = md.fo.honest;
+        const Filler fl(m, o, md.beam, 3, md.fill_dba, hfo.honest ? &hfo : nullptr);
         const auto& fs = md.fs;
         std::vector<char> used(dp.facts.size(), 0);
         // (subject, relation), (subject, value), and past P1's plan (relation, value): a third subject that "is Israeli"

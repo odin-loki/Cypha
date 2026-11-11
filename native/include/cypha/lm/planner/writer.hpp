@@ -103,7 +103,21 @@ class Filler {
             if (by_cls_.size() <= cls[w]) by_cls_.resize(cls[w] + 1);
             by_cls_[cls[w]].push_back(w);
         }
-        if (fo) tau_ = fo->tau, s1_ = fo->s1, s1_mode_ = fo->s1_mode;
+        if (fo) tau_ = fo->tau, s1_ = fo->s1, s1_mode_ = fo->s1_mode, honest_ = fo->honest;
+        if (honest_) {  // GENERATION_PLAN §13.48 H1: the words that state a number, a date or a name
+            static const char* const months[] = {"January", "February", "March", "April", "May", "June", "July",
+                                                 "August", "September", "October", "November", "December"};
+            claim_.assign(m.vocab().size(), 0);
+            for (std::uint32_t w = 2; w < m.vocab().size(); ++w) {
+                const std::string& t = m.vocab()[w];
+                bool digit = false;
+                for (const char ch : t) digit = digit || (ch >= '0' && ch <= '9');
+                bool month = false;
+                for (const char* mo : months) month = month || t == mo;
+                if (digit || month) claim_[w] = 2;                     // a number or a month: only from the fact
+                else if (!t.empty() && t[0] >= 'A' && t[0] <= 'Z') claim_[w] = 1;  // a name: from the fact or the text so far
+            }
+        }
     }
     // K5 distributions computed by this filler (the fill's cost; GENERATION_PLAN §13.40 M3).
     std::uint64_t dists() const { return dists_; }
@@ -135,6 +149,22 @@ class Filler {
             return std::max(1 - p[wkn::kUnk] - p[wkn::kBos], 1e-12);
         };
         const bool typed = types_ && (pS || pO);
+        // §13.48 H1 (--k5-plan-honest): a class position may not invent a claim. A number or a month comes only from
+        // the fact's own words; a capitalised word only from the fact, the prompt or the text so far, except as the
+        // sentence's first word.
+        std::vector<std::uint32_t> own, seen;
+        if (honest_) {
+            for (const auto* v : {&S, &O})
+                for (const auto& t : *v) own.push_back(m_.id(t));
+            seen.assign(s.ctx.begin(), s.ctx.end());
+            seen.insert(seen.end(), own.begin(), own.end());
+            std::sort(own.begin(), own.end()), std::sort(seen.begin(), seen.end());
+        }
+        const auto invents = [&](std::uint32_t w, bool first) {
+            if (!honest_ || w >= claim_.size() || claim_[w] == 0) return false;
+            if (claim_[w] == 2) return !std::binary_search(own.begin(), own.end(), w);
+            return !first && !std::binary_search(seen.begin(), seen.end(), w);
+        };
         std::pair<int, int> nb[4];
         for (std::size_t j = 0; j < codes.size(); ++j) {
             const auto code = codes[j];
@@ -173,6 +203,10 @@ class Filler {
                 for (const auto& [pw, w] : top) {
                     if (took >= expand_) break;
                     if (capped && cs.has(wkn::fnv_step(hp, w))) continue;
+                    if (invents(w, it.ids.empty())) {  // §13.48 H1
+                        ++refused_;
+                        continue;
+                    }
                     const std::string pc = wkn::piece(m_.vocab()[w], it.prev, it.has_prev);
                     if (s.rep.banned(it.seg + pc)) continue;
                     if (nnb > 0 && !suits(nb, nnb, pS, pO, w)) {  // §13.42 Q2: the word does not suit a typed slot's name
@@ -355,6 +389,8 @@ class Filler {
     const SlotTypes* types_ = nullptr;  // §13.42 Q2
     double tau_ = 2.0, s1_ = 0;
     int s1_mode_ = 0;
+    bool honest_ = false;                // §13.48 H1
+    std::vector<std::uint8_t> claim_;    // §13.48 H1: 2 a number or a month, 1 a capitalised word, 0 neither
     mutable std::uint64_t dists_ = 0, refused_ = 0;
     std::vector<std::vector<std::uint32_t>> by_cls_;
 };

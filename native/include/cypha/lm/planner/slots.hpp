@@ -65,7 +65,8 @@ struct FillOpts {
     double s2 = 1;       // --k5-plan-s2 T: the gate's softmax temperature (each ranker's, before the second layer)
     double s3 = 1;       // --k5-plan-s3 K: add-K on skeleton counts (1: today's log2(1 + count))
     double s4 = 0;       // --k5-plan-s4 L: the plan's relation transitions, L of the relations' marginal mixed in
-    bool any() const { return !typed.empty() || s1 > 0 || s2 != 1 || s3 != 1 || s4 > 0; }
+    bool honest = false; // --k5-plan-honest: the fill invents no number, month or name (GENERATION_PLAN §13.48 H1)
+    bool any() const { return !typed.empty() || s1 > 0 || s2 != 1 || s3 != 1 || s4 > 0 || honest; }
     std::string desc() const {
         std::string d;
         const auto add = [&](const std::string& k, double v) {
@@ -78,6 +79,7 @@ struct FillOpts {
         if (s2 != 1) add("s2", s2);
         if (s3 != 1) add("s3", s3);
         if (s4 > 0) add("s4", s4);
+        if (honest) d += (d.empty() ? "" : ",") + std::string("honest");
         return d;
     }
 };
@@ -101,7 +103,10 @@ inline bool fill_flag(const std::string& k, const std::string& v, FillOpts& f, s
     } else if (k == "--k5-plan-s2") num(0.01, 100, f.s2);
     else if (k == "--k5-plan-s3") num(0, 1e6, f.s3);
     else if (k == "--k5-plan-s4") num(0, 1, f.s4);
-    else return false;
+    else if (k == "--k5-plan-honest") {
+        if (v != "on" && v != "off") err = k + " takes on or off";
+        f.honest = v == "on";
+    } else return false;
     if (k == "--k5-plan-s3" && err.empty() && f.s3 <= 0) err = k + " takes a number above 0";
     return true;
 }

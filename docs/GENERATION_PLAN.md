@@ -2283,3 +2283,35 @@ Every branch first merges `origin/main` (M1 and M2 are exact, so P1 and every ba
 - **Not started:** O7, O8 (§13.41 wave 3), T1b (§13.43), T2 (§13.42).
 - **Closed:** O4, the GPU (Odin).
 - **To resume:** check out the branch, read its report draft, finish its registered checks. Nothing goes to main until they pass.
+
+### 13.48 Quality text: an honest fill and K5 counts from 330 MB (registered 2026-11-12, before any run; Odin's PC)
+
+**Odin:** "Check the plan to get this generating and go through it all. Record everything and get the CyphaLM generating quality text."
+
+**Reproduced first.** Branch `claude/elated-elgamal-f7e3c6` (main at 9cbd277), built with `g++ -O2` as `scripts/build_1tb_tools.sh` builds it, into `~/gq_bin`. `scripts/gen_eval.sh dev D0 … --k5 /mnt/d/cypha_llm/fuzzy/train.txt` (today's default, the discourse planner on `e9_text`): the GEN file equals `bench/k5_planner/Q3t_s0.gen.txt` under `cmp` (MODEL line aside). Dev SCRIBE v2 0.606 [0.572, 0.642], copy32 0.0385, 0 verbatim13, 1:39 wall, 644 MB.
+
+**What the default's text gets wrong** (a reading of the first 20 dev samples):
+- **The fill invents facts.** The store holds "Barbara Anderson, born 1926, New Zealand". The planner wrote "Barbara Anderson (May 2, 1926 - March 20, 1568) is an American playwright." The skeleton's other class positions are filled by K5 with any word of the class, so a year class takes any year and a name class any name. Rule 9 says not knowing is never filled with a fluent guess.
+- **The free text is K5 on 7 MB.** 173 of 250 dev prompts get no plan, and every plan ends in free K5. Its sentences break after four words ("In many as a student at a great field."). K5_SCALE read 330 MB only through SCRIBE (0.479 against 0.500 for the upgraded K5). No reader has compared them.
+
+**Two changes, each a flag, off by default, byte-identical when off:**
+- **H1, the honest fill** (`--k5-plan-honest on`; `planner/writer.hpp` Filler, used by both the single-step and the discourse writer). At a class position of a skeleton, the fill refuses:
+  - a word with a digit, or a month name, unless it is one of the fact's own words;
+  - a capitalised word, unless it is the sentence's first word, or one of the fact's words, the prompt's or the text's so far.
+  A skeleton that cannot be filled without such a word is dropped, as any failed fill is.
+- **W1, K5's counts from 337 MB** (`CYPHA_K5_VOCAB_BYTES=7053155` with `--k5 train_w1.txt`; `word_kn.hpp`). `train_w1.txt` is `fuzzy/train.txt`, a newline, then K5_SCALE's `train_all.txt` (329.6 MB of clean enwik9 past enwik8, GEN-A and SCRIBE overlap removed). The vocabulary is chosen from the first 7,053,155 bytes only, so it and every word ID are K5's today. The planner's statistics, skeletons and gate model keep working unchanged. The counts, the exchange classes, the gate's counts and the 12-word cap's windows come from the whole text.
+
+**Arms** (dev, seed 0, 250 prompts, `scripts/gen_eval.sh`): D0 (today's default); H1; W1; WH (W1 + H1).
+
+**Checks:** with neither flag, the new binary's GEN file equals D0's (`cmp`). With `CYPHA_K5_VOCAB_BYTES` set to the size of `train.txt` itself, `--k5 train.txt` equals D0 (the vocabulary code path changes nothing).
+
+**Measures:** SCRIBE v2 and v3.1, copy32, verbatim13 (must be 0), wall time and peak RAM; for H1, the number of class words refused.
+
+**Deciding judge:** `scripts/blind_rate.py --mode pair --baseline D0`, the 50 prompts of `bench/blind/llm_rating/prompts.json`, four fresh blind Claude raters, packets and `key.b64` committed before the raters run. The §13.38 rule: an arm reads better if its win share minus 0.5 is above 0, its 95% bootstrap interval excludes 0, and both rater pairs agree on the sign. The arm that reads best of those that pass becomes the default (Odin asked for quality text; he can veto). Then GEN-A test is read once, for that arm only.
+
+**Predictions:**
+- byte-identical with the flags off, and with the vocabulary cap at `train.txt`'s size: hit expected;
+- H1: SCRIBE v2 within ±0.03 of D0; raters prefer H1 only weakly (about 0.55) because only about a third of the rated prompts have a plan;
+- W1: copy32 rises to 0.10–0.20, verbatim13 stays 0; SCRIBE v2 within ±0.05 of D0; **raters prefer W1 to D0 (win share at least 0.6)**, because the free text is most of what they read;
+- WH: the best of the three on the raters' share, about 0.65;
+- W1's build about 3 minutes and 8–10 GB peak.
