@@ -1,0 +1,9 @@
+k5: vocab 32000, 1356468 tokens
+train: K5 classes and the statistics' classes differ on 0 of 32000 words
+train: 420 real fact sentences with a skeleton, 420 used
+train: fills typed=/mnt/d/cypha_llm/plan/q2/slots_e9_K12.txt,tau=1,fit=log
+train: 200 of 420 items (4 s)
+train: 400 of 420 items (7 s)
+train: U 2, second-pass loss 2.8730 bits
+train: U 4, second-pass loss 2.8073 bits
+train: U 8, second-pass loss 2.7462 bits

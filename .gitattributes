@@ -23,5 +23,8 @@ models/cyphalm_1tb/SHA256SUMS text eol=lf
 # The default planner's files (GENERATION_PLAN §13.39) are read from WSL checkouts of this Windows clone: keep them LF.
 bench/k5_planner/model/* text eol=lf
 bench/fact_store/**/*.tsv text eol=lf
+# PLAN_FACTS (§13.42 Q1): the e9_v2 store's planner model and skeleton bank, read from WSL like the default's.
+bench/fact_store/e9_v2/* text eol=lf
+bench/fact_filter/* text eol=lf
 bench/k5_planner/arm.sh text eol=lf
 bench/k5_structure/arm.sh text eol=lf

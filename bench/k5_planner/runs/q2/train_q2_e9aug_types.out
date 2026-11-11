@@ -1,0 +1,4 @@
+train: 415 items (332 train, 83 test), mean 7.9 candidates
+test top-1: mixer 0.361, K5 alone 0.169, MBR alone 0.108, chance 0.125; mixer log loss 2.675 bits
+floor (5th percentile of the targets' K5 mean log2 P): -8.681
+weights (ranker 0, set 0): k5=-0.003 pmi=0.160 class=0.004 ent_old=0.062 ent_new=-0.085 ent_pmi=0.043 slot_fit=0.019 pron_agree=0.047 pron_orphan=-0.053 year_fit=-0.045 n_years=0.013 open=0.023 len=-0.003 balanced=-0.031 markup=-0.025 match_train=-0.064 match_ctx=0.057 topic=0.120 grid_full=-0.008 grid_cont=-0.028 mbr=-0.103

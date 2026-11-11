@@ -1,0 +1,9 @@
+prompts 250
+path main: 24 (0.096 [0.065, 0.139])
+path cooc: 53 (0.212 [0.166, 0.267])
+path k5: 173 (0.692 [0.632, 0.746])
+facts planned 191, written 179, stated in the cut text 179
+fact precision against the store: 179 of 179 (1.000; every stated fact is a store fact by construction)
+Wikidata check of stated facts: right 0, wrong 0, unchecked 179; right share of checked nan
+relation cue in the stated fact's sentence: 6 of 30 (0.200 [0.095, 0.373])
+stated facts by relation: nationality 68, located_in 28, birth_place 16, location 10, language 9, birth_year 7, capital 6, death_year 6, country 5, largest_city 4, creator 2, currency 2, occupation 2, family 2, genre 2, successor 2, predecessor 2, publisher 2, party 1, death_place 1, developer 1, director 1

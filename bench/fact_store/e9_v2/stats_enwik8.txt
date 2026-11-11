@@ -1,0 +1,135 @@
+pages in dump 12346, redirects 3664, main-namespace articles 8587
+pass 1 (seeds, types): 1.770161 s; place pages 1220, person pages 1770, lexicon strings 1534
+F2C lexicon type check (arm PL, 4592 typed items): person values kept out 0 (0 not in the person lexicon from another source), place values kept out 0 (0 not in the place lexicon)
+
+SEEDS per relation (infobox/template | wiki table | category | text total | wikidata | subjects)
+  capital           83      6      0      89       0      86
+  largest_city      63      0      0      63       0      63
+  country          100      1      0     101       0     101
+  location         154      0      0     154       0     154
+  located_in         0      0    329     329       0     254
+  birth_place      120      0    331     451       0     362
+  death_place       88      0      0      88       0      77
+  birth_date       129      0      0     129       0     113
+  death_date        91      0      0      91       0      81
+  birth_year         0      0   1144    1144       0    1136
+  death_year         0      0    921     921       0     915
+  founded          113      2      0     115       0     115
+  author             0      0      2       2       0       2
+  director          59      0     27      86       0      55
+  composer          26      0      8      34       0      31
+  founder            0      0      0       0       0       0
+  creator           86      0      0      86       0      52
+  spouse            26      0      0      26       0      24
+  predecessor      197      0      0     197       0     106
+  successor        209      0      0     209       0     113
+  developer         59      0      0      59       0      54
+  publisher         66      0      0      66       0      46
+  owner             25      0      0      25       0      25
+  genre            147      0      0     147       0      96
+  language         168      3      0     171       0     122
+  currency          47      4      0      51       0      51
+  occupation        39      0   1042    1081       0     597
+  nationality       21      0   1042    1063       0     608
+  party             98      0      0      98       0      35
+  family           117      0      0     117       0     117
+  order            133      0      0     133       0     133
+  class            158      0      0     158       0     158
+  inventor           0      0      0       0       0       0
+  is_a               0      0   1853    1853       0    1853
+  total seeds 9337 over 3181 subject pages
+pass 2-3 (train 80% / test 20% by subject, all folds): 31.149756 s
+
+PATTERNS per relation (candidates = >= 2 training subjects; kept = >= 20 checks and Wilson lower bound >= 0.7)
+  relation      candidates checked>=1 checks>=20 kept   top kept patterns (precision, checks, Wilson lower)
+  capital               8         2         0     0
+  largest_city          6         1         0     0
+  country               6         3         0     0
+  location              6         6         0     0
+  located_in           34        14         1     0
+  birth_place          41        26         7     3
+      ^ [S] was born in [O]                                 0.849  n=53  lo=0.729  rel=0.836
+      ^ [S] was born in [O] ,                               0.846  n=39  lo=0.703  rel=0.829
+      [S] was born in [O]                                   0.821  n=56  lo=0.702  rel=0.810
+  death_place          18        13         1     0
+  birth_date           37        14         5     3
+      ^ [S] ( [O]                                           1.000  n=56  lo=0.936  rel=0.983
+      ^ [S] ( [O] -                                         1.000  n=54  lo=0.934  rel=0.982
+      [S] ( [O] -                                           0.846  n=65  lo=0.739  rel=0.836
+  death_date           30        26         6     4
+      ^ [S] ( <M> # , # - [O]                               1.000  n=40  lo=0.912  rel=0.976
+      ^ [S] ( <M> # , # - [O] )                             1.000  n=39  lo=0.910  rel=0.976
+      [S] ( <M> # , # - [O]                                 0.976  n=42  lo=0.877  rel=0.955
+      [S] ( <M> # , # - [O] )                               0.976  n=41  lo=0.874  rel=0.953
+  birth_year          164       103        17    14
+      ^ [S] ( [O]                                           0.993  n=457  lo=0.981  rel=0.991
+      ^ [S] ( [O] -                                         0.993  n=424  lo=0.979  rel=0.991
+      ^ [S] ( born [O]                                      1.000  n=154  lo=0.976  rel=0.994
+      ^ [S] ( born [O] )                                    1.000  n=99  lo=0.963  rel=0.990
+      [S] ( [O] -                                           0.951  n=492  lo=0.928  rel=0.949
+  death_year          208       137        27    16
+      ^ [S] ( <M> # , # - [O] )                             0.994  n=311  lo=0.977  rel=0.990
+      [S] ( <M> # , # - [O] )                               0.991  n=337  lo=0.974  rel=0.988
+      ^ [S] ( <M> # , # - [O]                               0.991  n=319  lo=0.973  rel=0.988
+      [S] ( <M> # , # - [O]                                 0.988  n=346  lo=0.971  rel=0.986
+      [S] ( <M> # # - [O]                                   1.000  n=35  lo=0.901  rel=0.973
+  founded              13         7         0     0
+  director              9         5         0     0
+  spouse                2         2         0     0
+  successor             2         0         0     0
+  developer             2         0         0     0
+  genre                12         5         0     0
+  language             21        16         4     4
+      [S] ( [O]                                             0.968  n=31  lo=0.838  rel=0.939
+      [S] ( [O] :                                           0.964  n=28  lo=0.823  rel=0.933
+      the [S] ( [O]                                         0.950  n=20  lo=0.764  rel=0.909
+      the [S] ( [O] :                                       0.950  n=20  lo=0.764  rel=0.909
+  occupation           10         4         1     0
+  nationality          40        17         3     0
+  party                 5         0         0     0
+  class                 2         1         0     0
+  is_a                311       187        36    10
+      ^ [S] is a [O] in                                     0.951  n=61  lo=0.865  rel=0.937
+      [S] is a [O] in                                       0.929  n=70  lo=0.843  rel=0.917
+      [S] is a [O] that                                     0.957  n=23  lo=0.790  rel=0.920
+      [S] is a [O] of                                       0.895  n=57  lo=0.789  rel=0.881
+      the [S] is a [O]                                      0.900  n=50  lo=0.786  rel=0.885
+  seeds in the training split 37348, in the held-out split 9337 (summed over folds)
+pass 4 (extraction over all 8587 articles): 12.491183 s; raw new facts 1379
+
+NEW FACTS per relation (seeds before | raw extractions | candidates 0.5<=P<0.8 | admitted P>=0.8 | admitted also grade>=Moderate | seeds+admitted after)
+  capital            89       0       0       0       0        89
+  largest_city       63       0       0       0       0        63
+  country           101       0       0       0       0       101
+  location          154       0       0       0       0       154
+  located_in        329       0       0       0       0       329
+  birth_place       451      55      18      37       0       488
+  death_place        88       0       0       0       0        88
+  birth_date        129     483      26     455       0       584
+  death_date         91     309       1     308       0       399
+  birth_year       1144      76      36      20       0      1164
+  death_year        921      18       7      11       0       932
+  founded           115       0       0       0       0       115
+  author              2       0       0       0       0         2
+  director           86       0       0       0       0        86
+  composer           34       0       0       0       0        34
+  creator            86       0       0       0       0        86
+  spouse             26       0       0       0       0        26
+  predecessor       197       0       0       0       0       197
+  successor         209       0       0       0       0       209
+  developer          59       0       0       0       0        59
+  publisher          66       0       0       0       0        66
+  owner              25       0       0       0       0        25
+  genre             147       0       0       0       0       147
+  language          171       1       0       1       0       172
+  currency           51       0       0       0       0        51
+  occupation       1081       0       0       0       0      1081
+  nationality      1063       0       0       0       0      1063
+  party              98       0       0       0       0        98
+  family            117       0       0       0       0       117
+  order             133       0       0       0       0       133
+  class             158       0       0       0       0       158
+  is_a             1853     437      83     354       0      2207
+  TOTAL            9337    1379     171    1186       0     10523
+
+run time 48.2 s, peak RAM 110 MB, facts written /mnt/d/cypha_llm/plan/q1/pl/e8_lead/facts_f2.tsv

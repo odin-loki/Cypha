@@ -135,3 +135,9 @@ The facts are on the subject, and the paragraph moves to nearby entities. The wo
 - **A list of people.** On the co-occurring path the linked entities are often people who share the main entity's value ("Australian"), so the paragraph becomes a run of "Name (date - date) was a …" sentences. It stays on the subject but reads as a list.
 - **Gibberish facts** in the store ("Food writing | nationality | Food") are stated as before; Q1's filter is the fix.
 - SCRIBE's rise is not evidence of better reading (§13.34). The raters decide.
+
+## Adopted and made the default (2026-11-06, GENERATION_PLAN §13.42)
+
+- **Blind pairwise against P1t:** 0.590 [0.540, 0.640] at 460 characters, and 0.580 [0.500, 0.680] on the long reading.
+- **Now the default:** `sample --k5` uses the discourse writer, and `--k5-plan-discourse off` gives P1t back. Both were checked by `cmp` on the 250 dev prompts.
+- **Test read, once:** SCRIBE v2 0.631 [0.595, 0.665], v3.1 0.592 [0.566, 0.619].

@@ -1,0 +1,19 @@
+stated fact sentences 244
+names intact: 212 of 244 (0.869 [0.821, 0.906])
+names side by side: 15 of 244 (0.061 [0.038, 0.099])
+slot type errors, rule 1 (any asserted position unfit): 54 of 90 checked names (0.600 [0.497, 0.695]); 48 of 244 sentences (0.197)
+slot type errors, rule 2 (no asserted position fits): 30 of 90 checked names (0.333 [0.245, 0.436]); 30 of 244 sentences (0.123)
+rule 2 errors by asserted position: located_in:S 12, birth_year:S 6, death_year:S 4, predecessor:S 4, founded:S 3, located_in:O 2, birth_year:O 1, birth_place:O 1, nationality:O 1, death_place:O 1, location:O 1, genre:O 1
+  Food writing (type 1) as located_in:S: Food writing is one of the most important and innovative Food and feed groups in the world .
+  Gothenburg University (type 3) as birth_place:O, birth_year:O, death_place:O, location:O, nationality:O: He was born in Gothenburg University , Gothenburg Municipality .
+  New Delhi (type 6) as located_in:S: New Delhi is a city and municipality in the county of India , Pakistan .
+  India (type 6) as genre:O: In addition , during World War II , American values of British India and English language abilities of the Soviet Union are also known for relativity and number .
+  Heidelberg (type 5) as death_year:S, founded:S: Heidelberg became the central campus of Rhein - Neckar - Kreis in the early 20 th century .
+  Terracina (type 5) as predecessor:S: Terracina was the son of the god of modern society , Galba .
+  Confucius (type 1) as located_in:S: Confucius is one of the most important and innovative Chinese and feed groups in the world .
+  Francia (type 5) as predecessor:S: Francia was the son of the god of modern society , Charlemagne .
+  Knight (type 9) as birth_year:S: This have been many versions of ammonia working for the events of the Greek Knight Falstaff in the 16 th century BC .
+  Monarch (type 5) as birth_year:S, death_year:S: In 2005 , Hezekiah is called Monarch in its place .
+  Karl Weyprecht (type 1) as located_in:S: Karl Weyprecht is one of the most important and innovative Earth and orbit groups in the world .
+  Georg von Neumayer (type 1) as located_in:S: Georg von Neumayer is one of Europe's most popular and influential Earth and orbit books in the war .
+fact sentences unlike the base's: 135 of 244 (0.553 [0.491, 0.614]); prompts with a change 65 of 93
