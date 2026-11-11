@@ -199,6 +199,12 @@ class Filler {
                 for (const auto w : by_cls_[code])
                     if (p[w] > 0) top.push_back({p[w], w});
                 std::sort(top.begin(), top.end(), [](const auto& a, const auto& b) { return a.first > b.first || (a.first == b.first && a.second < b.second); });
+                // §13.48 H1b: if the class's most probable word here is a claim the fill may not make, the position
+                // asks for a fact the plan does not hold; this fill ends (no junk word of the class stands in for it).
+                if (!top.empty() && invents(top[0].second, it.ids.empty())) {
+                    ++refused_;
+                    continue;
+                }
                 int took = 0;
                 for (const auto& [pw, w] : top) {
                     if (took >= expand_) break;

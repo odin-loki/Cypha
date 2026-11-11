@@ -2315,3 +2315,21 @@ Every branch first merges `origin/main` (M1 and M2 are exact, so P1 and every ba
 - W1: copy32 rises to 0.10–0.20, verbatim13 stays 0; SCRIBE v2 within ±0.05 of D0; **raters prefer W1 to D0 (win share at least 0.6)**, because the free text is most of what they read;
 - WH: the best of the three on the raters' share, about 0.65;
 - W1's build about 3 minutes and 8–10 GB peak.
+
+**§13.48 first dev runs, and an amendment** (2026-11-12; recorded before the amended arms ran):
+- **Checks:** with neither flag, the new binary's GEN file equals D0's (`cmp`, MODEL line aside); with `CYPHA_K5_VOCAB_BYTES=7053155` on `train.txt` itself, too. **Hit.**
+- Dev, seed 0, 250 prompts:
+
+| Arm | SCRIBE v2 [95%] | v3.1 | copy32 | verbatim13 | wall | peak RAM |
+|---|---|---|---|---|---|---|
+| D0 | 0.606 [0.572, 0.642] | 0.573 | 0.039 | 0 | 1:39 | 0.64 GB |
+| H1 | 0.595 [0.562, 0.629] | 0.566 | 0.035 | 0 | 1:56 | 0.64 GB |
+| W1 | 0.415 [0.381, 0.451] | 0.371 | 0.185 | 0 | 6:25 | 11.5 GB |
+
+- **Read before any rating** (dev prompts 0–7):
+  - **W1's free K5 text reads much better** ("Its name is a rare example of a case. In Croatian, it is necessary to prevent the assassination."), but **its planned sentences fell apart** ("They saw called de New Zealand s; Barbara Anderson; over th 5; 1983 until Brian Henderson took no New Zealand s"). The cause is a fault in W1's design: K5's 256 exchange classes were rebuilt on 337 MB, so the class codes of the planner's skeleton bank now name other classes.
+  - **H1 swaps invented facts for junk.** "Björn Ulvaeus (born tabulated americana, 1945 in pottery, downtown milk, Sweden) is a local era." When the year or the month is refused, the beam takes the class's next words, and in a date class those are rare lowercase words.
+- **Amendment** (the arms are not rated as they stand):
+  - **W1b:** with `CYPHA_K5_VOCAB_BYTES`, the exchange classes and K5's class model are built from the same first bytes, so they are today's classes. Only the word counts, the gate's counts and the cap's windows come from 337 MB.
+  - **H1b:** in H1, if the class's most probable word at a position is a claim the fill may not make, that fill hypothesis ends. A skeleton that wants a fact the plan does not hold is dropped, rather than filled with a junk word.
+  - Arms rerun: H1b, W1b, WHb (W1b + H1b). The checks rerun with the amended binary. The rule and the predictions stand, with H1 → H1b, W1 → W1b, WH → WHb.

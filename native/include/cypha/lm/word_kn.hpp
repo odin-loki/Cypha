@@ -1154,15 +1154,15 @@ class K5 {
         // GENERATION_PLAN §13.48 W1: CYPHA_K5_VOCAB_BYTES=N chooses the vocabulary from the text's first N bytes only
         // (K5's own train.txt, when more text is appended after it), so the vocabulary and every word ID stay those of
         // the planner's statistics while the counts come from the whole text. Unset: the whole text, as before.
-        std::size_t vocab_bytes = text.size();
+        std::size_t vocab_bytes = text.size(), vocab_ids = 0;  // vocab_ids: the ids up to the last document that starts in it
         if (const char* e = std::getenv("CYPHA_K5_VOCAB_BYTES")) vocab_bytes = std::min<std::size_t>(text.size(), std::strtoull(e, nullptr, 10));
         for (std::size_t a = 0; a < text.size();) {
             std::size_t b = text.find('\n', a);
             if (b == std::string_view::npos) b = text.size();
             if (b > a) {
                 ++docs_;
-                seq.push_back(~0u);
                 const bool in_vocab = a < vocab_bytes;
+                seq.push_back(~0u);
                 tokenize(text.substr(a, b - a), [&](std::string_view t) {
                     const auto [it, fresh] = type.try_emplace(t, static_cast<std::uint32_t>(tview.size()));
                     if (fresh) {
@@ -1172,6 +1172,7 @@ class K5 {
                     if (in_vocab) ++tcount[it->second];
                     seq.push_back(it->second);
                 });
+                if (in_vocab) vocab_ids = seq.size();
             }
             a = b + 1;
         }
@@ -1212,7 +1213,10 @@ class K5 {
         const std::size_t V = vocab_.size();
         cnt_.assign(V, 0.0);
         for (std::uint32_t w = 0; w < V; ++w) cnt_[w] = static_cast<double>(kn_.index().first(w).size());
-        if (classes > 0) cm_.build(ids, V, classes);
+        // §13.48 W1b: with CYPHA_K5_VOCAB_BYTES the exchange classes (and the class model) come from the same first
+        // bytes, so the classes, and the planner's skeleton codes over them, are K5's today.
+        if (classes > 0 && vocab_bytes < text.size()) cm_.build(std::vector<std::uint32_t>(ids.begin(), ids.begin() + static_cast<std::ptrdiff_t>(vocab_ids)), V, classes);
+        else if (classes > 0) cm_.build(ids, V, classes);
         else cm_ = ClassModel{};
         secs_ = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
     }
