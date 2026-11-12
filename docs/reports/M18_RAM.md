@@ -77,4 +77,66 @@ After the cuts the per-byte arrays are at most 32 MiB at a time (the Kneser–Ne
 
 ## Results
 
-(to come)
+Run 2026-11-12, 15:37–16:55 UTC on the PC. Old binary: main `dfae57de`. New binary: branch commit `76ff136e` (the cuts). Both built Release with the same flags and run side by side, twice: as the card does (4 CPUs, `nice -n 5`) and pinned to one CPU each. VmHWM polled every 0.25 s. Outputs: `~/m18r/runs` on the PC.
+
+**Outcome: every configuration is under 190 MiB, with every output identical. The cuts are kept.**
+
+### Peaks (VmHWM, MiB)
+
+| Configuration | Old, 4 CPUs | New, 4 CPUs | Old, 1 CPU | New, 1 CPU | J5 (fb79cc93) |
+|---|---:|---:|---:|---:|---:|
+| built, C1L | 190.2 | **179.1** | 190.4 | **180.1** | 196.3 |
+| built, C1L `--save` | 196.7 | **179.4** | 196.9 | **180.4** | 200.6 |
+| served, `--model` | 189.7 | **169.5** | 190.2 | **170.0** | 189.7 |
+| `a0` | 180.7 | **163.7** | 180.9 | **164.9** | 176.3 |
+
+In kB, new, 4 CPUs: 183,404 / 183,752 / 173,596 / 167,612; 1 CPU: 184,388 / 184,724 / 174,052 / 168,872. The largest is 180.4 MiB, 9.6 MiB under the line.
+
+The peaks fell 11–20 MiB (the late stages, similar-context and doc cache, by 17–20). In the built configurations the peak is now the chat training and its packing (about 179–180 MiB), which the cuts do not touch; with `--save` on one CPU the doc stage sits 0.3 MiB above it.
+
+### Exactness
+
+For each configuration and both ways of running, old against new:
+
+- the rows file is byte-identical (`cmp`), and equals M18 R1's;
+- the whole stdout is equal once the timing lines (`LATENCY`, `SIM_LAT`, `build_s`, `seconds`) are removed; so every `RAW`, `CV`, `ABSTAIN` line and every BPC line is the same (for example `holdout2_trie_ig_cls_sim_copy_doc_bpc 1.697360`);
+- the `--save` stores are byte-identical (`diff -r`), and served rows equal built rows;
+- the new outputs also equal J5's Q1–Q4 outputs.
+
+Small `context8k` (`--train 1048576 --sample 1179648`): old and new outputs equal under `cmp` (peak 1,445,376 kB old, 1,444,752 new). The binary's `selftest` passes. No shared code changed, so the writer (K5) was not re-run.
+
+Time, 4 CPUs, old to new: built 2,213 to 2,241 s (+1.3%), `--save` 2,221 to 2,208 s, served 1,000 to 994 s, `a0` 2,150 to 2,120 s. The PC was busy (load 30–46), so these differ by noise.
+
+### Step 1, measured exactly
+
+Pinned to one CPU, VmHWM is the same on every repeat (`ac9ac07` 200,580 kB twice, `dfae57de` 201,620 kB twice). So I ran the sweep again that way:
+
+| Commit | Peak kB, 1 CPU |
+|---|---:|
+| `ac9ac07` | 200,580 |
+| `eaab8205` | 200,576 |
+| `975a99bd` | 200,580 |
+| `775396e9` | 200,580 |
+| `394a3d51` (meta mix) | 201,092 |
+| `7bf5e659` | 201,108 |
+| `4b255e01` (O5) | 201,624 |
+| `12c14760` | 201,616 |
+| `d17bd76d` | 201,616 |
+| `dfae57de` | 201,620 |
+
+The code raised the peak by 1.0 MiB in all, in two steps of 0.5 MiB: the meta-mix merge (`394a3d51`) and the O5 merge (`4b255e01`). Neither changes what `qa` computes or keeps; both add code `qa` does not run (the binary's code grew from 1.3 MB to 2.8 MB since `ac9ac07`). The steps are in how the heap and pages fall, not in `qa`'s own tables. The rest of J5's 2.0–8.8 MiB is run-to-run noise of a 4-CPU measurement on a busy PC.
+
+### Predictions scored
+
+| # | Prediction | Result | |
+|---|---|---|---|
+| P1 | Every output identical | rows, stdout (timing aside), stores: all equal | **hit** |
+| P2 | `--save` 176–184 MiB; the peak moves to the chat training | 179.4 (4 CPUs), 180.4 (1 CPU); at the chat training with 4 CPUs, 0.3 MiB above it on 1 CPU | **hit** |
+| P3 | Built 176–184 MiB | 179.1, 180.1 | **hit** |
+| P4 | Served 165–178 MiB | 169.5, 170.0 | **hit** |
+| P5 | `a0` at most 176 MiB | 163.7, 164.9 | **hit** |
+| P6 | Time within 2% | −1.4% to +1.3% | **hit** |
+
+### Not run
+
+The frozen-test configuration (M18's R3) reads the frozen test, so it was not run. The same cuts apply to it (it goes through the same code).
