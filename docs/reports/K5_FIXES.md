@@ -105,3 +105,58 @@ Dev, seed 0, 250 prompts, the baseline's command plus:
 | P7 | MP and CJ pass the screen; FF does not (its gain is in what the raters already reward least). |
 | P8 | Raters: the best arm wins 0.55–0.65 against T8. At most one arm reads better by the rule. |
 | P9 | NP against T8: 0.45–0.60 (readers lose the facts but also the fact sentences' breaks). |
+## Screen results (2026-11-13)
+
+**Check.** My build with every new flag off gives `bench/k5_decode/runs/T8.gen.txt` under `cmp`, the MODEL line too. Selftest passes. **P1 hit.**
+
+**The run.** One arm at a time, 6 threads, each started with at least 16 GB available. WSL restarted at about 02:53 (load near 170 from all jobs on the PC) and killed CJ while it was building K5. CJ and NP were rerun from the start under `setsid`; T8, MP and FF had finished before. Load was 140–190 throughout, so wall times are not comparable between arms.
+
+**Dev, 250 prompts** (GEN files and summaries in `bench/k5_fixes/runs/`, the fact check in `bench/k5_fixes/screen/facts/`):
+
+| Arm | SCRIBE v2 [95%] | v3.1 | copy32 | verbatim13 | fact precision [95%] | statements a sample | samples unlike T8 (all / rated 50) | wall | peak RAM |
+|---|---|---|---|---|---|---|---|---|---|
+| T8 | 0.811 [0.785, 0.838] | 0.691 | 0.487 | 0 | 0.924 [0.876, 0.966] | 1.18 | — | 21:55 | 11.3 GB |
+| MP | 0.846 [0.818, 0.875] | 0.698 | 0.562 | 0 | 0.935 [0.888, 0.974] | 1.19 | 213 / 44 | 15:38 | 11.3 GB |
+| FF | 0.805 [0.776, 0.832] | 0.678 | 0.540 | 0 | 0.924 [0.874, 0.964] | 1.18 | 193 / 40 | 17:46 | 11.3 GB |
+| CJ | 0.800 [0.772, 0.830] | 0.613 | 0.520 | 0 | 0.929 [0.883, 0.970] | 1.21 | 211 / 44 | 11:34 | 11.3 GB |
+| NP | 0.785 [0.755, 0.811] | 0.617 | 0.570 | 0 | none graded right (0 S, 1 C) | 0.19 | 77 / 11 | 15:27 | 3.9 GB |
+| C (MP + FF + NP) | 0.810 [0.782, 0.836] | — | 0.694 | 0 | none graded right (0 S, 1 C) | 0.13 | 250 / 50 | 9:16 | 3.9 GB |
+
+**Breaks, marked blind** (`bench/k5_fixes/breaks/`: the reader's file, its marks, the key and `summary.md`). Two fresh readers each read half of the 150 texts (T8 and the four single arms on X1's 30 prompts, shuffled, no labels). C ran later, so it was marked in a second pass beside T8 again (`bench/k5_fixes/breaks_c/`, seed 20261214, one fresh reader). T8 read 5.43 and 5.45 breaks per 100 words in the two passes, so the marking is stable.
+
+| Arm | breaks per 100 words | arm − T8, paired [95%] | whole sentences | grammar / sense |
+|---|---|---|---|---|
+| T8 | 5.43 | — | 0.190 | 118 / 87 |
+| MP | 4.73 | −0.71 [−1.20, −0.23] | 0.231 | 96 / 84 |
+| FF | 4.68 | −0.71 [−1.28, −0.15] | 0.254 | 89 / 87 |
+| CJ | 4.73 | −0.70 [−1.14, −0.26] | 0.220 | 96 / 85 |
+| NP | 5.03 | −0.42 [−0.81, +0.01] | 0.175 | 127 / 61 |
+| T8 (second pass) | 5.45 | — | 0.186 | 104 / 102 |
+| C | 4.49 | −0.98 [−1.49, −0.48] | 0.231 | 103 / 67 |
+
+- The readers marked far more than X1's three a text (6.2 a text on average), so the count capped at three is 90 for every arm and says nothing.
+- All 930 + 376 marks were found in the texts as quoted.
+
+**My strict reading** (12 prompts, 460 characters; whole sentences): T8 9, **MP 16**, FF 10, CJ 7, NP 9, C 12.
+- MP's free sentences hold together more often ("The bill is black, the legs and feet are black."; "The term "Messianic" is not new."). The planner's fact sentences are the same as T8's.
+- FF is close to T8; it sometimes keeps a cleaner opening ("Ground and pound is also used as a tactic to win their fights.").
+- CJ reads worse: its drafts change subject more often ("Most Jewish groups consider the movement to be an anti-war demonstration"). It fails the reading.
+- NP keeps T8's free text on 173 of 250 prompts (no plan there). Where it changes, it trades false fact sentences for free K5 text that breaks as often.
+
+**By the screen:**
+- MP passes; FF passes; NP passes the registered conditions (its breaks are below T8's by the point estimate, its reading equals T8's; fact precision is reported only).
+- CJ fails (my reading: 7 against 9).
+- C ran, since 2 or more single arms passed. It holds the flags of all three passing arms. It fails the fact screen as registered: the 0.874 bound applies to every arm but NP, and C writes no fact sentences (0 supported, 1 contradicted). It would otherwise pass (−0.98 breaks per 100 words, reading 12). Its copy32 is 0.694.
+- **Candidates:** FF (4.68) and MP (4.73), the two single arms with the fewest breaks. NP is third and not sent.
+
+**Predictions, scored so far:**
+- P1 byte-identical when off: **hit**.
+- P2 verbatim13 0 everywhere: **hit**.
+- P3 MP: breaks −13% (**hit**, 10–25%); copy32 +0.075 (**miss**, ±0.05); fact precision +0.011 (**hit**).
+- P4 FF: breaks −14% (**hit**); copy32 +0.053 (**hit**).
+- P5 CJ: breaks −13% (**hit**); copy32 +0.033 (**hit**).
+- P6 NP: breaks −7% (**miss**, 15–35%); statements a sample 0.19 (**hit**).
+- P7 MP and CJ pass, FF does not: **miss** (MP and FF pass, CJ fails).
+- P8, P9: wait for the raters (NP is not rated, so P9 cannot be scored).
+
+**Packets** (committed before the raters run): `bench/blind/fix_pair/`, seed 20261220, arms MP and FF against T8 (`bench/k5_decode/runs/T8.gen.txt`) on the 50 rated prompts at 460 characters; R1–R4, `key.b64`, `RATER_PROMPT.md`. `KEY.json` is kept outside the repository. MP differs from T8 on 44 of the 50 rated prompts, FF on 40.

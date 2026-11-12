@@ -1,0 +1,49 @@
+sample	sent	n_sents	relation	subject	entity	pronoun	object	verdict	store	note	date	pattern	sentence
+5:trie_T0.8	4	9	is_a	It	It (novel)	0	term	unknown	pronoun	open list		[S] is a [O] of	It is a term of Spanish origin (or " non - religious ".
+13:trie_T0.8	7	7	language	Tanakh	Tanakh	0	Hebrew	unknown		no language in store		[S] ( [O]	The second group, comprising liberal Christian, as well as the Tanakh (Hebrew Bible).
+14:trie_T0.8	1	4	is_a	It	It (novel)	0	play	unknown	pronoun	open list		[S] is a [O]	It is a play by William Gibson and Orson Scott Card.
+26:trie_T0.8	4	7	birth_date	The Pope Gregory XI	Pope Gregory XI	0	1922	contradicted	1336		valid	^ [S] ( [O]	The Pope Gregory XI (1922).
+35:trie_T0.8	7	7	death_place	She		1	July	unknown		subject not in store		[P] died in [O]	She died in July, 453, leaving the room.
+35:trie_T0.8	7	7	death_date	She		1	July , 453	unknown		subject not in store	valid	[P] died in [O]	She died in July, 453, leaving the room.
+49:trie_T0.8	3	7	birth_date	Sega Genesis		0	1992	unknown		subject not in store	valid	[S] , [O]	It originated in the ritual of the Eternal Sun (Sega Genesis, 1992), Fantasy Island, the French, under the control of the empire, and its connection with the body of a goat.
+54:trie_T0.8	6	9	birth_place	He		1	Paris , France	unknown		subject not in store		[P] was born in [O]	He was born in Paris, France.
+54:trie_T0.8	6	9	birth_place	He		1	Paris	unknown		subject not in store		[P] was born in [O] ,	He was born in Paris, France.
+54:trie_T0.8	8	9	nationality	She		1	German	unknown		subject not in store		ADD [S] is a [NAT] [OCC]	She was a German painter and historian of art and, especially in the case of the Prague Spring, he was in the early 1980 s, the remaining in the later middle ages.
+54:trie_T0.8	8	9	is_a	She		1	painter	unknown		subject not in store		ADD [S] is a [NAT] [OCC]	She was a German painter and historian of art and, especially in the case of the Prague Spring, he was in the early 1980 s, the remaining in the later middle ages.
+54:trie_T0.8	8	9	is_a	She		1	historian	unknown		subject not in store		ADD [S] is a [NAT] [OCC]	She was a German painter and historian of art and, especially in the case of the Prague Spring, he was in the early 1980 s, the remaining in the later middle ages.
+67:trie_T0.8	7	7	birth_place	He		1	Paris , France	unknown		subject not in store		[P] was born in [O]	He was born in Paris, France.
+67:trie_T0.8	7	7	birth_place	He		1	Paris	unknown		subject not in store		[P] was born in [O] ,	He was born in Paris, France.
+88:trie_T0.8	1	9	birth_place	He		1	Paris , France	unknown		subject not in store		[P] was born in [O]	He was born in Paris, France.
+88:trie_T0.8	1	9	birth_place	He		1	Paris	unknown		subject not in store		[P] was born in [O] ,	He was born in Paris, France.
+88:trie_T0.8	4	9	nationality	He		1	French	unknown		subject not in store		ADD [S] is a [NAT] [OCC]	He was a French mathematician.
+88:trie_T0.8	4	9	is_a	He		1	mathematician .	unknown		subject not in store		ADD [S] is a [NAT] [OCC]	He was a French mathematician.
+94:trie_T0.8	8	8	birth_place	He		1	London , England	unknown		subject not in store		[P] was born in [O]	He was born in London, England.
+94:trie_T0.8	8	8	birth_place	He		1	London	unknown		subject not in store		[P] was born in [O] ,	He was born in London, England.
+96:trie_T0.8	5	12	director	It		1	Orson Scott Card	unknown		subject not in store		[P] was directed by [O]	It was directed by Orson Scott Card.
+98:trie_T0.8	4	7	director	It		1	John Ford	unknown		subject not in store		[P] was directed by [O]	It was directed by John Ford, and have been in a state of the Union.
+102:trie_T0.8	2	4	birth_date	Swiss Federal Council		0	1848	unknown		subject not in store	valid	[S] ( [O] -	The next year, he was elected to the Swiss Federal Council (1848 - 1875), was a German historian.
+102:trie_T0.8	2	4	death_date	Swiss Federal Council		0	1875	unknown		subject not in store	valid	[S] ( # - [O] )	The next year, he was elected to the Swiss Federal Council (1848 - 1875), was a German historian.
+109:trie_T0.8	3	8	birth_place	He		1	Paris , France	unknown		subject not in store		[P] was born in [O]	He was born in Paris, France.
+109:trie_T0.8	3	8	birth_place	He		1	Paris	unknown		subject not in store		[P] was born in [O] ,	He was born in Paris, France.
+112:trie_T0.8	4	7	is_a	G	Ĝ	0	graph .	unknown	consonant	open list		[S] is a [O]	A bridge is a graph G is a graph.
+121:trie_T0.8	2	4	is_a	There		0	number	unknown		subject not in store		[S] are an [O]	There are a number of problems with this, the scientific; the test, and these are sometimes used for certain knowledge of how to perform some task.
+141:trie_T0.8	1	8	birth_place	He		1	Copenhagen , Denmark	unknown		subject not in store		[P] was born in [O]	He was born in Copenhagen, Denmark, and that the new century.
+147:trie_T0.8	6	10	birth_place	He		1	Brooklyn , New York	unknown		subject not in store		[P] was born in [O]	He was born in Brooklyn, New York, where it is the best - known.
+147:trie_T0.8	10	10	is_a	His Dark Materials		0	trilogy	unknown		subject not in store		[S] is a [O] of	His Dark Materials is a trilogy of science - fiction novels.
+156:trie_T0.8	5	12	birth_place	She		1	Paris , France	unknown		subject not in store		[P] was born in [O]	She was born in Paris, France.
+156:trie_T0.8	5	12	birth_place	She		1	Paris	unknown		subject not in store		[P] was born in [O] ,	She was born in Paris, France.
+156:trie_T0.8	10	12	director	It		1	Sam Wood	unknown		subject not in store		[P] was directed by [O]	It was directed by Sam Wood.
+163:trie_T0.8	3	6	is_a	This		0	revolutionary	unknown		subject not in store		[S] is a [O] ,	This was a revolutionary, and the effects of electron correlation on structure).
+175:trie_T0.8	1	6	is_a	It	It (novel)	0	guitarist	unknown	pronoun	open list		[S] is a [O]	The large (a bonus track on the album, " " I. " The term " He was also part of the Stone Age) and released a solo album titled The Good, the Bad and the self - titled track off of the character Troy (a bonus is given if the film is still used by some of the major neighboring constellations here. " It is a guitarist and composer.
+181:trie_T0.8	1	6	is_a	Dr . John	John	partial	language .	unknown	given name	open list		ADD [S] is a [NAT] [OCC]	The team was led by Dr. John is a Swedish language.
+183:trie_T0.8	2	7	birth_place	He		1	Rome , Italy	unknown		subject not in store		[P] was born in [O]	He was born in Rome, Italy, the Netherlands, and a daughter, but no sons, for him.
+199:trie_T0.8	2	6	birth_place	He		1	New York City , New York	unknown		subject not in store		[P] was born in [O]	He was born in New York City, New York.
+199:trie_T0.8	2	6	birth_place	He		1	New York City	unknown		subject not in store		[P] was born in [O] ,	He was born in New York City, New York.
+210:trie_T0.8	6	9	is_a	There		0	genus .	unknown		subject not in store		[S] is a [O]	There is a genus.
+210:trie_T0.8	8	9	is_a	South Park		0	municipality	unknown		subject not in store		the [O] only comprises the town of [S]	The municipality only comprises the town of South Park.
+215:trie_T0.8	4	9	birth_place	He		1	Los Angeles	unknown		subject not in store		[P] was born in [O]	He was born in Los Angeles.
+226:trie_T0.8	6	8	birth_place	He		1	London	unknown		subject not in store		[P] was born in [O]	He was born in London.
+231:trie_T0.8	6	8	is_a	It	It (novel)	0	term	unknown	pronoun	open list		[S] is a [O]	It is a term used to describe the formal and official style was also a world title.
+234:trie_T0.8	5	6	birth_date	In November		0	2003	unknown		subject not in store	valid	[S] , [O]	In November, 2003.
+244:trie_T0.8	6	6	birth_place	He		1	Glasgow , Scotland	unknown		subject not in store		[P] was born in [O]	He was born in Glasgow, Scotland.
+244:trie_T0.8	6	6	birth_place	He		1	Glasgow	unknown		subject not in store		[P] was born in [O] ,	He was born in Glasgow, Scotland.

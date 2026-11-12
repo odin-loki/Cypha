@@ -1,0 +1,605 @@
+{
+ "seed": 20261213,
+ "key": {
+  "t001": {
+   "arm": "NP",
+   "prompt": 11
+  },
+  "t002": {
+   "arm": "FF",
+   "prompt": 24
+  },
+  "t003": {
+   "arm": "CJ",
+   "prompt": 11
+  },
+  "t004": {
+   "arm": "NP",
+   "prompt": 15
+  },
+  "t005": {
+   "arm": "CJ",
+   "prompt": 20
+  },
+  "t006": {
+   "arm": "CJ",
+   "prompt": 31
+  },
+  "t007": {
+   "arm": "T8",
+   "prompt": 26
+  },
+  "t008": {
+   "arm": "MP",
+   "prompt": 1
+  },
+  "t009": {
+   "arm": "FF",
+   "prompt": 31
+  },
+  "t010": {
+   "arm": "MP",
+   "prompt": 32
+  },
+  "t011": {
+   "arm": "CJ",
+   "prompt": 1
+  },
+  "t012": {
+   "arm": "FF",
+   "prompt": 9
+  },
+  "t013": {
+   "arm": "MP",
+   "prompt": 13
+  },
+  "t014": {
+   "arm": "NP",
+   "prompt": 2
+  },
+  "t015": {
+   "arm": "FF",
+   "prompt": 26
+  },
+  "t016": {
+   "arm": "MP",
+   "prompt": 22
+  },
+  "t017": {
+   "arm": "NP",
+   "prompt": 23
+  },
+  "t018": {
+   "arm": "CJ",
+   "prompt": 21
+  },
+  "t019": {
+   "arm": "T8",
+   "prompt": 16
+  },
+  "t020": {
+   "arm": "T8",
+   "prompt": 23
+  },
+  "t021": {
+   "arm": "T8",
+   "prompt": 3
+  },
+  "t022": {
+   "arm": "CJ",
+   "prompt": 4
+  },
+  "t023": {
+   "arm": "NP",
+   "prompt": 3
+  },
+  "t024": {
+   "arm": "FF",
+   "prompt": 21
+  },
+  "t025": {
+   "arm": "MP",
+   "prompt": 10
+  },
+  "t026": {
+   "arm": "T8",
+   "prompt": 28
+  },
+  "t027": {
+   "arm": "CJ",
+   "prompt": 13
+  },
+  "t028": {
+   "arm": "FF",
+   "prompt": 28
+  },
+  "t029": {
+   "arm": "NP",
+   "prompt": 4
+  },
+  "t030": {
+   "arm": "T8",
+   "prompt": 20
+  },
+  "t031": {
+   "arm": "MP",
+   "prompt": 5
+  },
+  "t032": {
+   "arm": "CJ",
+   "prompt": 24
+  },
+  "t033": {
+   "arm": "CJ",
+   "prompt": 16
+  },
+  "t034": {
+   "arm": "CJ",
+   "prompt": 26
+  },
+  "t035": {
+   "arm": "CJ",
+   "prompt": 3
+  },
+  "t036": {
+   "arm": "FF",
+   "prompt": 22
+  },
+  "t037": {
+   "arm": "NP",
+   "prompt": 36
+  },
+  "t038": {
+   "arm": "MP",
+   "prompt": 9
+  },
+  "t039": {
+   "arm": "T8",
+   "prompt": 33
+  },
+  "t040": {
+   "arm": "T8",
+   "prompt": 35
+  },
+  "t041": {
+   "arm": "MP",
+   "prompt": 17
+  },
+  "t042": {
+   "arm": "NP",
+   "prompt": 25
+  },
+  "t043": {
+   "arm": "T8",
+   "prompt": 4
+  },
+  "t044": {
+   "arm": "MP",
+   "prompt": 11
+  },
+  "t045": {
+   "arm": "FF",
+   "prompt": 2
+  },
+  "t046": {
+   "arm": "T8",
+   "prompt": 25
+  },
+  "t047": {
+   "arm": "CJ",
+   "prompt": 28
+  },
+  "t048": {
+   "arm": "MP",
+   "prompt": 33
+  },
+  "t049": {
+   "arm": "FF",
+   "prompt": 4
+  },
+  "t050": {
+   "arm": "FF",
+   "prompt": 32
+  },
+  "t051": {
+   "arm": "T8",
+   "prompt": 22
+  },
+  "t052": {
+   "arm": "NP",
+   "prompt": 33
+  },
+  "t053": {
+   "arm": "FF",
+   "prompt": 23
+  },
+  "t054": {
+   "arm": "MP",
+   "prompt": 15
+  },
+  "t055": {
+   "arm": "CJ",
+   "prompt": 22
+  },
+  "t056": {
+   "arm": "MP",
+   "prompt": 36
+  },
+  "t057": {
+   "arm": "NP",
+   "prompt": 5
+  },
+  "t058": {
+   "arm": "CJ",
+   "prompt": 7
+  },
+  "t059": {
+   "arm": "CJ",
+   "prompt": 25
+  },
+  "t060": {
+   "arm": "CJ",
+   "prompt": 32
+  },
+  "t061": {
+   "arm": "MP",
+   "prompt": 4
+  },
+  "t062": {
+   "arm": "FF",
+   "prompt": 1
+  },
+  "t063": {
+   "arm": "T8",
+   "prompt": 7
+  },
+  "t064": {
+   "arm": "FF",
+   "prompt": 33
+  },
+  "t065": {
+   "arm": "CJ",
+   "prompt": 36
+  },
+  "t066": {
+   "arm": "MP",
+   "prompt": 18
+  },
+  "t067": {
+   "arm": "NP",
+   "prompt": 35
+  },
+  "t068": {
+   "arm": "MP",
+   "prompt": 21
+  },
+  "t069": {
+   "arm": "FF",
+   "prompt": 0
+  },
+  "t070": {
+   "arm": "CJ",
+   "prompt": 10
+  },
+  "t071": {
+   "arm": "MP",
+   "prompt": 20
+  },
+  "t072": {
+   "arm": "FF",
+   "prompt": 7
+  },
+  "t073": {
+   "arm": "MP",
+   "prompt": 23
+  },
+  "t074": {
+   "arm": "FF",
+   "prompt": 20
+  },
+  "t075": {
+   "arm": "NP",
+   "prompt": 28
+  },
+  "t076": {
+   "arm": "CJ",
+   "prompt": 5
+  },
+  "t077": {
+   "arm": "MP",
+   "prompt": 26
+  },
+  "t078": {
+   "arm": "MP",
+   "prompt": 35
+  },
+  "t079": {
+   "arm": "MP",
+   "prompt": 2
+  },
+  "t080": {
+   "arm": "NP",
+   "prompt": 26
+  },
+  "t081": {
+   "arm": "MP",
+   "prompt": 31
+  },
+  "t082": {
+   "arm": "CJ",
+   "prompt": 23
+  },
+  "t083": {
+   "arm": "NP",
+   "prompt": 10
+  },
+  "t084": {
+   "arm": "T8",
+   "prompt": 31
+  },
+  "t085": {
+   "arm": "MP",
+   "prompt": 29
+  },
+  "t086": {
+   "arm": "T8",
+   "prompt": 12
+  },
+  "t087": {
+   "arm": "MP",
+   "prompt": 25
+  },
+  "t088": {
+   "arm": "T8",
+   "prompt": 13
+  },
+  "t089": {
+   "arm": "MP",
+   "prompt": 12
+  },
+  "t090": {
+   "arm": "T8",
+   "prompt": 10
+  },
+  "t091": {
+   "arm": "FF",
+   "prompt": 3
+  },
+  "t092": {
+   "arm": "CJ",
+   "prompt": 29
+  },
+  "t093": {
+   "arm": "NP",
+   "prompt": 21
+  },
+  "t094": {
+   "arm": "T8",
+   "prompt": 0
+  },
+  "t095": {
+   "arm": "T8",
+   "prompt": 24
+  },
+  "t096": {
+   "arm": "FF",
+   "prompt": 18
+  },
+  "t097": {
+   "arm": "FF",
+   "prompt": 13
+  },
+  "t098": {
+   "arm": "NP",
+   "prompt": 9
+  },
+  "t099": {
+   "arm": "CJ",
+   "prompt": 17
+  },
+  "t100": {
+   "arm": "NP",
+   "prompt": 29
+  },
+  "t101": {
+   "arm": "CJ",
+   "prompt": 9
+  },
+  "t102": {
+   "arm": "MP",
+   "prompt": 7
+  },
+  "t103": {
+   "arm": "MP",
+   "prompt": 24
+  },
+  "t104": {
+   "arm": "T8",
+   "prompt": 9
+  },
+  "t105": {
+   "arm": "CJ",
+   "prompt": 12
+  },
+  "t106": {
+   "arm": "NP",
+   "prompt": 20
+  },
+  "t107": {
+   "arm": "FF",
+   "prompt": 5
+  },
+  "t108": {
+   "arm": "FF",
+   "prompt": 29
+  },
+  "t109": {
+   "arm": "CJ",
+   "prompt": 33
+  },
+  "t110": {
+   "arm": "FF",
+   "prompt": 10
+  },
+  "t111": {
+   "arm": "NP",
+   "prompt": 32
+  },
+  "t112": {
+   "arm": "NP",
+   "prompt": 31
+  },
+  "t113": {
+   "arm": "T8",
+   "prompt": 29
+  },
+  "t114": {
+   "arm": "NP",
+   "prompt": 1
+  },
+  "t115": {
+   "arm": "NP",
+   "prompt": 7
+  },
+  "t116": {
+   "arm": "T8",
+   "prompt": 18
+  },
+  "t117": {
+   "arm": "NP",
+   "prompt": 22
+  },
+  "t118": {
+   "arm": "NP",
+   "prompt": 18
+  },
+  "t119": {
+   "arm": "MP",
+   "prompt": 16
+  },
+  "t120": {
+   "arm": "NP",
+   "prompt": 12
+  },
+  "t121": {
+   "arm": "NP",
+   "prompt": 16
+  },
+  "t122": {
+   "arm": "CJ",
+   "prompt": 2
+  },
+  "t123": {
+   "arm": "CJ",
+   "prompt": 15
+  },
+  "t124": {
+   "arm": "FF",
+   "prompt": 17
+  },
+  "t125": {
+   "arm": "CJ",
+   "prompt": 18
+  },
+  "t126": {
+   "arm": "FF",
+   "prompt": 12
+  },
+  "t127": {
+   "arm": "T8",
+   "prompt": 1
+  },
+  "t128": {
+   "arm": "MP",
+   "prompt": 3
+  },
+  "t129": {
+   "arm": "T8",
+   "prompt": 21
+  },
+  "t130": {
+   "arm": "FF",
+   "prompt": 11
+  },
+  "t131": {
+   "arm": "T8",
+   "prompt": 11
+  },
+  "t132": {
+   "arm": "NP",
+   "prompt": 13
+  },
+  "t133": {
+   "arm": "FF",
+   "prompt": 36
+  },
+  "t134": {
+   "arm": "NP",
+   "prompt": 24
+  },
+  "t135": {
+   "arm": "T8",
+   "prompt": 32
+  },
+  "t136": {
+   "arm": "T8",
+   "prompt": 17
+  },
+  "t137": {
+   "arm": "T8",
+   "prompt": 2
+  },
+  "t138": {
+   "arm": "T8",
+   "prompt": 15
+  },
+  "t139": {
+   "arm": "T8",
+   "prompt": 36
+  },
+  "t140": {
+   "arm": "FF",
+   "prompt": 25
+  },
+  "t141": {
+   "arm": "MP",
+   "prompt": 28
+  },
+  "t142": {
+   "arm": "FF",
+   "prompt": 35
+  },
+  "t143": {
+   "arm": "T8",
+   "prompt": 5
+  },
+  "t144": {
+   "arm": "MP",
+   "prompt": 0
+  },
+  "t145": {
+   "arm": "CJ",
+   "prompt": 35
+  },
+  "t146": {
+   "arm": "NP",
+   "prompt": 0
+  },
+  "t147": {
+   "arm": "NP",
+   "prompt": 17
+  },
+  "t148": {
+   "arm": "FF",
+   "prompt": 16
+  },
+  "t149": {
+   "arm": "CJ",
+   "prompt": 0
+  },
+  "t150": {
+   "arm": "FF",
+   "prompt": 15
+  }
+ }
+}

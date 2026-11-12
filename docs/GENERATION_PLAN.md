@@ -2856,3 +2856,10 @@ Not a cause: sentence starts (4 of 90 breaks).
   - **C**, the passing single arms together, if 2 or more pass.
 - **Screen:** verbatim13 0; fact precision at least 0.874 (NP reports it); breaks per 100 words below T8's, marked blind by X1's rule on X1's 30 prompts; my strict reading. At most 2 single candidates, plus C.
 - **Judge:** blind pairwise raters against T8 at 460 characters (`bench/blind/fix_pair`, seed 20261220), §13.38's rule.
+
+**§13.76 screen** (2026-11-13; [K5_FIXES](reports/K5_FIXES.md) "Screen results"):
+- Check: with every new flag off, my build equals T8's GEN file under `cmp`.
+- Breaks per 100 words, marked blind on X1's 30 prompts (T8 5.43): MP 4.73, FF 4.68, CJ 4.73, NP 5.03; C (MP + FF + NP) 4.49 against T8 5.45 in a second pass. verbatim13 0 everywhere; copy32 T8 0.487, MP 0.562, FF 0.540, CJ 0.520, NP 0.570, C 0.694.
+- Fact precision: MP 0.935, FF 0.924, CJ 0.929; NP and C write almost no checkable statements (0 supported, 1 contradicted).
+- My strict reading (whole sentences in 12 prompts): T8 9, MP 16, FF 10, CJ 7, NP 9, C 12. CJ fails; C fails the fact screen as registered.
+- **Candidates MP and FF.** Packets `bench/blind/fix_pair` (seed 20261220) are committed; the raters have not run.

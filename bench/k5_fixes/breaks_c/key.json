@@ -1,0 +1,245 @@
+{
+ "seed": 20261214,
+ "key": {
+  "t001": {
+   "arm": "C",
+   "prompt": 2
+  },
+  "t002": {
+   "arm": "T8",
+   "prompt": 10
+  },
+  "t003": {
+   "arm": "C",
+   "prompt": 21
+  },
+  "t004": {
+   "arm": "T8",
+   "prompt": 11
+  },
+  "t005": {
+   "arm": "C",
+   "prompt": 26
+  },
+  "t006": {
+   "arm": "T8",
+   "prompt": 29
+  },
+  "t007": {
+   "arm": "T8",
+   "prompt": 21
+  },
+  "t008": {
+   "arm": "C",
+   "prompt": 29
+  },
+  "t009": {
+   "arm": "C",
+   "prompt": 24
+  },
+  "t010": {
+   "arm": "T8",
+   "prompt": 33
+  },
+  "t011": {
+   "arm": "T8",
+   "prompt": 15
+  },
+  "t012": {
+   "arm": "T8",
+   "prompt": 0
+  },
+  "t013": {
+   "arm": "C",
+   "prompt": 20
+  },
+  "t014": {
+   "arm": "C",
+   "prompt": 9
+  },
+  "t015": {
+   "arm": "T8",
+   "prompt": 16
+  },
+  "t016": {
+   "arm": "C",
+   "prompt": 25
+  },
+  "t017": {
+   "arm": "T8",
+   "prompt": 26
+  },
+  "t018": {
+   "arm": "T8",
+   "prompt": 17
+  },
+  "t019": {
+   "arm": "C",
+   "prompt": 4
+  },
+  "t020": {
+   "arm": "C",
+   "prompt": 22
+  },
+  "t021": {
+   "arm": "T8",
+   "prompt": 22
+  },
+  "t022": {
+   "arm": "T8",
+   "prompt": 28
+  },
+  "t023": {
+   "arm": "C",
+   "prompt": 0
+  },
+  "t024": {
+   "arm": "C",
+   "prompt": 10
+  },
+  "t025": {
+   "arm": "C",
+   "prompt": 1
+  },
+  "t026": {
+   "arm": "T8",
+   "prompt": 24
+  },
+  "t027": {
+   "arm": "T8",
+   "prompt": 36
+  },
+  "t028": {
+   "arm": "T8",
+   "prompt": 20
+  },
+  "t029": {
+   "arm": "T8",
+   "prompt": 35
+  },
+  "t030": {
+   "arm": "T8",
+   "prompt": 31
+  },
+  "t031": {
+   "arm": "C",
+   "prompt": 33
+  },
+  "t032": {
+   "arm": "C",
+   "prompt": 18
+  },
+  "t033": {
+   "arm": "C",
+   "prompt": 12
+  },
+  "t034": {
+   "arm": "T8",
+   "prompt": 7
+  },
+  "t035": {
+   "arm": "C",
+   "prompt": 28
+  },
+  "t036": {
+   "arm": "C",
+   "prompt": 32
+  },
+  "t037": {
+   "arm": "T8",
+   "prompt": 13
+  },
+  "t038": {
+   "arm": "T8",
+   "prompt": 32
+  },
+  "t039": {
+   "arm": "C",
+   "prompt": 3
+  },
+  "t040": {
+   "arm": "C",
+   "prompt": 31
+  },
+  "t041": {
+   "arm": "C",
+   "prompt": 7
+  },
+  "t042": {
+   "arm": "C",
+   "prompt": 15
+  },
+  "t043": {
+   "arm": "C",
+   "prompt": 11
+  },
+  "t044": {
+   "arm": "C",
+   "prompt": 17
+  },
+  "t045": {
+   "arm": "T8",
+   "prompt": 9
+  },
+  "t046": {
+   "arm": "T8",
+   "prompt": 1
+  },
+  "t047": {
+   "arm": "C",
+   "prompt": 23
+  },
+  "t048": {
+   "arm": "C",
+   "prompt": 13
+  },
+  "t049": {
+   "arm": "T8",
+   "prompt": 3
+  },
+  "t050": {
+   "arm": "C",
+   "prompt": 5
+  },
+  "t051": {
+   "arm": "C",
+   "prompt": 35
+  },
+  "t052": {
+   "arm": "C",
+   "prompt": 36
+  },
+  "t053": {
+   "arm": "C",
+   "prompt": 16
+  },
+  "t054": {
+   "arm": "T8",
+   "prompt": 12
+  },
+  "t055": {
+   "arm": "T8",
+   "prompt": 18
+  },
+  "t056": {
+   "arm": "T8",
+   "prompt": 2
+  },
+  "t057": {
+   "arm": "T8",
+   "prompt": 4
+  },
+  "t058": {
+   "arm": "T8",
+   "prompt": 25
+  },
+  "t059": {
+   "arm": "T8",
+   "prompt": 23
+  },
+  "t060": {
+   "arm": "T8",
+   "prompt": 5
+  }
+ }
+}
