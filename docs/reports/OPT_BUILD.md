@@ -36,6 +36,43 @@ If any check differs, O1 is reported failed. Timings come only from the pairs st
 
 Measures: wall time, user time and peak RAM (`/usr/bin/time -v`); K5's sampling time (stderr's `k5: generated N bytes in X s`).
 
-## Results
+## Results (2026-11-12)
 
-(to come)
+**The compiler.** Small default `context8k`, base, GCC-PGO and Clang-PGO started together: all three stdouts `cmp` equal (260 lines, 1.7501). Wall: base 8:47.8, GCC-PGO 8:32.6 (−2.9%), **Clang-PGO 8:13.7 (−6.5%)**. So O1's build is `scripts/pgo_build.sh --cc clang` (Clang 18, ThinLTO, `-march=native -ffp-contract=off`, PGO). None of the binaries has an FMA instruction (`objdump`: 0 in every `cyphalm_trie` and `scribe`).
+
+**O1 is exact.** Old: Release GCC 13. New: Clang-PGO.
+
+| Check | What was compared | Result |
+|---|---|---|
+| `context8k` small, default | stdout, 260 lines; 1.7501 | `cmp` equal |
+| `context8k` small, `--no-meta-mix` | stdout, 245 lines; 1.7633 | `cmp` equal |
+| `context8k` small, `--no-full-mix` | stdout, 233 lines; 1.8384 | `cmp` equal |
+| GEN-A dev, the planner (7 MB) | GEN file, stdout, SCRIBE v2 and v3.1, summary; stderr (timing removed, sorted) | `cmp` equal (8 of 8 files) |
+| GEN-A dev, `--no-k5-plan` (7 MB) | the same | `cmp` equal (8 of 8) |
+| selftests (`cyphalm_trie`, `scribe`) | — | pass, both builds |
+| **full `context8k`, default** (new, in the lock) | stdout against O5's full run of main (`/mnt/d/cypha_llm/opt/o5/F_new.out`) |  equal (260 lines); ** 1.4962** reproduced; wall 34:40, 1,533 MB (alone in the lock, not a timing test) |
+
+The SCRIBE reports are equal, so each side's own `scribe` binary gives the same scores.
+
+**Speed** (old and new started together, 4 CPUs each; other sessions loaded the PC, load 20–54):
+
+| Run | Wall, old → new | User CPU, old → new | Peak RAM |
+|---|---:|---:|---:|
+| `context8k` small, default | 8:48 → 8:14 (**−6.5%**) | 649 → 602 s (−7%) | 1,312 MB both |
+| `context8k` small, `--no-meta-mix` | 9:59 → 9:21 (−6.4%) | 733 → 711 s (−3%) | 913 MB both |
+| `context8k` small, `--no-full-mix` | 6:05 → 6:03 (−0.8%) | 394 → 394 s (0%) | 671 MB both |
+| K5 sampling, the planner | 169.4 → 143.0 s (**−16%**) | `sample` 584 → 461 s (−21%) | 616 MB both |
+| K5 sampling, `--no-k5-plan` | 205.2 → 146.0 s (**−29%**) | `sample` 689 → 537 s (−22%) | 144 → 143 MB |
+
+- `sample`'s wall: 3:14 → 2:50 (−12%) with the planner, 3:52 → 2:49 (−27%) without.
+- `context8k` gains little: its hot loops were already hand-vectorised (O5) and its floating point may not be reordered. Without the full mix it does not gain at all.
+- K5's code is branchy (hash lookups, sorting, bans), where profile-guided layout and inlining help most.
+
+**Predictions** (§13.41):
+- Exact: **hit** (every check `cmp` equal; the full run reproduces 1.4962).
+- `context8k` time down at least 10%: **miss** (−6.5% default, −6.4%, −0.8%).
+- K5 sampling down at least 10%: **hit** (−16% with the planner, −29% without).
+
+**Kept, as an option, off by default.** It is exact and makes K5 faster, but `-march=native` binaries run only on CPUs like this PC's, and a PGO build takes about 20 minutes. Use it for long K5 runs on Odin's PC: `scripts/pgo_build.sh --cc clang`. Not on main: that is the lead's call.
+
+Runs: `/mnt/d/cypha_llm/opt/o1/r1112/` (`ctx/` the `context8k` pairs, the screen and the full run with `runs.log`; `gen/` the GEN pairs with their `.cmp`; `logs/`; `bin/` the scripts).
