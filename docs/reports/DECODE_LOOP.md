@@ -95,7 +95,7 @@ A candidate is dropped if any holds:
 - **Packet:** `python3 scripts/blind_rate.py make --mode pair --baseline BEST --out bench/blind/loop_rN --ids bench/blind/loop_rN/ids.json --arm BEST=… --arm S1=… [--arm S2=…] --seed 20261210+N` (460 characters). `blind_rate.py` writes four files: R1 and R2 hold the first 10 prompts, R3 and R4 the second 10.
 - **Two raters:** rater X reads R1.txt and R3.txt; rater Y reads R2.txt and R4.txt (each file is answered as a fresh task, with `RATER_PROMPT.md`'s text). So every prompt is judged once by each rater, for each survivor. The replies are saved as R1.json–R4.json.
 - `KEY.json` is moved out of the repository (the scratchpad, `loop_rN_KEY.json`) before the commit. The packets, `ids.json`, `key.b64` and `RATER_PROMPT.md` are committed and pushed before the raters run. I message the lead; the lead runs the raters and replies with the result.
-- **The round's rule:** a survivor's win share against the best (a tie counts half) over the 20 prompts and both raters. **It becomes the new best if its share is at least 0.60 and each rater's own share is at least 0.5.** If both qualify: the higher share, then the higher bootstrap lower bound, then the lower copy32. Otherwise the best stays.
+- **The round's rule:** a survivor's win share against the best (a tie counts half) over the 20 prompts and both raters. **It becomes the new (provisional) best if its share is at least 0.60 and each rater's own share is at least 0.5.** If both qualify: the higher share, then the higher bootstrap lower bound, then the lower copy32. Otherwise the best stays.
 - This is a loose rule on purpose (20 prompts give an interval of about ±0.13); the confirmations below are the strict test.
 
 ## The search rule (coordinate search with halving)
@@ -186,7 +186,7 @@ Subset A (100 prompts); splice and tail on X1's 30. Full table: `bench/decode_lo
 
 - **Screen:** all four pass. **Ranking** (rank sum of surprise, SCRIBE v2, stuff3, verbless, splice): N9 6, T75 7, N7 7 (T75 by the copy32 tie-break), T85 10. **To the readers: N9 and T75.**
 - **Readers** (`bench/blind/loop_r1`, 20 prompts, seed 20261211; packets committed first, 36b87324). The lead gave each of the four packet files to its own fresh rater, not two raters reading two files each. Scored as registered, with "rater X" = the R1 and R3 replies and "rater Y" = R2 and R4 (each covers all 20 prompts once):
-  - **T 0.75: 0.625 [0.450, 0.775]**, X 0.60, Y 0.65: **the new best**;
+  - **T 0.75: 0.625 [0.450, 0.775]**, X 0.60, Y 0.65: **leads, not significant** (the interval includes 0.5). By the round's loose rule it is carried forward as the provisional best. Nothing is adopted until a confirmation (all 50 prompts, four raters, against START) passes §13.38;
   - nucleus 0.9: 0.425 [0.275, 0.575], X 0.40, Y 0.45: no.
 - SCRIBE v2 ranked them the same way the readers did; so did the link, splice and verbless. N9 had the lower stuff3. Too few rated arms to say more.
-- Round 2 (gate) starts from T 0.75. Gate arms run speculatively from START while the readers read were stopped and are not used.
+- Round 2 (gate) starts from T 0.75, the provisional best. The round-3 confirmation tests the round-3 best against START. Gate arms run speculatively from START while the readers read were stopped and are not used.
