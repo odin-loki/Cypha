@@ -2587,3 +2587,13 @@ Old binary main 9cbd277; old and new were started together.
   - v3.1 passes 5 of 5 on the rungs and 4 of 5 on the source region.
 - **Today's default (L1) on GEN-W dev:** SCRIBE v2 0.691 [0.665, 0.718] (GEN-A dev 0.610), v3.1 0.622, K5's bits a byte on the human continuations 1.604 (GEN-A 1.357), copy32 0.199, no 13-word copy. The web reference is looser (sentences shuffled score 0.404 against 0.344), and the writer stays on Wikipedia topics whatever the prompt.
 - **C1:** `/mnt/d/cypha_llm/c4prose/c1_train.txt`, 1.50 GB, 764,046 documents from shards 00000–00002. The overlap rule removed 10.2% of the bytes; the final check found 0 forbidden spans. K5 has not read it.
+
+**§13.63 checks and test read** (2026-11-12):
+- `cmp` on the 250 dev prompts: the default equals HLT's dev GEN file, and `--k5-plan-honest off` equals L1's. Selftest passes.
+- **The one test read** (GEN-A test; `bench/honest_dates2/test_read/`):
+  - SCRIBE v2 **0.630 [0.598, 0.663]** (L1 0.629), v3.1 0.571, copy32 0.223, no 13-word copies;
+  - **fact precision 0.924 [0.883, 0.959]** against L1's 0.426 [0.364, 0.494];
+  - contradicted 0.043 against 0.347;
+  - birth dates 84 right and 5 wrong (L1: 66 and 58), death dates 41 and 1 (L1: 7 and 58).
+- **The default writer now states what CyphaLM's store holds.** G4's fact-precision bar of 0.9 is met on dev and test.
+- **Left:** invented birth places (12 right, 7 wrong on test) and K5's free sentences after the plan, which no flag touches.
