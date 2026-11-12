@@ -624,6 +624,20 @@ class DiscourseWriter final : public wkn::StructureWriter {
         return p_.w_grid * grid + p_.w_topic * topic + p_.w_assoc * as + p_.w_cooc * co + p_.w_trans * tr -
                p_.w_hop * static_cast<double>(dp.ents[dp.of[j]].hop);
     }
+    // K5_DECODE.md: a draft's mean log2 probability per word (fluency, wf) and mean log2 P(class | two classes before)
+    // under K5's class model (grammar, wg). The draft's words are the last words.size() ids of its context.
+    static void fluency_terms(const wkn::K5& m, const wkn::Options& o, const wkn::K5::State& d, const std::vector<std::uint32_t>& words,
+                              const std::vector<double>& lp, std::vector<double>& flu, std::vector<double>& gram, std::size_t ku) {
+        const double n = static_cast<double>(std::max<std::size_t>(words.size(), 1));
+        double a = 0, b = 0;
+        for (const double x : lp) a += x;
+        const auto& cm = m.classes();
+        if (o.gate_wg != 0 && cm.on() && d.ctx.size() >= words.size()) {
+            const std::size_t n0 = d.ctx.size() - words.size();
+            for (std::size_t i = 0; i < words.size(); ++i) b += cm.class_lp(d.ctx.data(), n0 + i, d.ctx[n0 + i]);
+        }
+        flu[ku] = a / n, gram[ku] = b / n;
+    }
     // One free K5 sentence: K drafts from s, the paragraph gate's choice (c prepared); s and c take it.
     void free_sentence(const wkn::K5& m, st::Context& c, wkn::K5::State& s, std::uint64_t seed, std::uint64_t no, const wkn::Options& o,
                        const std::vector<double>& assoc, std::vector<wkn::K5::State>& drafts, wkn::GenStats& g) const {
@@ -631,6 +645,7 @@ class DiscourseWriter final : public wkn::StructureWriter {
         m.regrow(s, o, true);  // K5_RETRIEVE2.md: once, before the drafts copy the state (off: nothing)
         const int K = static_cast<int>(drafts.size());
         std::vector<double> pmi(static_cast<std::size_t>(K)), topic(pmi.size()), grid(pmi.size()), mk(pmi.size()), rec(pmi.size());
+        std::vector<double> flu(pmi.size()), gram(pmi.size());  // K5_DECODE.md
         std::vector<double> ar;  // K5_COHERENCE.md (--k5-gate K,wr=W): the association with the previous sentence
         if (o.gate_wr != 0 && !c.sents.empty()) {
             std::vector<std::uint32_t> prev;
@@ -652,16 +667,21 @@ class DiscourseWriter final : public wkn::StructureWriter {
             if (!ar.empty()) rec[ku] = st::mean_assoc(ar, words);
             for (const auto w : words) toks[ku].push_back(m.vocab()[w]);
             topic[ku] = tok_topic(toks[ku], c.theta);
+            if (o.gate_wf != 0 || o.gate_wg != 0) fluency_terms(m, o, drafts[ku], words, lp, flu, gram, ku);  // K5_DECODE.md
             grid[ku] = md.grid.trained() ? md.grid.append_logp(c.grid, md.grid.roles(toks[ku])) : 0.0;
         }
         const auto zp = zscores(pmi), zt = zscores(topic), zg = zscores(grid);
         const auto zr = ar.empty() ? std::vector<double>{} : zscores(rec);
+        const auto zf = o.gate_wf != 0 ? zscores(flu) : std::vector<double>{};  // K5_DECODE.md
+        const auto zgr = o.gate_wg != 0 ? zscores(gram) : std::vector<double>{};
         int best = 0;
         double bsc = -1e300;
         for (int k = 0; k < K; ++k) {
             const auto ku = static_cast<std::size_t>(k);
             double sc = p_.g_pmi * zp[ku] + p_.g_topic * zt[ku] + p_.g_grid * zg[ku] - o.gate_wm * mk[ku];
             if (!ar.empty()) sc += o.gate_wr * zr[ku];  // K5_COHERENCE.md
+            if (!zf.empty()) sc += o.gate_wf * zf[ku];   // K5_DECODE.md
+            if (!zgr.empty()) sc += o.gate_wg * zgr[ku];
             if (k == 0 || sc > bsc) bsc = sc, best = k;
         }
         const auto bu = static_cast<std::size_t>(best);
