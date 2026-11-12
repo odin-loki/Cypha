@@ -2634,3 +2634,11 @@ Old binary main 9cbd277; old and new were started together.
 - **Choice between the two.** The registered order says "higher lower bound first, then lower copy32", but not on which reading. It is read conservatively, as the weaker of each arm's two lower bounds: K1 0.780, K4 0.730. K1 also has the lower copy32 (0.275 against 0.294) and costs less. **K1 becomes the default.** K4 reads better at 1,500 characters and stays a flag.
 - **The default:** when K5 counts from the more-text, `sample --k5` adds `--k5-retrieve k=1,rel=0.5`. `--k5-retrieve off` restores HLT.
 - **Checks** (registered before they run): the default equals K1's dev GEN file under `cmp`, and `--k5-retrieve off` equals HLT's. Then GEN-A test is read once, with the fact check.
+
+**§13.66 checks and test read** (2026-11-12):
+- `cmp` on the 250 dev prompts: the default equals K1's dev GEN file, and `--k5-retrieve off` equals HLT's. Selftest passes.
+- **The one test read** (GEN-A test; `bench/k5_retrieve/test_read/`):
+  - SCRIBE v2 **0.706 [0.674, 0.738]** (HLT 0.630), v3.1 0.666 (0.571);
+  - fact precision 0.924 [0.883, 0.959] (HLT 0.924), contradicted 0.045;
+  - copy32 0.264, no 13-word copies.
+- This is the first CyphaLM writer above SCRIBE's G4 bar of 0.70 on test (GPT-2 small: 0.767). SCRIBE alone is not the evidence (§13.57); the raters are: 0.860 and 0.880 against HLT.
