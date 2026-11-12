@@ -200,6 +200,18 @@ class DocTopic {
         /// From here on the words read no longer change the parts' masses (the partial word is still followed): in
         /// sample, after the prompt, so the parts cannot feed on what CyphaLM itself writes.
         void freeze() { frozen_ = true; }
+        /// MIXDEC_TUNE.md: where a frozen stream reads (the partial word, the last bytes, the byte before), so the
+        /// decoder's learner can mark and rewind it. A frozen stream's masses do not move, so this is all it changes.
+        struct Pos {
+            std::string partial, tail;
+            std::uint8_t prev = ' ';
+        };
+        Pos pos() const { return {partial_, tail_, prev_}; }
+        void set_pos(const Pos& p) {
+            partial_ = p.partial;
+            tail_ = p.tail;
+            prev_ = p.prev;
+        }
         /// After `b`: the partial word grows or ends; a document restarts after "<page>".
         void feed(std::uint8_t b) {
             if (alpha(b)) {

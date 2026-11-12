@@ -18,12 +18,25 @@
 /// none of them has a way to rewind a hypothetical byte. Rule 10: every expert is CyphaLM's own; the byte LSTM is
 /// CyphaLM's own online learner, which context8k already runs.
 ///
+/// MIXDEC_TUNE.md (2026-11-13), all off by default (the learner is then the same to the last bit):
+///   - the class expert (ClassContext, word shapes, counted on K5's prose): a pure function of the text read, so it
+///     rewinds for free;
+///   - the document cache (DocTopic's cache part, cand 2048 as T1 tuned it): fed while primed, frozen before writing;
+///     a frozen stream's state is its partial word and last bytes, which a mark keeps;
+///   - the n-gram's orders, table bits, count cap and step (T1's tuned 1..8,12,16, cap 8, step 0.000625), and counts
+///     pretrained on generic prose (OnlineNgram::pretrain);
+///   - the mixer's floor, step and step decay (T1's tuned arm B: 1.67652e-05, 0.00181686, 0.0001);
+///   - a second mixer, its weight sets by the previous byte (mix2=1) or an order-2 hash (mix2=2), joined to the first
+///     by a final geometric mixer (5 sets by the previous byte's class) that starts on the first mixer alone.
+///
 /// Learning: the learner learns (mixer weights, n-gram counts, LSTM) only while it is primed: once on a slice of generic
 /// clean prose (the base), then per continuation on the retrieved article and the prompt. While writing it is FROZEN: it
 /// reads its own text (the experts' contexts move) but learns nothing from it (GEN-C: learning from its own output loops).
 
 #include "cypha/lm/byte_kn.hpp"
+#include "cypha/lm/class_context.hpp"
 #include "cypha/lm/copy_expert.hpp"
+#include "cypha/lm/doc_cache.hpp"
 #include "cypha/lm/packed_trie.hpp"
 #include "cypha/online/byte_lstm.hpp"
 #include "cypha/online/mix_core.hpp"
@@ -47,26 +60,45 @@ struct Models {
     bool copy = true, ngram = true, lstm = true;
     double lr = 0.002;    // the geometric mixer's step
     double floor = 1e-6;  // each input distribution's floor before its log
+    // MIXDEC_TUNE.md (off by default)
+    const ClassContext* cls = nullptr;  // the class expert
+    const DocTopic* doc = nullptr;      // the document cache (its cache part)
+    std::vector<int> ng_orders{1, 2, 3, 4, 6};
+    int ng_tb = 18, ng_cap = 60;
+    double ng_lr = 0.005;
+    double decay = 0;  // the mixers' step at a weight set's t-th update: lr / (1 + t decay)
+    int mix2 = 0;      // 0: one mixer; 1: a second by the previous byte; 2: by an order-2 hash; then a final mixer
 };
 
 class Learner {
  public:
-    static constexpr int kIn = 10;   // trie x5, trie mixture, Kneser-Ney, copy, n-gram, LSTM
+    static constexpr int kIn = 12;    // trie x5, trie mixture, Kneser-Ney, copy, n-gram, LSTM, class, document cache
     static constexpr int kSets = 40;  // copy bucket (8) x previous byte's class (5)
     static constexpr int kTM = 5;     // the input the weights start on (the trie mixture; Kneser-Ney without a trie)
+    static constexpr int kMaxOrders = 16;
 
     Learner(const Models& m, const ::cypha::online::ByteLSTM* lstm0) : M_(&m) {
         if (m.lstm && lstm0) L_ = std::make_unique<::cypha::online::ByteLSTM>(*lstm0), L_->set_threads(1);
         if (m.ngram) {
             ::cypha::online::OnlineNgram::Params np;
-            np.orders = {1, 2, 3, 4, 6};
-            np.tb = 18, np.cap = 60, np.lr = 0.005;
+            np.orders = m.ng_orders;
+            np.tb = m.ng_tb, np.cap = m.ng_cap, np.lr = m.ng_lr;
             ng_ = std::make_shared<::cypha::online::OnlineNgram>(np);
             nh_ = ng_->history();
         }
-        w_.assign(static_cast<std::size_t>(kSets) * kIn, 0.0);
+        if (m.doc) ds_ = std::make_shared<DocTopic::Stream>(*m.doc), dp_ = ds_->pos();
         const int init = m.trie ? kTM : 6;
+        w_.assign(static_cast<std::size_t>(kSets) * kIn, 0.0);
         for (int g = 0; g < kSets; ++g) w_[static_cast<std::size_t>(g) * kIn + init] = 1.0;
+        if (m.decay > 0) n_.assign(kSets, 0);
+        if (m.mix2 > 0) {
+            const int s2 = sets2();
+            w2_.assign(static_cast<std::size_t>(s2) * kIn, 0.0);
+            for (int g = 0; g < s2; ++g) w2_[static_cast<std::size_t>(g) * kIn + init] = 1.0;
+            wf_.assign(5 * 2, 0.0);
+            for (int g = 0; g < 5; ++g) wf_[static_cast<std::size_t>(g) * 2] = 1.0;  // the final mixer starts on mixer 1
+            if (m.decay > 0) n2_.assign(static_cast<std::size_t>(s2), 0), nf_.assign(5, 0);
+        }
         buf_.push_back('\n');
     }
     Learner(const Learner& o) { *this = o; }
@@ -78,13 +110,40 @@ class Learner {
         if (L_) L_->set_threads(1);
         ng_ = o.ng_;  // shared: a copy reads the same counts (frozen); own() makes them its own
         nh_ = o.nh_;
+        ds_ = o.ds_;  // shared likewise (a frozen stream changes only its position, which each learner keeps)
+        dp_ = o.dp_;
         w_ = o.w_;
+        w2_ = o.w2_, wf_ = o.wf_;
+        n_ = o.n_, n2_ = o.n2_, nf_ = o.nf_;
         learned_ = o.learned_;
         return *this;
     }
-    /// The n-gram's counts become this learner's own copy (before it learns, or when another thread reads the original).
+    /// The n-gram's counts (and the document stream) become this learner's own copy (before it learns, or when another
+    /// thread reads the original).
     void own() {
         if (ng_) ng_ = std::make_shared<::cypha::online::OnlineNgram>(*ng_);
+        if (ds_) ds_ = std::make_shared<DocTopic::Stream>(*ds_);
+    }
+    /// MIXDEC_TUNE.md: the n-gram's counts of generic text, counted alone (no mixer, no other expert).
+    void pretrain_ngram(std::string_view s) {
+        if (!ng_ || s.empty()) return;
+        ng_->set_history(nh_);
+        ng_->pretrain(reinterpret_cast<const std::uint8_t*>(s.data()), s.size());
+        nh_ = ng_->history();
+    }
+    /// MIXDEC_TUNE.md: the document cache starts a new document (the base's generic prose is not one document).
+    void doc_reset() {
+        if (!ds_) return;
+        ds_ = std::make_shared<DocTopic::Stream>(*M_->doc);
+        dp_ = ds_->pos();
+    }
+    /// MIXDEC_TUNE.md: the document cache stops learning (before writing); its candidates are fixed here.
+    void doc_freeze() {
+        if (!ds_) return;
+        ds_->freeze();
+        double D[256];
+        ds_->set_pos(dp_);
+        ds_->predict(DocTopic::kCache, D);
     }
 
     /// The next byte's distribution after everything read, learning nothing. The inputs are kept for learn().
@@ -136,7 +195,7 @@ class Learner {
             put(nullptr);
         }
         if (ng_) {
-            double G[256], Go[5 * 256];
+            double G[256], Go[kMaxOrders * 256];
             ng_->set_history(nh_);
             ng_->dist(G, Go);
             put(G);
@@ -150,17 +209,41 @@ class Learner {
         } else {
             put(nullptr);
         }
-        set_ = copy_bucket(cn) * 5 + ::cypha::online::mix::byte_class(n ? h[n - 1] : 32);
-        const double* w = &w_[static_cast<std::size_t>(set_) * kIn];
-        double z[256] = {};
-        for (int j = 0; j < kIn; ++j)
-            if (has_[j] && w[j] != 0)
-                for (int s = 0; s < 256; ++s) z[s] += w[j] * lin_[j][s];
-        double mx = z[0];
-        for (int s = 1; s < 256; ++s) mx = std::max(mx, z[s]);
-        double t = 0;
-        for (int s = 0; s < 256; ++s) t += (P[s] = std::exp(z[s] - mx));
-        for (int s = 0; s < 256; ++s) P_[s] = (P[s] /= t);
+        if (M_->cls) {  // MIXDEC_TUNE.md: skipped where no context of it was seen
+            double C[256];
+            const auto hit = M_->cls->predict(h, n, C);
+            put(hit.order > 0 ? C : nullptr);
+        } else {
+            put(nullptr);
+        }
+        if (ds_) {  // MIXDEC_TUNE.md: skipped where no candidate word fits (bucket 0)
+            double D[256];
+            ds_->set_pos(dp_);
+            const int b = ds_->predict(DocTopic::kCache, D);
+            put(b > 0 ? D : nullptr);
+        } else {
+            put(nullptr);
+        }
+        const std::uint8_t pb = n ? h[n - 1] : 32;
+        set_ = copy_bucket(cn) * 5 + ::cypha::online::mix::byte_class(pb);
+        mixed(&w_[static_cast<std::size_t>(set_) * kIn], P);
+        if (M_->mix2 > 0) {  // MIXDEC_TUNE.md: the second mixer and the final one
+            const std::uint8_t pb2 = n > 1 ? h[n - 2] : 32;
+            set2_ = M_->mix2 == 1 ? pb : static_cast<int>(((pb2 * 0x9E37u) ^ (pb * 0x85EBu) ^ pb) & 4095u);
+            cls_ = ::cypha::online::mix::byte_class(pb);
+            for (int s = 0; s < 256; ++s) P1_[s] = P[s];
+            mixed(&w2_[static_cast<std::size_t>(set2_) * kIn], P2_);
+            const double* f = &wf_[static_cast<std::size_t>(cls_) * 2];
+            double z[256], mx = -1e300;
+            for (int s = 0; s < 256; ++s) {
+                z[s] = f[0] * std::log(std::max(P1_[s], 1e-300)) + f[1] * std::log(std::max(P2_[s], 1e-300));
+                mx = std::max(mx, z[s]);
+            }
+            double t = 0;
+            for (int s = 0; s < 256; ++s) t += (P[s] = std::exp(z[s] - mx));
+            for (int s = 0; s < 256; ++s) P[s] /= t;
+        }
+        for (int s = 0; s < 256; ++s) P_[s] = P[s];
     }
 
     /// Reads byte y and learns it (priming only): the mixer's gradient on log loss, the n-gram's counts, the LSTM.
@@ -168,20 +251,32 @@ class Learner {
     double learn(std::uint8_t y) {
         double P[256];
         dist(P);
-        double* w = &w_[static_cast<std::size_t>(set_) * kIn];
-        for (int j = 0; j < kIn; ++j) {
-            if (!has_[j]) continue;
-            double e = 0;
-            for (int s = 0; s < 256; ++s) e += P[s] * lin_[j][s];
-            w[j] -= M_->lr * (e - lin_[j][y]);
+        if (M_->mix2 > 0) {
+            step(&w_[static_cast<std::size_t>(set_) * kIn], P1_, y, n_.empty() ? nullptr : &n_[static_cast<std::size_t>(set_)]);
+            step(&w2_[static_cast<std::size_t>(set2_) * kIn], P2_, y, n2_.empty() ? nullptr : &n2_[static_cast<std::size_t>(set2_)]);
+            double* f = &wf_[static_cast<std::size_t>(cls_) * 2];
+            const double* in[2] = {P1_, P2_};
+            const double lr = rate(nf_.empty() ? nullptr : &nf_[static_cast<std::size_t>(cls_)]);
+            for (int j = 0; j < 2; ++j) {
+                double e = 0;
+                for (int s = 0; s < 256; ++s) e += P[s] * std::log(std::max(in[j][s], 1e-300));
+                f[j] -= lr * (e - std::log(std::max(in[j][y], 1e-300)));
+            }
+        } else {
+            step(&w_[static_cast<std::size_t>(set_) * kIn], P, y, n_.empty() ? nullptr : &n_[static_cast<std::size_t>(set_)]);
         }
         if (ng_) {
-            double po[8];
+            double po[kMaxOrders];
             ng_->set_history(nh_);
             ng_->code(y, po, true);
             nh_ = ng_->history();
         }
         if (L_) L_->step(y, true);
+        if (ds_) {
+            ds_->set_pos(dp_);
+            ds_->feed(y);
+            dp_ = ds_->pos();
+        }
         buf_.push_back(y);
         ++learned_;
         return std::log2(std::max(P[y], 1e-300));
@@ -199,6 +294,11 @@ class Learner {
             nh_.push_back(y);
         }
         if (L_) L_->step(y, false);
+        if (ds_) {
+            ds_->set_pos(dp_);
+            ds_->feed(y);
+            dp_ = ds_->pos();
+        }
         buf_.push_back(y);
     }
     void read(std::string_view s) {
@@ -206,23 +306,26 @@ class Learner {
     }
 
     /// A mark to come back to after reading hypothetical bytes (rewind), and the rewind. Exact: the frozen learner's
-    /// state is the text read, the LSTM's recurrent state and the n-gram's history.
+    /// state is the text read, the LSTM's recurrent state, the n-gram's history and the document stream's position.
     struct Mark {
         std::size_t n = 0;
         ::cypha::online::ByteLSTM::State ls{};
         std::vector<std::uint8_t> nh;
+        DocTopic::Stream::Pos dp;
     };
     Mark mark() const {
         Mark m;
         m.n = buf_.size();
         if (L_) m.ls = L_->save();
         m.nh = nh_;
+        if (ds_) m.dp = dp_;
         return m;
     }
     void rewind(const Mark& m) {
         buf_.resize(m.n);
         if (L_) L_->restore(m.ls);
         nh_ = m.nh;
+        if (ds_) dp_ = m.dp;
     }
 
     /// Keeps the last 32 KiB of the text read (the copy expert's window is 16 KiB; the trie and Kneser-Ney read a few
@@ -234,18 +337,49 @@ class Learner {
     std::uint64_t learned() const { return learned_; }
 
  private:
+    int sets2() const { return M_->mix2 == 1 ? 256 : 4096; }
+    // One mixer: the geometric mix of the inputs present with the weights w.
+    void mixed(const double* w, double* P) const {
+        double z[256] = {};
+        for (int j = 0; j < kIn; ++j)
+            if (has_[j] && w[j] != 0)
+                for (int s = 0; s < 256; ++s) z[s] += w[j] * lin_[j][s];
+        double mx = z[0];
+        for (int s = 1; s < 256; ++s) mx = std::max(mx, z[s]);
+        double t = 0;
+        for (int s = 0; s < 256; ++s) t += (P[s] = std::exp(z[s] - mx));
+        for (int s = 0; s < 256; ++s) P[s] /= t;
+    }
+    double rate(std::uint32_t* t) const {
+        if (!t) return M_->lr;
+        return M_->lr / (1.0 + static_cast<double>((*t)++) * M_->decay);
+    }
+    // One mixer's gradient step on log loss of y, its output P.
+    void step(double* w, const double* P, std::uint8_t y, std::uint32_t* t) {
+        const double lr = rate(t);
+        for (int j = 0; j < kIn; ++j) {
+            if (!has_[j]) continue;
+            double e = 0;
+            for (int s = 0; s < 256; ++s) e += P[s] * lin_[j][s];
+            w[j] -= lr * (e - lin_[j][y]);
+        }
+    }
+
     const Models* M_ = nullptr;
     std::vector<std::uint8_t> buf_;
     std::unique_ptr<::cypha::online::ByteLSTM> L_;
     std::shared_ptr<::cypha::online::OnlineNgram> ng_;
     std::vector<std::uint8_t> nh_;
-    std::vector<double> w_;
+    std::shared_ptr<DocTopic::Stream> ds_;
+    DocTopic::Stream::Pos dp_;
+    std::vector<double> w_, w2_, wf_;
+    std::vector<std::uint32_t> n_, n2_, nf_;
     std::uint64_t learned_ = 0;
     // the last dist()'s inputs, for learn()
     double lin_[kIn][256] = {};
     bool has_[kIn] = {};
-    int set_ = 0;
-    double P_[256] = {};
+    int set_ = 0, set2_ = 0, cls_ = 0;
+    double P_[256] = {}, P1_[256] = {}, P2_[256] = {};
 };
 
 }  // namespace cypha::cyphalm::decoder

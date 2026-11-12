@@ -999,6 +999,7 @@ struct Options {
     // K5_MIXDEC.md: the mixer decoder of each continuation (start() makes it from the prompt and the retrieved article's
     // text); null: off.
     std::function<std::shared_ptr<MixDec>(std::string_view prompt, std::string_view article)> mixdec;
+    int mixdec_artk = 0;  // MIXDEC_TUNE.md: > 0, the learner reads the N best retrieved documents (0: K5's own k)
     bool cap = true;           // apply the model's copy cap (K5::load's cap; a model built with cap 0 has none)
     double temperature = 1.0;  // fuzzy_bake.py: 1.0
     double cand_mass = 0.995;  // --k5-cand-mass P
@@ -1564,8 +1565,13 @@ class K5 {
         }
         if (o.mixdec) {  // K5_MIXDEC.md: the retrieved documents' text (as K5 reads them: <unk> left out) primes the learner
             std::string art;
+            retrieve::Params rp = o.ret;  // MIXDEC_TUNE.md: artk documents for the learner (K5's overlay keeps its k)
+            if (o.mixdec_artk > 0) rp.k = o.mixdec_artk;
+            const char* dump = std::getenv("CYPHA_MIXDEC_DUMP");  // MIXDEC_TUNE.md: each document's text, for the evaluation
+            int nd = 0;
             if (o.ret.on() && ret_)
-                for (const std::uint32_t d : ret_->top(s.ctx, o.ret, kn_.index(), prompt)) {
+                for (const std::uint32_t d : ret_->top(s.ctx, rp, kn_.index(), prompt)) {
+                    const std::size_t a0 = art.size();
                     const auto [a, b] = ret_->span(d);
                     const auto& ids = kn_.index().text();
                     std::string prev;
@@ -1575,6 +1581,17 @@ class K5 {
                         art += piece(vocab_[ids[i]], prev, hp);
                         prev = vocab_[ids[i]], hp = true;
                     }
+                    if (dump) {
+                        std::uint64_t hsh = 1469598103934665603ull;
+                        for (const char c : prompt) hsh = (hsh ^ static_cast<std::uint8_t>(c)) * 1099511628211ull;
+                        char fn[64];
+                        std::snprintf(fn, sizeof fn, "/%016llx.%d.art", static_cast<unsigned long long>(hsh), nd);
+                        if (FILE* f = std::fopen((std::string(dump) + fn).c_str(), "wb")) {
+                            std::fwrite(art.data() + a0, 1, art.size() - a0, f);
+                            std::fclose(f);
+                        }
+                    }
+                    ++nd;
                     art += "\n\n";
                 }
             s.mix = o.mixdec(prompt, art);
