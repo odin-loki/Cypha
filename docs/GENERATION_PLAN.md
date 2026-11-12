@@ -2693,3 +2693,26 @@ Four fresh blind raters. Raters 1–2 rate the first 25 prompts, raters 3–4 th
 - Q3t 2.0–3.0;
 - K1 3.0–4.5, the gap to human still at least 4 points;
 - K1 rated 6 or more on at most 15% of prompts.
+
+**§13.69 result** (2026-11-12; four blind raters, 50 prompts, two ratings per text):
+
+| Arm | Mean (1–10) [95%] | Rated 6 or more | Minus human, paired [95%] |
+|---|---|---|---|
+| human | **8.54** [8.32, 8.73] | 99 of 100 | — |
+| **K1** (today's default) | **2.28** [2.16, 2.39] | 0 of 100 | −6.26 [−6.48, −6.03] |
+| Q3t (this morning's default) | 1.82 [1.72, 1.93] | 0 of 100 | −6.72 |
+| K5 (plain, 7 MB) | 1.66 [1.60, 1.73] | 0 of 100 | −6.88 |
+
+- K1 against K5, paired: **+0.62 [+0.49, +0.75]**; K1 against Q3t: +0.46 [+0.34, +0.58]. Both rater pairs agree on every sign.
+- **What it says:**
+  - The pairwise wins of §13.48–13.66 are real; the raters prefer K1 to its predecessors by large shares.
+  - In absolute terms, the gain is about half a point on a 10-point scale. Readers place today's writer between "word salad" (1) and "sentence-shaped but not connecting" (3). Not one of its texts reached 6.
+  - The gap to human text is 6.3 points.
+  - SCRIBE v2's 0.706 against human 0.923 overstates how close it is.
+- **Predictions:**
+  - human 8.0–9.0: **hit** (8.54);
+  - K5 1.5–2.5: **hit** (1.66);
+  - Q3t 2.0–3.0: **miss** (1.82);
+  - K1 3.0–4.5: **miss** (2.28);
+  - gap to human at least 4: **hit** (6.26);
+  - K1 rated 6 or more on at most 15%: **hit** (0%).
