@@ -146,3 +146,10 @@ L = `cls=1,bkn=10:4:2:1,ngo=1:2:3:4:5:6:7:8:12:16,ngcap=8,nglr=0.000625,mix2=2,n
 | Q6 | TL passes the screen and is a candidate |
 | Q7 | Raters: the best candidate 0.50–0.62 against T8MR; at most one reads better by the rule |
 | Q8 | Wall: T8MR and TM5 20–30 minutes; TL, TL5, TL2 40–60 minutes |
+
+## Status (2026-11-13, 04:20; stopped at Odin's request)
+
+- **Check 1 done:** with no `--mixdec`, the rebased build equals T8 (`bench/k5_decode/runs/T8.gen.txt`) under `cmp`. SCRIBE v2 0.811 [0.785, 0.838], copy32 0.487, verbatim13 0; 17:02 wall on a loaded PC (`bench/mixdec_tune/checks/`).
+- **Check 2, partly:** a T8MR run from this build wrote a GEN file equal to D5's T8MR GEN file under `cmp` (the tuning fields off leave the learner unchanged). WSL went down before its copy32 line and SCRIBE, so it is not a finished arm.
+- **No arm has finished.** WSL went down three times (02:53, about 03:55, about 04:08) while five or more 10 GB jobs from several agents ran at once. Each time my run was lost with the rest.
+- **Queue, when resumed:** T8MR, TL, TM5, TL5, TL2 (`bench/mixdec_tune/scripts/mt_queue_arms.sh`; it skips arms with a summary). Each arm runs under `~/heavy.sh` (2 global slots, 16 GB available), 6 threads. Then the screen (`mt_screen.sh`), my reading, and the packets in `bench/blind/mixtune_pair/` (seed 20261208).
