@@ -6,7 +6,7 @@ The language model being taken forward is the packed byte trie. hp gate24 stays 
 
 ## Recommended for `context8k` (2026-11-12)
 
-The 1 TB trie, `--model /mnt/d/cypha_llm/corpus/trie/trie_1tb.pk` (Odin's PC only): `context8k_bpc` **1.4900** against 1.4962 for today's default with the 8 MiB trie. It takes 7:39 wall and peaks at 2.92 GB (GENERATION_PLAN §13.55). The default stays the 8 MiB trie until Odin decides.
+The 1 TB trie, `--model /mnt/d/cypha_llm/corpus/trie/trie_1tb.pk` (Odin's PC only): `context8k_bpc` **1.4900** against 1.4962 for today's default with the 8 MiB trie. It takes 7:39 wall and peaks at 2.92 GB (GENERATION_PLAN §13.55). Since §13.56 it is the default where the file exists; `--no-1tb` (or `--train N`) trains the 8 MiB trie as before.
 
 ## Trie trained on the 1 TB corpus (2026-10-30)
 

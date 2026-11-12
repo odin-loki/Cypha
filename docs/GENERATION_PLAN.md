@@ -2520,3 +2520,5 @@ Old binary main 9cbd277; old and new were started together.
   - RQ64 0.520 [0.410, 0.630].
 - **No arm clears the rule.** K64's interval touches 0.5. **L1 stays the default.** K64 leans better and could be retried with more prompts.
 - By reading, no arm really fixes the start. 3–4 of 12 first sentences are on the subject in every arm. The prompt-word filter mostly matches common words.
+
+**§13.56 checks** (2026-11-12): the small setup equals the binary before the change under `cmp`. The full default run (no flags, 1 TB file present) equals §13.55's `--model` run under `cmp`, at `context8k_bpc` **1.4900**. **The 1 TB trie is `context8k`'s default on Odin's PC.** The final tree (with §13.57–13.60 merged) also gives L1's dev GEN file on the 250 prompts.

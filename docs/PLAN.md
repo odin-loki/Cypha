@@ -1031,6 +1031,7 @@ Everything raised on 2026-10-26, and where this plan covers it.
 | 129 | Odin (2026-11-12): "get the CyphaLM generating quality text". K5's counts from 337 MB of clean enwik9 with K5's own vocabulary and classes (§13.48 W1b): blind raters prefer it to the discourse planner on 7 MB 0.940 [0.860, 1.000]; it is the default (`--no-k5-more` restores the old). Test SCRIBE v2 0.600 (old 0.631). The honest fill (H1b) ties (0.560), off by default | [`GENERATION_PLAN.md`](GENERATION_PLAN.md) §13.48 |
 | 130 | T2, writing tuned on the 337 MB default (§13.51): a sentence gate of 16 drafts reads better than 8 (raters 0.670 [0.570, 0.770]) and is the default; nucleus 0.7 tied it, order 6 and N7+G16 did not help; test SCRIBE v2 0.621 | [`GENERATION_PLAN.md`](GENERATION_PLAN.md) §13.51 |
 | 131 | T3 (§13.53): the LDA topic term in K5's sentence gate is the default; raters 0.610 at 460 characters and 0.700 at 1,500 against the 16-draft gate; the previous-sentence link reads worse (0.390) though SCRIBE rose; test SCRIBE v2 0.629 | [`GENERATION_PLAN.md`](GENERATION_PLAN.md) §13.53 |
+| 132 | Odin (2026-11-12): "You pick." The 1 TB trie is context8k's default where the file is (1.4900 against 1.4962, §13.55–13.56). Measures added: fact precision of generated text 0.437 (§13.58), writing signals vs raters (§13.57), paragraph statistics (§13.59). T4's first-sentence arms not adopted (§13.60) | [`GENERATION_PLAN.md`](GENERATION_PLAN.md) §13.55–13.60 |
 
 ---
 
