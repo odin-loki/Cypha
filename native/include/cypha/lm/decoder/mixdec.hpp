@@ -348,6 +348,32 @@ inline bool self_test(std::string& err) {
     for (int s = 0; s < 256; ++s)
         if (a[s] != b[s] || a[s] != c[s]) return err = "decoder: rewind or copy changed the distribution", false;
     if (!(a[static_cast<unsigned char>('b')] > a[static_cast<unsigned char>('z')])) return err = "decoder: the learner did not learn", false;
+    {  // MIXDEC_TUNE.md: the same with the document cache, the class expert, two mixers and the step decay
+        std::string tx;
+        for (int r = 0; r < 40; ++r) tx += "<page> The harbour master watched the trawler enter the harbour at dawn. ";
+        DocTopic::Params dp;
+        dp.trig = false, dp.cache = true, dp.stop_top = 2, dp.min_df = 1;
+        DocTopic dt(dp);
+        dt.build(reinterpret_cast<const std::uint8_t*>(tx.data()), tx.size());
+        ClassContext cc({}, ClassContext::Options{});
+        cc.build(reinterpret_cast<const std::uint8_t*>(tx.data()), tx.size());
+        Models M2;
+        M2.lr = 0.05, M2.doc = &dt, M2.cls = &cc, M2.mix2 = 2, M2.decay = 0.001, M2.ng_orders = {1, 2, 3, 4, 5, 6, 7, 8, 12, 16};
+        Learner D(M2, &l0);
+        for (int r = 0; r < 20; ++r) D.learn("The trawler left the harbour. The harbour master slept. ");
+        D.doc_freeze();
+        D.learn("The harbour ");
+        D.dist(a);
+        const auto m2 = D.mark();
+        D.read("master watched the trawler");
+        D.dist(b);
+        D.rewind(m2);
+        D.dist(b);
+        Learner E(D);
+        E.dist(c);
+        for (int s = 0; s < 256; ++s)
+            if (a[s] != b[s] || a[s] != c[s]) return err = "decoder: rewind or copy changed the tuned learner's distribution", false;
+    }
     return true;
 }
 
