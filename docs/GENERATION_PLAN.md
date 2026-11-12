@@ -2490,3 +2490,18 @@ Old binary main 9cbd277; old and new were started together.
 - **G4's fact precision of 0.9 is far off.** The honest fill meets it, but the raters did not prefer it (0.560). Next: a fill that refuses only the claims that are wrong most often (numbers and months), keeping names free for fluency.
 - Human continuations give 0.04 statements a sample and none graded, so this measures the planner's own kind of sentence.
 - Predictions F1–F8 and A1.1–A1.3: all hits, except human precision, which could not be scored.
+
+### 13.59 J2, paragraph-plan statistics mined offline (2026-11-12; [PARA_PLAN](reports/PARA_PLAN.md), `wip/para-plan` ceb0a34)
+
+- **Registered first** (4e725c5). `scripts/para_plan_mine.py` counted how 89,026 Wikipedia documents (the 330 MB clean text) move from sentence to sentence: opening type, sentence function, reference to the subject, topic-word persistence. The tables are in `bench/para_plan/tables/` (`open2.tsv` in K5_STRUCTURE's layout, `state1.tsv` for a planner). It took 5:55 on 4 processes.
+- **Check:** GEN-A dev's human continuations match the mined windows (JSD 0.002–0.005 bits).
+- **Where today's writer (L1) differs most from humans** (dev, 460 characters, paired 95% intervals):
+  - the link to the sentence before: 0.204 against 0.508 (−0.304 [−0.366, −0.240]); in long text, 0.116 against 0.534;
+  - the prompt's words, at every position: −0.20 to −0.27.
+- **Other differences:**
+  - the writer reuses the subject's name as often as humans do (0.407 against 0.411);
+  - it opens with a pronoun more often (0.289 against 0.177), often right after a sentence that dropped the subject (29% against 12%);
+  - it writes definitions (11.1% against 5.9%) and birth sentences (4.3% against 0.3%) mid-paragraph;
+  - its sentences are short (16 tokens against 23).
+- **Predictions:** 13 hits, 13 misses. The largest gap was predicted to be the subject's name; it is the lexical link.
+- **Registered, not built:** `--k5-para-plan` (`lm/para_plan.hpp`, off by default). It adds a sentence-gate term from the mined (function, reference) chain, with penalties for orphan pronouns and for lead sentences mid-paragraph. Arms PP1–PP3 against L1, judged by four blind pairwise raters at 460 and 1,500 characters under the §13.38 rule. It waits for `word_kn.hpp` and `planner/` to be free (T4).
