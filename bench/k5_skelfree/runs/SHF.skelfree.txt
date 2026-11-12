@@ -1,0 +1,2 @@
+k5-skelfree: n=8,k5=8,pool=256,fills=2; bank bench/k5_skelfree/bank_e9.txt: 164983 skeletons, 166441 sentences
+k5-skelfree: 13504 skeleton drafts over 1688 sentence starts; the gate chose 620 skeleton and 1101 K5 drafts

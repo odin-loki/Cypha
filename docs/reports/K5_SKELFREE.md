@@ -119,3 +119,57 @@ Dev, seed 0, 250 prompts; the baseline's command plus `--k5-skelfree bank=bench/
 ## Results
 
 (Added after the runs, under this line.)
+
+### Checks (2026-11-12)
+
+- My build with the flag off, all 250 dev prompts: the GEN file **equals** `bench/k5_retrieve/runs/K1.gen.txt` under `cmp` (MODEL line aside). SCRIBE v2 0.704 [0.673, 0.735], copy32 0.275, 9:09 wall, 11.3 GB. **Hit.**
+- `n=0,k5=16` equals the default on the 8 smoke prompts (above). Selftest passes.
+
+### The screen (dev, seed 0, 250 prompts; files in `bench/k5_skelfree/runs/`, fact checks in `bench/k5_skelfree/screen/facts/`)
+
+One arm at a time, 6 threads.
+
+| Arm | SCRIBE v2 [95%] | v3.1 | copy32 | verbatim13 | fact precision [95%] | gate chose a skeleton draft | wall | peak RAM | screen |
+|---|---|---|---|---|---|---|---|---|---|
+| K1 | 0.704 [0.673, 0.735] | 0.666 | 0.275 | 0 | 0.918 [0.867, 0.962] | – | 9:09 | 11.3 GB | baseline |
+| SA (`n=16,k5=0`) | **0.650** [0.618, 0.679] | 0.641 | 0.132 | 0 | 0.901 [0.827, 0.958] | 2,008 of 2,021 | 8:56 | 11.3 GB | fail (SCRIBE) |
+| SH (`n=8,k5=8`) | 0.690 [0.659, 0.720] | 0.656 | 0.255 | 0 | 0.918 [0.866, 0.961] | 568 of 1,708 (0.33) | 8:33 | 11.3 GB | **pass, candidate** |
+| SF (`n=16,k5=0,fills=2`) | **0.664** [0.635, 0.694] | 0.642 | 0.178 | 0 | 0.895 [0.831, 0.949] | 2,002 of 2,013 | 9:31 | 11.3 GB | fail (SCRIBE) |
+| SHF (`n=8,k5=8,fills=2`) | 0.688 [0.656, 0.721] | 0.663 | 0.259 | 0 | 0.884 [0.822, 0.934] | 620 of 1,721 (0.36) | 10:52 | 11.3 GB | **pass, candidate** |
+
+(The gate's count runs over all free sentence starts; "of" includes the starts where K5's drafts alone were offered.) Each arm differs from K1 in 214–215 of 250 samples (44–45 of the 50 rated). The other 35 are planned prompts whose first 600 bytes are all fact sentences. Ended sentences in the first 460 characters (helper, `screen/stats.txt`): K1 0.860, SA 0.882, SH 0.866, SF 0.881, SHF 0.868.
+
+**Reading** (dev 0, 1, 2, 3, 4, 5, 7, 9, 10, 11, 12, 13; first 460 characters; K1, SH and SHF side by side, SA on 0–5). I counted each free sentence as whole (a clause a reader can parse, whatever it says) or broken; a sentence cut at 460 characters is not counted. Dev 0 is all fact sentences in every arm.
+
+| Arm | whole / counted | share |
+|---|---|---|
+| K1 | 12 / 45 | 0.27 |
+| SH | 20 / 56 | 0.36 |
+| SHF | 21 / 58 | 0.36 |
+| SA (dev 1–5 only) | 15 / 30 | 0.50 (K1 on the same five: 7 / 21, 0.33) |
+
+- **More sentences parse, but they say less.** The skeleton drafts give whole frames: "It also occurs as a propellant." (SH, dev 1, black powder), "Examples include the model used in Britain." (SH, dev 9), "He studied piano and organ." (SHF, dev 5), "Alia is then confronted. She was diagnosed with leukemia." (SHF, dev 12). Many are grammatical nonsense: "The mineral had been isolated from charge in the United States National Film Registry." (SA and SH, dev 3), "He was about 100 km long." (SH, dev 2), "Her body was a younger brother of the actress." (SHF, dev 12).
+- **Agreement slips** come from the class cut: "They is heavily contaminated in the West Indies." (SA, dev 4), "They is living with the Social Democratic Party of Finland." (SHF, dev 5), "more than ten different Christian denominations follows" (SH, dev 13).
+- **K5's own drafts still break** as before, and the gate takes them two times in three in SH and SHF: "A growing number of visitors.", "In order to overcome this problem."
+- **Subject.** About as K1. SH loses Dune on dev 12 (K1 and SHF keep Alia and Leto); SH and SHF stay on chemistry in dev 1 where K1 writes "The sulfuric acid is added to the Moon". SA drifts most (dev 2: Taiwan, Greece, air defense) and repeats "U. S." five times in dev 4.
+- **Stuffing and patchwork:** none beyond K1's in SH and SHF. Wikipedia boilerplate shows up twice ("For more information, see List of battles.", "feel free to remove this notice").
+- By my registered reading, **SH and SHF pass**: a higher share of whole sentences than K1 (0.36 against 0.27), the subject kept about as K1 keeps it, no extra stuffing. The margin is modest and counted on 12 prompts. SA has the most whole sentences but fails SCRIBE.
+
+**Candidates** (reading first, then lower copy32): **SH** and **SHF** (tied on reading; SH copy32 0.255, SHF 0.259).
+
+### Packets (built before any rating)
+
+- `bench/blind/skf_pair/`: K1 against SH and SHF, the 50 prompts of `bench/blind/llm_rating/prompts.json`, 460 characters, seed 20261202. Each differs from K1 on 44 of them.
+- `KEY.json` is kept outside the repository; `key.b64` and `RATER_PROMPT.md` are committed. The lead runs the raters.
+
+### Predictions so far
+
+- P1 flag off equals K1, and `n=0,k5=16` too: **hit**.
+- P2 verbatim13 0: **hit**; copy32 0.20–0.30: **hit** for SH and SHF, **miss** for SA (0.132) and SF (0.178), below the range: the class cut breaks long runs more than expected.
+- P3 fact precision within ±0.02 of K1: **hit** for SA and SH, **miss** for SF (−0.023) and SHF (−0.034). The fact sentences are the same; the checker finds a few more statements in the new free sentences, some contradicted.
+- P4 SCRIBE v2: SA and SF 0.02–0.08 below: **hit** (−0.054, −0.040); SH and SHF within ±0.03: **hit** (−0.014, −0.016).
+- P5 the gate takes a skeleton draft 40–60% of the time in SH and SHF: **miss** (0.33, 0.36).
+- P6 more whole sentences with more misfit words: **hit**; SF and SHF read best: **miss** (SHF ties SH; SF fails SCRIBE).
+- P7 at least one passes; SA fails: **hit**.
+- P8 raters: wait for the raters.
+- P9 wall within ±30% of K1's 9:09: **hit** (8:33–10:52); peak RAM 11.3–11.6 GB: **hit**.
