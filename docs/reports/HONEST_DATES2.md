@@ -99,4 +99,46 @@ Samples identical to L1's are rated too (they come out as ties).
 
 ## Results
 
-(To be added after the runs.)
+**Checks** (2026-11-12): main's build equals `bench/k5_coherence/runs/L1.gen.txt` under `cmp` (MODEL line aside); so does my build with the flags off; my build's HD2 equals `bench/honest_dates/runs/HD2.gen.txt`. **Hit.**
+
+**Dev, seed 0, 250 prompts** (`bench/honest_dates2/runs/`; fact check `bench/honest_dates2/facts/`, `--v2`):
+
+| Arm | SCRIBE v2 [95%] (not screened) | v3.1 | copy32 | verbatim13 | differ from L1 (all / rated) | statements a sample | contradicted [95%] | precision S/(S+C) [95%] | wall | peak RAM |
+|---|---|---|---|---|---|---|---|---|---|---|
+| L1 | 0.610 [0.577, 0.645] | 0.546 | 0.242 | 0 | – | 1.48 | 0.324 [0.260, 0.396] | 0.437 [0.369, 0.507] | 9:04 | 11.3 GB |
+| HD2 | 0.570 [0.540, 0.602] | 0.518 | 0.239 | 0 | 74 / 11 | 0.74 | 0.027 [0.006, 0.051] | 0.865 [0.757, 0.960] | 7:31 | 11.3 GB |
+| HL | 0.590 [0.560, 0.624] | 0.538 | 0.231 | 0 | 75 / 11 | 0.98 | 0.033 [0.012, 0.058] | 0.928 [0.871, 0.972] | 10:11 | 11.3 GB |
+| HLT | 0.595 [0.563, 0.630] | 0.539 | 0.232 | 0 | 75 / 11 | 1.12 | 0.036 [0.013, 0.063] | **0.935 [0.888, 0.974]** | 10:03 | 11.3 GB |
+| HLTM | 0.595 [0.563, 0.630] | 0.540 | 0.232 | 0 | 75 / 11 | 1.11 | 0.043 [0.018, 0.074] | 0.922 [0.871, 0.966] | 9:25 | 11.3 GB |
+
+(Two arms ran at a time, so wall times are not comparable with a lone run.)
+
+By relation (supported / contradicted):
+- birth date: L1 70/55, HD2 0/0, HL 56/4, HLT 86/6, HLTM 83/8;
+- death date: L1 6/53, HD2 none, HL 23/0, HLT 39/0, HLTM 37/0;
+- nationality: L1 6/8, HD2 16/0, HL 10/0, HLT 8/0, HLTM 9/0; birth place 4/4 in every H3 arm (as HD2).
+
+Planner: the life book holds 9,974 subjects (birth: 8,972 years, 5,066 with month and day; death: 6,087 years, 2,737 with month and day). The planner wrote 473 fact sentences under HL, 472 under HLT and HLTM, against HD2's 373. The mined year-only bank added only 58 skeletons the bank did not hold. (The discourse writer does not print the fit's count, so it is not reported.)
+
+The 6 birth dates HLT gets wrong: four are the planner's store disagreeing with the checker's (George Grenville 1765 against 1712; Heinrich Lübke 1892 against 1894, twice; Chester A. Arthur November 18 against October 5, 1829); two ("Ernst Zündel (born 2005)", "Johan Asplund (born 1980)") come from K5's free sentences after the plan, which no flag here touches.
+
+**Reading** (the first 20 samples that differ from L1 on unrated dev prompts, each beside L1's and HD2's):
+- **The date sentences are back, and they are true.** "Björn Ulvaeus (born April 25, 1945)", "Louis Giorgio Bassani (March 4 1916 – April 13 2000)", "Friedrich Wöhler was born in ... on July 31, 1800", "Hirohito (1901 - 1989)". L1's were as fluent and mostly false ("Hirohito (November 10, 1901 - October 25, 1963) is an American actor").
+- **Better than HD2.** HD2 put weak free sentences where the lead dates were ("The U. S. states. He was accused of sexual assault."). HL, HLT and HLTM keep a date sentence there.
+- **Still weak:** a stilted shape repeats ("In 1901, Hirohito was born in Dublin.", "In 1546, François d'Aguilon was born in Dublin."), and places are still invented ("born in Vienna, Berlin"), as in HD2 and L1. "US" escapes the nationality list ("is a US musician").
+- HL, HLT and HLTM read almost alike (HLT and HLTM differ in 22 samples).
+- **By my reading, HLT and HL read about as well as L1 on these 20.** L1's leads are a little smoother; theirs are true. It is close. All three H3 arms pass my reading.
+
+**Screen:** HL, HLT and HLTM all pass (verbatim13 0, copy32 0.23, reading). By the rule, the 2 with the highest fact precision go: **HLT (0.935) and HL (0.928)**. HD2 goes too (Odin's word). SCRIBE v2 (not screened): HLT 0.595 is 0.015 below L1, 0.025 above HD2.
+
+**Packets** (`bench/blind/hd2_pair`, `blind_rate.py make ... --arm L1 --arm HD2 --arm HLT --arm HL --mode pair --baseline L1 --seed 20261121`): committed with `key.b64` and `RATER_PROMPT.md` before the raters run. `KEY.json` is kept out of the repo. HLT differs from L1 in 11 of the 50 rated prompts, from HL in 5, from HD2 in 10.
+
+**Predictions so far:**
+- P1 byte identity, flags off and HD2: **hit**.
+- P2 HL at least 40 birth dates supported, at most 8 contradicted: **hit** (56 / 4).
+- P3 precision at least 0.80 and contradicted at most 0.08 for each H3 arm: **hit** (0.922 to 0.935; 0.033 to 0.043).
+- P4 HLT more date statements than HL: **hit** (131 against 83); HLTM at least as many as HLT: **miss** (128).
+- P5 HL at least 0.585: **hit** (0.590); HLT and HLTM within 0.015 of L1: **hit**, just (0.595).
+- P6 copy32 within 0.01 of L1: **miss** for HL and HLT (0.231, 0.232; lower, not higher), hit for HD2 and HLTM; verbatim13 0: **hit**.
+- P7 HLT or HLTM reads as well as L1 and better than HD2, by my reading: **hit** (close against L1).
+- P8 raters: **not yet scored** (the lead runs the raters).
