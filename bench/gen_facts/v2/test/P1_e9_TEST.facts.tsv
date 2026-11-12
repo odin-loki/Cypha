@@ -1,0 +1,81 @@
+sample	sent	n_sents	relation	subject	entity	pronoun	object	verdict	store	note	date	pattern	sentence
+6:trie_T1.0	1	3	birth_date	Johann Litsa Spathi	Litsa Spathi	partial	1988	contradicted	1958		valid	^ [S] ( [O] -	Johann Litsa Spathi (1988 - January 4, 1960) was a German - greek artist.
+6:trie_T1.0	1	3	death_date	Johann Litsa Spathi	Litsa Spathi	partial	January 4 , 1960	unknown		no death in store	valid	^ [S] ( # - [O] )	Johann Litsa Spathi (1988 - January 4, 1960) was a German - greek artist.
+17:trie_T1.0	1	9	is_a	There		0	private	unknown		subject not in store		[S] is a [O]	There is a private city; Ancient Greek, and the state.
+18:trie_T1.0	2	6	is_a	Bahamas	Bahamas	0	city	unknown		no is_a or occupation in store		[S] is a [O]	Nassau, Bahamas is a city located in the human history of North America.
+18:trie_T1.0	3	6	is_a	Jamaica		0	city	unknown		subject not in store		[S] is a [O]	Kingston, Jamaica is a city built in the free history of North America.)
+32:trie_T1.0	1	7	birth_date	King Charles Towneley	Charles Towneley	partial	2003	contradicted	1737		valid	^ [S] ( [O] -	King Charles Towneley (2003 - January 4, 1960) was a German - English poet.
+32:trie_T1.0	1	7	death_date	King Charles Towneley	Charles Towneley	partial	January 4 , 1960	contradicted	1805		valid	^ [S] ( # - [O] )	King Charles Towneley (2003 - January 4, 1960) was a German - English poet.
+32:trie_T1.0	3	7	birth_date	King William Wake	William Wake	partial	2003	contradicted	1657		valid	^ [S] ( [O] -	King William Wake (2003 - May 11, 1970) was a British - English poet.).
+32:trie_T1.0	3	7	death_date	King William Wake	William Wake	partial	May 11 , 1970	contradicted	1737		valid	^ [S] ( # - [O] )	King William Wake (2003 - May 11, 1970) was a British - English poet.).
+38:trie_T1.0	1	5	birth_place	He		1	Parma , Emilia - Romagna	unknown		subject not in store		[P] was born in [O]	He was born in Parma, Emilia - Romagna, the daughter of a local era.
+40:trie_T1.0	2	5	language	Abwehr		0	German ) ,	unknown		subject not in store		[S] ( [O]	Its best point of view, they did not die when some of its own, not all of them have a built - in - chief of the Abwehr (German), or may be grouped into the first or more powerful in 1996.
+53:trie_T1.0	3	5	located_in	Bouvet Island	Bouvet Island	0	Norway	supported	norway			[S] is a city in [O] ,	Bouvet Island is a city in Norway, Denmark.) and the LM, still common on the Electron had been involved in later military actions of power and power by far the most important naturalists.
+53:trie_T1.0	3	5	located_in	Bouvet Island	Bouvet Island	0	Norway , Denmark	contradicted	norway	different top places; by part		[S] is a city in [O]	Bouvet Island is a city in Norway, Denmark.) and the LM, still common on the Electron had been involved in later military actions of power and power by far the most important naturalists.
+53:trie_T1.0	3	5	is_a	Bouvet Island	Bouvet Island	0	city	unknown	island	open list		^ [S] is a [O] in	Bouvet Island is a city in Norway, Denmark.) and the LM, still common on the Electron had been involved in later military actions of power and power by far the most important naturalists.
+55:trie_T1.0	1	9	is_a	Byzantine Empire		0	city	unknown		subject not in store		[S] is a [O]	Byzantine Empire is a city located in the human history of Roman Empire.
+63:trie_T1.0	1	5	is_a	Amsterdam	Amsterdam	0	city	unknown		no is_a or occupation in store		^ [S] ( ) is a [O]	Amsterdam () is a city in the northern province of Europe.
+63:trie_T1.0	2	5	is_a	Alps	Alps	0	city	unknown		no is_a or occupation in store		[S] is a [O]	Alps is a city located in the human history of Europe.)
+66:trie_T1.0	1	7	death_place	He		1	Jerusalem , Israel	unknown		subject not in store		[P] died in [O]	He died in Jerusalem, Israel.
+71:trie_T1.0	4	9	is_a	There		0	sense	unknown		subject not in store		[S] is a [O] of	There is a sense of the " Arab " How our planet.
+74:trie_T1.0	1	7	is_a	Empire		0	industry	unknown		subject not in store		the [S] is a [O]	Many of the Empire was an industry standard in high - speed train crew how to " Aspirin ", which was a direct superior.
+78:trie_T1.0	1	6	birth_date	Arthur Conan Doyle	Arthur Conan Doyle	0	October 4 , 1859	contradicted	1859-05-22		valid	^ [S] ( born [O]	Arthur Conan Doyle (born October 4, 1859) is an American playwright.
+78:trie_T1.0	2	6	birth_date	Arthur Conan Doyle	Arthur Conan Doyle	0	May 19 , 1946	contradicted	1859-05-22		valid	^ [S] ( [O] -	Arthur Conan Doyle (May 19, 1946 - January 11, 1930) is a American actor.
+78:trie_T1.0	2	6	death_date	Arthur Conan Doyle	Arthur Conan Doyle	0	January 11 , 1930	contradicted	1930-07-07		valid	^ [S] ( <M> # , # - [O] )	Arthur Conan Doyle (May 19, 1946 - January 11, 1930) is a American actor.
+78:trie_T1.0	4	6	is_a	This		0	town	unknown		subject not in store		^ [S] is a [O] in	This is a town in the sun.
+85:trie_T1.0	2	7	birth_place	Boss Tweed	Boss Tweed	0	New York	supported	New York			[S] was born in [O]	Boss Tweed was born in New York in Africa, France, and died out with a different role in control characters.
+85:trie_T1.0	3	7	birth_date	He	Boss Tweed	1	August 31 , 1918	contradicted	1823-04-03		valid	[P] was born on [O]	He was born on August 31, 1918 in Cayuga Lake, New York, and began to America with his father.
+86:trie_T1.0	1	8	birth_place	Robert Catesby	Robert Catesby	0	Europe , Canada	unknown		no birth_place in store		^ [S] was born in [O] ,	Robert Catesby was born in Europe, Canada, on March 1, 1573.
+86:trie_T1.0	2	8	birth_date	Robert Catesby	Robert Catesby	0	August 14 , 1876	contradicted	1573		valid	^ [S] ( [O] -	Robert Catesby (August 14, 1876 - June 15, 1605) was a poet, writer, and actor.
+86:trie_T1.0	2	8	death_date	Robert Catesby	Robert Catesby	0	June 15 , 1605	supported	1605	checked 1 of 3 parts	valid	^ [S] ( <M> # , # - [O] )	Robert Catesby (August 14, 1876 - June 15, 1605) was a poet, writer, and actor.
+86:trie_T1.0	3	8	birth_date	Lady Anne Rice	Anne Rice	partial	November 28 , 1896	contradicted	1941-10-04		valid	[S] ( born [O]	The daughter, Lady Anne Rice (born November 28, 1896), where a collection of journal entries that chronicled her own chemical bonds.
+88:trie_T1.0	1	7	is_a	Aegis Ballistic Missile Defense System	Aegis Ballistic Missile Defense System	0	city	unknown		no is_a or occupation in store		[S] is a [O]	Aegis Ballistic Missile Defense System is a city located in the human history of United States.
+88:trie_T1.0	2	7	birth_date	President Billy Bass Nelson	Billy Bass Nelson	partial	2000	contradicted	1951		valid	^ [S] ( [O] -	President Billy Bass Nelson (2000 - January 4, 1960) was a German - United States era.
+88:trie_T1.0	2	7	death_date	President Billy Bass Nelson	Billy Bass Nelson	partial	January 4 , 1960	unknown		no death in store	valid	^ [S] ( # - [O] )	President Billy Bass Nelson (2000 - January 4, 1960) was a German - United States era.
+88:trie_T1.0	3	7	birth_date	President Julie Dash	Julie Dash	partial	2003	contradicted	1952		valid	^ [S] ( [O] -	President Julie Dash (2003 - March 20, 1620) was a British - United States era.)
+88:trie_T1.0	3	7	death_date	President Julie Dash	Julie Dash	partial	March 20 , 1620	unknown		no death in store	valid	^ [S] ( # - [O] )	President Julie Dash (2003 - March 20, 1620) was a British - United States era.)
+89:trie_T1.0	2	5	is_a	This		0	real	unknown		subject not in store		[S] is a [O]	This is a real application of the Arab states and Canada (after only 800 - DOS 3.3 - a - table.
+96:trie_T1.0	3	6	birth_place	He		1	Berlin , Germany	unknown		subject not in store		[P] was born in [O]	He was born in Berlin, Germany.
+96:trie_T1.0	3	6	birth_place	He		1	Berlin	unknown		subject not in store		[P] was born in [O] ,	He was born in Berlin, Germany.
+102:trie_T1.0	2	9	is_a	Anglesey	Anglesey	0	city	unknown		no is_a or occupation in store		[S] is a [O]	Anglesey is a city located in the human history of Wales.
+102:trie_T1.0	3	9	is_a	Cardiff	Cardiff	0	city	unknown	capital	open list		[S] is a [O]	Cardiff is a city built in the free history of Wales.)
+112:trie_T1.0	1	5	birth_place	He		1	Lugo	unknown		subject not in store		[P] was born in [O]	He was born in Lugo (province), Galicia, the daughter of a local era.
+116:trie_T1.0	2	5	birth_place	Claude Monet	Claude Monet	0	Paris	supported	Paris			[S] was born in [O]	Claude Monet was born in Paris. i.
+126:trie_T1.0	1	5	is_a	Khartoum	Khartoum	0	city	unknown	capital	open list		[S] is a [O]	Khartoum is a city located in the human history of Africa.
+126:trie_T1.0	2	5	is_a	Pope Miltiades Aachen	Pope Miltiades	partial	average	unknown		no is_a or occupation in store		the [S] is a [O]	The Pope Miltiades Aachen is an average structural formula in Africa, named after the world - famous page who was born and raised in the city.
+132:trie_T1.0	1	6	is_a	He		0	series	unknown		subject not in store		[S] is a [O] of	He is a series of small groups, but also have shown that the western city in response to increasing the world.
+136:trie_T1.0	5	5	language	Hungary		0	German	unknown		subject not in store		[S] ( [O]	One can bring to the colony of Hungary (German National Academy of Science, in that it is a secret underground political party, the difference between the two.
+141:trie_T1.0	3	6	is_a	Jamaica		0	city	unknown		subject not in store		[S] is a [O]	Kingston, Jamaica is a city located in the human history of North America.
+156:trie_T1.0	1	8	is_a	Avery Hopwood Athens	Avery Hopwood	partial	standard	unknown	playwright	open list		the [S] is a [O]	The Avery Hopwood Athens was a standard medical problem in Cleveland, named after the world - famous page who was born and raised in the city.
+160:trie_T1.0	7	8	is_a	There		0	language	unknown		subject not in store		[S] is a [O]	There is a language so that the ACLU argued that the story is generally is " triple, and the European one.) was a smaller, including those rights.
+173:trie_T1.0	1	8	is_a	Aalborg	Aalborg	0	city	unknown	municipality	open list		[S] is a [O]	Aalborg is a city located in the human history of Denmark.
+173:trie_T1.0	2	8	is_a	Aarhus	Aarhus	0	city	unknown		no is_a or occupation in store		[S] is a [O]	Aarhus is a city built in the free history of Denmark., but with the axiom of choice, however, is also the name and a special instead.
+177:trie_T1.0	2	4	birth_date	President Theobald Mathew	Theobald Mathew	partial	1852	contradicted	1790		valid	^ [S] ( [O] -	President Theobald Mathew (1852 - January 4, 1960) was a German - Ireland era.
+177:trie_T1.0	2	4	death_date	President Theobald Mathew	Theobald Mathew	partial	January 4 , 1960	contradicted	1856		valid	^ [S] ( # - [O] )	President Theobald Mathew (1852 - January 4, 1960) was a German - Ireland era.
+177:trie_T1.0	3	4	is_a	Achill Island	Achill Island	0	city	unknown		no is_a or occupation in store		[S] is a [O]	Achill Island is a city located in the human history of Ireland.
+184:trie_T1.0	5	6	is_a	It	It (novel)	0	term	unknown	pronoun	open list		[S] is a [O]	It is a term applied to the leading of the groups at the time.
+190:trie_T1.0	1	9	birth_place	Algernon Swinburne	Algernon Swinburne	0	London	supported	London			[S] was born in [O]	Algernon Swinburne was born in London.
+201:trie_T1.0	2	12	birth_date	David Hume	David Hume	0	May 19 , 1946	contradicted	1711-04-26		valid	^ [S] ( [O] -	David Hume (May 19, 1946 - January 1, 1776) is an American playwright.
+201:trie_T1.0	2	12	death_date	David Hume	David Hume	0	January 1 , 1776	contradicted	1776-08-25		valid	^ [S] ( <M> # , # - [O] )	David Hume (May 19, 1946 - January 1, 1776) is an American playwright.
+201:trie_T1.0	4	12	is_a	David Hume	David Hume	0	native	unknown	philosopher	open list		[S] is a [O] of	However, David Hume was a native of Edinburgh.
+204:trie_T1.0	1	7	death_place	He		1	New Delhi , India	unknown		subject not in store		[P] died in [O]	He died in New Delhi, India on January 24, 1984, with the head of 20.
+205:trie_T1.0	1	9	is_a	Baghdad	Baghdad	0	city	unknown	capital	open list		[S] is a [O]	Baghdad is a city located in the human history of Iraq.
+205:trie_T1.0	2	9	is_a	Euphrates	Euphrates	0	city	unknown		no is_a or occupation in store		[S] is a [O]	Euphrates was a city built in the free history of Iraq.)
+209:trie_T1.0	1	8	is_a	Arkansas	Arkansas	0	city	unknown		no is_a or occupation in store		[S] is a [O]	Arkansas is a city and a city in the western United States.
+209:trie_T1.0	2	8	birth_place	He		1	Little Rock , Arkansas	unknown		subject not in store		[P] was born in [O]	He was born in Little Rock, Arkansas.
+209:trie_T1.0	2	8	birth_place	He		1	Little Rock	unknown		subject not in store		[P] was born in [O] ,	He was born in Little Rock, Arkansas.
+214:trie_T1.0	1	8	birth_place	Cicero	Cicero	0	Europe , Canada	contradicted	Lazio	different top places; by part		^ [S] was born in [O] ,	Cicero was born in Europe, Canada, on March 1, 106.
+214:trie_T1.0	2	8	birth_date	Cicero	Cicero	0	October 1 , 1901	contradicted	106 BC		valid	^ [S] ( [O] -	Cicero (October 1, 1901 - January 1, 43) was a German engineer and type of the British Royal Institute (2000 - 2002).
+214:trie_T1.0	2	8	birth_date	British Royal Institute		0	2000	unknown		subject not in store	valid	[S] ( [O] -	Cicero (October 1, 1901 - January 1, 43) was a German engineer and type of the British Royal Institute (2000 - 2002).
+214:trie_T1.0	2	8	death_date	British Royal Institute		0	2002	unknown		subject not in store	valid	[S] ( # - [O] )	Cicero (October 1, 1901 - January 1, 43) was a German engineer and type of the British Royal Institute (2000 - 2002).
+214:trie_T1.0	3	8	birth_date	King Cicero	Cicero	partial	2000	contradicted	106 BC		valid	^ [S] ( [O] -	King Cicero (2000 - January 4, 1960) was a French - Executed artist.
+214:trie_T1.0	3	8	death_date	King Cicero	Cicero	partial	January 4 , 1960	contradicted	43 BC		valid	^ [S] ( # - [O] )	King Cicero (2000 - January 4, 1960) was a French - Executed artist.
+221:trie_T1.0	2	5	birth_date	Robert Koch		0	October 1 , 1901	unknown		subject not in store	valid	^ [S] ( [O] -	Robert Koch (October 1, 1901 - January 1, 1910) was a poet, writer, and actor.
+221:trie_T1.0	2	5	death_date	Robert Koch		0	January 1 , 1910	unknown		subject not in store	valid	^ [S] ( <M> # , # - [O] )	Robert Koch (October 1, 1901 - January 1, 1910) was a poet, writer, and actor.
+225:trie_T1.0	1	6	is_a	Greenland		0	city	unknown		subject not in store		[S] is a [O]	Greenland is a city and a city in the southern Danish Realm.
+225:trie_T1.0	4	6	is_a	Nuuk		0	term	unknown		subject not in store		[S] is a [O]	Nuuk is a term and area in the field of Greenland, Iceland.
+225:trie_T1.0	4	6	is_a	Nuuk		0	area	unknown		subject not in store		ADD [S] is a [NAT] [OCC]	Nuuk is a term and area in the field of Greenland, Iceland.
+228:trie_T1.0	6	9	language	United Kingdom		0	German :	unknown		subject not in store		[S] ( [O]	If the United Kingdom (German: 1 - 11.
+232:trie_T1.0	2	6	birth_date	Heinrich Rudolf Hertz		0	January 1 , 1878	unknown		subject not in store	valid	^ [S] ( [O] -	Heinrich Rudolf Hertz (January 1, 1878 - February 1, 1894) was a Greek philosopher and theologian.
+232:trie_T1.0	2	6	death_date	Heinrich Rudolf Hertz		0	February 1 , 1894	unknown		subject not in store	valid	^ [S] ( <M> # , # - [O] )	Heinrich Rudolf Hertz (January 1, 1878 - February 1, 1894) was a Greek philosopher and theologian.
+248:trie_T1.0	1	2	is_a	It	It (novel)	0	term	unknown	pronoun	open list		^ [S] is a [O] in	It is a term in certain countries of a part of the period of his house (that is not likely to be crowned in other languages, the city's life.

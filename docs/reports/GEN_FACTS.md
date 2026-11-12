@@ -138,3 +138,71 @@ Also seen, not in the sample: in HUMAN_TEST, "in Paris (1892-1895)" was read as 
 - A1.1: the share contradicted of W1b, G16 and L1 rises by 0.05 to 0.12 (on N7, a file outside the arms, it rose from 0.24 to 0.33); precision falls to 0.40–0.55.
 - A1.2: H1b stays at or below 0.03 contradicted.
 - A1.3: grader precision on the fresh 40 at least 0.9.
+
+## Results under A1 (v2, 2026-11-12; the numbers to use)
+
+Run after d4515696. `bench/gen_facts/v2/` and `bench/gen_facts/v2/test/`.
+
+| Arm | statements a sample | contradicted | supported | precision S/(S+C) | supported only in part |
+|---|---|---|---|---|---|
+| D0 | 1.12 [0.84, 1.43] | 0.324 [0.250, 0.395] | 0.260 [0.215, 0.299] | 0.445 [0.374, 0.519] | 0.48 |
+| W1b | 1.47 [1.15, 1.82] | 0.327 [0.259, 0.397] | 0.253 [0.209, 0.297] | 0.437 [0.369, 0.507] | 0.56 |
+| H1b | 0.56 [0.40, 0.72] | 0.007 [0.000, 0.022] | 0.165 [0.099, 0.227] | 0.958 [0.880, 1.000] | 0.00 |
+| G16 | 1.49 [1.17, 1.83] | 0.322 [0.255, 0.392] | 0.249 [0.205, 0.293] | 0.437 [0.369, 0.507] | 0.56 |
+| L1 | 1.48 [1.15, 1.82] | 0.324 [0.260, 0.396] | 0.251 [0.207, 0.294] | 0.437 [0.369, 0.507] | 0.56 |
+| HUMAN | 0.04 [0.01, 0.09] | 0 of 11 | 0 of 11 | none graded | – |
+| W1b_TEST | 1.54 [1.20, 1.91] | 0.358 [0.287, 0.425] | 0.259 [0.221, 0.295] | 0.420 [0.360, 0.487] | 0.45 |
+| G16_TEST | 1.57 [1.23, 1.94] | 0.346 [0.277, 0.414] | 0.254 [0.217, 0.290] | 0.424 [0.361, 0.491] | 0.45 |
+| L1_TEST | 1.56 [1.22, 1.92] | 0.347 [0.277, 0.414] | 0.257 [0.220, 0.293] | 0.426 [0.364, 0.494] | 0.45 |
+| P1_e9_TEST | 0.32 [0.22, 0.44] | 0.275 [0.138, 0.398] | 0.062 [0.016, 0.118] | 0.185 [0.057, 0.375] | 0.20 |
+| HUMAN_TEST | 0.02 [0.00, 0.05] | 1 of 6 (the Paris fault) | 0 of 6 | – | – |
+
+**By sentence position** (v2, share contradicted; 95% intervals in `v2/summary.md`):
+
+| Arm | sentence 1 | 2 | 3 | 4 and later |
+|---|---|---|---|---|
+| D0 | 0.15 (n 34) | 0.39 (36) | 0.29 (28) | 0.35 (183) |
+| W1b | 0.20 (41) | 0.29 (58) | 0.24 (37) | 0.37 (231) |
+| H1b | 0.00 (33) | 0.00 (32) | 0.00 (34) | 0.03 (40) |
+| G16 | 0.19 (42) | 0.30 (56) | 0.24 (38) | 0.36 (237) |
+| L1 | 0.20 (41) | 0.29 (58) | 0.24 (38) | 0.37 (233) |
+
+**By relation** (W1b, v2; supported / contradicted / unknown): birth date 70 / 55 / 6, death date 6 / 53 / 35, nationality 6 / 8 / 9, birth place 3 / 2 / 33, located in 4 / 2 / 1, is_a 4 / 0 / 66.
+
+**The fresh hand check (v2).** 40 statements, seed 20261113 (`hand_check_v2.tsv`). **Verdicts right: 38 of 40, 0.95 [0.83, 0.99].** Contradicted 20 of 20 [0.84, 1.00]; supported 18 of 20, 0.90 [0.70, 0.97]. The two wrong ones:
+- "Aristotle (January 17, 1949 - April 6, 322)": the registered era rule lets "322" match "322 BC".
+- "Natacha Atlas was an Egyptian era": the added pattern read a nationality where the sentence states none.
+
+## What it says about the writers
+
+- **The planned sentences state wrong facts as often as right ones.** Under v2, a third of all statements contradict CyphaLM's own store, and only 0.44 of the checkable ones agree with it (G4 asks for 0.9). Today's default (L1) is at 0.437 [0.369, 0.507] on dev and 0.426 on test.
+- **The second date is invented.** Of W1b's 59 graded death dates, 53 are wrong ("Averroes (January 1, 1126 - July 13, 1807)"). Birth dates come from the plan, so the year is mostly right, but the fill adds a month and day: 55 of 125 graded birth dates are wrong at the store's full date.
+- **W1b, G16 and L1 give the same facts.** Their numbers agree to the third decimal. The fact sentences come from the planner, and T2's and T3's settings do not touch them. Better free text did not change the facts.
+- **The honest fill works for facts.** H1b contradicts the store once in 139 statements (0.007), with precision 0.958 [0.880, 1.000]. It states almost no dates it does not hold. The raters did not prefer it (0.560, §13.48), so today's default trades facts for fluency.
+- **Errors grow down the paragraph.** Sentence 1 is contradicted least (0.15–0.20); from sentence 4 on, 0.35–0.37. The later sentences are the discourse writer's linked people ("He was the son of Louis Braille (1809 - 1810), Italian painter.").
+- **Human text gives the measure almost nothing to check:** 0.04 statements a sample, none graded. GEN-A's continuations are mid-article prose, not lead sentences. So this measure grades the planner's own kind of sentence, and it cannot say how a human would score.
+- **P1_e9 (with the Wikidata seeds, §13.38) is worse still** against the text store: 0.185 [0.057, 0.375].
+
+## Predictions, scored
+
+Scored on v1, the measure as registered; A1's on v2.
+
+| # | Result |
+|---|---|
+| F1 | statements 1.47–1.49 **hit**; contradicted 0.236–0.240 **hit**; precision 0.585 **hit**; G4 not met **hit** |
+| F2 | D0 1.12 **hit**; precision 0.605 **hit** |
+| F3 | H1b contradicted 0.007 against D0's 0.228 **hit**; precision 0.958 **hit** |
+| F4 | HUMAN 0.04 a sample **hit**; contradicted 0 **hit**; precision not scorable (no graded statement) |
+| F5 | sentence 1 below sentences 2 and later, in every writer **hit** |
+| F6 | supported only in part 0.66 **hit** |
+| F7 | test contradicted within dev intervals (0.238, 0.229, 0.229) **hit** |
+| F8 | grader precision 0.90 [0.77, 0.96] **hit** |
+| A1.1 | contradicted +0.086 to +0.087 **hit**; precision 0.437 **hit** |
+| A1.2 | H1b 0.007 **hit** |
+| A1.3 | fresh hand check 0.95 [0.83, 0.99] **hit** |
+
+## Known limits
+
+- Only lead-style statements are found (F2's patterns): dates in brackets, "born in", "is a", "is a town in". Statements such as "was President of France from 1887 to 1892" are not read.
+- The store is coarse: most supported dates are checked to the year only, and is_a and language never contradict.
+- Faults seen and not fixed: a one-word name can match a person's page ("Paris (1892-1895)"); a year without BC passes for a BC year; "British" passes for a Scot before 1707.

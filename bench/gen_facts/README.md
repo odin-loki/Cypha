@@ -17,4 +17,5 @@ python3 scripts/gen_fact_check.py run --out bench/gen_facts \
 | `summary.md`, `summary.json` | per arm: statements per sample, share contradicted, share supported, precision, by sentence position, with 95% intervals |
 | `test/` | the same for the test reads already made |
 | `full_store/` | the same with `--drop none` (beside the measure) |
-| `hand_check.tsv` | the 40 hand-checked statements |
+| `hand_check.tsv` | the 40 hand-checked statements (v1) |
+| `v2/`, `v2/test/`, `hand_check_v2.tsv` | the same under amendment A1 (`--v2`), and its fresh hand check: the numbers to use |
