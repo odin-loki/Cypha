@@ -190,3 +190,35 @@ Subset A (100 prompts); splice and tail on X1's 30. Full table: `bench/decode_lo
   - nucleus 0.9: 0.425 [0.275, 0.575], X 0.40, Y 0.45: no.
 - SCRIBE v2 ranked them the same way the readers did; so did the link, splice and verbless. N9 had the lower stuff3. Too few rated arms to say more.
 - Round 2 (gate) starts from T 0.75, the provisional best. The round-3 confirmation tests the round-3 best against START. Gate arms run speculatively from START while the readers read were stopped and are not used.
+
+### Round 2: gate (from T 0.75)
+
+Full table: `bench/decode_loop/rounds/r2.screen.md`. The WSL machine restarted at about 02:53 (not this job). It killed the last arm (lda_w 2), which was rerun whole. No other arm was affected.
+
+| | T 0.75 (best) | wf 0.5 | wg 0.5 | lda_w 0.5 | lda_w 2 |
+|---|---|---|---|---|---|
+| mean surprise (bits) | 7.70 | 7.75 | 7.48 | 7.70 | 7.67 |
+| words a sentence | 13.1 | 12.7 | 12.8 | 13.2 | 13.0 |
+| link to the sentence before | 0.357 | 0.322 | 0.291 | 0.360 | 0.342 |
+| verbless | 0.221 | 0.215 | 0.203 | 0.199 | 0.232 |
+| stuff3 | 0.029 | 0.029 | 0.027 | 0.030 | 0.027 |
+| splice | 0.212 | 0.205 | 0.214 | 0.217 | 0.216 |
+| tail | 0.166 | 0.151 | 0.165 | 0.164 | 0.164 |
+| SCRIBE v2 | 0.844 | 0.843 | 0.859 | 0.843 | 0.823 |
+| copy32 | 0.525 | 0.557 | 0.522 | 0.528 | 0.523 |
+| rated texts unlike the best (of 50) | – | 29 | 31 | 20 | 23 |
+
+- **Screen:** all four pass (verbatim13 0, fact precision 0.938). **Ranking:** wg 0.5 3, wf 0.5 8, lda_w 2 9, lda_w 0.5 10. **To the readers: wg 0.5 and wf 0.5.**
+- **Readers** (`bench/blind/loop_r2`, seed 20261212, packets committed first, 419e96aa; four fresh raters, one file each):
+  - **wf 0.5: 0.700 [0.575, 0.825]**, X 0.75, Y 0.65: **the new (provisional) best.** Its interval excludes 0.5, but it is a 20-prompt round against T 0.75, not a confirmation;
+  - wg 0.5: 0.500 [0.325, 0.675], X 0.55, Y 0.45: no.
+- **Secondary** (the lead's request; the decision stays on the registered score): many pairs showed the same text twice (21 of the 50 rated prompts are unchanged by wf, 19 by wg), and the raters tied them. On the differing items only (`loop_diffscore.py`): wf 0.5 **0.808 [0.615, 0.962]** (13 prompts), wg 0.5 0.500 [0.250, 0.750] (14). Round 1 the same way: T 0.75 0.656 [0.438, 0.844] (16), nucleus 0.9 0.406 (16).
+- The ranking put wg first by SCRIBE v2 and its low mean surprise; the readers did not prefer it. wf had the lowest splice and tail shares of the four.
+
+## Amendment 2: packets from prompts whose texts differ (2026-11-13, before round 3's packet)
+
+- **Why:** in round 2, 19–21 of the 50 rated prompts gave the same text for the best and the candidate, and the raters tied them (the lead's note). Identical pairs carry no signal and pull every share toward 0.5.
+- **From round 3 on:** round r walks the 50 rater prompts in `prompts.json`'s order from position 20(r−1) mod 50, wrapping. It takes the first 20 where every survivor's text (as cut for the raters) differs from the best's. If fewer than 20 qualify, it adds prompts where at least one differs (`loop_round.py`, `rotation_differing`).
+- Confirmations keep all 50 prompts, as registered (they are the comparable strict test). Their score on the differing items only is reported beside them as secondary.
+- The round rule, the seeds and everything else stay as registered.
+- What had run when this was written: round 3's candidates (retrieval, from wf 0.5) were being written; none was measured or read.

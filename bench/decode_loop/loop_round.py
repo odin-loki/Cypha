@@ -27,6 +27,19 @@ def rotation(n):
     return [R50[(s + j) % 50] for j in range(20)]
 
 
+def rotation_differing(n, best, others):
+    """Amendment 2 (rounds 3 on): walk the 50 from round n's start; take the first 20 prompts where every survivor's
+    text (cut at 460 characters) differs from the best's; if fewer than 20, add those where at least one differs."""
+    sys.path.insert(0, HERE)
+    from blind_cut import cut_texts
+    t = {lab: cut_texts(os.path.join(RUNS, lab + ".gen.txt")) for lab in [best] + others}
+    s = (20 * (n - 1)) % 50
+    order = [R50[(s + j) % 50] for j in range(50)]
+    allv = [i for i in order if all(t[o][i] != t[best][i] for o in others)]
+    some = [i for i in order if i not in allv and any(t[o][i] != t[best][i] for o in others)]
+    return (allv + some)[:20]
+
+
 def make(name, ids, best, others, seed):
     out = os.path.join(ROOT, "bench/blind", name)
     os.makedirs(out, exist_ok=True)
@@ -101,7 +114,8 @@ def main():
     if cmd == "packet":
         n, best, others = int(sys.argv[2]), sys.argv[3], sys.argv[4:]
         name = f"loop_r{n}"
-        make(name, rotation(n), best, others, 20261210 + n)
+        ids = rotation(n) if n <= 2 else rotation_differing(n, best, others)
+        make(name, ids, best, others, 20261210 + n)
         log["rounds"] = [x for x in log["rounds"] if x["name"] != name] + [dict(name=name, kind="round", best=best, arms=others)]
     elif cmd == "confirm":
         c, best, start = int(sys.argv[2]), sys.argv[3], sys.argv[4]

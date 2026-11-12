@@ -604,7 +604,595 @@
    "arms": [
     "r2_WG5",
     "r2_WF5"
-   ]
+   ],
+   "result": {
+    "r2_WF5": {
+     "share": 0.7,
+     "lo": 0.575,
+     "hi": 0.825,
+     "by": {
+      "X": 0.75,
+      "Y": 0.65
+     },
+     "passes": true
+    },
+    "r2_WG5": {
+     "share": 0.5,
+     "lo": 0.325,
+     "hi": 0.675,
+     "by": {
+      "X": 0.55,
+      "Y": 0.45
+     },
+     "passes": false
+    }
+   },
+   "judgments": [
+    {
+     "dev": 185,
+     "arm": "r2_WG5",
+     "rater": "X",
+     "win": 0.5,
+     "packet": 1
+    },
+    {
+     "dev": 185,
+     "arm": "r2_WF5",
+     "rater": "X",
+     "win": 0.5,
+     "packet": 1
+    },
+    {
+     "dev": 118,
+     "arm": "r2_WG5",
+     "rater": "X",
+     "win": 1.0,
+     "packet": 1
+    },
+    {
+     "dev": 118,
+     "arm": "r2_WF5",
+     "rater": "X",
+     "win": 1.0,
+     "packet": 1
+    },
+    {
+     "dev": 244,
+     "arm": "r2_WF5",
+     "rater": "X",
+     "win": 0.5,
+     "packet": 1
+    },
+    {
+     "dev": 244,
+     "arm": "r2_WG5",
+     "rater": "X",
+     "win": 0.5,
+     "packet": 1
+    },
+    {
+     "dev": 209,
+     "arm": "r2_WG5",
+     "rater": "X",
+     "win": 0.5,
+     "packet": 1
+    },
+    {
+     "dev": 209,
+     "arm": "r2_WF5",
+     "rater": "X",
+     "win": 0.5,
+     "packet": 1
+    },
+    {
+     "dev": 81,
+     "arm": "r2_WG5",
+     "rater": "X",
+     "win": 1.0,
+     "packet": 1
+    },
+    {
+     "dev": 81,
+     "arm": "r2_WF5",
+     "rater": "X",
+     "win": 0.5,
+     "packet": 1
+    },
+    {
+     "dev": 45,
+     "arm": "r2_WF5",
+     "rater": "X",
+     "win": 1.0,
+     "packet": 1
+    },
+    {
+     "dev": 45,
+     "arm": "r2_WG5",
+     "rater": "X",
+     "win": 1.0,
+     "packet": 1
+    },
+    {
+     "dev": 178,
+     "arm": "r2_WG5",
+     "rater": "X",
+     "win": 0.0,
+     "packet": 1
+    },
+    {
+     "dev": 178,
+     "arm": "r2_WF5",
+     "rater": "X",
+     "win": 1.0,
+     "packet": 1
+    },
+    {
+     "dev": 212,
+     "arm": "r2_WF5",
+     "rater": "X",
+     "win": 0.5,
+     "packet": 1
+    },
+    {
+     "dev": 212,
+     "arm": "r2_WG5",
+     "rater": "X",
+     "win": 0.5,
+     "packet": 1
+    },
+    {
+     "dev": 126,
+     "arm": "r2_WF5",
+     "rater": "X",
+     "win": 1.0,
+     "packet": 1
+    },
+    {
+     "dev": 126,
+     "arm": "r2_WG5",
+     "rater": "X",
+     "win": 1.0,
+     "packet": 1
+    },
+    {
+     "dev": 238,
+     "arm": "r2_WF5",
+     "rater": "X",
+     "win": 0.5,
+     "packet": 1
+    },
+    {
+     "dev": 238,
+     "arm": "r2_WG5",
+     "rater": "X",
+     "win": 0.0,
+     "packet": 1
+    },
+    {
+     "dev": 45,
+     "arm": "r2_WF5",
+     "rater": "Y",
+     "win": 0.0,
+     "packet": 2
+    },
+    {
+     "dev": 45,
+     "arm": "r2_WG5",
+     "rater": "Y",
+     "win": 0.0,
+     "packet": 2
+    },
+    {
+     "dev": 178,
+     "arm": "r2_WG5",
+     "rater": "Y",
+     "win": 0.0,
+     "packet": 2
+    },
+    {
+     "dev": 178,
+     "arm": "r2_WF5",
+     "rater": "Y",
+     "win": 1.0,
+     "packet": 2
+    },
+    {
+     "dev": 118,
+     "arm": "r2_WF5",
+     "rater": "Y",
+     "win": 1.0,
+     "packet": 2
+    },
+    {
+     "dev": 118,
+     "arm": "r2_WG5",
+     "rater": "Y",
+     "win": 1.0,
+     "packet": 2
+    },
+    {
+     "dev": 212,
+     "arm": "r2_WF5",
+     "rater": "Y",
+     "win": 0.5,
+     "packet": 2
+    },
+    {
+     "dev": 212,
+     "arm": "r2_WG5",
+     "rater": "Y",
+     "win": 0.5,
+     "packet": 2
+    },
+    {
+     "dev": 209,
+     "arm": "r2_WG5",
+     "rater": "Y",
+     "win": 0.5,
+     "packet": 2
+    },
+    {
+     "dev": 209,
+     "arm": "r2_WF5",
+     "rater": "Y",
+     "win": 0.5,
+     "packet": 2
+    },
+    {
+     "dev": 81,
+     "arm": "r2_WF5",
+     "rater": "Y",
+     "win": 0.5,
+     "packet": 2
+    },
+    {
+     "dev": 81,
+     "arm": "r2_WG5",
+     "rater": "Y",
+     "win": 1.0,
+     "packet": 2
+    },
+    {
+     "dev": 244,
+     "arm": "r2_WG5",
+     "rater": "Y",
+     "win": 0.5,
+     "packet": 2
+    },
+    {
+     "dev": 244,
+     "arm": "r2_WF5",
+     "rater": "Y",
+     "win": 0.5,
+     "packet": 2
+    },
+    {
+     "dev": 126,
+     "arm": "r2_WF5",
+     "rater": "Y",
+     "win": 1.0,
+     "packet": 2
+    },
+    {
+     "dev": 126,
+     "arm": "r2_WG5",
+     "rater": "Y",
+     "win": 1.0,
+     "packet": 2
+    },
+    {
+     "dev": 185,
+     "arm": "r2_WG5",
+     "rater": "Y",
+     "win": 0.5,
+     "packet": 2
+    },
+    {
+     "dev": 185,
+     "arm": "r2_WF5",
+     "rater": "Y",
+     "win": 0.5,
+     "packet": 2
+    },
+    {
+     "dev": 238,
+     "arm": "r2_WF5",
+     "rater": "Y",
+     "win": 0.5,
+     "packet": 2
+    },
+    {
+     "dev": 238,
+     "arm": "r2_WG5",
+     "rater": "Y",
+     "win": 0.0,
+     "packet": 2
+    },
+    {
+     "dev": 49,
+     "arm": "r2_WG5",
+     "rater": "X",
+     "win": 1.0,
+     "packet": 3
+    },
+    {
+     "dev": 49,
+     "arm": "r2_WF5",
+     "rater": "X",
+     "win": 1.0,
+     "packet": 3
+    },
+    {
+     "dev": 73,
+     "arm": "r2_WF5",
+     "rater": "X",
+     "win": 1.0,
+     "packet": 3
+    },
+    {
+     "dev": 73,
+     "arm": "r2_WG5",
+     "rater": "X",
+     "win": 0.5,
+     "packet": 3
+    },
+    {
+     "dev": 87,
+     "arm": "r2_WG5",
+     "rater": "X",
+     "win": 0.5,
+     "packet": 3
+    },
+    {
+     "dev": 87,
+     "arm": "r2_WF5",
+     "rater": "X",
+     "win": 0.5,
+     "packet": 3
+    },
+    {
+     "dev": 93,
+     "arm": "r2_WF5",
+     "rater": "X",
+     "win": 1.0,
+     "packet": 3
+    },
+    {
+     "dev": 93,
+     "arm": "r2_WG5",
+     "rater": "X",
+     "win": 1.0,
+     "packet": 3
+    },
+    {
+     "dev": 14,
+     "arm": "r2_WF5",
+     "rater": "X",
+     "win": 1.0,
+     "packet": 3
+    },
+    {
+     "dev": 14,
+     "arm": "r2_WG5",
+     "rater": "X",
+     "win": 0.0,
+     "packet": 3
+    },
+    {
+     "dev": 84,
+     "arm": "r2_WF5",
+     "rater": "X",
+     "win": 1.0,
+     "packet": 3
+    },
+    {
+     "dev": 84,
+     "arm": "r2_WG5",
+     "rater": "X",
+     "win": 1.0,
+     "packet": 3
+    },
+    {
+     "dev": 243,
+     "arm": "r2_WG5",
+     "rater": "X",
+     "win": 0.0,
+     "packet": 3
+    },
+    {
+     "dev": 243,
+     "arm": "r2_WF5",
+     "rater": "X",
+     "win": 0.5,
+     "packet": 3
+    },
+    {
+     "dev": 8,
+     "arm": "r2_WG5",
+     "rater": "X",
+     "win": 1.0,
+     "packet": 3
+    },
+    {
+     "dev": 8,
+     "arm": "r2_WF5",
+     "rater": "X",
+     "win": 1.0,
+     "packet": 3
+    },
+    {
+     "dev": 235,
+     "arm": "r2_WG5",
+     "rater": "X",
+     "win": 0.0,
+     "packet": 3
+    },
+    {
+     "dev": 235,
+     "arm": "r2_WF5",
+     "rater": "X",
+     "win": 1.0,
+     "packet": 3
+    },
+    {
+     "dev": 220,
+     "arm": "r2_WF5",
+     "rater": "X",
+     "win": 0.0,
+     "packet": 3
+    },
+    {
+     "dev": 220,
+     "arm": "r2_WG5",
+     "rater": "X",
+     "win": 0.0,
+     "packet": 3
+    },
+    {
+     "dev": 93,
+     "arm": "r2_WF5",
+     "rater": "Y",
+     "win": 1.0,
+     "packet": 4
+    },
+    {
+     "dev": 93,
+     "arm": "r2_WG5",
+     "rater": "Y",
+     "win": 1.0,
+     "packet": 4
+    },
+    {
+     "dev": 243,
+     "arm": "r2_WF5",
+     "rater": "Y",
+     "win": 0.5,
+     "packet": 4
+    },
+    {
+     "dev": 243,
+     "arm": "r2_WG5",
+     "rater": "Y",
+     "win": 0.0,
+     "packet": 4
+    },
+    {
+     "dev": 49,
+     "arm": "r2_WF5",
+     "rater": "Y",
+     "win": 0.0,
+     "packet": 4
+    },
+    {
+     "dev": 49,
+     "arm": "r2_WG5",
+     "rater": "Y",
+     "win": 0.0,
+     "packet": 4
+    },
+    {
+     "dev": 84,
+     "arm": "r2_WG5",
+     "rater": "Y",
+     "win": 1.0,
+     "packet": 4
+    },
+    {
+     "dev": 84,
+     "arm": "r2_WF5",
+     "rater": "Y",
+     "win": 1.0,
+     "packet": 4
+    },
+    {
+     "dev": 14,
+     "arm": "r2_WG5",
+     "rater": "Y",
+     "win": 0.0,
+     "packet": 4
+    },
+    {
+     "dev": 14,
+     "arm": "r2_WF5",
+     "rater": "Y",
+     "win": 1.0,
+     "packet": 4
+    },
+    {
+     "dev": 235,
+     "arm": "r2_WF5",
+     "rater": "Y",
+     "win": 1.0,
+     "packet": 4
+    },
+    {
+     "dev": 235,
+     "arm": "r2_WG5",
+     "rater": "Y",
+     "win": 0.0,
+     "packet": 4
+    },
+    {
+     "dev": 87,
+     "arm": "r2_WG5",
+     "rater": "Y",
+     "win": 0.5,
+     "packet": 4
+    },
+    {
+     "dev": 87,
+     "arm": "r2_WF5",
+     "rater": "Y",
+     "win": 0.5,
+     "packet": 4
+    },
+    {
+     "dev": 73,
+     "arm": "r2_WG5",
+     "rater": "Y",
+     "win": 0.5,
+     "packet": 4
+    },
+    {
+     "dev": 73,
+     "arm": "r2_WF5",
+     "rater": "Y",
+     "win": 1.0,
+     "packet": 4
+    },
+    {
+     "dev": 220,
+     "arm": "r2_WG5",
+     "rater": "Y",
+     "win": 0.0,
+     "packet": 4
+    },
+    {
+     "dev": 220,
+     "arm": "r2_WF5",
+     "rater": "Y",
+     "win": 0.0,
+     "packet": 4
+    },
+    {
+     "dev": 8,
+     "arm": "r2_WF5",
+     "rater": "Y",
+     "win": 1.0,
+     "packet": 4
+    },
+    {
+     "dev": 8,
+     "arm": "r2_WG5",
+     "rater": "Y",
+     "win": 1.0,
+     "packet": 4
+    }
+   ],
+   "shares": {
+    "r2_WF5": 0.7,
+    "r2_WG5": 0.5
+   }
   }
  ]
 }
