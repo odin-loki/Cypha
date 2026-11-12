@@ -129,3 +129,7 @@ Four fresh blind raters, 50 prompts, packets and key committed first (7e401c7a).
   - **Tie-break:** the higher lower bound of the interval, then the lower copy32. G16 wins both (0.570 against 0.560; copy32 0.241 against 0.289), and it does not reshape K5's distribution. **G16 becomes the default** (`--k5-gate 16`), and GEN-A test is read once for it.
   - **NG**, a new arm: N7 + G16 (`--k5-nucleus 0.7 --k5-gate 16`), not tried before (TC held O6 too and failed on copy32). It is screened on dev by the same rule. If it passes, raters compare it against G16, the new default, on the same 50 prompts with four fresh raters. It becomes the default only if it reads better by the §13.38 rule; then GEN-A test is read once for it.
   - **Prediction for NG:** copy32 about 0.29 (N7's); against G16, a win share of 0.55–0.60, interval touching 0.5.
+
+**NG on dev** (2026-11-12): SCRIBE v2 0.652 [0.623, 0.682], v3.1 0.525, copy32 0.280, verbatim13 0. By reading (dev 1, 2, 4, 9, 10, not rated), it is about as good as G16: slightly cleaner clauses, with as many fragments. **It passes the screen.** Packets NG against G16: `bench/blind/ng_pair/`, seed 20261114, committed before the raters run.
+
+**NG against G16** (four fresh raters, 50 prompts, packets committed first, e1d69808): **0.510 [0.400, 0.620]**, rater pairs 0.52 and 0.50. No difference. **NG is not adopted; G16 stays the default.** Prediction 0.55–0.60 with the interval touching 0.5: **miss** (0.51; the interval holds 0.5 as predicted).
