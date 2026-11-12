@@ -2538,3 +2538,18 @@ Old binary main 9cbd277; old and new were started together.
   - The replacement text is weaker.
   - Refusing names was not the cost: HD1 refuses none and loses as much SCRIBE as H1b did.
 - **Next (H3):** let a year-only fact take a year-only skeleton, or cut the month and day out of the skeleton.
+
+### 13.62 PP, the paragraph-plan term in the sentence gate (2026-11-12; [PARA_PLAN](reports/PARA_PLAN.md) "PP amendment" and "PP results"; not adopted)
+
+- **Registered first** (6ab793d, before any arm ran). `--k5-para-plan TABLEDIR[,w=W,orph=W,lead=W]` (`lm/para_plan.hpp`) adds a z-scored gate term to the gate and the discourse writer's free sentences. The term is log₂ P(state | previous state) from §13.59's mined table, plus penalties for orphan pronouns and mid-paragraph lead sentences. Off by default; with it off, the output equals L1 and L1_long under `cmp`.
+- **Screen** (dev):
+  - PP1 (w=1): SCRIBE v2 0.606, orphan pronouns 0.286 → 0.199;
+  - PP3 (w=1, orph=2, lead=2): 0.609, orphans → 0.158 (human 0.12);
+  - PP2 (w=2) fails: SCRIBE v2 0.575.
+  - The link to the sentence before does not move. A side effect: the subject is kept less often (sentence 2: 0.41 → 0.27–0.31), since the table's most common step is "no subject → no subject".
+- **Blind pairwise raters against L1** (packets 4c1c989):
+  - 460 characters: PP1 0.480 [0.380, 0.585], PP3 0.470 [0.365, 0.580];
+  - 1,500 characters: PP1 0.520 [0.340, 0.700], PP3 0.500 [0.320, 0.680].
+  - Fewer orphan pronouns did not read better. **Not adopted; L1 stays.**
+- **The code stays on `wip/para-hook`, not merged.** Its gate changes overlap T4's `--k5-first` in `word_kn.hpp`, and neither is adopted. The report, runs and packets are on main.
+- **What it says:** fixing sentence-to-sentence form (pronouns, lead sentences) is not what readers notice. The gap the raters feel is content: the word thread between sentences (§13.59: 0.204 against 0.508) needs something to write about.

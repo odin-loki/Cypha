@@ -199,3 +199,164 @@ The gap grows with length. In long text the writer's link to the sentence before
 - PP1 and PP2 move these by half as much as PP3;
 - raters: PP3 about 0.55–0.60 against L1 at 460 characters, about 0.60 on the long reading. It does not fix drift by itself. It removes the clearest false signs of a kept subject.
 - What it cannot fix: the missing lexical thread (on_prev −0.30). That needs content to write about (the fact plan, CT3.1) or a draft source that carries words from sentence to sentence, not a chooser.
+
+## PP amendment (registered 2026-11-12, before any arm runs)
+
+**Odin Loch** · 2026-11-12 · branch `wip/para-hook` (main 2fdebcce with `wip/para-plan` ceb0a349 merged) · GENERATION_PLAN §13.53, the hook of this report
+
+The hook above is built. These details were not fixed above. They are fixed here, before any arm runs.
+
+### Who edits what
+
+- `native/include/cypha/lm/para_plan.hpp` is new. The two hook sites are edited by this job: `word_kn.hpp` (the z-scored gate, `gate_z`) and `planner/discourse.hpp` (the free sentences). Another job owns `planner/writer.hpp` and `slots.hpp`; they are not touched.
+- L1 already uses the z-scored gate (its LDA term). With the flag on, the z-scored gate is used even without LDA.
+
+### The term, exactly
+
+- **Labels:** the script's functions, ported line by line (`split_sents`, `toks`, `content`, `open_type`, `func_type`, `name_runs`, `subject_of`, `ref_type`). Python's `\w` is exact in ASCII and approximated outside it (letters and digits are word characters; punctuation, symbol and mark blocks are not).
+- **The capitalisation table** is the script's `bench/para_plan/caps.json` (counted on the first 30 MB). `open2.tsv` is not loaded: the term does not use it.
+- **A parity check** (done before this registration; it reads no arm): the C++ labels equal the script's on every one of 137,753 lines (subject, prompt function, and open, func and ref of each sentence). The text was GEN-A dev human, L1, G16 and L1_long, and 14,106 Wikipedia windows from the first 4,000 documents of `train_all.txt`.
+- **The previous sentence** is the last sentence of the text written so far, split as the script splits it. With nothing written yet, the previous state is `START:func(the prompt's last sentence)`.
+- **A draft** is read as one sentence (whitespace joined). Its ref anchor is the prompt's content words and the previous sentence's, as in the script's `window`.
+- **Smoothing:** P(next | prev) = (count + 0.5) / (row total + 0.5 × 40).
+- **orph:** the draft's ref is PRON and the previous sentence's ref is NONE. This is the orphan rate the screen reads (NONE → PRON). It never applies to the first draft: its previous sentence is the prompt.
+- **lead:** the draft's func is DEF or BIRTH, its ref is NONE (it does not refer to the subject), and it holds a name (a run of the script's `name_runs`). It applies to every draft, the first included: the prompt is the paragraph's first sentence.
+- **The gate:** term = log2 P − orph × [orphan] − lead × [lead]. It is z-scored over the 16 drafts, like the other terms, and w × z is added to the score.
+- **Off:** with no `--k5-para-plan`, nothing is loaded or computed, and the score is the same expression as before.
+
+### Checks before any arm is read
+
+- With the flag off, my build's dev GEN file equals `bench/k5_coherence/runs/L1.gen.txt` under `cmp` (MODEL line aside).
+- With the flag off, my build's long setup equals `bench/k5_coherence/runs/L1_long.gen.txt` under `cmp` (MODEL line aside). That file is the long baseline.
+- The selftest passes.
+
+### Arms (dev, seed 0, 250 prompts; L1 plus)
+
+- PP1 `--k5-para-plan bench/para_plan/tables,w=1`
+- PP2 `--k5-para-plan bench/para_plan/tables,w=2`
+- PP3 `--k5-para-plan bench/para_plan/tables,w=1,orph=2,lead=2`
+
+Run by `scripts/gen_eval.sh dev LABEL OUT --prompts 250 --k5 /mnt/d/cypha_llm/fuzzy/train.txt FLAGS`, with `cyphalm_trie` and `scribe` built by `g++ -O2` as `scripts/build_1tb_tools.sh` builds them (`libsais.o` linked into `scribe`), `WIKI=ENWIK8=/mnt/d/cypha_llm/enwik8`, `SCRIBE_VEC=/mnt/d/cypha_llm/scribe/v32`, `K5_THREADS=6`. Files go to `bench/para_plan/runs/`.
+
+### The screen, exactly
+
+An arm passes if all of these hold:
+- verbatim13 is 0;
+- copy32 is at most 0.30;
+- SCRIBE v2 is at least L1's minus 0.03 (L1: 0.610, so at least 0.580);
+- by `para_plan_mine.py compare` (460 characters), the orphan rate (NONE → PRON) and the DEF + BIRTH share are both below L1's;
+- by `coh_measures.py`, stuffing (3rd+ use) is up at most 0.01;
+- by my reading, it reads at least as well as L1 on T3's 12 dev prompts (0, 1, 2, 3, 4, 5, 7, 9, 10, 11, 12, 13), with no more keyword repetition.
+
+**Reported beside the screen, not ruled on:** J2's three measures (orphan pronouns, mid-paragraph lead sentences, the link to the previous sentence `on_prev`); kept_s1–s4, run, on_prompt; SCRIBE v3.1; samples unlike L1; wall time and peak RAM; and **WRITING_SIGNAL's mean surprise** (`surp_mean`: word trigram Kneser–Ney over `fuzzy/train.txt`, `scripts/surprise_profile.py` at 2124363f; texts cut as the raters see them; lower reads better between variants of one writer), each arm minus L1 with a 95% paired bootstrap interval over the prompts (2,000 resamples, seed 20261112). The measures are made by `bench/para_plan/hook_screen.py` (new).
+
+**Candidates:** at most two arms that pass, chosen by my reading first, then by the lower orphan rate.
+
+### The long reading
+
+- For each candidate: `cyphalm_trie sample` on the 250 dev prompts with `--bytes 1800 --k5-max-words 600` and the same seeds (K5_COHERENCE's `coh_arm.sh --long`). The baseline is `L1_long.gen.txt`, after its check above.
+- The long packet uses the 25 prompts K5_COHERENCE used for `coh_long` (`bench/blind/q3_long/prompts.json`; the same list as `bench/blind/coh_long/prompts.json`).
+
+### The packets
+
+- 460 characters: `python3 scripts/blind_rate.py make --out bench/blind/pp_pair --ids bench/blind/llm_rating/prompts.json --arm L1=bench/k5_coherence/runs/L1.gen.txt --arm X=... --mode pair --baseline L1 --seed 20261120`.
+- **The seed changed.** 20261117 was registered above, but K5_FIRST (`wip/k5-first`, `bench/blind/first_pair`) took it for its own L1 pair round. So this round uses 20261120.
+- Long: `--out bench/blind/pp_long --ids bench/blind/q3_long/prompts.json --arm L1=bench/k5_coherence/runs/L1_long.gen.txt --arm X=... --mode pair --baseline L1 --seed 20261118 --cut 1500`. 20261118 was checked: no other round uses it.
+- Four fresh blind Claude raters each. Packets, `key.b64` and `RATER_PROMPT.md` are committed and pushed before the raters run. `KEY.json` stays out of the repository.
+
+### The rule (as registered, written out)
+
+- The §13.38 rule: an arm reads better if its win share minus 0.5 is above 0, its 95% bootstrap interval excludes 0, and both rater pairs agree on the sign.
+- **Adopted** if it reads better by the rule on either reading (460 or long) and its win share on the other reading is at least 0.5 (as K5_COHERENCE). The best such arm (higher lower bound first, then lower copy32) becomes the default. Then GEN-A test is read once, for it only. Odin can veto.
+- If no arm is adopted, nothing changes.
+
+### Predictions added here
+
+- Both `cmp` checks and the selftest: hit expected.
+- PP3 passes the screen. PP1 and PP2 pass too.
+- Samples unlike L1: PP1 and PP2 150–220, PP3 180–230 (the term moves the choice in most paragraphs).
+- on_prev within ±0.03 of L1 for every arm; stuffing within ±0.005.
+- Mean surprise within ±0.15 bits of L1 for every arm.
+- Wall time +5% to +20% (16 drafts labelled per sentence); peak RAM +0.0 to +0.2 GB (the capitalisation table).
+
+## PP results (2026-11-12; the amendment 6ab793d1 was pushed before any arm ran)
+
+**Odin Loch** · 2026-11-12 · files in `bench/para_plan/runs/`
+
+### Checks
+
+- With the flag off, my build's dev GEN file equals `bench/k5_coherence/runs/L1.gen.txt` under `cmp`. The MODEL line is the same too. **Hit.**
+- With the flag off, the long setup equals `L1_long.gen.txt` under `cmp`. **Hit.**
+- The selftest passes.
+
+### The screen (dev, seed 0, 250 prompts)
+
+| Arm | SCRIBE v2 [95%] | v3.1 | copy32 | verbatim13 | wall | peak RAM | samples unlike L1 | screen |
+|---|---|---|---|---|---|---|---|---|
+| L1 (flag off) | 0.610 [0.577, 0.645] | 0.546 | 0.242 | 0 | 6:15 | 11.32 GB | – | baseline |
+| PP1 w=1 | 0.606 [0.573, 0.640] | 0.542 | 0.238 | 0 | 6:54 | 11.33 GB | 187 | **pass, candidate** |
+| PP2 w=2 | 0.575 [0.540, 0.606] | 0.539 | 0.231 | 0 | 7:33 | 11.32 GB | 205 | fail (SCRIBE v2 under 0.580) |
+| PP3 w=1, orph=2, lead=2 | 0.609 [0.576, 0.643] | 0.544 | 0.233 | 0 | 8:58 | 11.32 GB | 191 | **pass, candidate** |
+
+Two arms at once on a shared PC, so wall times are rough. PP2's SCRIBE row holds 248 samples (2 too short).
+
+**J2's measures** (`hook_screen.py`, 460 characters; each arm minus L1 with a 95% paired bootstrap over the prompts):
+
+| Arm | orphan pronouns (NONE → PRON) | mid-paragraph leads (DEF + BIRTH) | link to the sentence before (on_prev) | stuffing (3rd+ use) | mean surprise (bits) |
+|---|---|---|---|---|---|
+| L1 | 0.286 | 0.155 | 0.204 | 0.0151 | 7.396 |
+| PP1 | 0.199 (−0.086 [−0.120, −0.052]) | 0.127 (−0.028 [−0.038, −0.018]) | 0.195 (−0.009 [−0.025, +0.006]) | 0.0157 (+0.0006) | 7.421 (+0.025 [−0.040, +0.090]) |
+| PP2 | 0.127 (−0.158 [−0.192, −0.125]) | 0.117 (−0.038 [−0.047, −0.028]) | 0.184 (−0.020 [−0.036, −0.005]) | 0.0153 (+0.0002) | 7.461 (+0.065 [−0.002, +0.133]) |
+| PP3 | 0.158 (−0.128 [−0.163, −0.097]) | 0.130 (−0.025 [−0.035, −0.015]) | 0.198 (−0.006 [−0.023, +0.010]) | 0.0159 (+0.0008) | 7.413 (+0.017 [−0.053, +0.081]) |
+| human dev | 0.12 | 0.062 | 0.508 | | 8.92 |
+
+**Keeping the subject** (not in the screen; it moved most):
+
+| Arm | kept_s1 | kept_s2 | kept_s3 | kept_s4+ | run | sentences in 460 characters |
+|---|---:|---:|---:|---:|---:|---:|
+| L1 | 0.392 | 0.407 | 0.410 | 0.339 | 0.78 | 5.25 |
+| PP1 | 0.328 | 0.310 | 0.332 | 0.246 | 0.67 | 5.46 |
+| PP2 | 0.276 | 0.266 | 0.249 | 0.182 | 0.58 | 5.48 |
+| PP3 | 0.332 | 0.274 | 0.310 | 0.217 | 0.68 | 5.39 |
+
+- **The term does what it was built to do.** Orphan pronouns fall by a third to a half (PP3: 0.29 → 0.16, near the human 0.12). Lead sentences in mid-paragraph fall by a fifth.
+- **But it also drops the subject more often.** kept_s2 falls from 0.41 to 0.27–0.31. The table's most common step is NONE → NONE (0.62 in Wikipedia). After a sentence that leaves the subject, the term rewards another that leaves it, and it removes pronouns (orphan or not). So the false signs of a kept subject go, and so do some true ones.
+- **The lexical link does not move** (on_prev −0.006 to −0.020), as registered: the term does not push it.
+- **Mean surprise rises a little** in every arm (+0.02 to +0.07 bits; no interval excludes 0). By WRITING_SIGNAL, that leans slightly against the arms.
+
+**Reading** (dev 0, 1, 2, 3, 4, 5, 7, 9, 10, 11, 12, 13, each arm beside L1):
+- Dev 0 (planned), 2, 10 and 12 are the same as L1 in PP1. Most changes come after the second sentence.
+- **PP1 and PP3 read about as L1.** The drift is the same. Some orphan pronouns are gone (dev 5: L1's "In 2002, she returned to her." after a sentence about a man). Some links to the prompt are gone too (dev 4: L1's "The town has a population of about 1,000" after a census prompt; dev 10: L1's "The program was not completely accurate" after a programming prompt). Neither has more keyword repetition.
+- **PP2 reads worse:** more fragments ("The science of geology. A of the relevant production is often made …", dev 9).
+- So PP1 and PP3 pass my reading, narrowly; PP2 fails it as well as SCRIBE.
+
+**Candidates:** PP3 and PP1 (both pass; PP3 has the lower orphan rate).
+
+### The long reading (1,800 bytes, cut 1,500; 25 prompts)
+
+`--bytes 1800 --k5-max-words 600`, the same seeds. PP3_long 11:12 and PP1_long 11:02 wall (run together; L1's check run alone with one other job took 7:26), 11.34 GB.
+
+| Arm | orphan | DEF + BIRTH | on_prev | stuffing | mean surprise | kept_s4+ | run |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| L1 | 0.276 | 0.111 | 0.116 | 0.0194 | 7.393 | 0.319 | 0.78 |
+| PP1 | 0.177 | 0.081 | 0.108 | 0.0187 | 7.467 (+0.075 [+0.028, +0.119]) | 0.222 | 0.68 |
+| PP3 | 0.138 | 0.084 | 0.107 | 0.0197 | 7.434 (+0.041 [−0.006, +0.088]) | 0.189 | 0.68 |
+
+PP1 and PP3 differ from L1 in 245 and 246 of the 250 long texts. PP1's mean surprise rise is the one interval that excludes 0. By reading (dev 4, 12, 34, 55 at 1,500 characters), all three wander through unrelated subjects. PP3 sometimes stays nearer the prompt's field (dev 34: "programming language … talk through problems" after a help-desk prompt), and sometimes further (dev 4). About as L1.
+
+### Packets (built before any rating)
+
+- `bench/blind/pp_pair/`: L1 against PP3 and PP1, the 50 prompts of `bench/blind/llm_rating/prompts.json`, seed 20261120, 460 characters. PP3 differs from L1 on 40 of them, PP1 on 38.
+- `bench/blind/pp_long/`: L1_long against PP3_long and PP1_long, the 25 prompts of `bench/blind/q3_long/prompts.json`, seed 20261118, `--cut 1500`. Both differ on all 25.
+- `KEY.json` of each is kept outside the repository; `key.b64` and `RATER_PROMPT.md` are committed.
+
+### Predictions so far
+
+- Off equals L1 under `cmp` (dev and long): **hit**. Selftest: **hit**.
+- PP3 orphan rate 0.29 → at most 0.20: **hit** (0.158). DEF + BIRTH 0.154 → at most 0.11: **miss** (0.130). on_prev up at most 0.03: **hit** (−0.006). SCRIBE v2 within ±0.03 of L1: **hit** (−0.001).
+- PP1 and PP2 move these half as much as PP3: **miss**. PP1 moves the orphan rate two thirds as much, PP2 more than PP3; DEF + BIRTH moves about the same in all three.
+- PP3 passes the screen: **hit**. PP1 and PP2 pass: **hit** for PP1, **miss** for PP2 (SCRIBE v2 0.575).
+- Samples unlike L1 (PP1, PP2 150–220; PP3 180–230): **hit** (187, 205, 191).
+- on_prev within ±0.03: **hit**. Stuffing within ±0.005: **hit**. Mean surprise within ±0.15 bits: **hit**.
+- Wall +5% to +20%: **hit** for PP1 (+10%), **miss** for PP2 (+21%) and PP3 (+43%) on a shared PC. Peak RAM +0.0 to +0.2 GB: **hit** (+0.0).
+- The raters' predictions (PP3 about 0.55–0.60 at 460 characters, about 0.60 long) wait for the raters.
