@@ -160,3 +160,33 @@ One arm at a time (two only while `free -g` shows 30 GB or more available), 6 th
 ## Results
 
 (Added after the runs, under this line.)
+
+### Checks (2026-11-13)
+
+- My build of main (deda93c3) with no flags, on all 250 dev prompts: the GEN file equals `bench/k5_decode/runs/T8.gen.txt` under `cmp`, MODEL line aside. 9:13 wall, 10.9 GB. **L1 hit.**
+- The written-out LDA form with W=1 (`--k5-lda 100 --k5-lda-w 1 --k5-disc-text … --k5-disc-cache …`) equals the default on 6 loop prompts (`cmp`, and the same MODEL line). **Hit.**
+- `wip/mixdec-t8` had not appeared on origin by the start of round 1. Rounds run on main's T8 (decoder absent). START: 7:41 wall for the 150 loop prompts, 11.0 GB.
+
+### Round 1: sampling (from START)
+
+Subset A (100 prompts); splice and tail on X1's 30. Full table: `bench/decode_loop/rounds/r1.screen.md`.
+
+| | human | START | T 0.75 | T 0.85 | nucleus 0.7 | nucleus 0.9 |
+|---|---|---|---|---|---|---|
+| mean surprise (bits) | 8.92 | 7.58 | 7.70 | 7.53 | 7.74 | 7.61 |
+| words a sentence | 20.1 | 13.2 | 13.1 | 12.3 | 12.7 | 12.6 |
+| link to the sentence before | 0.571 | 0.301 | 0.357 | 0.271 | 0.366 | 0.267 |
+| verbless | 0.050 | 0.204 | 0.221 | 0.226 | 0.184 | 0.208 |
+| stuff3 | 0.033 | 0.030 | 0.029 | 0.026 | 0.034 | 0.024 |
+| splice | 0.216 | 0.240 | 0.212 | 0.247 | 0.225 | 0.240 |
+| SCRIBE v2 | | 0.817 | 0.844 | 0.776 | 0.863 | 0.787 |
+| fact precision | | 0.938 | 0.938 | 0.938 | 0.938 | 0.938 |
+| copy32 | | 0.498 | 0.525 | 0.438 | 0.531 | 0.424 |
+| verbatim13 | | 0 | 0 | 0 | 0 | 0 |
+
+- **Screen:** all four pass. **Ranking** (rank sum of surprise, SCRIBE v2, stuff3, verbless, splice): N9 6, T75 7, N7 7 (T75 by the copy32 tie-break), T85 10. **To the readers: N9 and T75.**
+- **Readers** (`bench/blind/loop_r1`, 20 prompts, seed 20261211; packets committed first, 36b87324). The lead gave each of the four packet files to its own fresh rater, not two raters reading two files each. Scored as registered, with "rater X" = the R1 and R3 replies and "rater Y" = R2 and R4 (each covers all 20 prompts once):
+  - **T 0.75: 0.625 [0.450, 0.775]**, X 0.60, Y 0.65: **the new best**;
+  - nucleus 0.9: 0.425 [0.275, 0.575], X 0.40, Y 0.45: no.
+- SCRIBE v2 ranked them the same way the readers did; so did the link, splice and verbless. N9 had the lower stuff3. Too few rated arms to say more.
+- Round 2 (gate) starts from T 0.75. Gate arms run speculatively from START while the readers read were stopped and are not used.

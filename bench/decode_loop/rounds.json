@@ -7,7 +7,595 @@
    "arms": [
     "r1_N9",
     "r1_T75"
-   ]
+   ],
+   "result": {
+    "r1_N9": {
+     "share": 0.425,
+     "lo": 0.275,
+     "hi": 0.575,
+     "by": {
+      "X": 0.4,
+      "Y": 0.45
+     },
+     "passes": false
+    },
+    "r1_T75": {
+     "share": 0.625,
+     "lo": 0.45,
+     "hi": 0.775,
+     "by": {
+      "X": 0.6,
+      "Y": 0.65
+     },
+     "passes": true
+    }
+   },
+   "judgments": [
+    {
+     "dev": 103,
+     "arm": "r1_N9",
+     "rater": "X",
+     "win": 0.0,
+     "packet": 1
+    },
+    {
+     "dev": 103,
+     "arm": "r1_T75",
+     "rater": "X",
+     "win": 1.0,
+     "packet": 1
+    },
+    {
+     "dev": 132,
+     "arm": "r1_T75",
+     "rater": "X",
+     "win": 1.0,
+     "packet": 1
+    },
+    {
+     "dev": 132,
+     "arm": "r1_N9",
+     "rater": "X",
+     "win": 1.0,
+     "packet": 1
+    },
+    {
+     "dev": 197,
+     "arm": "r1_N9",
+     "rater": "X",
+     "win": 0.0,
+     "packet": 1
+    },
+    {
+     "dev": 197,
+     "arm": "r1_T75",
+     "rater": "X",
+     "win": 0.0,
+     "packet": 1
+    },
+    {
+     "dev": 98,
+     "arm": "r1_T75",
+     "rater": "X",
+     "win": 0.0,
+     "packet": 1
+    },
+    {
+     "dev": 98,
+     "arm": "r1_N9",
+     "rater": "X",
+     "win": 0.0,
+     "packet": 1
+    },
+    {
+     "dev": 85,
+     "arm": "r1_N9",
+     "rater": "X",
+     "win": 0.5,
+     "packet": 1
+    },
+    {
+     "dev": 85,
+     "arm": "r1_T75",
+     "rater": "X",
+     "win": 0.5,
+     "packet": 1
+    },
+    {
+     "dev": 157,
+     "arm": "r1_N9",
+     "rater": "X",
+     "win": 1.0,
+     "packet": 1
+    },
+    {
+     "dev": 157,
+     "arm": "r1_T75",
+     "rater": "X",
+     "win": 1.0,
+     "packet": 1
+    },
+    {
+     "dev": 60,
+     "arm": "r1_T75",
+     "rater": "X",
+     "win": 1.0,
+     "packet": 1
+    },
+    {
+     "dev": 60,
+     "arm": "r1_N9",
+     "rater": "X",
+     "win": 1.0,
+     "packet": 1
+    },
+    {
+     "dev": 168,
+     "arm": "r1_T75",
+     "rater": "X",
+     "win": 0.0,
+     "packet": 1
+    },
+    {
+     "dev": 168,
+     "arm": "r1_N9",
+     "rater": "X",
+     "win": 0.0,
+     "packet": 1
+    },
+    {
+     "dev": 55,
+     "arm": "r1_N9",
+     "rater": "X",
+     "win": 1.0,
+     "packet": 1
+    },
+    {
+     "dev": 55,
+     "arm": "r1_T75",
+     "rater": "X",
+     "win": 1.0,
+     "packet": 1
+    },
+    {
+     "dev": 6,
+     "arm": "r1_N9",
+     "rater": "X",
+     "win": 0.5,
+     "packet": 1
+    },
+    {
+     "dev": 6,
+     "arm": "r1_T75",
+     "rater": "X",
+     "win": 0.5,
+     "packet": 1
+    },
+    {
+     "dev": 132,
+     "arm": "r1_N9",
+     "rater": "Y",
+     "win": 0.0,
+     "packet": 2
+    },
+    {
+     "dev": 132,
+     "arm": "r1_T75",
+     "rater": "Y",
+     "win": 1.0,
+     "packet": 2
+    },
+    {
+     "dev": 55,
+     "arm": "r1_N9",
+     "rater": "Y",
+     "win": 0.0,
+     "packet": 2
+    },
+    {
+     "dev": 55,
+     "arm": "r1_T75",
+     "rater": "Y",
+     "win": 1.0,
+     "packet": 2
+    },
+    {
+     "dev": 6,
+     "arm": "r1_T75",
+     "rater": "Y",
+     "win": 0.5,
+     "packet": 2
+    },
+    {
+     "dev": 6,
+     "arm": "r1_N9",
+     "rater": "Y",
+     "win": 0.5,
+     "packet": 2
+    },
+    {
+     "dev": 157,
+     "arm": "r1_N9",
+     "rater": "Y",
+     "win": 1.0,
+     "packet": 2
+    },
+    {
+     "dev": 157,
+     "arm": "r1_T75",
+     "rater": "Y",
+     "win": 0.0,
+     "packet": 2
+    },
+    {
+     "dev": 85,
+     "arm": "r1_N9",
+     "rater": "Y",
+     "win": 0.5,
+     "packet": 2
+    },
+    {
+     "dev": 85,
+     "arm": "r1_T75",
+     "rater": "Y",
+     "win": 0.5,
+     "packet": 2
+    },
+    {
+     "dev": 168,
+     "arm": "r1_T75",
+     "rater": "Y",
+     "win": 0.0,
+     "packet": 2
+    },
+    {
+     "dev": 168,
+     "arm": "r1_N9",
+     "rater": "Y",
+     "win": 0.0,
+     "packet": 2
+    },
+    {
+     "dev": 197,
+     "arm": "r1_N9",
+     "rater": "Y",
+     "win": 1.0,
+     "packet": 2
+    },
+    {
+     "dev": 197,
+     "arm": "r1_T75",
+     "rater": "Y",
+     "win": 1.0,
+     "packet": 2
+    },
+    {
+     "dev": 60,
+     "arm": "r1_T75",
+     "rater": "Y",
+     "win": 1.0,
+     "packet": 2
+    },
+    {
+     "dev": 60,
+     "arm": "r1_N9",
+     "rater": "Y",
+     "win": 1.0,
+     "packet": 2
+    },
+    {
+     "dev": 103,
+     "arm": "r1_T75",
+     "rater": "Y",
+     "win": 1.0,
+     "packet": 2
+    },
+    {
+     "dev": 103,
+     "arm": "r1_N9",
+     "rater": "Y",
+     "win": 1.0,
+     "packet": 2
+    },
+    {
+     "dev": 98,
+     "arm": "r1_T75",
+     "rater": "Y",
+     "win": 1.0,
+     "packet": 2
+    },
+    {
+     "dev": 98,
+     "arm": "r1_N9",
+     "rater": "Y",
+     "win": 1.0,
+     "packet": 2
+    },
+    {
+     "dev": 222,
+     "arm": "r1_T75",
+     "rater": "X",
+     "win": 0.5,
+     "packet": 3
+    },
+    {
+     "dev": 222,
+     "arm": "r1_N9",
+     "rater": "X",
+     "win": 0.5,
+     "packet": 3
+    },
+    {
+     "dev": 34,
+     "arm": "r1_N9",
+     "rater": "X",
+     "win": 0.0,
+     "packet": 3
+    },
+    {
+     "dev": 34,
+     "arm": "r1_T75",
+     "rater": "X",
+     "win": 1.0,
+     "packet": 3
+    },
+    {
+     "dev": 191,
+     "arm": "r1_T75",
+     "rater": "X",
+     "win": 1.0,
+     "packet": 3
+    },
+    {
+     "dev": 191,
+     "arm": "r1_N9",
+     "rater": "X",
+     "win": 0.0,
+     "packet": 3
+    },
+    {
+     "dev": 115,
+     "arm": "r1_T75",
+     "rater": "X",
+     "win": 1.0,
+     "packet": 3
+    },
+    {
+     "dev": 115,
+     "arm": "r1_N9",
+     "rater": "X",
+     "win": 1.0,
+     "packet": 3
+    },
+    {
+     "dev": 170,
+     "arm": "r1_N9",
+     "rater": "X",
+     "win": 1.0,
+     "packet": 3
+    },
+    {
+     "dev": 170,
+     "arm": "r1_T75",
+     "rater": "X",
+     "win": 0.0,
+     "packet": 3
+    },
+    {
+     "dev": 219,
+     "arm": "r1_T75",
+     "rater": "X",
+     "win": 0.0,
+     "packet": 3
+    },
+    {
+     "dev": 219,
+     "arm": "r1_N9",
+     "rater": "X",
+     "win": 0.0,
+     "packet": 3
+    },
+    {
+     "dev": 27,
+     "arm": "r1_N9",
+     "rater": "X",
+     "win": 0.0,
+     "packet": 3
+    },
+    {
+     "dev": 27,
+     "arm": "r1_T75",
+     "rater": "X",
+     "win": 1.0,
+     "packet": 3
+    },
+    {
+     "dev": 173,
+     "arm": "r1_T75",
+     "rater": "X",
+     "win": 0.5,
+     "packet": 3
+    },
+    {
+     "dev": 173,
+     "arm": "r1_N9",
+     "rater": "X",
+     "win": 0.5,
+     "packet": 3
+    },
+    {
+     "dev": 233,
+     "arm": "r1_N9",
+     "rater": "X",
+     "win": 0.0,
+     "packet": 3
+    },
+    {
+     "dev": 233,
+     "arm": "r1_T75",
+     "rater": "X",
+     "win": 0.0,
+     "packet": 3
+    },
+    {
+     "dev": 40,
+     "arm": "r1_T75",
+     "rater": "X",
+     "win": 1.0,
+     "packet": 3
+    },
+    {
+     "dev": 40,
+     "arm": "r1_N9",
+     "rater": "X",
+     "win": 0.0,
+     "packet": 3
+    },
+    {
+     "dev": 219,
+     "arm": "r1_N9",
+     "rater": "Y",
+     "win": 1.0,
+     "packet": 4
+    },
+    {
+     "dev": 219,
+     "arm": "r1_T75",
+     "rater": "Y",
+     "win": 0.0,
+     "packet": 4
+    },
+    {
+     "dev": 27,
+     "arm": "r1_T75",
+     "rater": "Y",
+     "win": 1.0,
+     "packet": 4
+    },
+    {
+     "dev": 27,
+     "arm": "r1_N9",
+     "rater": "Y",
+     "win": 0.0,
+     "packet": 4
+    },
+    {
+     "dev": 191,
+     "arm": "r1_N9",
+     "rater": "Y",
+     "win": 0.0,
+     "packet": 4
+    },
+    {
+     "dev": 191,
+     "arm": "r1_T75",
+     "rater": "Y",
+     "win": 1.0,
+     "packet": 4
+    },
+    {
+     "dev": 115,
+     "arm": "r1_T75",
+     "rater": "Y",
+     "win": 1.0,
+     "packet": 4
+    },
+    {
+     "dev": 115,
+     "arm": "r1_N9",
+     "rater": "Y",
+     "win": 1.0,
+     "packet": 4
+    },
+    {
+     "dev": 173,
+     "arm": "r1_T75",
+     "rater": "Y",
+     "win": 0.5,
+     "packet": 4
+    },
+    {
+     "dev": 173,
+     "arm": "r1_N9",
+     "rater": "Y",
+     "win": 0.5,
+     "packet": 4
+    },
+    {
+     "dev": 170,
+     "arm": "r1_T75",
+     "rater": "Y",
+     "win": 0.0,
+     "packet": 4
+    },
+    {
+     "dev": 170,
+     "arm": "r1_N9",
+     "rater": "Y",
+     "win": 0.0,
+     "packet": 4
+    },
+    {
+     "dev": 34,
+     "arm": "r1_N9",
+     "rater": "Y",
+     "win": 0.0,
+     "packet": 4
+    },
+    {
+     "dev": 34,
+     "arm": "r1_T75",
+     "rater": "Y",
+     "win": 1.0,
+     "packet": 4
+    },
+    {
+     "dev": 233,
+     "arm": "r1_N9",
+     "rater": "Y",
+     "win": 0.0,
+     "packet": 4
+    },
+    {
+     "dev": 233,
+     "arm": "r1_T75",
+     "rater": "Y",
+     "win": 0.0,
+     "packet": 4
+    },
+    {
+     "dev": 40,
+     "arm": "r1_N9",
+     "rater": "Y",
+     "win": 0.0,
+     "packet": 4
+    },
+    {
+     "dev": 40,
+     "arm": "r1_T75",
+     "rater": "Y",
+     "win": 1.0,
+     "packet": 4
+    },
+    {
+     "dev": 222,
+     "arm": "r1_T75",
+     "rater": "Y",
+     "win": 0.5,
+     "packet": 4
+    },
+    {
+     "dev": 222,
+     "arm": "r1_N9",
+     "rater": "Y",
+     "win": 0.5,
+     "packet": 4
+    }
+   ],
+   "shares": {
+    "r1_N9": 0.425,
+    "r1_T75": 0.625
+   }
   }
  ]
 }
