@@ -391,6 +391,7 @@ class DiscourseWriter final : public wkn::StructureWriter {
         const int K = std::max(o.gate_k, 1);
         std::vector<wkn::K5::State> drafts(static_cast<std::size_t>(K));
         while (s.out.size() < o.bytes && s.step < o.max_words) {
+            m.regrow(s, o, true);  // K5_RETRIEVE2.md (off: nothing)
             ex.prepare(c);
             // the next fact: P1's plan in its order, then the highest focus weight
             std::size_t pick = dp.facts.size();
@@ -627,6 +628,7 @@ class DiscourseWriter final : public wkn::StructureWriter {
     void free_sentence(const wkn::K5& m, st::Context& c, wkn::K5::State& s, std::uint64_t seed, std::uint64_t no, const wkn::Options& o,
                        const std::vector<double>& assoc, std::vector<wkn::K5::State>& drafts, wkn::GenStats& g) const {
         const Model& md = *md_;
+        m.regrow(s, o, true);  // K5_RETRIEVE2.md: once, before the drafts copy the state (off: nothing)
         const int K = static_cast<int>(drafts.size());
         std::vector<double> pmi(static_cast<std::size_t>(K)), topic(pmi.size()), grid(pmi.size()), mk(pmi.size()), rec(pmi.size());
         std::vector<double> ar;  // K5_COHERENCE.md (--k5-gate K,wr=W): the association with the previous sentence

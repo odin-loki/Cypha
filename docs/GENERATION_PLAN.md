@@ -2642,3 +2642,11 @@ Old binary main 9cbd277; old and new were started together.
   - fact precision 0.924 [0.883, 0.959] (HLT 0.924), contradicted 0.045;
   - copy32 0.264, no 13-word copies.
 - This is the first CyphaLM writer above SCRIBE's G4 bar of 0.70 on test (GPT-2 small: 0.767). SCRIBE alone is not the evidence (§13.57); the raters are: 0.860 and 0.880 against HLT.
+
+### 13.67 G4, build on the retrieval win (registered 2026-11-12, before any arm runs; [K5_RETRIEVE2](reports/K5_RETRIEVE2.md))
+
+- **Why:** K1 (§13.66) left known limits: the planner's fact-sentence fill does not read the overlay; one k for all lengths; in long text the link to the sentence before does not move.
+- **The change** (new `--k5-retrieve` fields, off by default, byte-identical when off): `fill=1` (R-fill: the fill reads the overlay; the honest fill rules stay); `grow=B,k2=N` (R-grow: past each B bytes, at a sentence boundary, the overlay is rebuilt from N documents); `qtext=1` (the later query is the prompt and the text so far).
+- **Arms** (K1 plus): RF (`fill=1`), RG (`grow=500,k2=4`), RQ (`grow=500,k2=4,qtext=1`), RFG (`fill=1,grow=500,k2=4`); each also long (`--bytes 1800 --k5-max-words 600`).
+- **Screen:** verbatim13 0; copy32 at most 0.30, short and long; SCRIBE v2 at least K1 − 0.03 (long: K1_long − 0.03); fact precision at least 0.874; the leak check 0; my strict reading (keyword patchwork fails). At most 2 candidates, one per idea where possible.
+- **Judge:** blind pairwise raters against K1 at 460 characters (`bench/blind/ret2_pair`, seed 20261127) and 1,500 characters (`bench/blind/ret2_long`, seed 20261128). Adopted if better by §13.38's rule on either reading and at least 0.5 on the other; best by the weaker of its two lower bounds, then lower copy32. An arm equal to K1 at 460 characters counts 0.5 there.
