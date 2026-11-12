@@ -97,3 +97,52 @@ Blind pairwise raters against K1 at 460 characters: `scripts/blind_rate.py make 
 - At least one arm fails the screen on my reading (broken clauses no better than K1's).
 - No arm reaches a win share of 0.70. If one is adopted, the 1–10 round moves by less than 0.5 point.
 - Wall time: 1.5–4 hours an arm on this shared machine (K1: 10 minutes).
+
+## Results (2026-11-13; dev, seed 0, 250 prompts)
+
+**Checks.** The final binary (060b4e52) with the flag off equals K1's GEN file under `cmp` (9:40 wall, 11.3 GB). The selftest passes. MA, the check, scores like K1, as predicted: decoding random bytes is sampling.
+
+| Arm | SCRIBE v2 [95%] | v3.1 | copy32 | verbatim13 | fact precision [95%] | mean surprise − K1 (bits a word) [95%] | on_prev − K1 [95%] | stuff3 − K1 [95%] | sentences in 460 chars | wall | peak RAM |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| K1 | 0.704 [0.673, 0.735] | 0.665 | 0.275 | 0 | 0.918 [0.867, 0.962] | — (7.806) | — (0.232) | — (0.0214) | 5.30 | 9:46 | 11.3 GB |
+| MA (check) | 0.712 [0.682, 0.742] | 0.667 | 0.280 | 0 | 0.935 [0.888, 0.974] | −0.061 [−0.134, +0.014] | +0.020 [−0.006, +0.048] | −0.0010 | 5.25 | 11:17 | 12.5 GB |
+| MJ | 0.698 [0.668, 0.729] | 0.674 | 0.273 | 0 | 0.924 [0.874, 0.966] | −0.058 [−0.127, +0.011] | −0.020 [−0.039, −0.001] | +0.0008 | 6.04 | 15:09 | 12.5 GB |
+| MR | **0.810** [0.784, 0.836] | 0.725 | 0.277 | 0 | 0.918 [0.867, 0.962] | −0.211 [−0.305, −0.115] | +0.015 [−0.016, +0.045] | **+0.0161** [+0.0117, +0.0209] | 6.72 | 21:03 | 12.6 GB |
+| MV | 0.715 [0.686, 0.744] | 0.649 | 0.254 | 0 | 0.935 [0.888, 0.974] | −0.336 [−0.412, −0.258] | +0.019 [−0.006, +0.044] | +0.0005 | 5.32 | 20:01 | 12.8 GB |
+| MRJ | **0.802** [0.778, 0.829] | 0.739 | 0.268 | 0 | 0.918 [0.870, 0.959] | −0.122 [−0.213, −0.031] | +0.001 [−0.027, +0.032] | **+0.0227** [+0.0171, +0.0284] | 7.60 | 20:22 | 12.6 GB |
+
+Files: `bench/k5_mixdec/runs/` (GEN, SCRIBE, summaries, the decoder's counters, `time -v`), `bench/k5_mixdec/screen/facts/` (`gen_fact_check.py run --v2`), `bench/k5_mixdec/screen/hook.md` (`hook_screen.py`, 460 characters, 95% paired bootstrap).
+
+**Cost.** The decoder's arms took 15–21 minutes for 250 prompts on 6 threads (K1: 10), and about 1.3 GB more RAM (the 1 TB trie, Kneser–Ney, the learners). About 1.5 minutes of each is loading the models and priming the base (512 KiB at 1.92–1.94 bits a byte). The ratio and veto arms computed 27–36 million byte distributions, about 0.23 ms each on one thread; the judge alone 5.9 million. The learner's bits a byte on the human continuations of 12 dev prompts: 2.011 neutral, 1.975 primed on the prompt (smoke run). It is far weaker than `context8k` (1.49 on its own holdout): the price of a learner that can rewind.
+
+**Every arm passes the numbers** (verbatim13 0, copy32 ≤ 0.30, fact precision ≥ 0.874, SCRIBE v2 ≥ 0.674, mean surprise no more than 0.5 bits below K1). The decoder never changes a planned fact sentence: on planned prompts the first 460 characters are often K1's own.
+
+**My reading** (the 50 rated prompts' first 460 characters, side by side; 11 read closely, the rest skimmed):
+- **No arm writes grammatical sentences.** All read as K1 does: sentence-shaped word salad.
+- **MR and MRJ stay on the prompt's subject.** K1 drifts within a sentence or two; MR keeps to it.
+  - Monetary policy. K1: "Monetary policy in a church. … the British invaded by a policy of " one China"". MR: "A central idea of monetary policy. Monetary stability. … This entails managing the quantity of money in circulation, and setting reserve."
+  - Archery. K1 drifts to coups and "6,000 Ghost". MR: "The identities of the top eight archers. The team, with that archery. All six events were for men."
+  - Adjectives. K1: "the term " Achaeans " derives from the French words of core memory". MR: "Examples of adjectives, the adjectives light. The most widely recognized adjectives). In both Latin and Greek."
+- **The price is fragments and repetition.** MR writes more, shorter sentences (6.7 in 460 characters against 5.3), many without a verb ("Monetary stability.", "In both Latin and Greek."). It repeats the subject's word more (stuff3 0.037 against 0.021): "Cadillac. All of this, … Cadillac production cars. Cadillac." MRJ more so (7.6 sentences, stuff3 0.044). By my strict reading this is keyword repetition at the edge, not the patchwork that failed before (§13.34, §13.65): most of its sentences add a different phrase from the subject's field. I pass MR and MRJ, and state the doubt.
+- **SCRIBE v2 rose by 0.10** for MR and MRJ. SCRIBE has rewarded topic words that readers did not (§13.34, §13.53 R2, §13.65), so this is not evidence by itself.
+- **MV reads like K1**, drifting the same way ("Cadillac is a brand of luxury automobile, part of the Church was formed on the coast of Japan"). Its mean surprise is 0.34 bits lower: the veto removes rare words more than wrong ones.
+- **MJ reads like K1.** The judge changes the gate's choice in most prompts but not the kind of text.
+- **Copying did not rise** with the copy expert left out (0.268–0.277 against 0.275). With it (smoke run) it rose to 0.34–0.46.
+- **The link to the sentence before (on_prev) did not move** in any arm (±0.02). The smoke run's +0.19 came with the copy expert and the article's phrases.
+
+**Predictions:**
+- flag off equals K1: **hit**;
+- MA within ±0.03 SCRIBE and ±0.02 copy32: **hit** (+0.008, +0.005);
+- MJ: copy32 ±0.03 **hit**; SCRIBE ±0.03 **hit**; on_prev +0.02 to +0.08 **miss** (−0.020);
+- MR: copy32 ±0.03 **hit**; SCRIBE −0.06 to +0.02 **miss** (+0.106); on_prev +0.03 to +0.10 **miss** (+0.015); mean surprise up **miss** (down 0.21);
+- MV: SCRIBE ±0.02 **hit** (+0.011); copy32 ±0.02 **miss** (−0.021); reads like K1 **hit**;
+- MRJ like MR with on_prev up more: **miss** (+0.001);
+- at least one arm fails my reading: **miss** (all pass; MR and MRJ with a stated doubt);
+- 1.5–4 hours an arm: **miss** (15–21 minutes: the cap of 16 scored words, and a quieter machine);
+- the raters' predictions are scored when they have run.
+
+## Candidates and packets
+
+- **Candidates: MR and MRJ.** They are the two I read as best (on the subject where K1 drifts) and the two highest SCRIBE v2. Both use the ratio; MRJ adds the judge, the only other way in that changed the text with it. MJ and MV read like K1 and would cost the raters a round for no expected change.
+- **Packets:** `bench/blind/mix_pair/`: `scripts/blind_rate.py make --mode pair --baseline K1 --arm K1=… --arm MR=… --arm MRJ=… --seed 20261203`, the 50 prompts of `bench/blind/llm_rating/prompts.json`, 460 characters, with `key.b64` and `RATER_PROMPT.md`. `KEY.json` is kept off the branch.
+- **The rule, as registered:** §13.38's, on the 460-character reading; then the 1–10 round for the winner, before any default changes. The lead runs the raters.
