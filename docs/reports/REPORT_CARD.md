@@ -33,6 +33,7 @@
 - **Writing:** the card writes with the recommended writer, K5 (`sample --k5 $K5_TEXT`, default `/root/work/fz/train.txt`). `--writer bytes` gives the byte sampler. The card's meta records the writer.
 - **SCRIBE:** v2 stays the score of record. SCRIBE v3.1 is shown beside it, on the same samples (`L.scribe31.md`; `gen_eval.sh` writes it too).
 - Checked: `cypha_report_card selftest` (29 checks; the newest line wins), and a summary of real files gave context8k headline `context8k_bpc`, with K5's dev samples at v2 0.498 and v3.1 0.483.
+- **2026-11-12 (ledger 118 closed; [QA_RECHECK](QA_RECHECK.md)).** The `qa` headline now starts with the doc cache's line, `holdout2_trie_ig_cls_sim_copy_doc_bpc` (GEN-C2 made the cache a default of `qa`'s holdout lines; the reader stopped one line short and would have shown 1.7256 instead of 1.6974). The selftest has 31 checks. Peak RSS now polls the part's process and its children: with `gena`, the old poll read the `gen_eval.sh` shell (3 MB) instead of `sample` (11.3 GB). A bare `[ ] && echo` in the `gena` branch stopped the script before the summary; fixed.
 
 ## Registered rules (2026-10-29, before the first card run)
 
@@ -49,6 +50,7 @@
    - **LCI** (`compute_lci`): P_gain on the paired SCRIBE differences (ε 0); canaries: answers not wrong and answers right, each non-inferior within 1 point (δ 0.01); γ from the fresh SCRIBE gain against the dev gain, **only with `--fresh`** (otherwise γ and LCI are "not read" and the card stops at P_gain, r, σ, κ); c = 1 (generation has no calibration read); σ from the gains at the three sampling temperatures, which stand in for seeds (the card says so); κ = 1 if the candidate's built `qa` peak is within the RAM budget (200 MB, Odin's RAM request), else 0; the n_eff cap of 0.5 below 200 pairs.
 4. **ECS on the card** is the abstain side of PLAN §7.4: don't-know precision and recall against questions outside the 8 MiB slice, the in-slice share CyphaLM should have refused, and the `<|unknown …|>` tag counts (complete, reason right), as `cyphalm_trie qa` prints them.
 5. **Headline lines.** BPC: `qa`'s fullest holdout stack line present (with the defaults, `holdout2_trie_ig_cls_sim_copy_bpc`, which `qa` scores on the first 512 KiB of the holdout's second half) and context8k's fullest line (`trie_plus_context_8192_cls_sim_copy_bpc`). Answers: `CV chat/trie_ig all` (the out-of-fold gate at 2% wrong, 5-fold inside dev).
+   *Amended 2026-11-12 (ledger 118):* the lines move with the defaults. `qa`: the doc cache's line first (`holdout2_trie_ig_cls_sim_copy_doc_bpc`). `context8k`: the run's own best line, `context8k_bpc` (the meta mix today).
 6. **Nothing is tuned on the card.** It reports; choices stay in each change's own registered rules.
 
 ## Predictions for today's card (main `ba5bef7`, defaults, `c1l`, `a4d` source, dev only)
@@ -172,6 +174,24 @@ The binaries came from a Release build of the same tree (`CYPHALM_TRIE`, `SCRIBE
 - **ECS.** The card has the abstain side only. Answer calibration (ECE) needs a confidence per answer in `qa`'s rows file, which it does not write.
 - **GEN-A's harness** was not in this checkout, so `auto` chose `a4d`. `--gen-source gena` is untested. The card reads the harness's ladder table; a paired SCRIBE comparison also needs a per-sample export, which `gen_eval.sh` does not write yet.
 - **Frozen-test runs** use `parse_all_span.tsv` for the candidate and `parse_dev_span.tsv` for a baseline. The dev questions' parses should be the same in both; the card does not check this.
+
+## Card of 2026-11-12 (main `fb79cc93`, defaults, dev)
+
+**Configuration.** Main's defaults (no flags), protocol `c1l`, text source `gena` (GEN-A's 250 dev prompts), writer K5 (`--k5 /mnt/d/cypha_llm/fuzzy/train.txt`; 337 MB counts, gate 16, LDA term, planner). Dev only: no fresh text and no frozen test were read. The binaries were built Release from `fb79cc93`'s code; the branch commits on top (`91e319ae`, `5643f405`, `b9d0e85c`, `0d5cfbf4`, which the TSV names) change only docs, the card's reader and the card script. Run on Odin's PC, each part pinned to 4 CPUs, `context8k` under `flock ~/.cypha_full.lock`. TSV: [`report_card/card_20261112.tsv`](report_card/card_20261112.tsv). Checks and RAM per configuration: [QA_RECHECK](QA_RECHECK.md).
+
+| Measure | Result |
+|---|---|
+| BPC | `context8k_bpc` **1.4962** (the meta mix). `qa` holdout 1.6974 (`holdout2_trie_ig_cls_sim_copy_doc_bpc`); trie + InfiniGram 1.9186. Every expert's paired gain interval is clear of zero (doc cache +0.0282 [0.0253, 0.0311]) |
+| Answers, after the gate | **3 right / 2 wrong / 125 abstained** of 130 (wrong 0.015 [0.004, 0.054]); before the gate 6 / 56 / 68 |
+| Don't know | recall 30 / 30 (1.000 [0.886, 1.000]); precision 0.441 [0.329, 0.559]; refused 38 of the 98 in-slice questions the base rows get wrong |
+| T-perturb (`context8k`) | seen 3/3, one letter changed 3/3, " Thanks." 0/3, paraphrase 0/3, held-out Dolly 0/30, wiki facts 0/8 |
+| Text (K5, dev) | SCRIBE v2 **0.610 [0.577, 0.645]** (human 0.923, sentences shuffled 0.344); v3.1 0.546 [0.519, 0.573]; surface S 0.929; copy32 0.2416, no 13-word copies |
+| Peak RAM (VmHWM, kB) | `qa` 201,060 (196.3 MiB), `context8k` 1,976,344, writer (`sample` + `scribe`) 11,307,780 |
+| Wall time (4 CPUs, shared machine) | `qa` 1,559 s, `context8k` 1,193 s, writer 494 s |
+
+**Against earlier records.** Answers and the rows file equal M18's R1 (`ac9ac07`). `context8k`'s whole output equals main's full run of 2026-11-06 (`cmp`). The writer's dev file equals L1's (`cmp`). The 2026-10-29 card above read 2 / 0 / 128: byte Kneser–Ney (BKN2, `8e063682`) moved the answers to 3 / 2 / 125 by design.
+
+**Units.** The card's Cost rows divide kB by 1,000 (201.1 MB here). M18's report divides by 1,024 (196.3 MB). M18's 190 MB line is read in the second unit.
 
 ## How to run it
 

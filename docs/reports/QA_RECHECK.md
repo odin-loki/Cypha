@@ -56,4 +56,63 @@ Ledger 118 left "the report card's headline line" open. The card's reader alread
 
 ## Results
 
-(To be filled after the runs.)
+Run 2026-11-12, 13:47–14:36 UTC, binaries built from `fb79cc93`'s code (branch commit `91e319ae`, docs only). Outputs: `~/qa_recheck_runs` on the PC (the card in `card/`, Q2 and Q3 beside it).
+
+**Outcome: no answer changed. No regression.** M18 is still open.
+
+### Answers (dev, the rule)
+
+| Run | Gate (`CV chat/trie_ig all`) | Before the gate | `RAW`/`CV`/`ABSTAIN`/`RC` lines vs R1 | Rows vs R1 |
+|---|---|---|---|---|
+| R1 (`ac9ac07`, the reference) | 3 right, 2 wrong, 125 abstained | 6 / 56 / 68 | — | — |
+| Q1 built (the card) | 3, 2, 125 | 6 / 56 / 68 | all 70 equal | byte-identical |
+| Q2 built, `--save` | 3, 2, 125 | 6 / 56 / 68 | all 70 equal | byte-identical |
+| Q3 served, `--model` | 3, 2, 125 | 6 / 56 / 68 | all 70 equal | byte-identical |
+
+The whole `qa` output differs from R1 (and Q3 from R2) only in timing lines (`LATENCY`, `SIM_LAT`, `build_s`, `seconds`). Every BPC line is the same, for example `holdout2_trie_ig_cls_sim_copy_doc_bpc 1.697360`.
+
+Q4 (`a0`, no earlier record on these defaults): gate 0 right, 0 wrong, 130 abstained; before the gate 1 / 128 / 1. It is not under the rule.
+
+### T-perturb and `context8k`
+
+The card's full `context8k` run equals `F_old.out` byte for byte (`cmp`). `context8k_bpc` 1.4962 (the meta mix, `M1Gs`). Tallies: seen 3/3, one letter changed 3/3, " Thanks." 0/3, paraphrase 0/3, held-out Dolly 0/30, wiki facts 0/8. Peak 1,976,344 kB, 1,193 s on 4 CPUs.
+
+### `qa` RAM per configuration (VmHWM, 1 s poll)
+
+| Config | Peak kB | MiB | M18 line (190) | 2026-11-01 (0.25 s poll) |
+|---|---:|---:|---|---|
+| Q1 built, C1L (card) | 201,060 | 196.3 | over by 6.3 | — |
+| Q2 built, C1L `--save` | 205,452 | 200.6 | over by 10.6; over 200 | R1 191.8 |
+| Q3 served, C1L `--model` | 194,256 | 189.7 | under by 0.3 | R2 187.7 |
+| Q4 built, `a0` | 180,508 | 176.3 | under by 13.7 | — |
+| frozen-test configuration | not run | — | — | R3 193.8 |
+
+The peaks rose 2.0–8.8 MiB since 2026-11-01, with the same outputs. Four runs shared the PC (load 9–31), but VmHWM does not depend on load. The cause is not bisected here; M18 step 2 should start from `ac9ac07..fb79cc93`. Q2 (`--save`) is now above Odin's 200 MB limit, by 0.6 MiB.
+
+### The writer
+
+`gen_eval.sh dev` with K5 equals L1's dev GEN file byte for byte, the MODEL line included. SCRIBE v2 0.610 [0.577, 0.645], v3.1 0.546 [0.519, 0.573], surface S 0.929, copy32 0.2416, no 13-word copies. Peak 11,307,780 kB (`sample` + `scribe`), 494 s on 4 CPUs.
+
+### The card's headline (ledger 118)
+
+Closed, with fixes to the card's own code and docs only:
+- `cypha_report_card`: the `qa` headline list starts with `holdout2_trie_ig_cls_sim_copy_doc_bpc` (selftest 31 checks, 0 failed).
+- `cypha_report_card.sh`: peak RSS takes the largest VmHWM of the part and its children. The first writer run read 3 MB, the `gen_eval.sh` shell. The writer was run again with the fix (the same file, `cmp`).
+- `cypha_report_card.sh`: in the `gena` branch, `[ $FRESH = 1 ] && echo …` was the last command, so without `--fresh` the script exited 1 under `set -e` and wrote no summary. Now an `if`.
+- REPORT_CARD.md rule 5 amended; CURRENT.md's card section replaced by today's card.
+
+### Predictions scored
+
+| # | Prediction | Result | |
+|---|---|---|---|
+| P1 | Answers equal R1; rows byte-identical | 3 / 2 / 125 and 6 / 56 / 68 in Q1, Q2, Q3; rows byte-identical | **hit** |
+| P2 | `context8k` equals `F_old.out` | `cmp` equal; 1.4962; tallies the same | **hit** |
+| P3 | Q1, Q2 188–198; Q3 184–194; Q4 150–185 MiB; C1L built and served above 190 | Q1 196.3, Q2 200.6, Q3 189.7, Q4 176.3; served is 0.3 under 190 | **partial** (Q2 and the served part missed) |
+| P4 | Writer equals L1; SCRIBE v2 0.610 | `cmp` equal; 0.610 | **hit** |
+| P5 | Headlines `context8k_bpc` and the doc cache's `qa` line | 1.4962 and 1.6974 | **hit** |
+
+### Not on the PC, or not run
+
+- Nothing the dev parts needed was missing. The C1L inputs are in `bench/eval/qa_inputs.tar.gz`; enwik8, Dolly, SCRIBE's vectors (`/mnt/d/cypha_llm/scribe/v32`) and K5's text are under `/mnt/d/cypha_llm`.
+- The card script's defaults still point at the cloud paths (`/root/...`). On the PC, set `ENWIK8`, `DOLLY`, `SCRIBE_VEC`, `K5_TEXT`, `QA_*` and `--gen-source gena` (no `HARNESS_READY` file on the PC).
+- Not run: the frozen test, the frozen-test configuration's peak (M18's R3), fresh text.
