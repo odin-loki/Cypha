@@ -2448,3 +2448,8 @@ Old binary main 9cbd277; old and new were started together.
 **Rule.** If `context8k_bpc` is lower by more than 0.005, the 1 TB file is recommended for `context8k` in CURRENT.md. The default itself does not change; that is Odin's call, because the file is 992 MB and lives only on the PC. Answers are not read here.
 
 **Prediction.** 1.47–1.50: the online experts now carry most of the gain, and the 1 TB trie helped by only 0.006 under the old stack (1.6906 against 1.6971).
+
+**§13.55 result** (2026-11-12): `context8k_bpc` **1.4900** with the 1 TB trie, against 1.4962 for main's default with the 8 MiB trie (−0.0062). The run took 7:39 wall and peaked at 2.92 GB (the default: 1.91 GB with O2).
+- **By the rule, the 1 TB file is recommended for `context8k`** (CURRENT.md). The default does not change; that is Odin's call.
+- Prediction 1.47–1.50: **hit**.
+- The gain is the same size as under the old stack (−0.0065 on 4 November). The online experts did not absorb it.
