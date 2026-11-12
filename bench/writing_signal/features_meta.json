@@ -1,0 +1,9 @@
+{
+ "train": "/mnt/d/cypha_llm/fuzzy/train.txt",
+ "tokens": 1356478,
+ "vocab": 31668,
+ "trigrams": 968922,
+ "human_median_sl_mean": 19.0,
+ "human_median_sl_cv": 0.41679081391668393,
+ "human_median_fw_share": 0.4533001245330012
+}
