@@ -2530,6 +2530,7 @@ int cmd_sample(const Args& a) {
         std::string k5_plan_fill = "beam";  // MERGE_FILL.md: --k5-plan-fill beam|dba, --k5-plan-beam N
         int k5_plan_beam = 0;
         std::string k5_plan_disc;  // PLAN_DISCOURSE.md: --k5-plan-discourse on|SPEC
+        std::string k5_skelfree;   // K5_SKELFREE.md: --k5-skelfree bank=FILE,... (planner/free_skel.hpp)
         cypha::cyphalm::planner::FillOpts k5_plan_q2;  // PLAN_FILL.md (§13.42 Q2): --k5-plan-typed FILE, --k5-plan-s1..s4
         for (const auto& [k, v] : a.k5_opts) {  // K5_UPGRADES.md
             std::string err;
@@ -2555,6 +2556,10 @@ int cmd_sample(const Args& a) {
             if (k == "--k5-plan-fill" || k == "--k5-plan-beam") {  // MERGE_FILL.md: the fill's search
                 if (k == "--k5-plan-fill") k5_plan_fill = v;
                 else k5_plan_beam = std::atoi(v.c_str());
+                continue;
+            }
+            if (k == "--k5-skelfree") {  // K5_SKELFREE.md
+                k5_skelfree = v;
                 continue;
             }
             if (k == "--k5-plan-discourse") {  // PLAN_DISCOURSE.md: on|SPEC, the whole paragraph planned (discourse.hpp)
@@ -2675,6 +2680,13 @@ int cmd_sample(const Args& a) {
         if (!k5_plan_disc.empty()) {  // PLAN_DISCOURSE.md: the planner's writer becomes the discourse writer
             std::string err;
             if (!cypha::cyphalm::planner::apply_discourse_flag(k5_plan_disc, base, err)) {
+                std::cerr << err << "\n";
+                return 2;
+            }
+        }
+        if (!k5_skelfree.empty() && k5_skelfree != "off") {  // K5_SKELFREE.md: skeleton-first free sentences (off: nothing)
+            std::string err;
+            if (!cypha::cyphalm::planner::apply_skelfree_flag(k5_skelfree, base, err)) {
                 std::cerr << err << "\n";
                 return 2;
             }

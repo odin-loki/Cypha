@@ -40,6 +40,7 @@
 ///
 /// Author: Odin Loch
 
+#include "cypha/lm/planner/free_skel.hpp"  // K5_SKELFREE.md: --k5-skelfree (off: nothing changes)
 #include "cypha/lm/planner/writer.hpp"
 #include "cypha/lm/stopwords.hpp"
 
@@ -231,9 +232,14 @@ struct DPlan {
 
 class DiscourseWriter final : public wkn::StructureWriter {
  public:
-    DiscourseWriter(std::shared_ptr<const Model> md, DiscourseParams p) : md_(std::move(md)), p_(p) {}
+    DiscourseWriter(std::shared_ptr<const Model> md, DiscourseParams p, std::shared_ptr<const FreeSkel> fk = nullptr)
+        : md_(std::move(md)), p_(p), fk_(std::move(fk)) {}
     ~DiscourseWriter() override {
         const Model& md = *md_;
+        if (fk_)  // K5_SKELFREE.md
+            std::fprintf(stderr, "k5-skelfree: %llu skeleton drafts over %llu sentence starts; the gate chose %llu skeleton and %llu K5 drafts\n",
+                         static_cast<unsigned long long>(fk_->n_drafts()), static_cast<unsigned long long>(fk_->n_sents()),
+                         static_cast<unsigned long long>(fk_->chosen_skel.load()), static_cast<unsigned long long>(fk_->chosen_k5.load()));
         if (md.planned == 0) return;
         std::fprintf(stderr, "k5-plan-discourse: %llu prompts planned; %llu fact sentences (%llu from linked entities), %llu free "
                      "sentences between facts, %llu after them; repeat ban lifted for %llu facts at the sentence edge, %llu "
@@ -353,7 +359,8 @@ class DiscourseWriter final : public wkn::StructureWriter {
         if (dp.base.path == "k5") {  // as P1: plain K5
             wkn::Options o2 = o;
             o2.structure = nullptr;
-            std::string out = m.generate(prompt, seed, o2, gst);
+            std::string out = fk_ ? generate_free_plain(m, *fk_, md.stats, prompt, seed, o2, gst)  // K5_SKELFREE.md
+                                  : m.generate(prompt, seed, o2, gst);
             log(prompt, dp, {}, {}, {}, 0, 0);
             return out;
         }
@@ -390,6 +397,7 @@ class DiscourseWriter final : public wkn::StructureWriter {
         std::uint64_t free_no = 1000;  // the free sentences' streams (K5's draft numbers, as P1's tail)
         const int K = std::max(o.gate_k, 1);
         std::vector<wkn::K5::State> drafts(static_cast<std::size_t>(K));
+        std::set<std::size_t> skel_used;  // K5_SKELFREE.md: the free skeletons offered in this paragraph
         while (s.out.size() < o.bytes && s.step < o.max_words) {
             m.regrow(s, o, true);  // K5_RETRIEVE2.md (off: nothing)
             ex.prepare(c);
@@ -494,7 +502,7 @@ class DiscourseWriter final : public wkn::StructureWriter {
             if (dp.ents[dp.of[pick]].hop > 0) ++n_linked_;
             if (p_.gap > 0 && ++since_free >= p_.gap && s.out.size() < o.bytes && s.step < o.max_words) {
                 ex.prepare(c);
-                free_sentence(m, c, s, seed, free_no++, o, assoc, drafts, g);
+                free_sentence(m, c, s, seed, free_no++, o, assoc, drafts, g, &skel_used);
                 since_free = 0, ++n_mid;
             }
         }
@@ -504,7 +512,7 @@ class DiscourseWriter final : public wkn::StructureWriter {
         // past the facts: K5's free sentences, chosen with the whole paragraph
         while (s.step < o.max_words && s.out.size() < o.bytes) {
             ex.prepare(c);
-            free_sentence(m, c, s, seed, free_no++, o, assoc, drafts, g);
+            free_sentence(m, c, s, seed, free_no++, o, assoc, drafts, g, &skel_used);
             ++n_end;
         }
         n_free_mid_ += static_cast<std::uint64_t>(n_mid), n_free_end_ += static_cast<std::uint64_t>(n_end);
@@ -518,6 +526,7 @@ class DiscourseWriter final : public wkn::StructureWriter {
     }
 
     const DiscourseParams& params() const { return p_; }
+    const std::shared_ptr<const Model>& model() const { return md_; }  // K5_SKELFREE.md
 
  private:
     // A year or a number (not an entity to link through).
@@ -626,7 +635,9 @@ class DiscourseWriter final : public wkn::StructureWriter {
     }
     // One free K5 sentence: K drafts from s, the paragraph gate's choice (c prepared); s and c take it.
     void free_sentence(const wkn::K5& m, st::Context& c, wkn::K5::State& s, std::uint64_t seed, std::uint64_t no, const wkn::Options& o,
-                       const std::vector<double>& assoc, std::vector<wkn::K5::State>& drafts, wkn::GenStats& g) const {
+                       const std::vector<double>& assoc, std::vector<wkn::K5::State>& drafts, wkn::GenStats& g,
+                       std::set<std::size_t>* skel_used = nullptr) const {
+        if (fk_ && skel_used) return free_sentence_skel(m, c, s, seed, no, o, assoc, g, *skel_used);  // K5_SKELFREE.md
         const Model& md = *md_;
         m.regrow(s, o, true);  // K5_RETRIEVE2.md: once, before the drafts copy the state (off: nothing)
         const int K = static_cast<int>(drafts.size());
@@ -673,6 +684,58 @@ class DiscourseWriter final : public wkn::StructureWriter {
         if (!z.tok.empty()) c.sents.push_back(std::move(z));
         s = std::move(drafts[bu]);
     }
+    // K5_SKELFREE.md: free_sentence with the skeleton drafts (free_skel.hpp) and the first k5 of K5's own drafts (all
+    // gate_k of them where no skeleton draft can be made), chosen by the same paragraph gate.
+    void free_sentence_skel(const wkn::K5& m, st::Context& c, wkn::K5::State& s, std::uint64_t seed, std::uint64_t no, const wkn::Options& o,
+                            const std::vector<double>& assoc, wkn::GenStats& g, std::set<std::size_t>& used) const {
+        const Model& md = *md_;
+        m.regrow(s, o, true);
+        std::vector<FreeSkel::Draft> ds = fk_->drafts(m, md.stats, o, s, seed, no, used);
+        const std::size_t nsk = ds.size();
+        const int want = nsk == 0 ? std::max(o.gate_k, 1) : fk_->params().k5;
+        for (int k = 0; k < want; ++k) {
+            FreeSkel::Draft d;
+            m.draft(s, seed, no, k, o, d.st, d.words, d.lp, d.g);
+            ds.push_back(std::move(d));
+        }
+        const std::size_t K = ds.size();
+        std::vector<double> pmi(K), topic(K), grid(K), mk(K), rec(K);
+        std::vector<double> ar;
+        if (o.gate_wr != 0 && !c.sents.empty()) {
+            std::vector<std::uint32_t> prev;
+            for (const auto& t : c.sents.back().tok) prev.push_back(m.id(t));
+            ar = m.prompt_assoc(prev);
+        }
+        std::vector<std::vector<std::string>> toks(K);
+        for (std::size_t k = 0; k < K; ++k) {
+            const auto& out = ds[k].st.out;
+            std::size_t nm = 0;
+            for (std::size_t i = s.out.size(); i < out.size(); ++i) nm += std::string_view("[]{}|=<>&*#").find(out[i]) != std::string_view::npos;
+            mk[k] = static_cast<double>(nm) / static_cast<double>(std::max<std::size_t>(out.size() - s.out.size(), 1));
+            pmi[k] = st::mean_assoc(assoc, ds[k].words);
+            if (!ar.empty()) rec[k] = st::mean_assoc(ar, ds[k].words);
+            for (const auto w : ds[k].words) toks[k].push_back(m.vocab()[w]);
+            topic[k] = tok_topic(toks[k], c.theta);
+            grid[k] = md.grid.trained() ? md.grid.append_logp(c.grid, md.grid.roles(toks[k])) : 0.0;
+        }
+        const auto zp = zscores(pmi), zt = zscores(topic), zg = zscores(grid);
+        const auto zr = ar.empty() ? std::vector<double>{} : zscores(rec);
+        std::size_t best = 0;
+        double bsc = -1e300;
+        for (std::size_t k = 0; k < K; ++k) {
+            double sc = p_.g_pmi * zp[k] + p_.g_topic * zt[k] + p_.g_grid * zg[k] - o.gate_wm * mk[k];
+            if (!ar.empty()) sc += o.gate_wr * zr[k];
+            if (k == 0 || sc > bsc) bsc = sc, best = k;
+        }
+        (best < nsk ? fk_->chosen_skel : fk_->chosen_k5)++;
+        g.add(ds[best].g);
+        ++g.gate_sents;
+        st::Sent z;
+        z.tok = toks[best];
+        z.ended = !z.tok.empty() && (z.tok.back() == "." || z.tok.back() == "!" || z.tok.back() == "?");
+        if (!z.tok.empty()) c.sents.push_back(std::move(z));
+        s = std::move(ds[best].st);
+    }
     // The PLAN line (P1's columns, so k5_planner_measures.py reads it), then one field "D|hops|entities|free|links" with
     // each written fact's hop, the linked entities (;; between), the free sentences between and after the facts, and
     // each linked entity's hop:kind:parent:fit (kind 1 a value of the parent's facts, 2 has the parent as a value,
@@ -715,6 +778,7 @@ class DiscourseWriter final : public wkn::StructureWriter {
 
     std::shared_ptr<const Model> md_;
     DiscourseParams p_;
+    std::shared_ptr<const FreeSkel> fk_;  // K5_SKELFREE.md (null: off)
     mutable std::atomic<std::uint64_t> n_fact_{0}, n_linked_{0}, n_free_mid_{0}, n_free_end_{0}, n_lift_edge_{0}, n_lift_all_{0};
 };
 
@@ -732,8 +796,29 @@ inline bool apply_discourse_flag(const std::string& spec, wkn::Options& o, std::
     return true;
 }
 
+// K5_SKELFREE.md: cyphalm_trie --k5-skelfree SPEC, after apply_discourse_flag: the discourse writer's free sentences
+// (and the plain path's) take skeleton drafts. False (err) if the discourse writer is not on, SPEC is bad, or the
+// default gate's MBR or entity-grid terms are set (generate_free_plain does not take them).
+inline bool apply_skelfree_flag(const std::string& spec, wkn::Options& o, std::string& err) {
+    FreeSkelParams p;
+    if (!parse_free_skel(spec, p, err)) return false;
+    const auto* w = dynamic_cast<const DiscourseWriter*>(o.structure.get());
+    if (!w) return err = "--k5-skelfree needs the discourse planner (the default)", false;
+    if (o.gate_k <= 1 || !o.zgate()) return err = "--k5-skelfree needs the default z-scored sentence gate (--k5-gate K > 1 with the LDA term)", false;
+    if (o.mbr_sent_w != 0 || o.eg_w != 0 || o.first_k > 0 || o.first_req) return err = "--k5-skelfree does not take the gate's MBR, grid or first-sentence terms", false;
+    auto bank = std::make_shared<FreeBank>();
+    if (!bank->load(p.bank, err)) return false;
+    auto fk = std::make_shared<const FreeSkel>(bank, p);
+    o.structure = std::make_shared<DiscourseWriter>(w->model(), w->params(), fk);
+    o.structure_desc += ",skelfree=" + p.describe();
+    std::fprintf(stderr, "k5-skelfree: %s; bank %s: %zu skeletons, %llu sentences\n", p.describe().c_str(), p.bank.c_str(), bank->shapes.size(),
+                 static_cast<unsigned long long>(bank->total));
+    return true;
+}
+
 // Selftest: the spec parser, z-scores and the sequence match.
 inline bool discourse_self_test(std::string& err) {
+    if (!free_skel_self_test(err)) return false;  // K5_SKELFREE.md
     DiscourseParams p;
     if (!parse_discourse("on", p, err) || p.hops != 2) return err = "discourse: on", false;
     if (!parse_discourse("hops=3,gap=2,w_hop=0.5", p, err) || p.hops != 3 || p.gap != 2 || p.w_hop != 0.5) return err = "discourse: spec", false;
