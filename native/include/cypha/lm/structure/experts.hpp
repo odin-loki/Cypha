@@ -21,6 +21,10 @@
 ///   grid_full   the entity grid (entity_grid.hpp): the change in the grid's log2 probability when the candidate joins
 ///   grid_cont   ... its continuation score (kept entities only)
 ///
+/// Experts that read the same statistics share one pass (docs/reports/MERGE_GATE.md, GENERATION_PLAN §13.40 M4): the
+/// class n-gram's contexts are read off its n-grams; reference and time, and topic's count and ratio, share a pass
+/// over the tokens; a name's statistics serve its co-occurrence and its slot type; counting and scoring share one slot walk.
+///
 /// Author: Odin Loch
 
 #include "cypha/lm/entity_grid.hpp"  // wip/k5-discourse
@@ -328,26 +332,12 @@ class Stats {
             std::string p1 = "<s>", p2 = "<s>";
             for (const auto& s : d) {
                 const auto runs = name_runs(s);
-                std::size_t ri = 0;
-                for (std::size_t i = 0; i < s.tok.size(); ++i) {
-                    int ty = 0;
-                    std::size_t skip = 0;
-                    if (ri < runs.size() && runs[ri].first == i) {
-                        ty = type_of_name(join(s, runs[ri].first, runs[ri].second));
-                        skip = runs[ri].second - runs[ri].first - 1;
-                        ++ri;
-                    } else if (year_of(s.tok[i])) {
-                        ty = 3;
-                    } else if (is_number(s.tok[i])) {
-                        ty = 4;
-                    }
-                    ++slot1_[slot_h(p1) * kSlotT + ty];
-                    ++slot2_[slot_h(p2 + " " + p1) * kSlotT + ty];
-                    ++slot_all_[ty];
-                    const std::string w = ty ? std::string(ty == 3 ? "<year>" : ty == 4 ? "<num>" : "<name>") : lower(s.tok[i]);
-                    p2 = p1, p1 = w;
-                    i += skip;
-                }
+                slot_walk(s, runs, [&](std::size_t r) { return type_of_name(join(s, runs[r].first, runs[r].second)); }, p2, p1,
+                          [&](int ty, const std::string& q2, const std::string& q1) {
+                              ++slot1_[slot_h(q1) * kSlotT + ty];
+                              ++slot2_[slot_h(q2 + " " + q1) * kSlotT + ty];
+                              ++slot_all_[ty];
+                          });
             }
         }
         docs.clear();
@@ -386,6 +376,20 @@ class Stats {
         const auto it = caps_.find(h64(lower(t)));
         if (it == caps_.end()) return next_cap;
         return it->second.first > it->second.second;
+    }
+    // The relations expert's slot walk over s, for its counts (build) and its scores (features) alike: each slot's type
+    // (0 a word, run_type(r) for name run r, which is one slot, 3 a year, 4 a number) with the two words before it as
+    // shapes, visit(type, p2, p1); then p2, p1 move on.
+    template <class RunType, class Visit>
+    static void slot_walk(const Sent& s, const std::vector<std::pair<std::size_t, std::size_t>>& runs, RunType&& run_type, std::string& p2, std::string& p1, Visit&& visit) {
+        for (std::size_t i = 0, ri = 0; i < s.tok.size(); ++i) {
+            int ty = year_of(s.tok[i]) ? 3 : is_number(s.tok[i]) ? 4 : 0;
+            std::size_t skip = 0;
+            if (ri < runs.size() && runs[ri].first == i) ty = run_type(ri), skip = runs[ri].second - runs[ri].first - 1, ++ri;
+            visit(ty, p2, p1);
+            p2 = p1, p1 = ty ? std::string(ty == 3 ? "<year>" : ty == 4 ? "<num>" : "<name>") : lower(s.tok[i]);
+            i += skip;
+        }
     }
     static std::string join(const Sent& s, std::size_t a, std::size_t b) {
         std::string o;
@@ -487,27 +491,35 @@ class Stats {
     }
     std::uint32_t cls(std::uint32_t id) const { return cls_.empty() ? 0 : cls_[id]; }
     // log2 P(c | the classes before it) under the class n-gram (interpolated absolute discounting; add-one unigram).
+    // A context's n-grams lie together in cng_ (its followers): their number and their sum are what the context table
+    // held. Contexts of one or two classes are indexed densely (low_); a longer one is found from its first two classes
+    // by stepping down to each next class's followers (kid_), a short search each time.
     double class_lp(const std::uint32_t* h, std::size_t n, std::uint32_t c) const {
         double p = (uni_[c] + 1.0) / (uni_tot_ + ncls_);
-        for (int k = 2; k <= kCO; ++k) {
-            const std::size_t m = static_cast<std::size_t>(k - 1);
-            if (n < m) break;
-            std::uint64_t ctx = 0;
-            for (std::size_t i = 0; i < m; ++i) ctx = (ctx << 9) | h[n - m + i];
-            const std::uint64_t ck = (static_cast<std::uint64_t>(k) << 58) | ctx;
-            const auto it = std::lower_bound(cctx_.begin(), cctx_.end(), CtxE{ck, 0, 0}, [](const CtxE& a, const CtxE& b) { return a.k < b.k; });
-            if (it == cctx_.end() || it->k != ck) break;
-            const std::uint64_t nk = (static_cast<std::uint64_t>(k) << 58) | (ctx << 9) | c;
-            const auto jt = std::lower_bound(cng_.begin(), cng_.end(), std::make_pair(nk, std::uint32_t{0}));
-            const double cnt = jt != cng_.end() && jt->first == nk ? jt->second : 0.0;
-            p = std::max(cnt - kD, 0.0) / it->n + kD * it->types / it->n * p;
+        for (std::size_t m = 1; m < static_cast<std::size_t>(kCO) && m <= n; ++m) {  // the context: the last m classes
+            const std::uint32_t* x = h + n - m;
+            const Low& l = low_[m == 1 ? x[0] : 512 + (x[0] << 9 | x[1])];
+            std::size_t a = l.first, b = a + l.types;
+            double tot = l.n;
+            if (m > 2) {
+                for (std::size_t i = 2; i < m && a < b; ++i) {
+                    const std::size_t j = follower(a, b, x[i]);
+                    a = j == b ? b : kid_[j - start_[3]];
+                    b = j == b ? b : j + 1 < start_[i + 2] ? kid_[j + 1 - start_[3]] : start_[i + 3];
+                }
+                std::uint64_t t = 0;
+                for (std::size_t q = a; q < b; ++q) t += cng_[q].second;
+                tot = static_cast<double>(t);
+            }
+            if (a == b) break;
+            const std::size_t e = follower(a, b, c);
+            const double cnt = e != b ? cng_[e].second : 0.0;
+            p = std::max(cnt - kD, 0.0) / tot + kD * static_cast<double>(b - a) / tot * p;
         }
         return std::log2(p);
     }
     std::size_t docs() const { return docs_; }
-    std::size_t bytes() const {
-        return caps_.size() * 40 + names_.size() * 64 + cooc_.size() * 16 + (slot1_.size() + slot2_.size()) * 4 + cng_.size() * 16 + cctx_.size() * 16;
-    }
+    std::size_t bytes() const { return caps_.size() * 40 + names_.size() * 64 + cooc_.size() * 16 + (slot1_.size() + slot2_.size()) * 4 + cng_.size() * 16; }
 
     // ---- save / load
 
@@ -536,7 +548,7 @@ class Stats {
         w(gap_.data(), sizeof(gap_)), w(open_.data(), sizeof(open_)), w(len_.data(), sizeof(len_)), w(pron_all_.data(), sizeof(pron_all_));
         wv(uni_);
         w(&uni_tot_, sizeof uni_tot_);
-        wv(cng_), wv(cctx_);
+        wv(cng_), wv(contexts());
         return static_cast<bool>(f);
     }
     bool load(const std::string& path, std::string& err) {
@@ -572,8 +584,12 @@ class Stats {
         r(gap_.data(), sizeof(gap_)), r(open_.data(), sizeof(open_)), r(len_.data(), sizeof(len_)), r(pron_all_.data(), sizeof(pron_all_));
         rv(uni_);
         r(&uni_tot_, sizeof uni_tot_);
-        rv(cng_), rv(cctx_);
-        if (!f) return err = path + ": truncated", false;
+        rv(cng_);
+        std::uint64_t nctx = 0;  // the contexts: class_lp reads them off cng_, so they are not held
+        r(&nctx, 8);
+        const auto at = f.tellg();
+        if (!f.seekg(0, std::ios::end) || f.tellg() - at != static_cast<std::streamoff>(nctx * sizeof(CtxE))) return err = path + ": truncated", false;
+        index_classes();
         return true;
     }
 
@@ -592,17 +608,57 @@ class Stats {
         }
         v.clear(), v.shrink_to_fit();
     }
-    struct CtxE {
+    using NGram = std::pair<std::uint64_t, std::uint32_t>;  // (order << 58 | classes, 9 bits each), count
+    struct CtxE {  // a context as the file holds it: the n-grams' first k - 1 classes, their total count and followers
         std::uint64_t k;
         double n, types;
     };
+    struct Low {  // a context of one or two classes: its first n-gram in cng_, their number and their total count
+        double n = 0;
+        std::uint32_t first = 0, types = 0;
+    };
+    // start_, low_ and kid_ from cng_ (sorted by order, then context, then last class). Every n-gram of order k + 1
+    // follows an n-gram of order k (its first k classes), so one pass per order finds where each one's followers start.
+    void index_classes() {
+        constexpr std::uint64_t mask = (std::uint64_t{1} << 58) - 1;
+        for (int k = 0; k <= kCO; ++k)
+            start_[static_cast<std::size_t>(k)] = static_cast<std::size_t>(std::lower_bound(cng_.begin(), cng_.end(), NGram{static_cast<std::uint64_t>(k) << 58, 0}) - cng_.begin());
+        start_[kCO + 1] = cng_.size();
+        low_.assign(512 + (std::size_t{1} << 18), Low{});
+        for (std::size_t i = start_[2]; i < start_[4]; ++i) {
+            Low& x = low_[(cng_[i].first >> 58 == 2 ? 0 : 512) + ((cng_[i].first & mask) >> 9)];
+            if (!x.types) x.first = static_cast<std::uint32_t>(i);
+            x.n += cng_[i].second, ++x.types;
+        }
+        kid_.resize(start_[kCO] - start_[3]);
+        for (std::size_t k = 3; k < kCO; ++k)
+            for (std::size_t j = start_[k], q = start_[k + 1]; j < start_[k + 1]; ++j) {
+                while (q < start_[k + 2] && (cng_[q].first >> 9) < ((static_cast<std::uint64_t>(k + 1) << 49) | (cng_[j].first & mask))) ++q;
+                kid_[j - start_[3]] = static_cast<std::uint32_t>(q);
+            }
+    }
+    // The n-gram in [a, b) (one context's followers) whose last class is c, or b.
+    std::size_t follower(std::size_t a, std::size_t b, std::uint32_t c) const {
+        const auto it = std::lower_bound(cng_.begin() + static_cast<std::ptrdiff_t>(a), cng_.begin() + static_cast<std::ptrdiff_t>(b), c,
+                                         [](const NGram& e, std::uint32_t v) { return (e.first & 511) < v; });
+        return it != cng_.begin() + static_cast<std::ptrdiff_t>(b) && (it->first & 511) == c ? static_cast<std::size_t>(it - cng_.begin()) : b;
+    }
+    std::vector<CtxE> contexts() const {
+        std::vector<CtxE> ctx;
+        for (const auto& [key, c] : cng_) {
+            const std::uint64_t ck = (key >> 58 << 58) | ((key & ((std::uint64_t{1} << 58) - 1)) >> 9);
+            if (!ctx.empty() && ctx.back().k == ck) ctx.back().n += c, ctx.back().types += 1;
+            else ctx.push_back({ck, static_cast<double>(c), 1});
+        }
+        return ctx;
+    }
     void build_classes(const std::vector<std::uint32_t>& cs) {
         const std::uint32_t bos = cls_.empty() ? 0 : cls_[wkn::kBos];
         uni_.assign(ncls_, 0);
         uni_tot_ = 0;
         for (const auto c : cs)
             if (c != bos) ++uni_[c], ++uni_tot_;
-        cng_.clear(), cctx_.clear();
+        cng_.clear();
         for (int k = 2; k <= kCO; ++k) {
             std::vector<std::uint64_t> keys;
             keys.reserve(cs.size());
@@ -616,17 +672,10 @@ class Stats {
             }
             std::vector<std::pair<std::uint64_t, std::uint32_t>> cnt;
             count_sorted(keys, cnt);
-            // Contexts: the n-gram's first k - 1 classes: total count and distinct followers.
-            std::vector<CtxE> ctx;
-            for (const auto& [key, c] : cnt) {
-                const std::uint64_t ck = (static_cast<std::uint64_t>(k) << 58) | ((key & ((std::uint64_t{1} << 58) - 1)) >> 9);
-                if (!ctx.empty() && ctx.back().k == ck) ctx.back().n += c, ctx.back().types += 1;
-                else ctx.push_back({ck, static_cast<double>(c), 1});
-            }
             cng_.insert(cng_.end(), cnt.begin(), cnt.end());
-            cctx_.insert(cctx_.end(), ctx.begin(), ctx.end());
         }
-        // Keys of order k sort below order k + 1 (the order is in the top bits), so both stay sorted.
+        // Keys of order k sort below order k + 1 (the order is in the top bits), so cng_ stays sorted.
+        index_classes();
     }
 
     std::vector<std::uint32_t> cls_;
@@ -643,8 +692,10 @@ class Stats {
     std::array<double, 4> pron_all_{};
     std::vector<double> uni_;
     double uni_tot_ = 0;
-    std::vector<std::pair<std::uint64_t, std::uint32_t>> cng_;
-    std::vector<CtxE> cctx_;
+    std::vector<NGram> cng_;
+    std::array<std::size_t, kCO + 2> start_{};
+    std::vector<Low> low_;           // [0, 512): one class; then two classes (first << 9 | second)
+    std::vector<std::uint32_t> kid_;  // for each n-gram of orders 3 and 4 (index - start_[3]): where its followers start
 };
 
 // ---------------------------------------------------------------- the experts
@@ -657,11 +708,16 @@ class TrainRuns {
         for (int n = 2; n <= kMax; ++n) {
             auto& v = h_[static_cast<std::size_t>(n)];
             v.clear();
-            if (ids.size() < static_cast<std::size_t>(n)) continue;
             v.reserve(ids.size());
             for (std::size_t s = 0; s + static_cast<std::size_t>(n) <= ids.size(); ++s) v.push_back(hash(ids.data() + s, static_cast<std::size_t>(n)));
             std::sort(v.begin(), v.end());
             v.erase(std::unique(v.begin(), v.end()), v.end());
+            auto& x = at_[static_cast<std::size_t>(n)];  // where each value of the top 16 bits begins: a lookup searches one bucket
+            x.assign(kB + 1, 0);
+            for (std::size_t b = 0, i = 0; b <= kB; ++b) {
+                while (i < v.size() && (v[i] >> 48) < b) ++i;
+                x[b] = static_cast<std::uint32_t>(i);
+            }
         }
         built_ = true;
     }
@@ -671,20 +727,25 @@ class TrainRuns {
         int best = ids.empty() ? 0 : 1;
         for (std::size_t s = 0; s < ids.size(); ++s) {
             int n = best + 1;
-            while (n <= kMax && s + static_cast<std::size_t>(n) <= ids.size() &&
-                   std::binary_search(h_[static_cast<std::size_t>(n)].begin(), h_[static_cast<std::size_t>(n)].end(), hash(ids.data() + s, static_cast<std::size_t>(n))))
-                best = n++;
+            while (n <= kMax && s + static_cast<std::size_t>(n) <= ids.size() && has(static_cast<std::size_t>(n), hash(ids.data() + s, static_cast<std::size_t>(n)))) best = n++;
         }
         return best;
     }
 
  private:
+    static constexpr std::size_t kB = std::size_t{1} << 16;
+    bool has(std::size_t n, std::uint64_t h) const {
+        if (at_[n].empty()) return false;
+        const auto b = static_cast<std::size_t>(h >> 48);
+        return std::binary_search(h_[n].begin() + at_[n][b], h_[n].begin() + at_[n][b + 1], h);
+    }
     static std::uint64_t hash(const std::uint32_t* p, std::size_t n) {
         std::uint64_t h = wkn::kFnv0;
         for (std::size_t i = 0; i < n; ++i) h = wkn::fnv_step(h, p[i]);
         return h;
     }
     std::array<std::vector<std::uint64_t>, kMax + 1> h_;
+    std::array<std::vector<std::uint32_t>, kMax + 1> at_;
     bool built_ = false;
 };
 
@@ -694,9 +755,7 @@ struct Context {
     std::size_t n_prompt = 1;
     std::size_t prompt_chars = 0;
     // derived (prepare)
-    std::vector<std::vector<std::string>> names;  // each context name's tokens
-    std::vector<std::string> name_str;
-    std::vector<const NameStat*> name_st;
+    std::vector<const NameStat*> name_st;  // each context name's statistics, in order of first mention
     const NameStat* main = nullptr;
     bool has_person = false;
     int last_year = 0;
@@ -716,7 +775,7 @@ class Experts {
         : st_(st), m_(m), tr_(tr), lda_(topics && topics->trained() ? topics : nullptr), eg_(grid && grid->trained() ? grid : nullptr) {}
 
     void prepare(Context& c) const {
-        c.names.clear(), c.name_str.clear(), c.name_st.clear(), c.name_toks.clear(), c.ids.clear(), c.classes.clear();
+        c.name_st.clear(), c.name_toks.clear(), c.ids.clear(), c.classes.clear();
         std::unordered_map<std::string, int> freq;
         std::vector<std::string> order;
         c.last_year = 0, c.has_person = false;
@@ -745,7 +804,7 @@ class Experts {
         c.main = nullptr;
         for (const auto& nm : order) {
             const NameStat* ns = st_.name(nm);
-            c.name_str.push_back(nm), c.name_st.push_back(ns);
+            c.name_st.push_back(ns);
             if (ns && ns->type() == 1) c.has_person = true;
             if (freq[nm] > best) best = freq[nm], c.main = ns;
         }
@@ -766,34 +825,31 @@ class Experts {
     void features(const Context& c, const Sent& s, const std::vector<std::uint32_t>& ids, double k5lp, double pmi, double* f) const {
         for (int j = 0; j < kNFeat; ++j) f[j] = 0;
         f[kK5] = std::max(k5lp, -25.0), f[kPmi] = pmi;  // a few real words have almost no K5 mass: clipped at 2^-25
-        // class: the class n-gram from the context's last 4 classes.
+        // class: the class n-gram over the context's last 4 classes, then the candidate's, each after the 4 before it
         {
-            std::vector<std::uint32_t> h;
-            const std::size_t k = std::min<std::size_t>(c.classes.size(), Stats::kCO - 1);
-            h.assign(c.classes.end() - static_cast<std::ptrdiff_t>(k), c.classes.end());
+            constexpr std::size_t H = Stats::kCO - 1;
+            std::vector<std::uint32_t> h(c.classes.end() - static_cast<std::ptrdiff_t>(std::min(c.classes.size(), H)), c.classes.end());
+            const std::size_t k0 = h.size();
+            for (const auto id : ids) h.push_back(st_.cls(id));
             double lp = 0;
-            for (const auto id : ids) {
-                const std::uint32_t cl = st_.cls(id);
-                lp += st_.class_lp(h.data(), h.size(), cl);
-                h.push_back(cl);
-                if (h.size() > Stats::kCO - 1) h.erase(h.begin());
-            }
+            for (std::size_t p = k0; p < h.size(); ++p) lp += st_.class_lp(h.data() + (p > H ? p - H : 0), std::min(p, H), h[p]);
             f[kClass] = ids.empty() ? 0 : lp / static_cast<double>(ids.size());
         }
-        // relations
+        // relations: each name run's statistics are looked up once, for its co-occurrence and for its slot type
         const auto runs = st_.name_runs(s);
         {
             int old = 0, nw = 0, nslot = 0;
             double pm = 0, slot = 0;
             int npm = 0;
+            std::vector<const NameStat*> run_st;
             for (const auto& [a, b] : runs) {
+                const NameStat* ns = run_st.emplace_back(st_.name(Stats::join(s, a, b)));
                 bool seen = false;
                 for (std::size_t i = a; i < b && !seen; ++i) seen = c.name_toks.count(s.tok[i]) > 0;
                 if (seen) {
                     ++old;
                 } else {
                     ++nw;
-                    const NameStat* ns = st_.name(Stats::join(s, a, b));
                     double bp = 0;
                     if (ns && ns->id >= 0)
                         for (const NameStat* cs : c.name_st)
@@ -805,55 +861,26 @@ class Experts {
             f[kEntPmi] = npm ? pm / npm : 0;
             // slots: name-run starts, years, numbers
             std::string p1 = c.p1, p2 = c.p2;
-            std::size_t ri = 0;
-            for (std::size_t i = 0; i < s.tok.size(); ++i) {
-                int ty = 0;
-                std::size_t skip = 0;
-                if (ri < runs.size() && runs[ri].first == i) {
-                    ty = st_.type_of_name(Stats::join(s, runs[ri].first, runs[ri].second));
-                    skip = runs[ri].second - runs[ri].first - 1;
-                    ++ri;
-                } else if (year_of(s.tok[i])) {
-                    ty = 3;
-                } else if (is_number(s.tok[i])) {
-                    ty = 4;
-                }
-                if (ty) slot += st_.slot_score(p2, p1, ty), ++nslot;
-                const std::string w = ty ? std::string(ty == 3 ? "<year>" : ty == 4 ? "<num>" : "<name>") : lower(s.tok[i]);
-                p2 = p1, p1 = w;
-                i += skip;
-            }
+            Stats::slot_walk(s, runs, [&](std::size_t r) { return run_st[r] ? run_st[r]->type() : 5; }, p2, p1, [&](int ty, const std::string& q2, const std::string& q1) {
+                if (ty) slot += st_.slot_score(q2, q1, ty), ++nslot;
+            });
             f[kSlotFit] = nslot ? slot / nslot : 0;
         }
-        // reference
+        // reference and time, in one pass over the tokens
         {
-            double ag = 0;
-            int np = 0;
-            bool gendered = false;
-            for (const auto& t : s.tok) {
-                const int pc = pron_class(t);
+            double ag = 0, g = 0;
+            int np = 0, ny = 0;
+            std::size_t first_g = s.tok.size();  // the first he or she
+            for (std::size_t i = 0; i < s.tok.size(); ++i) {
+                if (const int y = year_of(s.tok[i])) g += st_.gap_score(gap_bucket(y, c.last_year)), ++ny;
+                const int pc = pron_class(s.tok[i]);
                 if (pc < 0) continue;
-                gendered = gendered || pc <= 1;
+                if (pc <= 1 && first_g == s.tok.size()) first_g = i;
                 if (c.main) ag += st_.pron_score(c.main, pc), ++np;
             }
             f[kPronAgree] = np ? ag / np : 0;
             // he/she with no person in the context and no name before it in the sentence
-            if (gendered && !c.has_person) {
-                std::size_t first_pron = s.tok.size();
-                for (std::size_t i = 0; i < s.tok.size(); ++i)
-                    if (const int pc = pron_class(s.tok[i]); pc == 0 || pc == 1) {
-                        first_pron = i;
-                        break;
-                    }
-                f[kPronOrphan] = !runs.empty() && runs[0].first < first_pron ? 0 : 1;
-            }
-        }
-        // time
-        {
-            double g = 0;
-            int ny = 0;
-            for (const auto& t : s.tok)
-                if (const int y = year_of(t)) g += st_.gap_score(gap_bucket(y, c.last_year)), ++ny;
+            if (first_g < s.tok.size() && !c.has_person) f[kPronOrphan] = !runs.empty() && runs[0].first < first_g ? 0 : 1;
             f[kYearFit] = ny ? g / ny : 0;
             f[kNYears] = std::log1p(ny);
         }
@@ -895,10 +922,13 @@ class Experts {
             }
             f[kMatchCtx] = best;
         }
-        // topic and grid (wip/k5-discourse)
+        // topic and grid (wip/k5-discourse); topic counts the content words and sums their log ratio in one pass
         if (lda_ && !c.theta.empty()) {
-            const std::size_t n = lda_->content_count(s.tok);
-            f[kTopic] = n ? lda_->log_ratio(c.theta, s.tok) / static_cast<double>(n) : 0;
+            double r = 0;
+            std::size_t n = 0;
+            for (const auto& t : s.tok)
+                if (const long x = lda_->id(t); x >= 0) r += std::log2(lda_->p_topic(c.theta, static_cast<std::size_t>(x)) / lda_->unigram(static_cast<std::size_t>(x))), ++n;
+            f[kTopic] = n ? r / static_cast<double>(n) : 0;
         }
         if (eg_) {
             const auto r = eg_->roles(s.tok);
