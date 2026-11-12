@@ -40,3 +40,5 @@ The same β and b serve A1, A2 and A3.
 - `qa` never passes the flag; its dev rows must `cmp` equal with the new binary.
 
 **Rule** (§13.43, unchanged): an arm is kept if its mean `context8k_bpc` is below A0's by more than its seeds' spread, and time rises at most 10%. A3 must also beat A1 by the same margin for the noise to count. Answers must not get worse.
+
+**Added 2026-11-12, before the choice runs ended:** a tie in β or b (equal at 4 decimals) goes to the value listed first. The σ values from the rule (T1 table, 2026-11-12): `lr1`, `lr2`, `lrb`, `m1lr2`, `m2eta`, `m2share`, `m2geta`, `m2gshare`, `--ngram-lr` 0.5 (flat curves); `apm` 0.396; `m1lr1` 0.280; `--ngram-cap` 0.280; temperature 0.265.
