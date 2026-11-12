@@ -88,3 +88,12 @@ Dev, seed 0, 250 prompts. At most 2 arms at once, 6 threads each, no start under
 ## Results
 
 (Added after the runs, under this line.)
+
+### Amendment (2026-11-12, after RQ ran and before any arm below runs)
+
+- **Checks:** main's build and my build with no new flag (L1n) both equal `bench/k5_coherence/runs/L1.gen.txt` under `cmp`. **Hit.**
+- **RQ's word test is too loose.** RQ changed 61 of the 173 plain prompts and raised s1 from 0.110 to 0.428. But the shared words are mostly common: "work", "seen", "above", "however", "used", "name". By my reading of dev 9 and 13 (the two read prompts RQ changed), neither new first sentence is about the prompt's subject. The s1 measure counts the same words, so it overstates RQ.
+- **New field, `req=2`:** only the prompt's rare content words count (outside K5's 2000 most frequent words: e.g. powder, peroxide, census, Walpole, Gothenburg, Esperanto). Off by default; `req=0` and `req=1` are unchanged (RQ and RQ64 run as registered).
+- **Arm C is dropped** (not run). In its place, still 6 arms: **RS64** `--k5-first k=64,req=2`.
+- **Measure added:** s1 with rare words only (the share of plain prompts whose first sentence holds a prompt content word outside K5's 2000 most frequent). My reading count stays the main first-sentence measure.
+- **Predictions for RS64:** changes 40–80 of the 173 plain prompts; rare-word s1 from L1's value up by 0.10–0.20; SCRIBE v2 within ±0.02; copy32 up at most 0.02 (rare words pull K5 into the one text that holds them); reads better at the start in 2–4 of the 12 read prompts. It is the most likely candidate now; raters about 0.60.

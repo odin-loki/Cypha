@@ -1025,7 +1025,8 @@ struct Options {
     unsigned lda_threads = 1;   // --k5-lda-threads N: LDA's Gibbs threads (1: exact; more: AD-LDA, which fit worse here)
     // K5_FIRST.md: the first sentence only, in the z-scored gate (today's default). --k5-first k=N,wp=W,wl=W,req=1:
     // N drafts instead of gate_k (the first gate_k are the usual ones); W more on z(pmi) and on z(topic); with req, only
-    // drafts holding a content word of the prompt compete when any draft does. All 0 (the default): off.
+    // drafts holding a content word of the prompt compete when any draft does; req=2 counts only the prompt's rare
+    // content words (outside K5's 2000 most frequent words). All 0 (the default): off.
     int first_k = 0;
     double first_wp = 0, first_wl = 0;
     int first_req = 0;
@@ -1160,8 +1161,8 @@ inline bool apply_flag(const std::string& name, const std::string& val, Options&
             if (k == "k" && v >= 0 && v <= 255 && v == std::floor(v)) o.first_k = static_cast<int>(v);
             else if (k == "wp") o.first_wp = v;
             else if (k == "wl") o.first_wl = v;
-            else if (k == "req" && (v == 0 || v == 1)) o.first_req = static_cast<int>(v);
-            else return err = name + ": fields k=N (0-255), wp=W, wl=W, req=0|1; bad " + f, false;
+            else if (k == "req" && (v == 0 || v == 1 || v == 2)) o.first_req = static_cast<int>(v);
+            else return err = name + ": fields k=N (0-255), wp=W, wl=W, req=0|1|2; bad " + f, false;
             a = b + 1;
         }
         return true;
@@ -1627,13 +1628,13 @@ class K5 {
 
     // K5_FIRST.md: word w in lower case if it is a content word (ASCII letters only, 4+ of them, not a function word
     // of coh_measures.py's list, not one of K5's 100 most frequent words), else empty.
-    std::string content_lower(std::uint32_t w) const {
+    std::string content_lower(std::uint32_t w, std::size_t skip_top = 100) const {
         static const std::set<std::string> stop = {"that", "this", "with", "from", "were", "have", "which", "their", "there", "they",
             "been", "when", "also", "into", "than", "then", "them", "these", "those", "other", "about", "after", "before", "would",
             "could", "should", "while", "where", "being", "because", "some", "such", "more", "most", "many", "much", "over", "under",
             "only", "very", "what", "will", "your", "first", "second", "three", "during", "between", "within", "without", "through",
             "against", "among", "upon", "each", "both", "either", "well", "just", "like", "even"};
-        if (w < 2 + 100 || w >= vocab_.size()) return {};
+        if (w < 2 + skip_top || w >= vocab_.size()) return {};
         const std::string& t = vocab_[w];
         if (t.size() < 4) return {};
         std::string l(t.size(), ' ');
@@ -1904,7 +1905,7 @@ class K5 {
         std::vector<char> hit;
         if (o.first_req) {
             for (const std::uint32_t v : s.ctx)
-                if (std::string lw = content_lower(v); !lw.empty()) pcw.insert(std::move(lw));
+                if (std::string lw = content_lower(v, o.first_req == 2 ? 2000 : 100); !lw.empty()) pcw.insert(std::move(lw));
             hit.assign(K1, 0);
         }
         const auto z = [](std::vector<double>& x) {
@@ -2946,7 +2947,7 @@ inline bool self_test(std::string& err) {
             o.class_mode != 2 || Options{}.describe() != "" || Options{}.gate_wr != 0 || !apply_flag("--k5-gate", "16,wr=1.5", o, e) ||
             o.gate_wr != 1.5 || o.gate_k != 16 ||  // K5_COHERENCE.md: wr parses, off by default
             Options{}.first_k != 0 || Options{}.first_req != 0 || !apply_flag("--k5-first", "k=64,wp=2,wl=1.5,req=1", o, e) ||
-            o.first_k != 64 || o.first_wp != 2 || o.first_wl != 1.5 || o.first_req != 1 || apply_flag("--k5-first", "req=2", o, e) ||
+            o.first_k != 64 || o.first_wp != 2 || o.first_wl != 1.5 || o.first_req != 1 || apply_flag("--k5-first", "req=3", o, e) ||
             apply_flag("--k5-first", "k", o, e)) {  // K5_FIRST.md: parses, off by default
             err = "apply_flag";
             return false;
