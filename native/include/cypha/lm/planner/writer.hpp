@@ -104,7 +104,8 @@ class Filler {
             by_cls_[cls[w]].push_back(w);
         }
         if (fo) tau_ = fo->tau, s1_ = fo->s1, s1_mode_ = fo->s1_mode, honest_ = fo->honest;
-        if (honest_) {  // GENERATION_PLAN §13.48 H1: the words that state a number, a date or a name
+        if (honest_) {  // GENERATION_PLAN §13.48 H1: the words that state a number, a date or a name (HONEST_DATES: 2 numbers
+                        // and months only; 3 those and nationalities or countries)
             static const char* const months[] = {"January", "February", "March", "April", "May", "June", "July",
                                                  "August", "September", "October", "November", "December"};
             claim_.assign(m.vocab().size(), 0);
@@ -115,9 +116,40 @@ class Filler {
                 bool month = false;
                 for (const char* mo : months) month = month || t == mo;
                 if (digit || month) claim_[w] = 2;                     // a number or a month: only from the fact
-                else if (!t.empty() && t[0] >= 'A' && t[0] <= 'Z') claim_[w] = 1;  // a name: from the fact or the text so far
+                else if (honest_ == 1 && !t.empty() && t[0] >= 'A' && t[0] <= 'Z') claim_[w] = 1;  // a name: from the fact or the text so far
+                else if (honest_ == 3 && nation(t)) claim_[w] = 1;  // HONEST_DATES HD2: a nationality or a country, as a name
             }
         }
+    }
+    // HONEST_DATES HD2 (--k5-plan-honest nations): the one-word nationalities and countries of the fact check's name
+    // table (scripts/gen_fact_check.py), and the second words of its two-word ones.
+    static bool nation(const std::string& t) {
+        static const char* const names[] = {
+            "American", "America", "USA", "U.S.", "British", "Britain", "UK", "English", "England", "Scottish",
+            "Scotland", "Scots", "Welsh", "Wales", "Irish", "Ireland", "Canadian", "Canada", "Australian", "Australia",
+            "Zealand", "Zealander", "French", "France", "German", "Germany", "Italian", "Italy", "Spanish", "Spain",
+            "Portuguese", "Portugal", "Dutch", "Netherlands", "Holland", "Belgian", "Belgium", "Swiss", "Switzerland",
+            "Austrian", "Austria", "Swedish", "Sweden", "Norwegian", "Norway", "Danish", "Denmark", "Finnish",
+            "Finland", "Icelandic", "Iceland", "Russian", "Russia", "Soviet", "USSR", "Ukrainian", "Ukraine", "Polish",
+            "Poland", "Czech", "Czechoslovak", "Czechoslovakia", "Slovak", "Slovakia", "Hungarian", "Hungary",
+            "Romanian", "Romania", "Bulgarian", "Bulgaria", "Greek", "Greece", "Turkish", "Turkey", "Serbian", "Serbia",
+            "Croatian", "Croatia", "Slovenian", "Slovenia", "Slovene", "Bosnian", "Bosnia", "Albanian", "Albania",
+            "Lithuanian", "Lithuania", "Latvian", "Latvia", "Estonian", "Estonia", "Belarusian", "Belarus", "Armenian",
+            "Armenia", "Japanese", "Japan", "Chinese", "China", "Korean", "Korea", "Indian", "India", "Pakistani",
+            "Pakistan", "Bangladeshi", "Bangladesh", "Lankan", "Nepalese", "Nepal", "Thai", "Thailand", "Vietnamese",
+            "Vietnam", "Filipino", "Philippines", "Philippine", "Indonesian", "Indonesia", "Malaysian", "Malaysia",
+            "Singaporean", "Singapore", "Iranian", "Iran", "Persian", "Persia", "Iraqi", "Iraq", "Israeli", "Israel",
+            "Egyptian", "Egypt", "Lebanese", "Lebanon", "Syrian", "Syria", "Saudi", "Afghan", "Afghanistan", "Mexican",
+            "Mexico", "Brazilian", "Brazil", "Argentine", "Argentina", "Argentinian", "Chilean", "Chile", "Colombian",
+            "Colombia", "Peruvian", "Peru", "Venezuelan", "Venezuela", "Cuban", "Cuba", "Jamaican", "Jamaica", "Rican",
+            "Uruguayan", "Uruguay", "Nigerian", "Nigeria", "Kenyan", "Kenya", "Ethiopian", "Ethiopia", "Ghanaian",
+            "Ghana", "Moroccan", "Morocco", "Algerian", "Algeria", "Tunisian", "Tunisia", "Zimbabwean", "Zimbabwe",
+            "Luxembourgish", "Luxembourg", "Maltese", "Malta", "Cypriot", "Cyprus", "Mongolian", "Mongolia",
+            "Taiwanese", "Taiwan", "Flemish", "Flanders", "Catalan", "Catalonia", "Basque", "Prussian", "Prussia",
+            "Bavarian", "Bavaria", "Ottoman", "Byzantine"};
+        for (const char* n : names)
+            if (t == n) return true;
+        return false;
     }
     // K5 distributions computed by this filler (the fill's cost; GENERATION_PLAN §13.40 M3).
     std::uint64_t dists() const { return dists_; }
@@ -395,7 +427,7 @@ class Filler {
     const SlotTypes* types_ = nullptr;  // §13.42 Q2
     double tau_ = 2.0, s1_ = 0;
     int s1_mode_ = 0;
-    bool honest_ = false;                // §13.48 H1
+    int honest_ = 0;                     // §13.48 H1 (1); HONEST_DATES HD1 (2), HD2 (3)
     std::vector<std::uint8_t> claim_;    // §13.48 H1: 2 a number or a month, 1 a capitalised word, 0 neither
     mutable std::uint64_t dists_ = 0, refused_ = 0;
     std::vector<std::vector<std::uint32_t>> by_cls_;
