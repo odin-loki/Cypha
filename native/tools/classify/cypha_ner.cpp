@@ -13,9 +13,10 @@
 //
 // Usage:
 //   cypha_ner run --train T.tsv --dev D.tsv [--test X.tsv --read-test] [--hand H.tsv] [--alpha A] [--whiten EPS]
-//                 [--simvec FILE] [--delta-lr X] [--world-lr X] [--passes P] [--cypha-sents N] [--seed S] [--diag]
+//                 [--simvec FILE] [--delta-lr X] [--world-lr X] [--passes P] [--cypha-sents N] [--seed S] [--diag] [--o-keep P]
 //                 [--prompts GEN.tsv --prompt-out SPANS.tsv] [--pred-out PREFIX]
 //   cypha_ner selftest
+// --o-keep P (amendment 1): Cypha learns from each O token with probability P (seeded); entity tokens always.
 // --passes 0 runs only the diagnostics (counts alone, exact class means). Without --read-test the test split is not
 // opened. --prompts tags the prompt column (3rd) of a GEN-A prompts file and writes one row per span:
 // id, byte start, byte end, type, surface (in the prompt's own bytes, after TSV unescaping).
@@ -712,7 +713,7 @@ void write_pred(const std::string& path, const std::vector<Sent>& S, const std::
 
 struct Opt {
     std::string train, dev, test, hand, simvec = "data/cyphalm/simvec_ppmi32.bin", prompts, prompt_out, pred_out;
-    double alpha = 2.0, delta_lr = 0.01, world_lr = 0.008, ood_sigma = 12.0, whiten = 0.1;
+    double alpha = 2.0, delta_lr = 0.01, world_lr = 0.008, ood_sigma = 12.0, whiten = 0.1, o_keep = 1.0;
     int passes = 3, seed = 1, field_dim = 16;
     std::size_t cypha_sents = 15000;
     bool read_test = false, diag = false;
@@ -897,6 +898,8 @@ int cmd_run(const Opt& o) {
     std::vector<std::size_t> order(pick.size());
     std::iota(order.begin(), order.end(), 0);
     std::vector<double> x(Du);
+    std::mt19937_64 keep_rng(static_cast<std::uint64_t>(o.seed) * 104729ULL + 3);
+    std::uniform_real_distribution<double> keep_u(0.0, 1.0);
     double train_s = 0;
     for (int pass = 1; pass <= o.passes; ++pass) {
         std::shuffle(order.begin(), order.end(), rng);
@@ -905,6 +908,7 @@ int cmd_run(const Opt& o) {
             const std::size_t r0 = first[q];
             for (std::size_t i = 0; i < tr[pick[q]].w.size(); ++i) {
                 const std::size_t r = r0 + i;
+                if (Y[r] == 0 && o.o_keep < 1.0 && keep_u(keep_rng) >= o.o_keep) continue;  // amendment 1: O tokens subsampled
                 for (std::size_t d = 0; d < Du; ++d) x[d] = X[r * Du + d];
                 Z.apply(x);
                 clf.learn(x, kTags[static_cast<std::size_t>(Y[r])]);
@@ -1027,6 +1031,7 @@ int main(int argc, char** argv) {
         else if (a == "--delta-lr") o.delta_lr = std::atof(nx().c_str());
         else if (a == "--world-lr") o.world_lr = std::atof(nx().c_str());
         else if (a == "--whiten") o.whiten = std::atof(nx().c_str());
+        else if (a == "--o-keep") o.o_keep = std::atof(nx().c_str());
         else if (a == "--passes") o.passes = std::atoi(nx().c_str());
         else if (a == "--cypha-sents") o.cypha_sents = static_cast<std::size_t>(std::atol(nx().c_str()));
         else if (a == "--seed") o.seed = std::atoi(nx().c_str());

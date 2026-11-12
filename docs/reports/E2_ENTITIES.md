@@ -113,6 +113,52 @@ Reads: prompts with a main-entity plan, and prompts with any candidate that has 
 | P8 | Where e2's main subject differs from find1's, E2's is the right entity in at least 60% of those prompts |
 | P9 | Each training run under 15 minutes; tagging at least 2,000 tokens per second |
 
+## Round 1 (dev, 2026-11-12)
+
+**Stage 1** (exact class means, whitened, ε 0.1; dev micro F1 over the five types):
+
+| α | Counts alone | Exact class means (LDA) |
+|---|---:|---:|
+| **0.5** | 0.529 | **0.708** |
+| 2 | 0.507 | 0.704 |
+
+α 0.5 is chosen (P1: hit). The LDA ceiling is low: PERSON 0.57, PLACE 0.39, ORG 0.00, DATE 0.80, NUMBER 0.94, MISC 0.14.
+
+**Stage 2** (α 0.5, online Cypha, dev micro F1 after passes 1 / 2 / 3):
+
+| ε | `delta_lr` | `world_lr` | Pass 1 | Pass 2 | Pass 3 |
+|---|---|---|---:|---:|---:|
+| 0.01 | 0.01 | 0.002 | 0.486 | 0.524 | 0.321 |
+| 0.01 | 0.01 | 0.008 | 0.403 | 0.445 | 0.500 |
+| 0.01 | 0.03 | 0.002 | 0.368 | 0.439 | 0.292 |
+| 0.01 | 0.03 | 0.008 | 0.323 | 0.376 | 0.254 |
+| 0.1 | 0.01 | 0.002 | 0.447 | 0.518 | **0.552** |
+| 0.1 | 0.01 | 0.008 | 0.427 | 0.520 | 0.462 |
+| 0.1 | 0.03 | 0.002 | 0.431 | 0.350 | 0.323 |
+| 0.1 | 0.03 | 0.008 | 0.420 | 0.370 | 0.347 |
+
+- The best cell is 0.552 (ε 0.1, `delta_lr` 0.01, `world_lr` 0.002, pass 3). It is 0.16 under its own ceiling (LDA 0.708), and close to counts alone (0.529).
+- The online model is unstable from pass to pass. Types swap: in one cell NUMBER's recall is 0.99 at precision 0.46, because DATEs are tagged NUMBER.
+- The smaller rates do better in every pair. About 87% of training tokens are O.
+
+## Amendment 1 (registered 2026-11-12, after round 1 and before any amendment run)
+
+Round 1 is far under its ceiling, unlike E1 (within 0.4 points). Two likely causes: the rates are too high for this input, and the O class floods the online updates. So, one more round, on dev only:
+
+- ε 0.1, `world_lr` 0.002, α 0.5 (round 1's best);
+- `delta_lr` ∈ {0.003, 0.001} × O kept with probability ∈ {1, 0.25} (`--o-keep`, seeded; entity tokens are always kept), 3 passes.
+- The dev choice of the item is the best dev micro F1 over rounds 1 and 2 (rule 2's ties). Then the test split and the hand set are read once.
+- `--o-keep` defaults to 1, so round 1's runs are unchanged.
+
+**Predictions for the amendment:**
+
+| # | Prediction |
+|---|---|
+| A1 | The amendment's best dev micro F1 is at least 0.60 |
+| A2 | It stays at least 0.05 under the LDA ceiling (0.708) |
+| A3 | O subsampling raises recall and lowers precision of every entity type |
+| A4 | The gate (0.80 on silver test) is missed |
+
 ## How to reproduce
 
 ```bash
