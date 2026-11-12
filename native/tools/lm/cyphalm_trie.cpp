@@ -1001,7 +1001,7 @@ struct FullMixRun {
         if (rc) return rc;
         if (!a.no_doc && !(dt = make_doc(a.doc.empty() ? std::string("cache") : a.doc, data.data(), kTrain, rc))) return rc ? rc : 1;
         if (!P.parse(a.full_mix_params)) {
-            std::cerr << "--full-mix-params k=v,... (lr1 lr2 lrb apm eps floor decay ssef a2bits headline)\n";
+            std::cerr << "--full-mix-params k=v,... (lr1 lr2 lrb apm eps floor decay ssef a2bits huff headline)\n";
             return 2;
         }
         std::string err;
