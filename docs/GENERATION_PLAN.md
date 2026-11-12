@@ -2650,3 +2650,10 @@ Old binary main 9cbd277; old and new were started together.
 - **Arms** (K1 plus): RF (`fill=1`), RG (`grow=500,k2=4`), RQ (`grow=500,k2=4,qtext=1`), RFG (`fill=1,grow=500,k2=4`); each also long (`--bytes 1800 --k5-max-words 600`).
 - **Screen:** verbatim13 0; copy32 at most 0.30, short and long; SCRIBE v2 at least K1 − 0.03 (long: K1_long − 0.03); fact precision at least 0.874; the leak check 0; my strict reading (keyword patchwork fails). At most 2 candidates, one per idea where possible.
 - **Judge:** blind pairwise raters against K1 at 460 characters (`bench/blind/ret2_pair`, seed 20261127) and 1,500 characters (`bench/blind/ret2_long`, seed 20261128). Adopted if better by §13.38's rule on either reading and at least 0.5 on the other; best by the weaker of its two lower bounds, then lower copy32. An arm equal to K1 at 460 characters counts 0.5 there.
+
+**§13.67 screen** (2026-11-12; [K5_RETRIEVE2](reports/K5_RETRIEVE2.md) "Results"):
+- Checks: main's build and my build with the new fields off equal K1, short and long (`cmp`). Leak check: **0** in every arm, short and long.
+- Dev (K1 → arm): SCRIBE v2 0.704 → RF 0.699, RG 0.705, RQ 0.710, RFG 0.700; fact precision 0.918 → 0.918–0.919; long SCRIBE v2 0.575 → 0.575, 0.598, 0.644, 0.606; long copy32 0.270 → 0.268, 0.299, **0.303**, 0.296; verbatim13 0.
+- RF changes 65 of 250 samples (fact sentences only). By reading its fills are no better: a garbled birthplace on dev 0 and one stock clause pasted into two prompts. RF fails; RFG with it. RQ fails long copy32.
+- RG equals K1 in the first 460 characters (by design) and stays nearer the subject past 500 bytes on about half the long prompts read; stuff3 down; the link to the sentence before unmoved.
+- **Candidate RG.** Packet `bench/blind/ret2_long` (25 long prompts, seed 20261128) is committed; no short packet (the same text). The raters have not run.

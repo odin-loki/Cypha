@@ -122,3 +122,80 @@ Dev, against K1:
 ## Results
 
 (Added after the runs, under this line.)
+
+### Checks (2026-11-12)
+
+- main's build (a37cd45e) and my build with the new fields off: both equal `bench/k5_retrieve/runs/K1.gen.txt` under `cmp` (MODEL line aside). My long run with the fields off equals `K1_long.gen.txt`. **Hit.** Selftest passes.
+
+### The screen (dev, seed 0, 250 prompts; files in `bench/k5_retrieve2/runs/`, measures in `bench/k5_retrieve2/screen/short` and `screen/long`)
+
+Two arms at a time on a shared PC.
+
+| Arm | SCRIBE v2 [95%] | v3.1 | copy32 | fact precision [95%] | long SCRIBE v2 [95%] | long copy32 | verbatim13 | leak | wall (short, long) | screen |
+|---|---|---|---|---|---|---|---|---|---|---|
+| K1 | 0.704 [0.673, 0.735] | 0.665 | 0.275 | 0.918 [0.867, 0.962] | 0.575 [0.551, 0.601] | 0.270 | 0 | 0 | 5:37, 7:05 | baseline |
+| RF | 0.699 [0.668, 0.731] | 0.663 | 0.268 | 0.919 [0.868, 0.963] | 0.575 [0.549, 0.601] | 0.268 | 0 | 0 | 5:36, 7:12 | fail (reading) |
+| RG | 0.705 [0.674, 0.737] | 0.669 | 0.276 | 0.918 [0.867, 0.962] | 0.598 [0.572, 0.627] | 0.299 | 0 | 0 | 5:55, 9:31 | **pass, candidate** |
+| RQ | 0.710 [0.678, 0.741] | 0.668 | 0.281 | 0.918 [0.867, 0.962] | 0.644 [0.618, 0.671] | **0.303** | 0 | 0 | 5:54, 13:41 | fail (long copy32) |
+| RFG | 0.700 [0.670, 0.732] | 0.665 | 0.268 | 0.919 [0.868, 0.963] | 0.606 [0.580, 0.635] | 0.296 | 0 | 0 | 5:42, 19:47 | fail (reading, as RF) |
+
+Peak RAM 11.3–12.0 GB. RFG_long's 19:47 was run beside RQ_long and RG_long on a loaded PC; it is not a cost of the code alone.
+
+**How much each arm changes** (against K1; long against K1_long):
+
+| Arm | unlike (250, whole) | 50 rated, cut 460 | 25 long, cut 1,500 |
+|---|---|---|---|
+| RF | 65 | 10 | 7 |
+| RG | 157 (long 249) | **0** | 24 |
+| RQ | 159 (long 249) | **0** | 24 |
+| RFG | 195 (long 250) | 10 | 25 |
+
+RF changes only the 65 prompts whose plan writes a fact sentence that the overlay moves. RG and RQ change nothing in the first 460 characters, as designed.
+
+**The leak check** (`leak_check.py check`, short and long): **0** same-title documents and 0 in GEN-A's source bytes for every arm. Long logs: RG 1,250 documents (983 distinct), RQ 3,590 (1,506 distinct). **Copy against each prompt's own documents** (long): RF 0.075, RG 0.114, RQ 0.132, RFG 0.114 of bytes in their 32-byte spans; the longest shared run is 12 words in every arm, short and long. The cap holds.
+
+**Fact precision** (short): every arm 0.918–0.919, contradicted 0.045–0.047. RF's fill states 9 fewer statements (277 against 286): fewer `is_a` statements (8 supported → 3; 85 unknown → 74), more birth dates (86 → 92 supported).
+
+**J2's measures** (`hook_screen.py`; each arm minus K1, 95% paired bootstrap):
+- 460 characters: RF `on_prev` +0.004 [−0.007, +0.013], stuff3 −0.0007, mean surprise +0.011 [−0.016, +0.037]. RG and RQ: 0 (same text).
+- 1,500 characters (against K1_long): `on_prev` RG −0.003 [−0.013, +0.007], RQ +0.004 [−0.008, +0.015], RFG +0.002; stuff3 RG −0.0017 [−0.0042, +0.0008], **RQ +0.0042 [+0.0015, +0.0070]**; mean surprise RG +0.133 [+0.088, +0.178], RQ +0.124; orphan pronouns RG −0.019 [−0.036, −0.002], RQ −0.028.
+
+**The prompt's words by sentence** (`coh_measures.py` at 1,500 characters, the 25 long prompts):
+
+| Arm | on the prompt s1 | s2 | s3 | s4+ | link to the sentence before | stuff3 | top word |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| K1_long | 0.440 | 0.440 | 0.320 | 0.189 | 0.111 | 0.031 | 0.034 |
+| RF_long | 0.440 | 0.440 | 0.320 | 0.190 | 0.116 | 0.031 | 0.035 |
+| RG_long | 0.440 | 0.440 | 0.320 | 0.202 | 0.114 | 0.023 | 0.031 |
+| RQ_long | 0.440 | 0.440 | 0.320 | 0.198 | 0.117 | 0.029 | 0.032 |
+| RFG_long | 0.440 | 0.440 | 0.320 | 0.204 | 0.125 | 0.023 | 0.032 |
+
+On all 250 long prompts: link K1_long 0.124, RG 0.124, RQ 0.130, RFG 0.128; s4+ 0.194 → RG 0.216, RQ 0.182.
+
+**Reading** (dev 0, 1, 2, 3, 4, 5, 7, 9, 10, 11, 12, 13):
+- **RF at 460 characters** differs from K1 on 3 of the 12 (0, 3, 5). Dev 0 is worse: K1's fact sentence "The modern sector was opened in 1976 by the New Zealand artist Francis Upritchard" becomes "Francis Upritchard was born in New York, New Zealand", a garbled birthplace (the honest rules stop numbers and countries, not a city name). Dev 3 is as bad as K1. Dev 5 is a little nearer the subject ("a Whig cause known by its lack of the existence of party politics"). The fill also pastes one stock clause into two unrelated prompts ("anti - communism and had great influence on the burgeoning of …", dev 0 and dev 3): the patchwork the screen looks for, now inside the fact sentences. By my strict reading RF does not read at least as well as K1. **Fail.** RFG has the same fact sentences, so it fails on the same reading.
+- **RG at 1,500 characters** (dev 0–5, 10, 12, 13) stays nearer the subject after 500 bytes on most: dev 0 (Holden) turns to cars ("used by Holden … American Motors Corporation") where K1 drifts to film and satellites; dev 4 (India's census) to "the Census Bureau … the proportion of the total population … ethnic and religious groups"; dev 10 (HAL) to the monolith, space observatories and astronauts; dev 13 to Messianic organisations. Dev 5 and 12 drift as K1 does. Grammar is no better. Names still come as patchwork at times (dev 4 "the Hausa, Yoruba"; dev 13 "Reform Rabbi Stephen A. Douglas"), about as often as in K1. stuff3 falls. By my reading RG reads at least as well as K1, better on about half. **Pass.**
+- **RQ** (read before its copy32 was known) also stays on the subject, more by repeating it (dev 3: "peroxide", "oxides", "oxidation" in most sentences; stuff3 rises). It fails copy32 long (0.303), so I do not rule on it by reading.
+
+**Candidates** (by the registered order): **RG** only. RF fails by reading; RFG with it; RQ fails long copy32. RG's 460-character text equals K1's on all 50 rated prompts, so by the registered rule it is left out of the short packet and its short reading counts 0.5. **No short packet is built** (`bench/blind/ret2_pair` would hold only identical pairs).
+
+### Predictions so far
+
+- P1 flags off equals K1, short and long: **hit**.
+- P2 leak check 0 for every arm: **hit**.
+- P3 RF unlike K1 in 235–250: **miss** (65; the overlay moves the fill only where a plan writes facts the overlay touches).
+- P4 RF fact precision within −0.04 to +0.01: **hit** (+0.001).
+- P5 RF SCRIBE v2 +0.00 to +0.03: **miss** (−0.005); copy32 +0.00 to +0.02: **miss** (−0.007); `on_prev` +0.00 to +0.03: **hit** (+0.004).
+- P6 RG and RQ equal to K1 at 460 characters on the 50: **hit**.
+- P7 long copy32 0.27–0.30: **hit** for RG (0.299), **miss** for RQ (0.303); RQ's own-document copy above RG's: **hit** (0.132 against 0.114).
+- P8 long link (25 prompts): RG 0.11–0.13 **hit** (0.114); RQ 0.12–0.16 **miss** (0.117).
+- P9 long stuff3: RG up at most 0.005 **hit** (down); RQ up 0.000–0.010 **hit** (+0.004).
+- P10 RQ wall +10–60%: **miss** (short +5%, long +93%); RF and RG within 15%: RF **hit**, RG **hit** short (+5%), **miss** long (+34%). Arms ran two at a time on a shared PC.
+- P11 RF passes by reading: **miss**; at least one R-grow arm passes: **hit**; at most one fails for patchwork: **hit**.
+- P12 raters: wait for the raters.
+
+### Packet (built before any rating)
+
+- `bench/blind/ret2_long/`: K1_long against RG_long, the 25 long prompts of `bench/blind/q3_long/prompts.json`, seed 20261128, `--cut 1500`. RG differs on 24 of the 25.
+- `KEY.json` is kept outside the repository; `key.b64` and `RATER_PROMPT.md` are committed. The lead runs the raters.
+- **What adoption needs:** RG reads better by §13.38's rule on the long reading (its short reading is 0.5 by construction, which meets "at least 0.5 on the other").
