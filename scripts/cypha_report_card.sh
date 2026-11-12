@@ -178,7 +178,7 @@ run_one() {
                 cp -f "$OUT/gena/$L.scribe31.md" "$P.scribe31.md" 2>/dev/null || true
                 cp -f "$OUT/gena/$L.gen.txt" "$P.gen_dev.txt" 2>/dev/null || true
             fi
-            [ $FRESH = 1 ] && echo "[card] gena: fresh prompts are GEN-A's test split; read it through gen_eval.sh test, not the card" >&2
+            if [ $FRESH = 1 ]; then echo "[card] gena: fresh prompts are GEN-A's test split; read it through gen_eval.sh test, not the card" >&2; fi
         fi
     fi
 }
