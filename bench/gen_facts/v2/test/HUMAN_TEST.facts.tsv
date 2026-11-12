@@ -1,0 +1,7 @@
+sample	sent	n_sents	relation	subject	entity	pronoun	object	verdict	store	note	date	pattern	sentence
+test/0180	4	5	is_a	It	It (novel)	0	joke	unknown	pronoun	open list		[S] is a [O] ,	It is a joke, not a serious virus.
+test/0191	2	3	birth_date	Final Wars		0	2004	unknown		subject not in store	valid	[S] ( [O]	While the plot resembles that of Godzilla vs. Monster Zero (1965), this entry is significant in that it showcases 11 daikaiju, a record for the Godzilla series until Godzilla: Final Wars (2004).
+test/0201	2	3	birth_date	Ernest Renan		0	1823	unknown		subject not in store	valid	[S] ( [O]	La Vie de J�sus (1863), by a Frenchman, Ernest Renan (1823?1892), continued the same tradition.
+test/0237	2	3	birth_date	Paris	Paris (rapper)	0	1892	contradicted	1967		valid	[S] ( [O] -	He attended his early education at various schools and institutes in the US and in Paris (1892-1895).
+test/0237	2	3	death_date	Paris	Paris (rapper)	0	1895	unknown		no death in store	valid	[S] ( # - [O] )	He attended his early education at various schools and institutes in the US and in Paris (1892-1895).
+test/0246	2	4	is_a	He		0	leader	unknown		subject not in store		[S] is a [O] of	He is a leader of modern Finnish philosophy, which specializes in philosophical logic, analysis, philosophy of language, philosophy of mind, and the close study of Charles Peirce.

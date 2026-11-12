@@ -1,0 +1,282 @@
+sample	sent	n_sents	relation	subject	entity	pronoun	object	verdict	store	note	date	pattern	sentence
+0:trie_T1.0	2	7	birth_date	King Brian Henderson	Brian Henderson	partial	2003	contradicted	1931		valid	^ [S] ( [O] -	King Brian Henderson (2003 - January 4, 1960) was a German - New Zealand era.
+0:trie_T1.0	2	7	death_date	King Brian Henderson	Brian Henderson	partial	January 4 , 1960	unknown		no death in store	valid	^ [S] ( # - [O] )	King Brian Henderson (2003 - January 4, 1960) was a German - New Zealand era.
+0:trie_T1.0	4	7	is_a	Auckland	Auckland	0	city	unknown	urban area	open list		[S] is a [O]	Auckland is a city located in the human history of New Zealand.
+0:trie_T1.0	5	7	birth_date	John Brian Henderson	Brian Henderson	partial	August 14 1931	supported	1931	checked 1 of 3 parts	valid	^ [S] ( [O]	John Brian Henderson (August 14 1931 / March 1 1781) is a American science fiction author.
+0:trie_T1.0	6	7	birth_date	Barbara Anderson	Barbara Anderson	0	May 2 , 1926	supported	1926	checked 1 of 3 parts	valid	^ [S] ( [O] -	Barbara Anderson (May 2, 1926 - March 20, 1568) is an American playwright.
+0:trie_T1.0	6	7	death_date	Barbara Anderson	Barbara Anderson	0	March 20 , 1568	unknown		no death in store	valid	^ [S] ( <M> # , # - [O] )	Barbara Anderson (May 2, 1926 - March 20, 1568) is an American playwright.
+0:trie_T1.0	7	7	birth_date	Francis Upritchard	Francis Upritchard	0	January 1 , 1976	supported	1976	checked 1 of 3 parts	valid	^ [S] ( [O]	Francis Upritchard (January 1, 1976 / March 1, 2008) was King of Jerusalem from 1997 to 2002.
+5:trie_T1.0	2	3	birth_date	George Grenville	George Grenville	0	August 14 , 1765	contradicted	1712-10-14		valid	^ [S] ( [O]	George Grenville (August 14, 1765 / March 1, 2008) was King of Jerusalem for 2000 to 2005.
+6:trie_T1.0	4	6	birth_date	Gene Simmons	Gene Simmons	0	August 14 , 1949	supported	1949	checked 1 of 3 parts	valid	^ [S] ( [O] -	Gene Simmons (August 14, 1949 - April 7, 1858) was an American playwright.
+6:trie_T1.0	4	6	death_date	Gene Simmons	Gene Simmons	0	April 7 , 1858	unknown		no death in store	valid	^ [S] ( <M> # , # - [O] )	Gene Simmons (August 14, 1949 - April 7, 1858) was an American playwright.
+6:trie_T1.0	6	6	birth_date	Martin van Creveld	Martin van Creveld	0	1946	supported	1946		valid	[S] ( [O] -	He was the son of Martin van Creveld (1946 - 2005), French theologian.
+6:trie_T1.0	6	6	death_date	Martin van Creveld	Martin van Creveld	0	2005	unknown		no death in store	valid	[S] ( # - [O] )	He was the son of Martin van Creveld (1946 - 2005), French theologian.
+6:trie_T1.0	6	6	nationality	Martin van Creveld	Martin van Creveld	0	French	contradicted	Israeli;Jewish;Military			[S] ( # - # ) , [O]	He was the son of Martin van Creveld (1946 - 2005), French theologian.
+7:trie_T1.0	3	7	birth_date	Björn Ulvaeus	Björn Ulvaeus	0	October 4 , 1945	contradicted	1945-04-25		valid	^ [S] ( born [O]	Björn Ulvaeus (born October 4, 1945) is an American writer and philosopher from Los Angeles, California. i.
+16:trie_T1.0	3	5	is_a	Divisions of Bangladesh	Divisions of Bangladesh	0	town	unknown		no is_a or occupation in store		^ [S] is a [O] in	Divisions of Bangladesh is a town in the county of Bangladesh, Germany.
+20:trie_T1.0	2	5	birth_date	Litsa Spathi	Litsa Spathi	0	October 4 , 1958	supported	1958	checked 1 of 3 parts	valid	^ [S] ( born [O]	Litsa Spathi (born October 4, 1958) was a Greek philosopher.
+21:trie_T1.0	1	8	is_a	California	California	0	city	unknown		no is_a or occupation in store		[S] is a [O]	California is a city and a city in the southern American West.
+21:trie_T1.0	5	8	is_a	Alameda		0	city	unknown		subject not in store		[S] is a [O]	Alameda is a city located in the human history of California.
+21:trie_T1.0	7	8	is_a	Juneau		0	term	unknown		subject not in store		[S] is a [O]	Juneau is a term and area in the state of Alaska, England.
+21:trie_T1.0	7	8	is_a	Juneau		0	area	unknown		subject not in store		ADD [S] is a [NAT] [OCC]	Juneau is a term and area in the state of Alaska, England.
+28:trie_T1.0	4	7	birth_place	Jacques Tardi	Jacques Tardi	0	Europe , Canada	unknown		no birth_place in store		^ [S] was born in [O] ,	Jacques Tardi was born in Europe, Canada, on March 1, 1946.
+28:trie_T1.0	5	7	birth_date	Henri Gouraud	Henri Gouraud (computer scientist)	0	1944	supported	1944		valid	[S] ( [O] -	He was the son of Henri Gouraud (1944 - 2005), French theologian.
+28:trie_T1.0	5	7	death_date	Henri Gouraud	Henri Gouraud (computer scientist)	0	2005	unknown		no death in store	valid	[S] ( # - [O] )	He was the son of Henri Gouraud (1944 - 2005), French theologian.
+28:trie_T1.0	5	7	nationality	Henri Gouraud	Henri Gouraud (computer scientist)	0	French	supported	France;french			[S] ( # - # ) , [O]	He was the son of Henri Gouraud (1944 - 2005), French theologian.
+28:trie_T1.0	6	7	birth_date	Guillaume Morel	Guillaume Morel	0	October 4 , 1505	supported	1505	checked 1 of 3 parts	valid	^ [S] ( born [O]	Guillaume Morel (born October 4, 1505) was a French sculptor and painter.
+29:trie_T1.0	1	9	death_place	He		1	Heidelberg , Rhein - Neckar - Kreis	unknown		subject not in store		[P] died in [O]	He died in Heidelberg, Rhein - Neckar - Kreis on July 21, 1967, at the age of 16.
+29:trie_T1.0	2	9	birth_date	She		1	August 31 , 1918	unknown		subject not in store	valid	[P] was born on [O]	She was born on August 31, 1918 in Rhein - Neckar - Kreis in Baden - Württemberg.
+29:trie_T1.0	3	9	is_a	Baden - Württemberg	Baden-Württemberg	0	city	unknown	federal state	open list		[S] is a [O]	Baden - Württemberg is a city located in the human history of Germany.
+36:trie_T1.0	1	7	is_a	Abraham Sea	Abraham	partial	international	unknown	model	open list		[S] is a [O]	Abraham Sea is an international outcry in Europe (Italy), 50 miles north - west of Amsterdam.
+38:trie_T1.0	4	8	birth_date	Edward Morley	Edward Morley	0	1838	supported	1838-01-29		valid	[S] ( [O] -	He was the son of Edward Morley (1838 - 1889), French theologian.
+38:trie_T1.0	4	8	death_date	Edward Morley	Edward Morley	0	1889	contradicted	1923-02-24		valid	[S] ( # - [O] )	He was the son of Edward Morley (1838 - 1889), French theologian.
+38:trie_T1.0	4	8	nationality	Edward Morley	Edward Morley	0	French	contradicted	American;Physical			[S] ( # - # ) , [O]	He was the son of Edward Morley (1838 - 1889), French theologian.
+40:trie_T1.0	2	10	birth_date	Victor Balaguer	Victor Balaguer	0	August 14 , 1824	supported	1824	checked 1 of 3 parts	valid	^ [S] ( [O]	Victor Balaguer (August 14, 1824 / March 1, 2008) was King of Jerusalem from 1997 to 2002.
+48:trie_T1.0	6	6	is_a	This		0	court	unknown		subject not in store		[S] is a [O]	This is a court was a direct descendant of Greece, but he started to make a three - dimensional cities in the service of the spacecraft.
+49:trie_T1.0	3	3	death_place	He		1	June	unknown		subject not in store		[P] died in [O]	He died in June 1984, while the Lunar Module, one - third parties of man's media, and more than 60 million people (using the Council of the motion of over (on a regular session, among them on the eastern - American in Paris.
+49:trie_T1.0	3	3	death_date	He		1	June 1984	unknown		subject not in store	valid	[P] died in [O]	He died in June 1984, while the Lunar Module, one - third parties of man's media, and more than 60 million people (using the Council of the motion of over (on a regular session, among them on the eastern - American in Paris.
+53:trie_T1.0	2	6	is_a	Scotsman		0	school	unknown		subject not in store		[S] , is a [O]	There are a variety of the city is located in the north of the French nobility, a Scotsman, was a school in London.
+53:trie_T1.0	2	6	is_a	There		0	variety	unknown		subject not in store		[S] are an [O]	There are a variety of the city is located in the north of the French nobility, a Scotsman, was a school in London.
+54:trie_T1.0	4	7	is_a	Pope Gregory XV Aachen	Pope Gregory XV	partial	average	unknown		no is_a or occupation in store		the [S] is a [O]	The Pope Gregory XV Aachen is an average structural formula in Bologna, named after the world - famous page who was born and raised in the city.
+54:trie_T1.0	7	7	birth_date	Pope Gregory XV	Pope Gregory XV	0	1554	supported	1554-01-09		valid	[S] ( [O] -	He was the son of Pope Gregory XV (1554 - 1811), French theologian.
+54:trie_T1.0	7	7	death_date	Pope Gregory XV	Pope Gregory XV	0	1811	contradicted	1623-07-08		valid	[S] ( # - [O] )	He was the son of Pope Gregory XV (1554 - 1811), French theologian.
+54:trie_T1.0	7	7	nationality	Pope Gregory XV	Pope Gregory XV	0	French	unknown		no store nationality in the name table		[S] ( # - # ) , [O]	He was the son of Pope Gregory XV (1554 - 1811), French theologian.
+63:trie_T1.0	1	10	birth_date	Hirohito	Hirohito	0	January 1 , 1901	supported	1901	checked 1 of 3 parts	valid	^ [S] ( [O] -	Hirohito (January 1, 1901 - April 7, 1858) was an American playwright.
+63:trie_T1.0	1	10	death_date	Hirohito	Hirohito	0	April 7 , 1858	contradicted	1989		valid	^ [S] ( <M> # , # - [O] )	Hirohito (January 1, 1901 - April 7, 1858) was an American playwright.
+63:trie_T1.0	2	10	birth_date	Hirohito	Hirohito	0	January 8 , 1892	contradicted	1901		valid	^ [S] ( [O] -	Hirohito (January 8, 1892 - March 3, 1989) is a American actor.
+63:trie_T1.0	2	10	death_date	Hirohito	Hirohito	0	March 3 , 1989	supported	1989	checked 1 of 3 parts	valid	^ [S] ( <M> # , # - [O] )	Hirohito (January 8, 1892 - March 3, 1989) is a American actor.
+64:trie_T1.0	1	8	birth_place	Carl Friedrich Gauss	Carl Friedrich Gauss	0	Braunschweig	supported	Braunschweig			[S] was born in [O]	Carl Friedrich Gauss was born in Braunschweig.
+64:trie_T1.0	4	8	birth_date	Friedrich Wöhler	Friedrich Wöhler	0	January 1 , 1800	contradicted	1800-07-31		valid	^ [S] , ( [O]	Friedrich Wöhler, (January 1, 1800 / March 1, 2008) was a French mathematician.
+64:trie_T1.0	5	8	birth_date	He	Friedrich Wöhler	1	August 31 , 1918	contradicted	1800-07-31		valid	[P] was born on [O]	He was born on August 31, 1918 in Braunschweig in Lower Saxony.
+66:trie_T1.0	1	10	is_a	Ankara	Ankara	0	city	unknown	capital	open list		[S] is a [O]	Ankara is a city located in the human side of Turkey.
+66:trie_T1.0	2	10	is_a	Afyonkarahisar	Afyonkarahisar	0	city	unknown		no is_a or occupation in store		[S] is a [O]	Afyonkarahisar is a city and a city in the western Turkey.
+66:trie_T1.0	3	10	is_a	The Euphrates	Euphrates	0	river	unknown		no is_a or occupation in store		^ [S] is a [O] in	The Euphrates is a river in the field of Turkey, Egypt.
+66:trie_T1.0	4	10	is_a	The Euphrates	Euphrates	0	sea	unknown		no is_a or occupation in store		^ [S] is a [O] in	The Euphrates is a sea in the Eastern Turkey city in southern France.
+66:trie_T1.0	7	10	nationality	He		1	British	unknown		subject not in store		ADD [S] is a [NAT] [OCC]	He was a British Warrior.
+67:trie_T1.0	1	6	is_a	Aristotle Sea	Aristotle	partial	international	unknown	philosopher	open list		[S] is a [O]	Aristotle Sea is an international outcry in Europe (Italy), 50 miles north - west of Amsterdam.
+70:trie_T1.0	1	9	birth_place	He		1	Calf of Man , Isle of Man	unknown		subject not in store		[P] was born in [O]	He was born in Calf of Man, Isle of Man, the daughter of a local era.
+72:trie_T1.0	2	6	is_a	It	It (novel)	0	idea	unknown	pronoun	open list		[S] is a [O]	It is an idea was too radical and second single infantry, has a high - pitched, it was a vassal of American culture.
+75:trie_T1.0	6	7	birth_date	John Hermann Zapf	Hermann Zapf	partial	August 14 1918	supported	1918	checked 1 of 3 parts	valid	^ [S] ( [O] -	John Hermann Zapf (August 14 1918 - June 27 2005) was a American science fiction author.
+75:trie_T1.0	6	7	death_date	John Hermann Zapf	Hermann Zapf	partial	June 27 2005	unknown		no death in store	valid	[S] ( <M> # # - [O] )	John Hermann Zapf (August 14 1918 - June 27 2005) was a American science fiction author.
+78:trie_T1.0	1	9	birth_date	Ken Livingstone	Ken Livingstone	0	August 14 , 1945	contradicted	1945-06-17		valid	^ [S] ( [O]	Ken Livingstone (August 14, 1945 / March 1, 2008) was King of Jerusalem from 1997 to 2002.
+80:trie_T1.0	2	8	birth_date	President Bert Hölldobler	Bert Hölldobler	partial	2003	contradicted	1936		valid	^ [S] ( [O] -	President Bert Hölldobler (2003 - January 4, 1960) was a German - german artist.
+80:trie_T1.0	2	8	death_date	President Bert Hölldobler	Bert Hölldobler	partial	January 4 , 1960	unknown		no death in store	valid	^ [S] ( # - [O] )	President Bert Hölldobler (2003 - January 4, 1960) was a German - german artist.
+80:trie_T1.0	4	8	birth_date	Heinrich Lübke	Heinrich Lübke	0	January 8 , 1892	contradicted	1894-10-14		valid	^ [S] ( [O] -	Heinrich Lübke (January 8, 1892 - March 20, 1568) is an American playwright.
+80:trie_T1.0	4	8	death_date	Heinrich Lübke	Heinrich Lübke	0	March 20 , 1568	contradicted	1972-04-06		valid	^ [S] ( <M> # , # - [O] )	Heinrich Lübke (January 8, 1892 - March 20, 1568) is an American playwright.
+80:trie_T1.0	5	8	birth_place	Kaspar von Barth	Kaspar von Barth	0	Washington	unknown		no birth_place in store		^ [S] was born in [O] ,	Kaspar von Barth was born in Washington, Kentucky on January 1 1587.
+80:trie_T1.0	5	8	birth_place	Kaspar von Barth	Kaspar von Barth	0	Washington , Kentucky	unknown		no birth_place in store		[S] was born in [O]	Kaspar von Barth was born in Washington, Kentucky on January 1 1587.
+80:trie_T1.0	6	8	birth_date	Bert Hölldobler	Bert Hölldobler	0	October 4 , 1936	supported	1936	checked 1 of 3 parts	valid	^ [S] ( born [O]	Bert Hölldobler (born October 4, 1936) is a American actor.
+80:trie_T1.0	7	8	birth_date	John Heimrad Prem	Heimrad Prem	partial	August 14 1934	supported	1934	checked 1 of 3 parts	valid	^ [S] ( [O]	John Heimrad Prem (August 14 1934 / March 1 1781) is an Australian science fiction author.
+80:trie_T1.0	8	8	birth_date	Jakob Balde	Jakob Balde	0	January 1 , 1604	supported	1604	checked 1 of 3 parts	valid	^ [S] ( [O] -	Jakob Balde (January 1, 1604 - April 6, 1862) was King of Jerusalem from 1997 to 2002.
+80:trie_T1.0	8	8	death_date	Jakob Balde	Jakob Balde	0	April 6 , 1862	contradicted	1668		valid	^ [S] ( <M> # , # - [O] )	Jakob Balde (January 1, 1604 - April 6, 1862) was King of Jerusalem from 1997 to 2002.
+82:trie_T1.0	4	7	birth_place	Liu Chih	Liu Chih	0	Europe , Canada	unknown		no birth_place in store		^ [S] was born in [O] ,	Liu Chih was born in Europe, Canada, on March 1, 1892.
+82:trie_T1.0	5	7	death_date	Zhang Heng	Zhang Heng	0	June 11 , 1903	contradicted	0139		valid	^ [S] ( <M> # , # - [O] )	Zhang Heng (August 14, 78 - June 11, 1903) is a American actor.
+82:trie_T1.0	6	7	birth_date	John Jin Shengtan	Jin Shengtan	partial	August 14 1608	supported	1608	checked 1 of 3 parts	valid	^ [S] ( [O] -	John Jin Shengtan (August 14 1608 - March 19 1939) is an American science fiction author.
+82:trie_T1.0	6	7	death_date	John Jin Shengtan	Jin Shengtan	partial	March 19 1939	contradicted	1661		valid	[S] ( <M> # # - [O] )	John Jin Shengtan (August 14 1608 - March 19 1939) is an American science fiction author.
+85:trie_T1.0	2	5	birth_date	Sultan Camille Pissarro	Camille Pissarro	partial	1988	contradicted	1830-07-10		valid	^ [S] ( [O] -	Sultan Camille Pissarro (1988 - January 4, 1960) was a German - Impressionist artist.
+85:trie_T1.0	2	5	death_date	Sultan Camille Pissarro	Camille Pissarro	partial	January 4 , 1960	contradicted	1903-11-13		valid	^ [S] ( # - [O] )	Sultan Camille Pissarro (1988 - January 4, 1960) was a German - Impressionist artist.
+85:trie_T1.0	3	5	birth_date	Claude Monet	Claude Monet	0	August 14 , 1840	contradicted	1840-11-14		valid	^ [S] ( [O] -	Claude Monet (August 14, 1840 - November 17, 1917) was King of Jerusalem from 1997 to 2002.
+85:trie_T1.0	3	5	death_date	Claude Monet	Claude Monet	0	November 17 , 1917	contradicted	1926-12-05		valid	^ [S] ( <M> # , # - [O] )	Claude Monet (August 14, 1840 - November 17, 1917) was King of Jerusalem from 1997 to 2002.
+85:trie_T1.0	4	5	birth_date	Pierre - Auguste Renoir	Pierre-Auguste Renoir	0	October 4 , 1841	contradicted	1841-02-25		valid	^ [S] ( born [O]	Pierre - Auguste Renoir (born October 4, 1841) was an Italian sculptor and painter.
+85:trie_T1.0	5	5	birth_date	John Alfred Sisley	Alfred Sisley	partial	August 14 1839	contradicted	1839-10-30		valid	^ [S] ( [O]	John Alfred Sisley (August 14 1839 / March 1 1781) is a American science fiction author.
+86:trie_T1.0	2	6	birth_date	He		1	August 31 , 1918	unknown		subject not in store	valid	[P] was born on [O]	He was born on August 31, 1918 in Tsuen Wan District in Hong Kong.
+86:trie_T1.0	3	6	is_a	Discovery Bay	Discovery Bay	0	city	unknown	residential development	open list		[S] is a [O]	Discovery Bay is a city located in the human history of Hong Kong.
+98:trie_T1.0	6	10	birth_place	He		1	American	unknown		subject not in store		[P] was born in [O]	He was born in American history.
+101:trie_T1.0	8	8	is_a	It	It (novel)	0	performance	unknown	pronoun	open list		[S] is a [O]	It is a performance at age.
+107:trie_T1.0	1	11	birth_date	Charlemagne	Charlemagne	0	October 4 , 742	supported	0742	checked 1 of 3 parts	valid	^ [S] ( born [O]	Charlemagne (born October 4, 742) was a French theologian and poet.
+107:trie_T1.0	2	11	birth_date	Charlemagne	Charlemagne	0	May 19 , 1946	contradicted	0742		valid	^ [S] ( [O] -	Charlemagne (May 19, 1946 - January 27, 814) was a Greek philosopher and theologian.
+107:trie_T1.0	2	11	death_date	Charlemagne	Charlemagne	0	January 27 , 814	supported	0814	checked 1 of 3 parts	valid	^ [S] ( <M> # , # - [O] )	Charlemagne (May 19, 1946 - January 27, 814) was a Greek philosopher and theologian.
+109:trie_T1.0	2	7	birth_place	Claude Monet	Claude Monet	0	Paris	supported	Paris			[S] was born in [O]	Claude Monet was born in Paris.
+109:trie_T1.0	3	7	is_a	Brigitte Bardot	Brigitte Bardot	0	son	unknown	actor	open list		[S] is a [O]	Brigitte Bardot was a son of King Priam of Paris.
+109:trie_T1.0	4	7	birth_date	Anatole France	Anatole France	0	October 3 , 1844	contradicted	1844-04-16		valid	[S] ( born [O] in	Anatole France (born October 3, 1844 in Paris, South Melbourne, Rochester) was a French mathematician.
+109:trie_T1.0	5	7	birth_date	André Gide	André Gide	0	November 28 , 1869	contradicted	1869-11-22		valid	^ [S] ( born [O]	André Gide (born November 28, 1869) is a American actor and director from New York, London.
+109:trie_T1.0	6	7	birth_date	Louis Braille	Louis Braille	0	1809	supported	1809-01-04		valid	[S] ( [O] -	He was the son of Louis Braille (1809 - 2005), French theologian.
+109:trie_T1.0	6	7	death_date	Louis Braille	Louis Braille	0	2005	contradicted	1852-01-06		valid	[S] ( # - [O] )	He was the son of Louis Braille (1809 - 2005), French theologian.
+109:trie_T1.0	6	7	nationality	Louis Braille	Louis Braille	0	French	supported	French			[S] ( # - # ) , [O]	He was the son of Louis Braille (1809 - 2005), French theologian.
+109:trie_T1.0	7	7	birth_date	Charles Baudelaire	Charles Baudelaire	0	August 14 , 1821	contradicted	1821-04-09		valid	^ [S] ( [O] -	Charles Baudelaire (August 14, 1821 - April 7, 1858) was an American playwright.
+109:trie_T1.0	7	7	death_date	Charles Baudelaire	Charles Baudelaire	0	April 7 , 1858	contradicted	1867-08-31		valid	^ [S] ( <M> # , # - [O] )	Charles Baudelaire (August 14, 1821 - April 7, 1858) was an American playwright.
+110:trie_T1.0	3	8	birth_place	He		1	Berlin , Germany	unknown		subject not in store		[P] was born in [O]	He was born in Berlin, Germany.
+110:trie_T1.0	3	8	birth_place	He		1	Berlin	unknown		subject not in store		[P] was born in [O] ,	He was born in Berlin, Germany.
+110:trie_T1.0	4	8	located_in	Ruhr	Ruhr	0	Germany	supported	germany			[S] is a city in [O] ,	Ruhr is a city in Germany, France.
+110:trie_T1.0	4	8	located_in	Ruhr	Ruhr	0	Germany , France	contradicted	germany	different top places; by part		[S] is a city in [O]	Ruhr is a city in Germany, France.
+110:trie_T1.0	4	8	is_a	Ruhr	Ruhr	0	city	unknown	river	open list		^ [S] is a [O] in	Ruhr is a city in Germany, France.
+110:trie_T1.0	6	8	is_a	Berlin	Berlin	0	city	supported	city			[S] is a [O]	Berlin is a city located in the human history of Europe.
+110:trie_T1.0	8	8	is_a	Munich	Munich (district)	0	city	unknown		no is_a or occupation in store		[S] is a [O]	Munich is a city and municipality in the county of Bavaria, Germany.
+110:trie_T1.0	8	8	is_a	Munich	Munich (district)	0	municipality	unknown		no is_a or occupation in store		ADD [S] is a [NAT] [OCC]	Munich is a city and municipality in the county of Bavaria, Germany.
+111:trie_T1.0	4	7	is_a	Midlothian	Midlothian (disambiguation)	0	city	unknown	council area	open list		[S] is a [O]	Midlothian is a city built in the human history of Scotland.
+111:trie_T1.0	5	7	birth_date	James Douglas Gordon	Douglas Gordon	partial	May 2 1966	supported	1966	checked 1 of 3 parts	valid	^ [S] ( [O]	James Douglas Gordon (May 2 1966 / March 1 1781) is a American science fiction author.
+111:trie_T1.0	6	7	birth_place	Robert Baillie	Robert Baillie	0	Europe , Canada	unknown		no birth_place in store		^ [S] was born in [O] ,	Robert Baillie was born in Europe, Canada, on March 1, 1602.
+111:trie_T1.0	7	7	birth_date	Alan Currall	Alan Currall	0	1964	supported	1964		valid	[S] ( [O] -	He was the son of Alan Currall (1964 - 2005), French theologian.
+111:trie_T1.0	7	7	death_date	Alan Currall	Alan Currall	0	2005	unknown		no death in store	valid	[S] ( # - [O] )	He was the son of Alan Currall (1964 - 2005), French theologian.
+111:trie_T1.0	7	7	nationality	Alan Currall	Alan Currall	0	French	contradicted	Scotland;scottish			[S] ( # - # ) , [O]	He was the son of Alan Currall (1964 - 2005), French theologian.
+116:trie_T1.0	2	5	is_a	It	It (novel)	0	system )	unknown	pronoun	open list		[S] is a [O] ,	It was an system), which has been discovered of the river - to - fiction works, and by their parent for each on the left and right inguinal.
+121:trie_T1.0	6	6	is_a	This		0	form	unknown		subject not in store		[S] is a [O] of	This is a form of the Greeks in various meanings.
+122:trie_T1.0	1	6	birth_place	Emil Theodor Kocher	Emil Theodor Kocher	0	Bern	supported	Bern			[S] was born in [O]	Emil Theodor Kocher was born in Bern in Africa, France, and died out with a different role in control characters.
+122:trie_T1.0	6	6	birth_date	Friedrich Traugott Wahlen	Friedrich Traugott Wahlen	0	1899	supported	1899-04-10		valid	[S] ( [O] -	He was the son of Friedrich Traugott Wahlen (1899 - 1902), French theologian.
+122:trie_T1.0	6	6	death_date	Friedrich Traugott Wahlen	Friedrich Traugott Wahlen	0	1902	contradicted	1985-11-07		valid	[S] ( # - [O] )	He was the son of Friedrich Traugott Wahlen (1899 - 1902), French theologian.
+122:trie_T1.0	6	6	nationality	Friedrich Traugott Wahlen	Friedrich Traugott Wahlen	0	French	unknown		no store nationality in the name table		[S] ( # - # ) , [O]	He was the son of Friedrich Traugott Wahlen (1899 - 1902), French theologian.
+129:trie_T1.0	1	5	is_a	In Canada	Canada	partial	set	unknown	country	open list		[S] , is a [O]	In Canada, was a set of them.
+131:trie_T1.0	6	8	is_a	Einstein	Albert Einstein	partial	advocate	unknown	physicist;scientist;theoretical physicist	open list		[S] is a [O] of	Einstein was an advocate of Adam (June 7, 2005.
+134:trie_T1.0	1	8	is_a	Aristotle Sea	Aristotle	partial	international	unknown	philosopher	open list		[S] is a [O]	Aristotle Sea is an international outcry in Australia (Tasmania), 50 miles north - west of Mount Kosciuszko.
+134:trie_T1.0	3	8	death_place	He	Aristotle	1	Canberra , Australia	unknown		no death_place in store		[P] died in [O]	He died in Canberra, Australia.
+134:trie_T1.0	8	8	is_a	The Darling River	Darling River	0	river	unknown		no is_a or occupation in store		^ [S] is a [O] in	The Darling River is a river in the Bourke name in British India.
+135:trie_T1.0	1	8	is_a	Dublin	Dublin	0	city	unknown	capital	open list		[S] is a [O]	Dublin is a city located in the human history of Europe.
+135:trie_T1.0	2	8	is_a	Munster	Munster	0	city	supported	city			[S] is a [O]	Munster is a city and a city in the southern Ireland.
+135:trie_T1.0	6	8	birth_date	Michael Jackson	Michael Jackson (Anglican bishop)	0	March 1 , 1956	contradicted	1956-05-24		valid	^ [S] ( [O] -	Michael Jackson (March 1, 1956 - April 7, 1858) was an Indian era.
+135:trie_T1.0	6	8	death_date	Michael Jackson	Michael Jackson (Anglican bishop)	0	April 7 , 1858	unknown		no death in store	valid	^ [S] ( <M> # , # - [O] )	Michael Jackson (March 1, 1956 - April 7, 1858) was an Indian era.
+135:trie_T1.0	7	8	birth_place	Billy Wright	Billy Wright (terrorist)	0	Europe , Canada	contradicted	County Armagh	different top places; by part		^ [S] was born in [O] ,	Billy Wright was born in Europe, Canada, on March 1, 1960.
+135:trie_T1.0	8	8	birth_date	Mary McAleese	Mary McAleese	0	1951	supported	1951-06-27		valid	[S] ( [O] -	He was the son of Mary McAleese (1951 - 2005), French theologian.
+135:trie_T1.0	8	8	death_date	Mary McAleese	Mary McAleese	0	2005	unknown		no death in store	valid	[S] ( # - [O] )	He was the son of Mary McAleese (1951 - 2005), French theologian.
+135:trie_T1.0	8	8	nationality	Mary McAleese	Mary McAleese	0	French	unknown		no store nationality in the name table		[S] ( # - # ) , [O]	He was the son of Mary McAleese (1951 - 2005), French theologian.
+138:trie_T1.0	4	6	birth_date	Jennifer Knapp	Jennifer Knapp	0	1974	supported	1974		valid	[S] ( [O] -	He was the son of Jennifer Knapp (1974 - 1991), French theologian.
+138:trie_T1.0	4	6	death_date	Jennifer Knapp	Jennifer Knapp	0	1991	unknown		no death in store	valid	[S] ( # - [O] )	He was the son of Jennifer Knapp (1974 - 1991), French theologian.
+138:trie_T1.0	4	6	nationality	Jennifer Knapp	Jennifer Knapp	0	French	unknown	Christian	no store nationality in the name table		[S] ( # - # ) , [O]	He was the son of Jennifer Knapp (1974 - 1991), French theologian.
+138:trie_T1.0	5	6	birth_date	Irene van Dyk	Irene van Dyk	0	October 4 , 1971	supported	1971	checked 1 of 3 parts	valid	[S] ( born [O] in	Irene van Dyk (born October 4, 1971 in Paris, South Melbourne, Rochester) was a French mathematician.
+141:trie_T1.0	1	8	birth_date	President Inger Brattström	Inger Brattström	partial	2000	unknown		no birth in store	valid	^ [S] ( [O] -	President Inger Brattström (2000 - January 4, 1960) was a German - german artist.
+141:trie_T1.0	1	8	death_date	President Inger Brattström	Inger Brattström	partial	January 4 , 1960	unknown		no death in store	valid	^ [S] ( # - [O] )	President Inger Brattström (2000 - January 4, 1960) was a German - german artist.
+141:trie_T1.0	3	8	birth_place	Heimrad Prem	Heimrad Prem	0	Los Angeles	unknown		no birth_place in store		^ [S] was born in [O] ,	Heimrad Prem was born in Los Angeles, german.
+141:trie_T1.0	4	8	birth_date	Heinrich Lübke	Heinrich Lübke	0	January 8 , 1892	contradicted	1894-10-14		valid	^ [S] ( [O] -	Heinrich Lübke (January 8, 1892 - March 20, 1568) is an American playwright.
+141:trie_T1.0	4	8	death_date	Heinrich Lübke	Heinrich Lübke	0	March 20 , 1568	contradicted	1972-04-06		valid	^ [S] ( <M> # , # - [O] )	Heinrich Lübke (January 8, 1892 - March 20, 1568) is an American playwright.
+141:trie_T1.0	5	8	birth_date	Kaspar von Barth	Kaspar von Barth	0	October 4 , 1587	supported	1587	checked 1 of 3 parts	valid	^ [S] ( born [O]	Kaspar von Barth (born October 4, 1587) is a American actor and director from New York, London.
+141:trie_T1.0	6	8	birth_date	Jakob Balde	Jakob Balde	0	January 8 1604	supported	1604	checked 1 of 3 parts	valid	^ [S] ( [O] -	Jakob Balde (January 8 1604 - April 6 1953) was a British film director.
+141:trie_T1.0	6	8	death_date	Jakob Balde	Jakob Balde	0	April 6 1953	contradicted	1668		valid	[S] ( <M> # # - [O] )	Jakob Balde (January 8 1604 - April 6 1953) was a British film director.
+142:trie_T1.0	3	7	is_a	Athens	Athens	0	town	unknown	capital	open list		^ [S] is a [O] in	Athens is a town in the county of Europe, Canada.
+142:trie_T1.0	7	7	is_a	Berlin	Berlin	0	city	supported	city			[S] is a [O]	Berlin is a city and municipality in the field of Germany, France.
+142:trie_T1.0	7	7	is_a	Berlin	Berlin	0	municipality	unknown	city	open list		ADD [S] is a [NAT] [OCC]	Berlin is a city and municipality in the field of Germany, France.
+143:trie_T1.0	4	7	birth_date	Jin Shengtan	Jin Shengtan	0	c . 1608	supported	1608		valid	^ [S] ( [O] -	Jin Shengtan (c. 1608 - 2003) was a Greek philosopher and theologian.
+143:trie_T1.0	4	7	death_date	Jin Shengtan	Jin Shengtan	0	2003	contradicted	1661		valid	[S] ( c . # - [O]	Jin Shengtan (c. 1608 - 2003) was a Greek philosopher and theologian.
+143:trie_T1.0	5	7	birth_place	Liu Chih	Liu Chih	0	Europe , Canada	unknown		no birth_place in store		^ [S] was born in [O] ,	Liu Chih was born in Europe, Canada, on April 12, 1892.
+143:trie_T1.0	6	7	death_date	Zhang Heng	Zhang Heng	0	2003	contradicted	0139		valid	[S] ( # - [O] )	He was the son of Zhang Heng (78 - 2003), French scholar.
+143:trie_T1.0	6	7	nationality	Zhang Heng	Zhang Heng	0	French	contradicted	Ancient;Chinese			[S] ( # - # ) , [O]	He was the son of Zhang Heng (78 - 2003), French scholar.
+143:trie_T1.0	7	7	birth_date	Wang Wei	Wang Wei	0	August 14 , 698	supported	0698	checked 1 of 3 parts	valid	^ [S] ( [O] -	Wang Wei (August 14, 698 - April 6, 1862) was King of Jerusalem from 1997 to 2002.
+143:trie_T1.0	7	7	death_date	Wang Wei	Wang Wei	0	April 6 , 1862	contradicted	0761		valid	^ [S] ( <M> # , # - [O] )	Wang Wei (August 14, 698 - April 6, 1862) was King of Jerusalem from 1997 to 2002.
+144:trie_T1.0	2	8	birth_place	Alan Ayckbourn	Alan Ayckbourn	0	London	supported	London			[S] was born in [O]	Alan Ayckbourn was born in London.
+144:trie_T1.0	4	8	is_a	Woolwich	Woolwich	0	city	unknown	town	open list		[S] is a [O]	Woolwich is a city built in the human history of London.
+144:trie_T1.0	5	8	birth_date	Arthur Phillip	Arthur Phillip	0	11 October 1738	supported	1738-10-11		valid	^ [S] ( [O] -	Arthur Phillip (11 October 1738 - 1 January 2005) was a British writer and philosopher.
+144:trie_T1.0	5	8	death_date	Arthur Phillip	Arthur Phillip	0	1 January 2005	contradicted	1814-08-31		valid	[S] ( # <M> # - [O]	Arthur Phillip (11 October 1738 - 1 January 2005) was a British writer and philosopher.
+144:trie_T1.0	6	8	birth_date	Alan Ayckbourn	Alan Ayckbourn	0	1939	supported	1939		valid	[S] ( [O] -	He was the son of Alan Ayckbourn (1939 - 1945), French theologian.
+144:trie_T1.0	6	8	death_date	Alan Ayckbourn	Alan Ayckbourn	0	1945	unknown		no death in store	valid	[S] ( # - [O] )	He was the son of Alan Ayckbourn (1939 - 1945), French theologian.
+144:trie_T1.0	6	8	nationality	Alan Ayckbourn	Alan Ayckbourn	0	French	unknown		no store nationality in the name table		[S] ( # - # ) , [O]	He was the son of Alan Ayckbourn (1939 - 1945), French theologian.
+144:trie_T1.0	7	8	birth_date	John Algernon Swinburne	Algernon Swinburne	partial	April 19 1837	contradicted	1837-04-05		valid	^ [S] ( [O] -	John Algernon Swinburne (April 19 1837 - April 6 1953) is a American science fiction author.
+144:trie_T1.0	7	8	death_date	John Algernon Swinburne	Algernon Swinburne	partial	April 6 1953	contradicted	1909-04-10		valid	[S] ( <M> # # - [O] )	John Algernon Swinburne (April 19 1837 - April 6 1953) is a American science fiction author.
+147:trie_T1.0	1	8	birth_date	He		1	August 31 , 1918	unknown		subject not in store	valid	[P] was born on [O]	He was born on August 31, 1918 in California, American West, and began to America with his father.
+147:trie_T1.0	5	8	birth_date	Forrest J . Ackerman	Forrest J. Ackerman	0	August 14 , 1916	contradicted	1916-11-24		valid	^ [S] ( [O] -	Forrest J. Ackerman (August 14, 1916 - April 7, 1858) was an American playwright.
+147:trie_T1.0	5	8	death_date	Forrest J . Ackerman	Forrest J. Ackerman	0	April 7 , 1858	unknown		no death in store	valid	^ [S] ( <M> # , # - [O] )	Forrest J. Ackerman (August 14, 1916 - April 7, 1858) was an American playwright.
+147:trie_T1.0	6	8	birth_place	Forrest J . Ackerman	Forrest J. Ackerman	0	New York	unknown		no birth_place in store		^ [S] was born in [O] ,	Forrest J. Ackerman was born in New York, California.
+147:trie_T1.0	6	8	birth_place	Forrest J . Ackerman	Forrest J. Ackerman	0	New York , California	unknown		no birth_place in store		[S] was born in [O]	Forrest J. Ackerman was born in New York, California.
+148:trie_T1.0	3	6	birth_date	John Flamsteed	John Flamsteed	0	1646	supported	1646		valid	[S] ( [O] -	He was the son of John Flamsteed (1646 - 1811), French theologian.
+148:trie_T1.0	3	6	death_date	John Flamsteed	John Flamsteed	0	1811	contradicted	1719		valid	[S] ( # - [O] )	He was the son of John Flamsteed (1646 - 1811), French theologian.
+148:trie_T1.0	3	6	nationality	John Flamsteed	John Flamsteed	0	French	contradicted	British			[S] ( # - # ) , [O]	He was the son of John Flamsteed (1646 - 1811), French theologian.
+148:trie_T1.0	4	6	birth_date	James Bradley	James Bradley	0	January 20 1693	contradicted	1693-03		valid	^ [S] ( [O]	James Bradley (January 20 1693, Australia - January 1 1901, England) is a British philosopher and theologian, one of the most important in their country.
+150:trie_T1.0	5	5	birth_date	John Leonard Bacon	Leonard Bacon	partial	May 2 1802	supported	1802	checked 1 of 3 parts	valid	^ [S] ( [O] -	John Leonard Bacon (May 2 1802 - March 19 1939) is an American science fiction author.
+150:trie_T1.0	5	5	death_date	John Leonard Bacon	Leonard Bacon	partial	March 19 1939	contradicted	1881		valid	[S] ( <M> # # - [O] )	John Leonard Bacon (May 2 1802 - March 19 1939) is an American science fiction author.
+152:trie_T1.0	1	8	is_a	Amakusa	Amakusa	0	city	unknown		no is_a or occupation in store		^ [S] ( ) is a [O]	Amakusa () is a city in the northern province of Japan.
+152:trie_T1.0	2	8	is_a	Dejima	Dejima	0	city	unknown		no is_a or occupation in store		[S] is a [O]	Dejima is a city located in the human history of Japan.
+152:trie_T1.0	7	8	birth_place	Maaya Sakamoto	Maaya Sakamoto	0	Europe , Canada	unknown		no birth_place in store		^ [S] was born in [O] ,	Maaya Sakamoto was born in Europe, Canada, on March 1, 1980.
+155:trie_T1.0	1	7	birth_date	Aristotle	Aristotle	0	c . 384	supported	384 BC		valid	^ [S] ( [O] -	Aristotle (c. 384 - 2005) was a Greek philosopher and theologian.
+155:trie_T1.0	1	7	death_date	Aristotle	Aristotle	0	2005	contradicted	322 BC		valid	[S] ( c . # - [O]	Aristotle (c. 384 - 2005) was a Greek philosopher and theologian.
+155:trie_T1.0	2	7	birth_date	Aristotle	Aristotle	0	May 19 , 1946	contradicted	384 BC		valid	^ [S] ( [O] -	Aristotle (May 19, 1946 - January 27, 322) is an English poet and artist.
+155:trie_T1.0	2	7	death_date	Aristotle	Aristotle	0	January 27 , 322	supported	322 BC	checked 1 of 3 parts	valid	^ [S] ( <M> # , # - [O] )	Aristotle (May 19, 1946 - January 27, 322) is an English poet and artist.
+155:trie_T1.0	5	7	birth_date	Ayn Rand	Ayn Rand	0	1905	supported	1905		valid	[S] ( [O] -	He was the son of Ayn Rand (1905 - 2005), Italian mathematician.
+155:trie_T1.0	5	7	death_date	Ayn Rand	Ayn Rand	0	2005	contradicted	1982		valid	[S] ( # - [O] )	He was the son of Ayn Rand (1905 - 2005), Italian mathematician.
+155:trie_T1.0	5	7	nationality	Ayn Rand	Ayn Rand	0	Italian	contradicted	American;Aristotelian;Atheist;Moral;Political;Women			[S] ( # - # ) , [O]	He was the son of Ayn Rand (1905 - 2005), Italian mathematician.
+155:trie_T1.0	6	7	birth_date	Avicenna	Avicenna	0	October 4 , 980	supported	0980	checked 1 of 3 parts	valid	^ [S] ( born [O]	Avicenna (born October 4, 980) was an Italian painter and second group of the British Royal Institute (2000 - 2002).
+155:trie_T1.0	6	7	birth_date	British Royal Institute		0	2000	unknown		subject not in store	valid	[S] ( [O] -	Avicenna (born October 4, 980) was an Italian painter and second group of the British Royal Institute (2000 - 2002).
+155:trie_T1.0	6	7	death_date	British Royal Institute		0	2002	unknown		subject not in store	valid	[S] ( # - [O] )	Avicenna (born October 4, 980) was an Italian painter and second group of the British Royal Institute (2000 - 2002).
+155:trie_T1.0	7	7	birth_place	Averroes	Averroes	0	Europe , Canada	unknown		no birth_place in store		^ [S] was born in [O] ,	Averroes was born in Europe, Canada, on March 1, 1126.
+158:trie_T1.0	6	8	is_a	This		0	international standards	unknown		subject not in store		[S] is a [O] ,	This is an international standards, and so on.
+160:trie_T1.0	2	7	birth_date	President Cimabue	Cimabue	partial	2003	contradicted	1240		valid	^ [S] ( [O] -	President Cimabue (2003 - January 4, 1960) was a German - Gothic historian.
+160:trie_T1.0	2	7	death_date	President Cimabue	Cimabue	partial	January 4 , 1960	contradicted	1302		valid	^ [S] ( # - [O] )	President Cimabue (2003 - January 4, 1960) was a German - Gothic historian.
+160:trie_T1.0	4	7	death_date	Cimabue	Cimabue	0	1240	contradicted	1302		valid	^ [S] ( d . [O]	Cimabue (d. 1240 - 2003) was a Greek philosopher and theologian.
+160:trie_T1.0	5	7	birth_place	Giotto di Bondone	Giotto di Bondone	0	Washington	contradicted	Tuscany	different top places		^ [S] was born in [O] ,	Giotto di Bondone was born in Washington, Kentucky on January 3 1267.
+160:trie_T1.0	5	7	birth_place	Giotto di Bondone	Giotto di Bondone	0	Washington , Kentucky	contradicted	Tuscany	different top places; by part		[S] was born in [O]	Giotto di Bondone was born in Washington, Kentucky on January 3 1267.
+160:trie_T1.0	6	7	birth_date	Arnolfo di Cambio	Arnolfo di Cambio	0	August 14 , 1245	contradicted	1232		valid	^ [S] ( [O] -	Arnolfo di Cambio (August 14, 1245 - March 20, 1568) is an American playwright.
+160:trie_T1.0	6	7	death_date	Arnolfo di Cambio	Arnolfo di Cambio	0	March 20 , 1568	contradicted	1310		valid	^ [S] ( <M> # , # - [O] )	Arnolfo di Cambio (August 14, 1245 - March 20, 1568) is an American playwright.
+160:trie_T1.0	7	7	birth_date	Andrea Orcagna	Andrea Orcagna	0	October 4 , 1308	supported	1308	checked 1 of 3 parts	valid	^ [S] ( born [O]	Andrea Orcagna (born October 4, 1308) is a American actor and director from New York, London.
+172:trie_T1.0	1	9	birth_place	He		1	Flevoland , Netherlands	unknown		subject not in store		[P] was born in [O]	He was born in Flevoland, Netherlands, the daughter of a local era.
+172:trie_T1.0	9	9	is_a	Freddy Heineken	Freddy Heineken	0	son	unknown		no is_a or occupation in store		[S] is a [O]	Freddy Heineken was a son of King Priam of Amsterdam.
+175:trie_T1.0	5	8	is_a	Seattle Pacific University	Seattle Pacific University	0	computer	unknown	university	open list		[S] is a [O]	Seattle Pacific University was a computer based in Seattle, the ACLU, England.
+175:trie_T1.0	6	8	birth_place	Bill Gates	Bill Gates	0	Europe , Canada	contradicted	Seattle;Seattle, Washington	different top places; by part		^ [S] was born in [O] ,	Bill Gates was born in Europe, Canada, on March 1, 1955.
+176:trie_T1.0	1	7	is_a	Beaujolais	Beaujolais	0	city	unknown	historical province;province	open list		[S] is a [O]	Beaujolais is a city located in the human history of France.
+176:trie_T1.0	2	7	birth_place	Jacques Tardi	Jacques Tardi	0	Los Angeles	unknown		no birth_place in store		^ [S] was born in [O] ,	Jacques Tardi was born in Los Angeles, France.
+176:trie_T1.0	2	7	birth_place	Jacques Tardi	Jacques Tardi	0	Los Angeles , France	unknown		no birth_place in store		[S] was born in [O]	Jacques Tardi was born in Los Angeles, France.
+176:trie_T1.0	4	7	birth_date	Jacques Tardi	Jacques Tardi	0	1946	supported	1946		valid	[S] ( [O] -	He was the son of Jacques Tardi (1946 - 2005), French theologian.
+176:trie_T1.0	4	7	death_date	Jacques Tardi	Jacques Tardi	0	2005	unknown		no death in store	valid	[S] ( # - [O] )	He was the son of Jacques Tardi (1946 - 2005), French theologian.
+176:trie_T1.0	4	7	nationality	Jacques Tardi	Jacques Tardi	0	French	supported	France;french			[S] ( # - # ) , [O]	He was the son of Jacques Tardi (1946 - 2005), French theologian.
+176:trie_T1.0	5	7	is_a	The Meuse River	Meuse River	0	river	supported	river			^ [S] is a [O] in	The Meuse River is a river in the France city in southern France.
+176:trie_T1.0	6	7	is_a	Brussels	Brussels	0	city	unknown		no is_a or occupation in store		[S] is a [O]	Brussels is a city and municipality in the county of Belgium, Germany.
+176:trie_T1.0	6	7	is_a	Brussels	Brussels	0	municipality	unknown		no is_a or occupation in store		ADD [S] is a [NAT] [OCC]	Brussels is a city and municipality in the county of Belgium, Germany.
+179:trie_T1.0	1	7	is_a	Islamabad	Islamabad	0	city	unknown		no is_a or occupation in store		[S] is a [O]	Islamabad is a city and a city in the southern Asia.
+183:trie_T1.0	2	7	birth_date	President Ilon Wikland	Ilon Wikland	partial	1988	contradicted	1930		valid	^ [S] ( [O] -	President Ilon Wikland (1988 - January 4, 1960) was a German - swedish artist.
+183:trie_T1.0	2	7	death_date	President Ilon Wikland	Ilon Wikland	partial	January 4 , 1960	unknown		no death in store	valid	^ [S] ( # - [O] )	President Ilon Wikland (1988 - January 4, 1960) was a German - swedish artist.
+183:trie_T1.0	4	7	birth_date	Johan Asplund	Johan Asplund	0	August 14 , 1980	contradicted	1937		valid	^ [S] ( [O] -	Johan Asplund (August 14, 1980 - June 11, 1903) is a American actor.
+183:trie_T1.0	4	7	death_date	Johan Asplund	Johan Asplund	0	June 11 , 1903	unknown		no death in store	valid	^ [S] ( <M> # , # - [O] )	Johan Asplund (August 14, 1980 - June 11, 1903) is a American actor.
+183:trie_T1.0	5	7	birth_place	Frederick William von Hessenstein	Frederick William von Hessenstein	0	Europe , Canada	unknown		no birth_place in store		^ [S] was born in [O] ,	Frederick William von Hessenstein was born in Europe, Canada, on September 1, 1735.
+183:trie_T1.0	6	7	birth_date	Maria Leissner	Maria Leissner	0	January 1 , 1956	supported	1956	checked 1 of 3 parts	valid	^ [S] , ( [O]	Maria Leissner, (January 1, 1956 / March 1, 2008) was a French mathematician.
+183:trie_T1.0	7	7	birth_date	Johan Christopher Toll	Johan Christopher Toll	0	1743	supported	1743		valid	[S] ( [O] -	He was the son of Johan Christopher Toll (1743 - 1811), French theologian.
+183:trie_T1.0	7	7	death_date	Johan Christopher Toll	Johan Christopher Toll	0	1811	contradicted	1817		valid	[S] ( # - [O] )	He was the son of Johan Christopher Toll (1743 - 1811), French theologian.
+183:trie_T1.0	7	7	nationality	Johan Christopher Toll	Johan Christopher Toll	0	French	contradicted	Sweden;swedish			[S] ( # - # ) , [O]	He was the son of Johan Christopher Toll (1743 - 1811), French theologian.
+189:trie_T1.0	3	5	birth_date	Kenneth II of Scotland	Kenneth II of Scotland	0	May 2 , 1182	unknown		no birth in store	valid	^ [S] ( [O] -	Kenneth II of Scotland (May 2, 1182 - April 19, 995) was a poet, writer, and actor. i.
+189:trie_T1.0	3	5	death_date	Kenneth II of Scotland	Kenneth II of Scotland	0	April 19 , 995	supported	0995	checked 1 of 3 parts	valid	^ [S] ( <M> # , # - [O] )	Kenneth II of Scotland (May 2, 1182 - April 19, 995) was a poet, writer, and actor. i.
+193:trie_T1.0	1	6	birth_date	David P . Litsa Spathi	Litsa Spathi	partial	October 4 , 1958	supported	1958	checked 1 of 3 parts	valid	[S] ( born [O]	The most common greek groups of the 20 th century were: Litsa Spathi, David P. Litsa Spathi (born October 4, 1958) was a Greek philosopher.
+196:trie_T1.0	1	7	is_a	Libreville	Libreville	0	city	supported	capital city			[S] is a [O]	Libreville is a city and a city in the southern Gabon.
+199:trie_T1.0	1	7	birth_place	Avery Hopwood	Avery Hopwood	0	Cleveland	unknown		no birth_place in store		[S] was born in [O]	Avery Hopwood was born in Cleveland in Africa, France, and died out with a different role in control characters.
+199:trie_T1.0	6	7	birth_date	Avery Hopwood	Avery Hopwood	0	May 28 , 1882	supported	1882-05-28		valid	^ [S] ( [O] -	Avery Hopwood (May 28, 1882 - July 1, 1967) is an American playwright.
+199:trie_T1.0	6	7	death_date	Avery Hopwood	Avery Hopwood	0	July 1 , 1967	contradicted	1928-07-01		valid	^ [S] ( <M> # , # - [O] )	Avery Hopwood (May 28, 1882 - July 1, 1967) is an American playwright.
+210:trie_T1.0	1	8	is_a	Amsterdam	Amsterdam	0	city	unknown		no is_a or occupation in store		^ [S] ( ) is a [O]	Amsterdam () is a city in the northern province of Europe.
+210:trie_T1.0	3	8	is_a	Athens	Athens	0	city	unknown	capital	open list		[S] is a [O]	Athens was a city built in the human history of Europe.
+214:trie_T1.0	3	7	birth_date	King Marc Riboud	Marc Riboud	partial	2003	contradicted	1923		valid	^ [S] ( [O] -	King Marc Riboud (2003 - January 4, 1960) was a German - french architect.
+214:trie_T1.0	3	7	death_date	King Marc Riboud	Marc Riboud	partial	January 4 , 1960	unknown		no death in store	valid	^ [S] ( # - [O] )	King Marc Riboud (2003 - January 4, 1960) was a German - french architect.
+214:trie_T1.0	5	7	birth_date	Henri Gouraud	Henri Gouraud (computer scientist)	0	1944	supported	1944		valid	[S] ( [O] -	He was the son of Henri Gouraud (1944 - 2005), French theologian.
+214:trie_T1.0	5	7	death_date	Henri Gouraud	Henri Gouraud (computer scientist)	0	2005	unknown		no death in store	valid	[S] ( # - [O] )	He was the son of Henri Gouraud (1944 - 2005), French theologian.
+214:trie_T1.0	5	7	nationality	Henri Gouraud	Henri Gouraud (computer scientist)	0	French	supported	France;french			[S] ( # - # ) , [O]	He was the son of Henri Gouraud (1944 - 2005), French theologian.
+214:trie_T1.0	7	7	birth_date	Guillaume Morel	Guillaume Morel	0	October 4 , 1505	supported	1505	checked 1 of 3 parts	valid	^ [S] ( born [O]	Guillaume Morel (born October 4, 1505) was a French sculptor and painter.
+216:trie_T1.0	6	9	is_a	He		0	series	unknown		subject not in store		[S] is a [O]	He was a series of the production of the', which, and a member of the lunar module.
+217:trie_T1.0	4	6	is_a	Alexandria	Alexandria	0	city	unknown		no is_a or occupation in store		[S] is a [O]	Alexandria is a city located in the human history of Egypt.
+219:trie_T1.0	1	7	birth_date	Alfonso XI of Castile	Alfonso XI of Castile	0	1312	supported	1312-08-13		valid	[S] ( [O] -	He was the son of Alfonso XI of Castile (1312 - 572), French theologian.
+219:trie_T1.0	1	7	death_date	Alfonso XI of Castile	Alfonso XI of Castile	0	572	contradicted	1350		valid	[S] ( # - [O] )	He was the son of Alfonso XI of Castile (1312 - 572), French theologian.
+219:trie_T1.0	1	7	nationality	Alfonso XI of Castile	Alfonso XI of Castile	0	French	unknown		no store nationality in the name table		[S] ( # - # ) , [O]	He was the son of Alfonso XI of Castile (1312 - 572), French theologian.
+219:trie_T1.0	2	7	birth_date	Alfonso XI of Castile	Alfonso XI of Castile	0	October 1 , 1901	contradicted	1312-08-13		valid	^ [S] ( [O] -	Alfonso XI of Castile (October 1, 1901 - January 1, 1350) was a French mathematician.
+219:trie_T1.0	2	7	death_date	Alfonso XI of Castile	Alfonso XI of Castile	0	January 1 , 1350	supported	1350	checked 1 of 3 parts	valid	^ [S] ( <M> # , # - [O] )	Alfonso XI of Castile (October 1, 1901 - January 1, 1350) was a French mathematician.
+220:trie_T1.0	1	3	is_a	This		0	computer network	unknown		subject not in store		[S] is a [O]	This was a computer network is also defined as a state of the art.).
+222:trie_T1.0	3	9	birth_date	Pope Paul Kelly	Paul Kelly (musician)	partial	2000	contradicted	1969-07-28		valid	^ [S] ( [O] -	Pope Paul Kelly (2000 - January 4, 1960) was a German - Australian drama.
+222:trie_T1.0	3	9	death_date	Pope Paul Kelly	Paul Kelly (musician)	partial	January 4 , 1960	unknown		no death in store	valid	^ [S] ( # - [O] )	Pope Paul Kelly (2000 - January 4, 1960) was a German - Australian drama.
+222:trie_T1.0	4	9	birth_date	P . L . Travers	P. L. Travers	0	August 14 , 1899	supported	1899	checked 1 of 3 parts	valid	^ [S] ( [O] -	P. L. Travers (August 14, 1899 - March 20, 1568) is an American playwright.
+222:trie_T1.0	4	9	death_date	P . L . Travers	P. L. Travers	0	March 20 , 1568	contradicted	1996		valid	^ [S] ( <M> # , # - [O] )	P. L. Travers (August 14, 1899 - March 20, 1568) is an American playwright.
+222:trie_T1.0	5	9	birth_date	J . F . Archibald	J.F. Archibald	0	January 1 , 1856	supported	1856	checked 1 of 3 parts	valid	^ [S] , ( [O]	J. F. Archibald, (January 1, 1856 / March 1, 2008) was a French mathematician.
+222:trie_T1.0	6	9	birth_place	He	J.F. Archibald	1	Richie Benaud	unknown		no birth_place in store		[P] was born in [O]	He was born in Richie Benaud in Australia.
+222:trie_T1.0	7	9	death_place	He	J.F. Archibald	1	Canberra , Australia	unknown		no death_place in store		[P] died in [O]	He died in Canberra, Australia.
+222:trie_T1.0	8	9	birth_date	John Hamilton Hume	Hamilton Hume	partial	May 2 1797	contradicted	1797-06-19		valid	^ [S] ( [O] -	John Hamilton Hume (May 2 1797 - April 6 1953) is a American science fiction author.
+222:trie_T1.0	8	9	death_date	John Hamilton Hume	Hamilton Hume	partial	April 6 1953	contradicted	1873		valid	[S] ( <M> # # - [O] )	John Hamilton Hume (May 2 1797 - April 6 1953) is a American science fiction author.
+222:trie_T1.0	9	9	birth_date	John Pilger	John Pilger	0	1939	supported	1939-10-09		valid	[S] ( [O] -	He was the son of John Pilger (1939 - 1945), French theologian.
+222:trie_T1.0	9	9	death_date	John Pilger	John Pilger	0	1945	unknown		no death in store	valid	[S] ( # - [O] )	He was the son of John Pilger (1939 - 1945), French theologian.
+222:trie_T1.0	9	9	nationality	John Pilger	John Pilger	0	French	contradicted	Australian			[S] ( # - # ) , [O]	He was the son of John Pilger (1939 - 1945), French theologian.
+223:trie_T1.0	4	7	birth_date	Joel Hamilton		0	1727	unknown		subject not in store	valid	[S] ( [O]	In 2004, Gore and Joel Hamilton (1727), using one), in contrast to Ra - Herakhty user to stop the massacre of the Latins and efficient).
+231:trie_T1.0	3	6	birth_date	Nigella Lawson	Nigella Lawson	0	May 2 , 1960	contradicted	1960-01-06		valid	^ [S] ( [O] -	Nigella Lawson (May 2, 1960 - June 11, 1903) is a American actor.
+231:trie_T1.0	3	6	death_date	Nigella Lawson	Nigella Lawson	0	June 11 , 1903	unknown		no death in store	valid	^ [S] ( <M> # , # - [O] )	Nigella Lawson (May 2, 1960 - June 11, 1903) is a American actor.
+231:trie_T1.0	6	6	birth_date	John Anita Brookner	Anita Brookner	partial	August 14 1928	contradicted	1928-07-16		valid	^ [S] ( [O] -	John Anita Brookner (August 14 1928 - February 22 1627) was a US science fiction author.
+231:trie_T1.0	6	6	death_date	John Anita Brookner	Anita Brookner	partial	February 22 1627	unknown		no death in store	valid	[S] ( <M> # # - [O] )	John Anita Brookner (August 14 1928 - February 22 1627) was a US science fiction author.
+234:trie_T1.0	4	7	birth_date	Augustine of Hippo	Augustine of Hippo	0	May 2 , 354	supported	0354	checked 1 of 3 parts	valid	^ [S] ( [O] -	Augustine of Hippo (May 2, 354 - April 7, 1858) was an American playwright.
+234:trie_T1.0	4	7	death_date	Augustine of Hippo	Augustine of Hippo	0	April 7 , 1858	contradicted	0430		valid	^ [S] ( <M> # , # - [O] )	Augustine of Hippo (May 2, 354 - April 7, 1858) was an American playwright.
+234:trie_T1.0	5	7	birth_date	John Blaise Pascal	Blaise Pascal	partial	May 2 1623	contradicted	1623-06-19		valid	^ [S] ( [O] -	John Blaise Pascal (May 2 1623 - April 6 1953) is a American science fiction author.
+234:trie_T1.0	5	7	death_date	John Blaise Pascal	Blaise Pascal	partial	April 6 1953	contradicted	1662-08-19		valid	[S] ( <M> # # - [O] )	John Blaise Pascal (May 2 1623 - April 6 1953) is a American science fiction author.
+234:trie_T1.0	7	7	birth_date	Alvin Plantinga	Alvin Plantinga	0	1932	supported	1932		valid	^ [S] ( [O] -	Alvin Plantinga (1932 - December 28, 1986) was a German engineer.
+234:trie_T1.0	7	7	death_date	Alvin Plantinga	Alvin Plantinga	0	December 28 , 1986	unknown		no death in store	valid	^ [S] ( # - [O] )	Alvin Plantinga (1932 - December 28, 1986) was a German engineer.
+238:trie_T1.0	3	7	is_a	It	It (novel)	0	child	unknown	pronoun	open list		[S] is a [O]	It was a child can use a spectrometer.
+244:trie_T1.0	1	8	birth_date	Avery Hopwood	Avery Hopwood	0	May 28 , 1882	supported	1882-05-28		valid	^ [S] ( [O] -	Avery Hopwood (May 28, 1882 - July 1, 1967) is an American playwright.
+244:trie_T1.0	1	8	death_date	Avery Hopwood	Avery Hopwood	0	July 1 , 1967	contradicted	1928-07-01		valid	^ [S] ( <M> # , # - [O] )	Avery Hopwood (May 28, 1882 - July 1, 1967) is an American playwright.
+244:trie_T1.0	2	8	birth_date	Avery Hopwood	Avery Hopwood	0	May 28 , 1936	contradicted	1882-05-28		valid	^ [S] ( [O] -	Avery Hopwood (May 28, 1936 - April 19, 1928), was a French mathematician.
+244:trie_T1.0	2	8	death_date	Avery Hopwood	Avery Hopwood	0	April 19 , 1928	contradicted	1928-07-01		valid	^ [S] ( <M> # , # - [O] )	Avery Hopwood (May 28, 1936 - April 19, 1928), was a French mathematician.
+244:trie_T1.0	4	8	birth_date	Philip Johnson	Philip Johnson	0	May 19 , 1906	contradicted	1906-07-08		valid	^ [S] ( [O] -	Philip Johnson (May 19, 1906 - June 1, 1962) was King of Jerusalem from 1997 to 2002.
+244:trie_T1.0	4	8	death_date	Philip Johnson	Philip Johnson	0	June 1 , 1962	contradicted	2005-01-25		valid	^ [S] ( <M> # , # - [O] )	Philip Johnson (May 19, 1906 - June 1, 1962) was King of Jerusalem from 1997 to 2002.
+244:trie_T1.0	5	8	birth_date	Jim Backus	Jim Backus	0	1913	supported	1913-02-25		valid	[S] ( [O] -	He was the son of Jim Backus (1913 - 2005), French theologian.
+244:trie_T1.0	5	8	death_date	Jim Backus	Jim Backus	0	2005	contradicted	1989-07-03		valid	[S] ( # - [O] )	He was the son of Jim Backus (1913 - 2005), French theologian.
+244:trie_T1.0	5	8	nationality	Jim Backus	Jim Backus	0	French	contradicted	American;Television;Voice			[S] ( # - # ) , [O]	He was the son of Jim Backus (1913 - 2005), French theologian.
+245:trie_T1.0	4	7	birth_date	Vladimir Steklov	Vladimir Steklov	0	August 14 , 1864	contradicted	1864-01-09		valid	^ [S] ( [O]	Vladimir Steklov (August 14, 1864 / March 1, 2008) was King of Jerusalem from 1997 to 2002.
+245:trie_T1.0	5	7	birth_date	Maxim Gorky	Maxim Gorky	0	January 1 , 1868	supported	1868	checked 1 of 3 parts	valid	^ [S] , ( [O]	Maxim Gorky, (January 1, 1868 / April 1, 1947) is a French mathematician.
+245:trie_T1.0	6	7	birth_date	Boris Yeltsin	Boris Yeltsin	0	January 16 , 1931	contradicted	1931-02-01		valid	^ [S] ( [O] -	Boris Yeltsin (January 16, 1931 - April 7, 1858) was an American playwright.
+245:trie_T1.0	6	7	death_date	Boris Yeltsin	Boris Yeltsin	0	April 7 , 1858	unknown		no death in store	valid	^ [S] ( <M> # , # - [O] )	Boris Yeltsin (January 16, 1931 - April 7, 1858) was an American playwright.
+245:trie_T1.0	7	7	birth_date	John Andrey Kolmogorov	Andrey Kolmogorov	partial	May 2 1903	supported	1903	checked 1 of 3 parts	valid	^ [S] ( [O]	John Andrey Kolmogorov (May 2 1903 / March 1 1781) is a American science fiction author.
+247:trie_T1.0	4	8	birth_date	Natacha Atlas	Natacha Atlas	0	October 4 , 1964	contradicted	1964-03-20		valid	^ [S] ( born [O]	Natacha Atlas (born October 4, 1964) was a Greek philosopher.
+247:trie_T1.0	8	8	birth_date	John Amr Diab	Amr Diab	partial	October 12 1961	contradicted	1961-10-11		valid	^ [S] ( [O] -	John Amr Diab (October 12 1961 - March 19 1939) is an American science fiction author.
+247:trie_T1.0	8	8	death_date	John Amr Diab	Amr Diab	partial	March 19 1939	unknown		no death in store	valid	[S] ( <M> # # - [O] )	John Amr Diab (October 12 1961 - March 19 1939) is an American science fiction author.
