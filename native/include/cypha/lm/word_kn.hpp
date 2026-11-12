@@ -959,6 +959,8 @@ struct ByteScorer {
     // K5_MIXDEC.md: the word drawn from the weights w[0, k) by the scorer's own decoder (arithmetic decoding of random
     // bytes); false: K5 draws it as before.
     virtual bool decode(const double*, std::size_t, std::size_t&) { return false; }
+    // K5_MIXDEC.md: whether score() reranks the nucleus (false: the scorer only decodes).
+    virtual bool rerank() const { return true; }
 };
 
 // K5_MIXDEC.md (docs/DECODER.md): one continuation's mixer decoder (lm/decoder/mixdec.hpp), primed on the retrieved
@@ -993,6 +995,7 @@ struct Options {
     std::function<std::unique_ptr<ByteScorer>()> scorer;
     int scorer_mode = 1;  // K5_MIXDEC.md adds 4: a veto, words more than scorer_w bits below the best scorer's score dropped
     double scorer_w = 0.25;
+    std::size_t scorer_top = 0;  // K5_MIXDEC.md: score only the nucleus's N most probable words (0: all, as §13.24)
     // K5_MIXDEC.md: the mixer decoder of each continuation (start() makes it from the prompt and the retrieved article's
     // text); null: off.
     std::function<std::shared_ptr<MixDec>(std::string_view prompt, std::string_view article)> mixdec;
@@ -2234,14 +2237,20 @@ class K5 {
             std::vector<double>& rw = sc.rw;
             rw.resize(k);
             for (std::size_t i = 0; i < k; ++i) rw[i] = p[cand[kept[i]]] / zn;
-            if (bs && k > 1) {
+            if (bs && k > 1 && bs->rerank()) {
                 std::vector<double> lb(k);
                 double mx = -1e300;
-                for (std::size_t i = 0; i < k; ++i) {
+                // K5_MIXDEC.md: only the scorer_top most probable words are scored (0: all); the rest take the scored words'
+                // mean (the ratio) or the best score (the veto: kept).
+                const std::size_t ks = o.scorer_top > 0 ? std::min(k, o.scorer_top) : k;
+                double ms = 0;
+                for (std::size_t i = 0; i < ks; ++i) {
                     lb[i] = bs->score(pieces[kept[i]]);
                     if (o.scorer_mode == 3) lb[i] -= bs->prior(pieces[kept[i]]);
                     mx = std::max(mx, lb[i]);
+                    ms += lb[i];
                 }
+                for (std::size_t i = ks; i < k; ++i) lb[i] = o.scorer_mode == 4 ? mx : ms / static_cast<double>(ks);
                 double zb = 0, zr = 0;
                 for (std::size_t i = 0; i < k; ++i) zb += std::exp2(lb[i] - mx);
                 for (std::size_t i = 0; i < k; ++i) {
@@ -2566,14 +2575,20 @@ class K5 {
         std::vector<double>& rw = sc.frw;
         rw.resize(k);
         for (std::size_t i = 0; i < k; ++i) rw[i] = cp[kept[i]] / zn;
-        if (bs && k > 1) {
+        if (bs && k > 1 && bs->rerank()) {
             std::vector<double> lb(k);
             double mx = -1e300;
-            for (std::size_t i = 0; i < k; ++i) {
+            // K5_MIXDEC.md: only the scorer_top most probable words are scored (0: all); the rest take the scored words'
+            // mean (the ratio) or the best score (the veto: kept).
+            const std::size_t ks = o.scorer_top > 0 ? std::min(k, o.scorer_top) : k;
+            double ms = 0;
+            for (std::size_t i = 0; i < ks; ++i) {
                 lb[i] = bs->score(pieces(kept[i]));
                 if (o.scorer_mode == 3) lb[i] -= bs->prior(pieces(kept[i]));
                 mx = std::max(mx, lb[i]);
+                ms += lb[i];
             }
+            for (std::size_t i = ks; i < k; ++i) lb[i] = o.scorer_mode == 4 ? mx : ms / static_cast<double>(ks);
             double zb = 0, zr = 0;
             for (std::size_t i = 0; i < k; ++i) zb += std::exp2(lb[i] - mx);
             for (std::size_t i = 0; i < k; ++i) {

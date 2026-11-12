@@ -35,13 +35,15 @@ namespace cypha::cyphalm::decoder {
 
 /// --mixdec SPEC: comma-separated fields. ratio=R (the context ratio, weight R) | veto=V (the veto, V bits); judge=J (the
 /// judge's weight in the gate, z-scored as the gate's other terms); ad=0|1 (arithmetic decoding; 1 by default once a
-/// word term is on); art=N (article bytes primed; 8192); lstm=0, ngram=0, copy=0, kn=0, trie=0 (leave an expert out).
+/// word term is on); art=N (article bytes primed; 8192); top=N (the nucleus's N most probable words are scored; 16;
+/// 0: all); lstm=0, ngram=0, copy=0, kn=0, trie=0 (leave an expert out).
 struct Params {
     int mode = 0;  // 0: no word term; 3: ratio; 4: veto (word_kn.hpp's scorer modes)
     double w = 0;
     double judge = 0;
     int ad = -1;
     std::size_t art = 8192;
+    std::size_t top = 16;  // the nucleus's most probable words scored (the rest: the scored words' mean ratio, or kept)
     bool lstm = true, ngram = true, copy = true, kn = true, trie = true;
     bool on() const { return mode != 0 || judge != 0 || ad > 0; }
     bool decode() const { return ad > 0 || (ad < 0 && mode != 0); }
@@ -61,6 +63,7 @@ struct Params {
             else if (k == "judge") judge = x;
             else if (k == "ad") ad = x != 0 ? 1 : 0;
             else if (k == "art") art = static_cast<std::size_t>(x);
+            else if (k == "top") top = static_cast<std::size_t>(x);
             else if (k == "lstm") lstm = x != 0;
             else if (k == "ngram") ngram = x != 0;
             else if (k == "copy") copy = x != 0;
@@ -73,8 +76,8 @@ struct Params {
     }
     std::string describe() const {
         char b[256];
-        std::snprintf(b, sizeof b, "mixdec %s%g judge %g ad %d art %zu experts%s%s%s%s%s", mode == 3 ? "ratio " : mode == 4 ? "veto " : "none ",
-                      w, judge, decode() ? 1 : 0, art, trie ? " trie" : "", kn ? " kn" : "", copy ? " copy" : "", ngram ? " ngram" : "",
+        std::snprintf(b, sizeof b, "mixdec %s%g top %zu judge %g ad %d art %zu experts%s%s%s%s%s", mode == 3 ? "ratio " : mode == 4 ? "veto " : "none ",
+                      w, top, judge, decode() ? 1 : 0, art, trie ? " trie" : "", kn ? " kn" : "", copy ? " copy" : "", ngram ? " ngram" : "",
                       lstm ? " lstm" : "");
         return b;
     }
@@ -116,6 +119,7 @@ class Fork : public wkn::ByteScorer {
         memo_.clear();
     }
     bool decode(const double* w, std::size_t k, std::size_t& j) override;
+    bool rerank() const override;
 
  private:
     struct Node {
@@ -242,6 +246,8 @@ inline double Fork::prior(std::string_view piece) {
     if (cache.size() > 2000000) cache.clear();
     return cache.emplace(k, lb).first->second;
 }
+
+inline bool Fork::rerank() const { return d_.S_.P.mode != 0; }
 
 inline bool Fork::decode(const double* w, std::size_t k, std::size_t& j) {
     if (!d_.S_.P.decode()) return false;

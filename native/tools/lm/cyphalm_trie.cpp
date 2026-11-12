@@ -2825,7 +2825,7 @@ int cmd_sample(const Args& a) {
             base.mixdec = [sp](std::string_view prompt, std::string_view art) -> std::shared_ptr<cypha::cyphalm::wkn::MixDec> {
                 return std::make_shared<dc::Dec>(*sp, prompt, art);
             };
-            if (mxs->P.mode != 0) base.scorer_mode = mxs->P.mode, base.scorer_w = mxs->P.w;
+            if (mxs->P.mode != 0) base.scorer_mode = mxs->P.mode, base.scorer_w = mxs->P.w, base.scorer_top = mxs->P.top;
         }
         cypha::cyphalm::wkn::mcmc::SharedStats mstats;  // K5_MCMC.md
         if (mp.steps > 0) {

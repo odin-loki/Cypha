@@ -31,6 +31,7 @@
 - Bytes alone wrote word salad (§2–3: 0.147 at best). Words on clean prose made the largest jump (§13.11, §13.19).
 - So the decoder decodes words. K5 proposes them. The learner scores each candidate's spelling exactly: log₂ P(bytes of the word, spacing included | article, prompt, text so far), plus the probability that the word ends there (the next byte is not a letter or digit). The end term is the T3 bridge's "cover" (TOKENS_T3_T4): without it "the" also counts "then" and "there" (DECODER_RESEARCH item 6).
 - Scoring shares prefixes. The candidates' spellings form a small tree; each node's 256-way distribution is computed once.
+- Only the nucleus's 16 most probable words are scored. On the 337 MB counts the nucleus 0.8 often holds hundreds of words; scoring all of them cost 10 times more (K5_MIXDEC.md, smoke run). The rest take the scored words' mean ratio, or are kept by the veto.
 
 ## 4. Where the learner enters, and why not as a plain product
 
@@ -75,7 +76,7 @@ So the decoder's learner (`lm/decoder/learner.hpp`) is lighter:
 |---|---|---|
 | 1 TB trie, 5 orders + match, and their mixture | yes | yes (the 992 MB file, shared by every thread) |
 | Byte Kneser–Ney 6:4:2:1 | on wiki train | on K5's 7 MB clean prose |
-| Copy | yes | over the article, the prompt and the text |
+| Copy | yes | over the article, the prompt and the text; left out of the ratio and the judge (`copy=0`) |
 | Online n-gram | orders 1–12, 24-bit tables | orders 1, 2, 3, 4, 6, 18-bit tables; learns only while primed |
 | Byte LSTM | hidden 256, from scratch | hidden 64, pretrained on K5's clean prose (`lstm-train`), learns while primed |
 | InfiniGram caps, class, similar-context, document cache | yes | no |
@@ -87,6 +88,6 @@ So the decoder's learner (`lm/decoder/learner.hpp`) is lighter:
 ## 8. Arms, screen, judge, predictions
 
 Registered in [reports/K5_MIXDEC.md](reports/K5_MIXDEC.md). In short:
-- **Arms** (K1 plus): MJ (the judge), MR (the context ratio, r 0.3), MV (the veto, V 10 bits), MVJ (veto and judge). A check, not an arm: MA (arithmetic decoding alone, no learner term), which should read like K1.
+- **Arms** (K1 plus): MJ (the judge), MR (the context ratio, r 0.3), MV (the veto, V 10 bits), MRJ (the ratio and the judge: the whole decoder). The ratio and the judge run without the copy expert: with it they reward the article's own phrases, and copy32 rose to 0.34–0.37 in the smoke run. A check, not an arm: MA (arithmetic decoding alone, no learner term), which should score like K1.
 - **Screen:** verbatim13 0; copy32 ≤ 0.30; fact precision ≥ 0.874; SCRIBE v2 ≥ K1 − 0.03; mean surprise reported (a drop of more than 0.5 bits a word below K1 fails: the guard against blandness); wall time; my strict reading. At most 2 candidates.
 - **Judge:** blind pairwise raters against K1 at 460 characters, §13.38's rule. The winner, if any, then goes to the 1–10 round of §13.69.
