@@ -50,7 +50,7 @@ Measures: wall time, user time and peak RAM (`/usr/bin/time -v`); K5's sampling 
 | GEN-A dev, the planner (7 MB) | GEN file, stdout, SCRIBE v2 and v3.1, summary; stderr (timing removed, sorted) | `cmp` equal (8 of 8 files) |
 | GEN-A dev, `--no-k5-plan` (7 MB) | the same | `cmp` equal (8 of 8) |
 | selftests (`cyphalm_trie`, `scribe`) | — | pass, both builds |
-| **full `context8k`, default** (new, in the lock) | stdout against O5's full run of main (`/mnt/d/cypha_llm/opt/o5/F_new.out`) |  equal (260 lines); ** 1.4962** reproduced; wall 34:40, 1,533 MB (alone in the lock, not a timing test) |
+| **full `context8k`, default** (new, in the lock) | stdout against O5's full run of main (`/mnt/d/cypha_llm/opt/o5/F_new.out`) | `cmp` equal (260 lines); **`context8k_bpc` 1.4962** reproduced; wall 34:40, 1,533 MB (alone in the lock, not a timing test) |
 
 The SCRIBE reports are equal, so each side's own `scribe` binary gives the same scores.
 
