@@ -2367,3 +2367,17 @@ Every branch first merges `origin/main` (M1 and M2 are exact, so P1 and every ba
 
 - **T1** ([TUNE_PREDICT](reports/TUNE_PREDICT.md), branch `wip/tune-predict`, a3e3439c). The rest of the plan was registered first. The new binary (main plus O5) gives the same output as the old one under `cmp`, so earlier trials stand. Within the +20% RAM limit, the expert search reached **1.7305** on the 1 MB slice (default 1.7501) at 1551 MB: `--bkn 10:4:2:1 --doc cache,cand=2048 --lstm-window 8 --ngram-cap 15 --ngram-lr 0.00125 --ngram-orders 1,2,3,4,5,6,7,8,12,16`. Round 2 of the search is still running on the PC (`~/t1r/expert_resume.sh`). Still to do: the mixers on the tuned experts, the 6 MiB check, the sensitivity table and the final pair. No prediction is scored yet.
 - **T1b** ([TUNE_ADAPT](reports/TUNE_ADAPT.md), branch `wip/tune-adapt`, 692e2f16). The code is in `online/hyper_adapt.hpp` with `context8k --hyper-adapt`, off by default; with the flag off, the output is unchanged under `cmp`. The method was registered before any run. No arm has run: T1b needs T1's tuned values and sensitivity table first.
+
+### 13.50 O6 and O1 results (2026-11-12; merged to main)
+
+- **O6, lazy exact nucleus** ([OPT_NUCLEUS](reports/OPT_NUCLEUS.md), branch `wip/opt-nucleus` 3bc2bfa): **exact, kept, on.** K5 picks the same word without sorting the whole vocabulary. Every check is `cmp` equal:
+  - the 250 dev prompts at 7 MB (the planner and `--no-k5-plan`) and at 337 MB (W1b's setup, both arms);
+  - check mode (`CYPHA_K5_NUCLEUS=check`, old and new choice side by side);
+  - the selftests and small `context8k`.
+  - K5 sampling, old and new run together on 4 CPUs each: −58% with the planner at 7 MB (147.6 → 61.3 s), −67% without; at 337 MB, −70% without the planner and −33% with it. RAM +7 MB. `CYPHA_K5_NUCLEUS=full` brings back the old path.
+  - Predictions: exact **hit**; at least −50% **hit** on the registered 7 MB default, **miss** at 337 MB with the planner (the planner's own work is outside the draw).
+- **O1, fast build** ([OPT_BUILD](reports/OPT_BUILD.md), branch `wip/opt-build` 7333ee3): **exact, kept as an option, off by default.** `scripts/pgo_build.sh --cc clang` (Clang 18, PGO, ThinLTO, `-march=native -ffp-contract=off`; no FMA instructions) beat GCC with PGO (−6.5% against −2.9%).
+  - Every check is `cmp` equal: small `context8k` (default, `--no-meta-mix`, `--no-full-mix`), the planner's and `--no-k5-plan`'s dev GEN files and SCRIBE reports, the selftests. The full run reproduces `context8k_bpc` 1.4962.
+  - Speed: `context8k` small −6.5% (**miss**: −10% predicted); K5 sampling −16% with the planner and −29% without (**hit**).
+  - It stays off by default because `-march=native` binaries run only on CPUs like this PC's.
+- **The merge, checked:** main + O6 + O1, built with `g++ -O2`. The default `sample --k5` on the 250 dev prompts equals W1b's GEN file (`cmp`, MODEL line aside). Selftest passes. Not checked: O1's build at 337 MB, and O1 and O6 built together.
