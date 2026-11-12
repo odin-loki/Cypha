@@ -1,0 +1,728 @@
+id	start	end	type	surface
+dev/0000	20	30	MISC	Holdens to
+dev/0000	31	34	PLACE	New
+dev/0000	35	42	DATE	Zealand
+dev/0000	52	56	DATE	1954
+dev/0000	104	185	MISC	General Motors New Zealand plant in Petone outside Wellington, until it closed in
+dev/0000	186	190	DATE	1990
+dev/0003	25	26	NUMBER	3
+dev/0003	101	142	MISC	Food and Drug Administration has approved
+dev/0003	143	144	NUMBER	3
+dev/0003	166	176	NUMBER	Food-Grade
+dev/0004	4	8	DATE	2001
+dev/0004	40	122	MISC	India Census Commission give a breakdown by various parameters including religion.
+dev/0005	27	31	MISC	Whig
+dev/0005	41	51	MISC	Parliament
+dev/0005	89	96	PERSON	Walpole
+dev/0005	129	138	MISC	Great Man
+dev/0005	162	169	PERSON	Walpole
+dev/0006	40	47	MISC	Israeli
+dev/0006	89	96	MISC	Israeli
+dev/0007	11	80	MISC	University, or Göteborgs universitet, is a university in Gothenburg,
+dev/0007	81	87	PLACE	Sweden
+dev/0007	106	112	NUMBER	49,000
+dev/0008	62	71	MISC	Ragnarök
+dev/0008	84	88	MISC	Loki
+dev/0009	4	11	MISC	Gravity
+dev/0010	0	11	MISC	Dr. Chandra
+dev/0010	27	30	MISC	HAL
+dev/0010	248	253	NUMBER	TMA-1
+dev/0011	27	38	MISC	Interlingua
+dev/0011	75	78	MISC	IAL
+dev/0011	101	105	MISC	IALs
+dev/0011	114	123	MISC	Esperanto
+dev/0011	128	131	MISC	Ido
+dev/0012	28	33	MISC	Siona
+dev/0012	43	49	MISC	Duncan
+dev/0012	206	218	MISC	Duncan Idaho
+dev/0013	14	24	MISC	Christians
+dev/0013	76	90	MISC	Pentecostalism
+dev/0013	126	138	MISC	Christianity
+dev/0013	202	213	MISC	Evangelical
+dev/0014	26	38	PERSON	Helen Keller
+dev/0014	49	71	MISC	The Miracle Continues.
+dev/0014	92	163	MISC	The Miracle Worker recounts her college years and her early adult life.
+dev/0016	11	15	DATE	1971
+dev/0016	16	19	MISC	War
+dev/0016	25	27	MISC	US
+dev/0016	41	44	NUMBER	7th
+dev/0016	45	57	MISC	Fleet to the
+dev/0016	58	61	PLACE	Bay
+dev/0016	65	71	MISC	Bengal
+dev/0016	88	93	MISC	India
+dev/0016	121	125	MISC	East
+dev/0016	126	134	PLACE	Pakistan
+dev/0016	181	185	MISC	West
+dev/0016	186	194	PLACE	Pakistan
+dev/0016	238	245	PLACE	Kashmir
+dev/0017	3	7	DATE	1977
+dev/0017	9	15	MISC	Carver
+dev/0017	35	68	MISC	Hall of Fame for Great Americans.
+dev/0017	72	76	DATE	1990
+dev/0017	78	84	MISC	Carver
+dev/0017	107	139	MISC	National Inventors Hall of Fame.
+dev/0018	32	35	NUMBER	128
+dev/0018	96	100	NUMBER	8×8
+dev/0018	107	113	NUMBER	64×64
+dev/0018	131	136	NUMBER	4-bit
+dev/0018	140	145	NUMBER	8-bit
+dev/0020	37	44	MISC	Fortuna
+dev/0020	46	142	MISC	Goddess of Luck, whose equivalent in mythology is Tyche, the Goddess of Luck in Greek mythology.
+dev/0021	0	11	MISC	Coleman was
+dev/0021	44	48	DATE	2003
+dev/0021	49	59	MISC	California
+dev/0021	132	136	PLACE	East
+dev/0021	137	148	MISC	Bay Express
+dev/0022	23	26	MISC	AOJ
+dev/0022	101	109	MISC	Haitians
+dev/0023	42	55	MISC	Veronica says
+dev/0023	58	62	MISC	Boom
+dev/0023	65	122	MISC	Then black letters tell the viewer that this is the prom.
+dev/0024	24	38	MISC	Mersenne prime
+dev/0024	72	77	MISC	GIMPS
+dev/0024	95	103	DATE	December
+dev/0024	104	108	DATE	2005
+dev/0024	110	115	MISC	GIMPS
+dev/0024	160	162	NUMBER	18
+dev/0024	163	169	MISC	TFLOPS
+dev/0024	183	188	MISC	GIMPS
+dev/0025	7	10	MISC	SNK
+dev/0025	31	193	MISC	Neo Geo Pocket Color was being advertised on US television and units were being sold nationally in Wal-Mart, Best Buy, Toys "R" Us, and other large retail chains.
+dev/0026	65	71	MISC	Gustav
+dev/0026	73	95	MISC	Count of Vasaborg, and
+dev/0026	141	153	MISC	Christina of
+dev/0026	154	160	PLACE	Sweden
+dev/0028	30	36	PLACE	French
+dev/0028	186	196	MISC	Latin octo
+dev/0028	237	242	MISC	Greek
+dev/0028	251	263	MISC	Latin ostrea
+dev/0029	3	7	DATE	1904
+dev/0029	26	35	MISC	Professor
+dev/0029	39	47	MISC	Criminal
+dev/0029	52	61	MISC	Trial Law
+dev/0029	66	85	MISC	Legal Philosophy in
+dev/0029	86	96	PLACE	Heidelberg
+dev/0029	101	105	DATE	1914
+dev/0029	147	158	NUMBER	Königsberg
+dev/0029	168	179	MISC	Kaliningrad
+dev/0029	189	193	DATE	1914
+dev/0029	213	217	PLACE	Kiel
+dev/0031	7	15	MISC	Terrgurt
+dev/0031	175	181	MISC	Cowper
+dev/0032	4	264	MISC	International Civil Aviation Organization (ICAO), an agency of the United Nations, develops the principles and techniques of international air navigation and fosters the planning and development of international air transport to ensure safe and orderly growth.
+dev/0033	4	8	MISC	GKOS
+dev/0033	86	92	MISC	QWERTY
+dev/0033	165	171	MISC	QWERTY
+dev/0034	44	47	MISC	ACD
+dev/0035	0	22	MISC	Aelia Galla Placidia (
+dev/0035	22	27	NUMBER	c.390
+dev/0035	30	38	DATE	November
+dev/0035	39	41	NUMBER	27
+dev/0035	43	46	NUMBER	450
+dev/0036	38	51	MISC	Green Parties
+dev/0036	128	134	MISC	Europe
+dev/0038	20	23	MISC	LAN
+dev/0038	45	48	MISC	WAN
+dev/0038	63	83	MISC	Physical connections
+dev/0040	0	18	MISC	Sardinian language
+dev/0040	52	63	MISC	Latin-based
+dev/0040	97	104	MISC	Spanish
+dev/0040	109	116	MISC	Catalan
+dev/0041	3	6	MISC	IRC
+dev/0041	79	82	MISC	IRC
+dev/0041	102	105	MISC	IRC
+dev/0042	20	31	NUMBER	Jean-Michel
+dev/0042	32	39	MISC	Akayesu
+dev/0042	50	54	DATE	1997
+dev/0042	56	69	PERSON	Jean Kambanda
+dev/0042	79	93	MISC	Prime Minister
+dev/0043	62	66	MISC	U.S.
+dev/0043	89	97	PERSON	Aristide
+dev/0043	146	150	MISC	U.S.
+dev/0043	162	166	MISC	U.S.
+dev/0046	34	185	MISC	Green Parties, Greenpeace, and a few more radical wings of the environmental movement such as the Gaia Liberation Front and the Earth Liberation Front.
+dev/0047	0	89	MISC	Tooth and tusk ivory can be carved into an almost infinite variety of shapes and objects.
+dev/0048	75	80	MISC	Galba
+dev/0049	9	18	MISC	Goddesses
+dev/0049	133	142	MISC	Storm God
+dev/0049	164	176	MISC	Lunar Empire
+dev/0049	198	205	MISC	Sun God
+dev/0049	218	230	MISC	Moon Goddess
+dev/0053	66	81	MISC	Open Source IDE
+dev/0053	90	97	MISC	Eclipse
+dev/0053	102	110	MISC	NetBeans
+dev/0054	34	41	PLACE	Bologna
+dev/0054	45	49	DATE	1798
+dev/0054	80	101	MISC	Sebastiano Canterzani
+dev/0054	103	112	NUMBER	1734-1819
+dev/0055	7	12	DATE	1970s
+dev/0055	17	22	DATE	1980s
+dev/0055	24	235	MISC	GM pushed Diesel engines and cylinder deactivation technologies to disastrous results due to poor durability in the Oldsmobile diesels (this was a modified gasoline engine) and drivability issues in the Cadillac
+dev/0055	236	241	NUMBER	4-6-8
+dev/0056	29	33	MISC	APCs
+dev/0057	76	85	PLACE	President
+dev/0059	35	42	MISC	Syrians
+dev/0059	53	54	MISC	I
+dev/0060	66	99	MISC	Scottish Juggling Convention each
+dev/0062	38	44	NUMBER	10,000
+dev/0062	53	58	NUMBER	8,000
+dev/0062	76	92	MISC	Amazon.de. Sales
+dev/0062	119	141	MISC	Directmedia Publishing
+dev/0062	142	186	MISC	GmbH of Berlin, were certainly helped by the
+dev/0062	187	194	NUMBER	€9.90
+dev/0063	9	17	MISC	Hirohito
+dev/0063	91	95	MISC	U.S.
+dev/0064	4	28	MISC	Gauss-Legendre algorithm
+dev/0064	118	132	PERSON	Carl Friedrich
+dev/0064	133	138	MISC	Gauss
+dev/0064	140	149	NUMBER	1777-1855
+dev/0064	155	167	NUMBER	Adrien-Marie
+dev/0064	168	176	MISC	Legendre
+dev/0064	178	187	NUMBER	1752-1833
+dev/0066	0	9	NUMBER	İskender
+dev/0066	69	75	MISC	Turkey
+dev/0066	114	123	NUMBER	İskender
+dev/0066	124	130	MISC	Efendi
+dev/0066	145	150	MISC	Bursa
+dev/0066	163	175	DATE	19th century
+dev/0067	0	9	MISC	Lineker's
+dev/0067	102	108	MISC	Europe
+dev/0068	38	46	NUMBER	helium-3
+dev/0068	113	121	NUMBER	helium-3
+dev/0068	232	238	MISC	Cooper
+dev/0068	252	284	MISC	BCS theory of superconductivity.
+dev/0070	4	53	MISC	Isle of Man is a self-governing crown dependency.
+dev/0070	79	195	MISC	Lord of Mann who is the British Sovereign, currently Her Majesty The Queen, her title on the Island is Lord of Mann.
+dev/0072	4	7	MISC	IOC
+dev/0072	34	36	NUMBER	92
+dev/0072	41	48	MISC	Olympic
+dev/0072	99	115	MISC	Olympic Movement
+dev/0072	146	159	MISC	Olympic Games
+dev/0073	91	95	NUMBER	4096
+dev/0074	87	101	NUMBER	stock-in-trade
+dev/0075	15	23	DATE	February
+dev/0075	24	26	NUMBER	29
+dev/0075	26	27	MISC	,
+dev/0075	28	32	DATE	1860
+dev/0075	36	43	PLACE	Buffalo
+dev/0075	45	48	PLACE	New
+dev/0075	49	53	PLACE	York
+dev/0075	57	69	PERSON	Johann Georg
+dev/0075	70	79	MISC	Hollerith
+dev/0075	81	92	NUMBER	1808–1869
+dev/0075	99	114	MISC	Franciska Brunn
+dev/0075	124	144	MISC	Rheinpfalz, Germany.
+dev/0076	31	41	MISC	RFC Editor
+dev/0076	43	53	PERSON	Jon Postel
+dev/0076	79	83	MISC	IANA
+dev/0076	103	107	DATE	1998
+dev/0078	35	46	MISC	Botley Hill
+dev/0078	54	59	PLACE	North
+dev/0078	60	65	MISC	Downs
+dev/0078	70	73	NUMBER	267
+dev/0078	88	92	DATE	2000
+dev/0078	97	103	PLACE	London
+dev/0078	140	288	MISC	Greater London Authority (the "GLA"), and has a directly-elected Mayor of London, Ken Livingstone, who is scrutinised by an elected London Assembly.
+dev/0080	24	29	NUMBER	735.5
+dev/0080	30	31	MISC	W
+dev/0080	83	95	MISC	German 'PS'.
+dev/0081	40	48	MISC	Alderney
+dev/0081	85	95	MISC	Bailiwick,
+dev/0081	100	104	PLACE	Sark
+dev/0082	21	33	MISC	Chinese iron
+dev/0082	56	68	MISC	Zhou dynasty
+dev/0082	222	227	PLACE	China
+dev/0082	238	249	MISC	Qin dynasty
+dev/0082	254	257	NUMBER	221
+dev/0082	258	261	MISC	BC)
+dev/0084	56	57	NUMBER	1
+dev/0084	61	63	NUMBER	10
+dev/0085	4	17	MISC	Impressionist
+dev/0086	17	20	NUMBER	183
+dev/0086	21	26	PERSON	Queen
+dev/0086	29	38	MISC	Road East
+dev/0086	43	71	MISC	Wan Chai on Hong Kong Island
+dev/0086	111	120	MISC	Hong Kong
+dev/0087	68	72	MISC	Bush
+dev/0087	109	138	MISC	International Criminal Court.
+dev/0088	25	86	MISC	Sur le principe des forces vives dans les mouvements relatifs
+dev/0088	189	198	MISC	Académie
+dev/0088	203	221	MISC	Sciences (Coriolis
+dev/0088	222	226	DATE	1832
+dev/0089	0	13	PERSON	Peter Jackson
+dev/0089	16	25	MISC	Braindead
+dev/0089	27	31	DATE	1992
+dev/0089	43	56	MISC	Dead-Alive in
+dev/0089	61	64	MISC	USA
+dev/0090	13	117	MISC	Archbishop Celestino Migliore, Holy See Permanent Observer, "We have no vote because this is our choice.
+dev/0091	69	83	MISC	Bussard ramjet
+dev/0092	19	23	MISC	Unix
+dev/0092	87	90	MISC	XFS
+dev/0094	86	90	DATE	1979
+dev/0094	95	102	DATE	January
+dev/0094	103	104	NUMBER	3
+dev/0094	104	105	MISC	,
+dev/0094	106	110	DATE	1982
+dev/0095	3	7	NUMBER	h2g2
+dev/0096	85	120	MISC	America by Universal International.
+dev/0097	109	115	MISC	Clovis
+dev/0098	39	45	MISC	Connor
+dev/0098	66	101	MISC	Russell Edwin Nash; and the Kurgan,
+dev/0098	121	127	PERSON	Victor
+dev/0098	128	134	MISC	Kruger
+dev/0099	213	220	MISC	Z under
+dev/0101	0	14	MISC	Italian mobile
+dev/0101	29	32	MISC	TIM
+dev/0101	78	90	MISC	Serie A TIM.
+dev/0101	116	118	NUMBER	20
+dev/0101	134	141	NUMBER	2004-05
+dev/0101	240	242	NUMBER	38
+dev/0102	0	6	MISC	HK was
+dev/0102	18	32	PERSON	Edmund Heckler
+dev/0102	34	46	PERSON	Theodor Koch
+dev/0102	52	56	PERSON	Alex
+dev/0102	57	66	MISC	Seidel in
+dev/0102	67	71	DATE	1949
+dev/0102	93	99	MISC	Mauser
+dev/0102	135	139	DATE	1950
+dev/0103	138	142	MISC	SMP,
+dev/0103	147	156	MISC	Haiti’s
+dev/0103	172	193	MISC	World Bank arrears ($
+dev/0103	193	195	NUMBER	30
+dev/0103	207	208	NUMBER	9
+dev/0103	209	211	NUMBER	30
+dev/0103	212	214	NUMBER	03
+dev/0104	103	108	MISC	Runge
+dev/0105	57	64	MISC	Mythos,
+dev/0106	38	42	NUMBER	2686
+dev/0106	47	51	NUMBER	2498
+dev/0106	52	54	MISC	BC
+dev/0106	121	139	MISC	Wadi Al-Garawi dam
+dev/0106	207	214	NUMBER	100,000
+dev/0107	7	10	NUMBER	800
+dev/0107	11	20	PERSON	Louis the
+dev/0107	21	122	MISC	Pious, son of Charlemagne, appointed Einhard, the biographer of Charlemagne, as abbot of both abbeys.
+dev/0109	3	7	NUMBER	1508
+dev/0109	19	24	PLACE	Paris
+dev/0109	46	55	PERSON	Louis XII
+dev/0110	5	9	DATE	1870
+dev/0110	15	25	MISC	Bismarkian
+dev/0110	38	145	MISC	Europe put France in a critical situation, and it slowly rebuilt it's relationships, seeking alliances with
+dev/0110	146	152	PLACE	Russia
+dev/0110	157	164	PLACE	Britain
+dev/0110	198	205	MISC	Germany
+dev/0111	10	18	MISC	Antonine
+dev/0111	33	41	PLACE	Scotland
+dev/0111	83	90	NUMBER	155-157
+dev/0111	101	119	MISC	Brigantes revolted
+dev/0113	0	73	MISC	Verdi's last opera, Falstaff, whose libretto, also by Boito, was based on
+dev/0113	74	85	PERSON	Shakespeare
+dev/0113	88	99	MISC	Merry Wives
+dev/0113	103	110	PLACE	Windsor
+dev/0113	115	126	PERSON	Victor Hugo
+dev/0115	118	122	NUMBER	46.6
+dev/0115	166	170	DATE	1989
+dev/0115	189	193	NUMBER	45.8
+dev/0115	205	209	DATE	1975
+dev/0116	84	88	MISC	Nuit
+dev/0116	130	136	MISC	Hathor
+dev/0116	158	160	MISC	Ra
+dev/0116	162	166	MISC	Maat
+dev/0116	216	225	MISC	Amenhotep
+dev/0116	233	237	MISC	Hapu
+dev/0119	23	25	NUMBER	13
+dev/0119	53	55	NUMBER	12
+dev/0119	74	78	DATE	13th
+dev/0120	89	95	MISC	I know
+dev/0120	104	105	MISC	I
+dev/0122	10	15	PLACE	Hesse
+dev/0122	46	53	MISC	Bern in
+dev/0122	54	58	DATE	1912
+dev/0122	166	180	MISC	Rosshalde from
+dev/0122	181	185	DATE	1914
+dev/0124	76	84	MISC	Thodanum
+dev/0124	88	96	MISC	Tharotan
+dev/0124	167	171	PERSON	Zeno
+dev/0126	101	106	DATE	1980s
+dev/0127	37	45	MISC	Hezekiah
+dev/0127	101	104	NUMBER	698
+dev/0127	105	107	MISC	BC
+dev/0127	161	169	MISC	Manasseh
+dev/0129	40	52	MISC	Seventh dorm
+dev/0129	100	109	MISC	Pink Dorm
+dev/0130	8	17	MISC	Guatemala
+dev/0130	106	111	PLACE	Roman
+dev/0130	112	123	MISC	Catholicism
+dev/0130	152	163	MISC	Guatemalans
+dev/0131	122	124	MISC	US
+dev/0132	16	21	MISC	Lande
+dev/0132	23	33	MISC	Sikh Gurus
+dev/0132	54	68	NUMBER	Proto-Gurmukhi
+dev/0134	6	12	MISC	Island
+dev/0134	29	40	MISC	Mawson Peak
+dev/0134	56	66	PLACE	Australian
+dev/0134	77	81	NUMBER	527m
+dev/0134	94	99	PLACE	Mount
+dev/0134	100	110	PLACE	Kosciuszko
+dev/0134	129	130	NUMBER	2
+dev/0134	151	161	PLACE	Australian
+dev/0135	3	7	DATE	2004
+dev/0135	29	33	MISC	Luas
+dev/0135	49	55	MISC	Dublin
+dev/0135	63	67	DATE	2004
+dev/0136	83	86	MISC	Are
+dev/0137	4	7	MISC	IAI
+dev/0137	73	204	MISC	Global Environmental Change on natural and anthropogenic systems and processes among tropical, temperate and cold latitude systems.
+dev/0138	9	15	MISC	Hebrew
+dev/0138	45	61	MISC	Christian groups
+dev/0138	81	85	MISC	Jews
+dev/0138	115	120	MISC	Jesus
+dev/0140	98	104	MISC	Cambay
+dev/0141	0	26	MISC	Gotthold Ephraim Lessing (
+dev/0141	26	28	NUMBER	22
+dev/0141	29	36	DATE	January
+dev/0141	38	42	NUMBER	1729
+dev/0141	47	49	NUMBER	15
+dev/0141	50	58	DATE	February
+dev/0141	60	64	DATE	1781
+dev/0141	147	153	MISC	German
+dev/0141	177	194	MISC	Enlightenment era
+dev/0142	4	224	MISC	U.S. National Center for Biotechnology Information (and sister organizations in Europe and Japan) house the gene sequence in a database known as Genbank, along with sequences of known and hypothetical genes and proteins.
+dev/0143	30	44	PERSON	William George
+dev/0143	45	51	MISC	Horner
+dev/0143	84	88	DATE	1819
+dev/0143	114	129	MISC	Isaac Newton in
+dev/0143	130	134	NUMBER	1669
+dev/0143	151	195	MISC	Chinese mathematician Ch'in Chiu-Shao around
+dev/0143	196	201	NUMBER	1200s
+dev/0144	4	30	MISC	Mk I Colossus was built in
+dev/0144	31	33	NUMBER	11
+dev/0144	44	57	MISC	Tommy Flowers
+dev/0144	84	130	MISC	Post Office Research Station at Dollis Hill in
+dev/0144	131	137	PLACE	London
+dev/0144	158	172	MISC	Bletchley Park
+dev/0146	53	59	MISC	Gemini
+dev/0146	64	76	MISC	Agena docked
+dev/0146	176	181	MISC	Earth
+dev/0147	11	60	MISC	Palm Springs, California, from the aftermath of a
+dev/0147	67	76	MISC	Hawks was
+dev/0147	183	191	MISC	Westerns
+dev/0148	70	83	PERSON	Edmond Halley
+dev/0148	88	100	MISC	Isaac Newton
+dev/0148	180	186	MISC	Newton
+dev/0148	195	199	DATE	1727
+dev/0150	16	31	MISC	American cities
+dev/0150	37	45	MISC	Honolulu
+dev/0150	166	173	MISC	Kapolei
+dev/0150	175	178	MISC	Ewa
+dev/0150	180	184	MISC	Aiea
+dev/0150	186	196	MISC	Pearl City
+dev/0150	198	205	MISC	Waipahu
+dev/0150	211	219	MISC	Mililani
+dev/0151	22	26	NUMBER	19th
+dev/0151	61	75	PERSON	Thomas Carlyle
+dev/0152	4	20	MISC	Kuroshio Current
+dev/0152	44	51	PLACE	Pacific
+dev/0152	60	65	MISC	Japan
+dev/0152	98	103	PLACE	Tokyo
+dev/0152	125	141	MISC	Tsushima Current
+dev/0152	156	159	PLACE	Sea
+dev/0152	163	168	MISC	Japan
+dev/0153	0	6	MISC	Hosea,
+dev/0153	18	21	NUMBER	8th
+dev/0153	89	100	MISC	Yahweh will
+dev/0153	184	191	MISC	Assyria
+dev/0154	76	84	NUMBER	helium-4
+dev/0155	29	34	MISC	Greek
+dev/0155	130	135	PERSON	Plato
+dev/0155	147	156	PERSON	Aristotle
+dev/0155	216	227	MISC	The Forms).
+dev/0156	21	27	PLACE	Howard
+dev/0156	28	35	MISC	Harrell
+dev/0156	52	106	MISC	Madam Beverly Harrell, who ran the Cottontail Ranch in
+dev/0156	107	111	DATE	1967
+dev/0157	4	146	MISC	Sovereign's Orb similarly has a band of jewels running along the center, and a half-band on the top hemisphere, with a cruciform at the crest.
+dev/0158	0	9	MISC	Hefner is
+dev/0158	57	66	MISC	Playmates
+dev/0158	73	84	NUMBER	18-year-old
+dev/0158	85	180	MISC	Donna Michelle, Marilyn Cole, Lillian Muller, Patti McGuire, Terri Welles, and Brande Roderick.
+dev/0159	38	41	NUMBER	800
+dev/0159	118	122	NUMBER	28.9
+dev/0159	123	139	MISC	C at Ronaldsway.
+dev/0160	105	111	MISC	Gothic
+dev/0160	125	134	PLACE	Lexington
+dev/0160	135	141	MISC	Avenue
+dev/0160	150	154	NUMBER	68th
+dev/0160	159	163	NUMBER	69th
+dev/0160	164	171	MISC	Streets
+dev/0161	77	106	MISC	Book of Habakkuk, which bears
+dev/0162	4	7	MISC	IEC
+dev/0162	68	70	MISC	NC
+dev/0162	129	132	MISC	IEC
+dev/0163	47	65	MISC	Molecular genetics
+dev/0164	125	127	MISC	IP
+dev/0166	69	74	PLACE	North
+dev/0166	82	142	MISC	Independent Counsel chose not to re-try North or Poindexter.
+dev/0167	5	13	MISC	Cerialis
+dev/0167	33	41	PERSON	Agricola
+dev/0167	84	90	PERSON	Gallia
+dev/0167	91	100	MISC	Aquitania
+dev/0168	4	24	MISC	Mid-levels Escalator
+dev/0168	37	39	NUMBER	20
+dev/0168	55	56	NUMBER	3
+dev/0168	81	84	NUMBER	800
+dev/0168	109	112	NUMBER	135
+dev/0170	25	29	DATE	July
+dev/0170	30	31	NUMBER	3
+dev/0170	32	36	DATE	1844
+dev/0170	55	73	MISC	Eldey off Iceland,
+dev/0170	134	138	DATE	1852
+dev/0170	147	159	PLACE	Newfoundland
+dev/0170	160	175	MISC	Banks in Canada
+dev/0171	3	148	MISC	Radioiodine (treatment) therapy, radioactive iodine is given orally (either by pill or liquid) on a one-time basis to ablate a hyperactive gland.
+dev/0172	7	20	DATE	17th century,
+dev/0172	87	98	PLACE	Netherlands
+dev/0172	122	127	PERSON	James
+dev/0172	152	167	MISC	British monarch
+dev/0172	168	177	PERSON	Charles I
+dev/0172	191	202	PLACE	Netherlands
+dev/0173	19	24	MISC	Hexen
+dev/0173	60	67	MISC	Heretic
+dev/0173	72	76	MISC	Doom
+dev/0173	126	131	MISC	Korax
+dev/0173	185	199	MISC	Serpent Riders
+dev/0173	233	240	MISC	Chronos
+dev/0174	75	83	PERSON	Sullivan
+dev/0174	86	90	MISC	Cove
+dev/0174	150	157	MISC	Derwent
+dev/0174	199	204	PLACE	Mount
+dev/0174	205	215	MISC	Wellington
+dev/0174	217	221	NUMBER	1270
+dev/0174	229	233	NUMBER	4233
+dev/0175	30	36	MISC	Eleven
+dev/0175	38	51	PERSON	Harry Connick
+dev/0175	51	142	MISC	, Jr., contributed "A Wink and a Smile" to the Sleepless in Seattle soundtrack, released in
+dev/0175	143	147	DATE	1993
+dev/0176	0	19	PERSON	Professor Schilling
+dev/0176	62	68	PERSON	France
+dev/0176	126	134	MISC	Gabonese
+dev/0176	153	157	NUMBER	1839
+dev/0176	162	166	DATE	1841
+dev/0177	18	27	MISC	Hong Kong
+dev/0177	75	80	DATE	1990s
+dev/0177	97	100	NUMBER	7.1
+dev/0177	112	116	DATE	2000
+dev/0179	0	9	PLACE	Islamabad
+dev/0179	60	68	PLACE	Pakistan
+dev/0179	96	110	MISC	Margalla Hills
+dev/0179	134	150	MISC	Pothowar Plateau
+dev/0180	65	68	MISC	May
+dev/0180	69	73	DATE	1999
+dev/0181	29	38	MISC	Hanseatic
+dev/0181	49	53	NUMBER	1358
+dev/0181	63	68	MISC	Hanse
+dev/0181	89	95	MISC	Baltic
+dev/0181	101	111	MISC	Gotlanders
+dev/0183	70	110	MISC	Swedish king Dyggve die a natural death.
+dev/0184	11	23	MISC	Percolomonas
+dev/0184	25	34	MISC	Lyromonas
+dev/0184	40	54	MISC	Psalteriomonas
+dev/0184	92	103	MISC	Vahlkampfia
+dev/0184	105	122	MISC	Pseudovahlkampfia
+dev/0185	78	84	MISC	Plasma
+dev/0185	86	90	PLACE	Dark
+dev/0185	91	96	MISC	Angel
+dev/0185	98	108	MISC	Kryptonian
+dev/0185	110	122	MISC	Golden Oldie
+dev/0185	128	142	MISC	Fantastic Four
+dev/0185	144	148	MISC	Thor
+dev/0185	150	156	MISC	Ardina
+dev/0185	162	170	MISC	Starglow
+dev/0187	6	10	DATE	1935
+dev/0187	13	16	MISC	CV"
+dev/0189	22	34	MISC	Monty Python
+dev/0189	95	106	MISC	King Arthur
+dev/0189	110	122	MISC	Monty Python
+dev/0189	131	141	MISC	Holy Grail
+dev/0189	146	151	PERSON	Brian
+dev/0189	155	169	MISC	Life of Brian.
+dev/0190	46	52	MISC	Ithaca
+dev/0190	115	129	MISC	Ithaca Commons
+dev/0193	31	37	MISC	Hermes
+dev/0193	101	106	MISC	Greek
+dev/0193	118	124	MISC	Trivia
+dev/0193	145	150	PLACE	Roman
+dev/0195	21	26	MISC	Cukor
+dev/0195	46	51	PERSON	Leigh
+dev/0195	56	68	MISC	De Havilland
+dev/0195	96	105	MISC	Gone with
+dev/0195	110	122	MISC	Wind debacle
+dev/0195	124	129	MISC	Cukor
+dev/0195	139	150	MISC	The Women (
+dev/0195	150	154	DATE	1939
+dev/0195	208	232	MISC	The Philadelphia Story (
+dev/0195	232	236	DATE	1940
+dev/0195	247	264	PERSON	Katharine Hepburn
+dev/0196	3	16	NUMBER	inter-African
+dev/0196	26	40	MISC	Gabon espouses
+dev/0197	34	40	MISC	Usenet
+dev/0197	42	49	MISC	FidoNet
+dev/0197	58	66	MISC	Internet
+dev/0198	103	106	MISC	HRT
+dev/0199	0	14	MISC	Cleveland died
+dev/0199	18	22	DATE	June
+dev/0199	23	25	NUMBER	24
+dev/0199	25	26	MISC	,
+dev/0199	27	31	DATE	1908
+dev/0199	74	92	MISC	Princeton Cemetery
+dev/0199	100	126	MISC	Nassau Presbyterian Church
+dev/0203	4	14	PLACE	Government
+dev/0203	18	23	MISC	Ghana
+dev/0203	76	78	NUMBER	39
+dev/0203	86	98	MISC	Constitution
+dev/0203	177	182	MISC	FCUBE
+dev/0205	19	23	DATE	June
+dev/0205	24	28	DATE	2004
+dev/0205	30	34	MISC	Yvon
+dev/0205	35	42	MISC	Neptune
+dev/0205	67	76	DATE	September
+dev/0205	77	79	NUMBER	20
+dev/0205	80	84	DATE	2005
+dev/0205	100	117	MISC	National Assembly
+dev/0205	119	129	NUMBER	Assemblée
+dev/0205	130	139	MISC	Nationale
+dev/0205	157	164	MISC	Chamber
+dev/0205	168	225	MISC	Deputies (Chambre des Députés) and the Senate (Sénat).
+dev/0207	0	8	PLACE	Southern
+dev/0207	9	16	MISC	Indiana
+dev/0207	58	86	MISC	Hoosier National Forest is a
+dev/0207	87	94	NUMBER	200,000
+dev/0207	121	128	MISC	Bedford
+dev/0208	0	12	MISC	ISIS modules
+dev/0209	4	9	NUMBER	80286
+dev/0209	62	67	MISC	Intel
+dev/0209	68	72	NUMBER	8086
+dev/0209	120	122	NUMBER	16
+dev/0209	123	126	MISC	MiB
+dev/0209	130	134	MISC	RAM,
+dev/0209	154	155	NUMBER	1
+dev/0209	156	159	MISC	MiB
+dev/0209	164	168	NUMBER	8086
+dev/0210	186	194	MISC	Europe (
+dev/0210	240	244	MISC	Isle
+dev/0210	248	261	MISC	Wight article
+dev/0212	4	115	MISC	Japan Railways Group companies operates long-distance bus service on the nation's expanding expressway network.
+dev/0213	58	147	MISC	World Wide Web has enabled a sudden and extreme decentralization of information and data.
+dev/0214	15	21	PLACE	French
+dev/0214	59	68	MISC	Saigon in
+dev/0214	69	73	DATE	1950
+dev/0214	79	83	MISC	U.S.
+dev/0214	114	120	MISC	Saigon
+dev/0214	139	145	PLACE	French
+dev/0215	0	9	PLACE	Greenwich
+dev/0215	10	17	MISC	Village
+dev/0215	88	93	DATE	1960s
+dev/0215	124	158	MISC	The Mamas and the Papas met there.
+dev/0216	6	12	MISC	Herman
+dev/0216	28	32	DATE	1835
+dev/0216	55	61	PLACE	Albany
+dev/0216	62	78	MISC	Classical School
+dev/0216	96	248	MISC	Melville's roving disposition, and a desire to support himself independently of family assistance, led him to seek work as a surveyor on the Erie Canal.
+dev/0217	4	162	MISC	Indus Valley Civilization was one of the three earliest civilizations of the ancient world, the other two being Sumer (in Mesopotamia/Iraq) and ancient Egypt.
+dev/0218	7	11	MISC	U.S.
+dev/0218	85	97	MISC	Constitution
+dev/0219	26	35	MISC	Calatrava
+dev/0219	95	99	NUMBER	1338
+dev/0219	128	134	PLACE	Toledo
+dev/0219	189	196	PERSON	Alfonso
+dev/0219	197	211	MISC	XI of Castile.
+dev/0220	27	37	PERSON	Mark Twain
+dev/0220	45	55	MISC	Adventures
+dev/0220	59	75	MISC	Huckleberry Finn
+dev/0221	20	33	MISC	Joseph Bramah
+dev/0221	189	199	MISC	Royal Navy
+dev/0221	207	230	MISC	Portsmouth Block Mills.
+dev/0222	4	15	MISC	Governor of
+dev/0222	16	24	PLACE	Victoria
+dev/0222	55	65	PLACE	Australian
+dev/0222	75	83	PLACE	Victoria
+dev/0222	87	96	PLACE	Australia
+dev/0222	114	123	PERSON	Elizabeth
+dev/0222	124	136	MISC	II, Queen of
+dev/0222	137	146	PLACE	Australia
+dev/0224	4	24	MISC	Phoenician heartland
+dev/0224	32	38	MISC	Levant
+dev/0224	84	95	MISC	Mesopotamia
+dev/0224	99	105	MISC	Persia
+dev/0224	115	126	MISC	Phoenicians
+dev/0224	166	180	MISC	Persian Empire
+dev/0225	0	12	MISC	Whereupon he
+dev/0225	107	108	NUMBER	5
+dev/0225	109	110	NUMBER	1
+dev/0225	111	112	NUMBER	2
+dev/0225	170	171	NUMBER	5
+dev/0226	31	35	MISC	Work
+dev/0226	46	59	MISC	Goren quickly
+dev/0229	77	89	MISC	Colin Powell
+dev/0229	106	129	MISC	U.N Security Council on
+dev/0229	130	131	NUMBER	5
+dev/0229	132	140	DATE	February
+dev/0229	141	145	DATE	2003
+dev/0229	214	221	NUMBER	al-Libi
+dev/0230	43	145	MISC	Monastery of St. Catherine at Sinai are realistic in appearance, in contrast to the later stylization.
+dev/0231	30	50	MISC	British genealogical
+dev/0232	33	44	MISC	Elizabethan
+dev/0232	128	140	PERSON	William Byrd
+dev/0232	196	209	MISC	Italian-style
+dev/0233	5	9	MISC	IKEA
+dev/0234	15	23	MISC	Ignatius
+dev/0234	84	102	MISC	Christian theology
+dev/0235	4	9	MISC	Exile
+dev/0235	17	21	MISC	Sons
+dev/0235	25	31	MISC	Usnach
+dev/0235	64	71	MISC	Deirdre
+dev/0235	99	114	PERSON	John Millington
+dev/0235	115	120	MISC	Synge
+dev/0235	125	145	PERSON	William Butler Yeats
+dev/0236	1	5	NUMBER	2700
+dev/0236	40	45	MISC	M1025
+dev/0236	50	55	MISC	M1043
+dev/0236	56	61	MISC	M1044
+dev/0236	129	133	NUMBER	MK19
+dev/0236	156	197	MISC	M2 machine gun, the M240G machine gun and
+dev/0236	198	206	MISC	M249 SAW
+dev/0237	116	269	MISC	Chappel & White was proposed initially to divide granites into I-type granite (or igneous protolith) granite and S-type or sedimentary protolith granite.
+dev/0240	0	12	MISC	Iqaluit does
+dev/0241	55	69	MISC	Rail Transport
+dev/0242	0	9	PLACE	Hollywood
+dev/0242	31	36	DATE	1930s
+dev/0242	41	46	DATE	1940s
+dev/0242	72	84	MISC	Dean Collins
+dev/0242	86	96	MISC	Hal Takier
+dev/0242	98	108	MISC	Jean Veloz
+dev/0244	31	44	MISC	Avery Hopwood
+dev/0244	58	76	MISC	American dramatist
+dev/0244	95	103	MISC	Class of
+dev/0244	104	108	NUMBER	1905
+dev/0244	112	115	MISC	The
+dev/0244	116	129	MISC	University of
+dev/0244	130	138	PERSON	Michigan
+dev/0244	153	164	MISC	Mr. Hopwood
+dev/0244	191	198	MISC	Regents
+dev/0244	206	216	MISC	University
+dev/0245	96	102	PLACE	Soviet
+dev/0245	122	128	NUMBER	BESM-6
+dev/0245	142	146	DATE	1967
+dev/0245	182	190	MISC	INTERCAL
+dev/0246	25	33	MISC	Bonewits
+dev/0246	71	75	MISC	RDNA
+dev/0246	87	195	MISC	Schismatic Druids of North America and was involved with a group called the Hasidic Druids of North America.
+dev/0247	20	28	PERSON	Judith I
+dev/0247	30	34	DATE	1901
+dev/0247	44	54	MISC	The Kiss (
+dev/0247	54	58	DATE	1907
+dev/0247	61	75	MISC	Art historians
+dev/0247	129	134	MISC	Klimt
+dev/0247	163	225	MISC	Egyptian, Minoan, Classical Greek, and Byzantine inspirations.
+dev/0248	61	68	MISC	Hadrian
+dev/0249	21	24	NUMBER	440

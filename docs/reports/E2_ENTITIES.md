@@ -2,7 +2,43 @@
 
 **Odin Loch** · 2026-11-12 · PLAN Track E, E2 · branch `wip/e2-ner` · follows [E1_CYPHA_TAGGER.md](E1_CYPHA_TAGGER.md)
 
-(The data, the design, the reads, the rules and the predictions below were written and committed before any training run. Results are added under them.)
+(The data, the design, the reads, the rules and the predictions were written and committed before any training run, in ca142f8b; amendment 1 before its runs, in ca7a35d5. Results are added around them.)
+
+## Result (2026-11-12)
+
+**The gate is not met.** The Cypha-classifier recogniser scores **0.678** micro F1 over the five types on the silver test (sentence bootstrap [0.647, 0.708]). The gate is 0.80. On the hand-checked set it scores **0.426** [0.275, 0.571]. Nothing uses it. The planner is unchanged.
+
+| Read | Silver test (once) | Hand-checked set (once) | Silver dev |
+|---|---|---|---|
+| Micro F1, five types | **0.678** [0.647, 0.708] | **0.426** [0.275, 0.571] | 0.651 [0.620, 0.683] |
+| PERSON | 0.409 [0.347, 0.468] (P 0.68, R 0.29) | 0.235 (12 gold) | 0.471 |
+| PLACE | 0.564 [0.487, 0.642] | 0.381 (25) | 0.502 |
+| ORG | 0.090 [0.000, 0.195] (R 0.05) | 0.000 (18) | 0.125 |
+| DATE | 0.681 [0.619, 0.738] | 0.759 (14) | 0.579 |
+| NUMBER | 0.853 [0.822, 0.878] (P 0.74, R 1.00) | 0.625 (5) | 0.819 |
+| MISC (not gated) | 0.357 [0.321, 0.393] | 0.333 (43) | 0.392 |
+| Six-type micro F1 | 0.571 | 0.379 | 0.557 |
+
+- **The dev choice** (amendment 1): α 0.5, ε 0.1, `delta_lr` 0.003, `world_lr` 0.002, Cypha learns from a quarter of the O tokens, 1 pass. Training 34 s, tagging 5,504 tokens/s, 0.99 GB.
+- **The ceiling of Cypha's rule is low too.** Exact class means (LDA) on the same input reach 0.708 on dev. A shared-variance Gaussian is a linear rule, and entity boundaries need conjunctions (a capital *and* the previous tag *and* the next word's shape). This is E1's finding again, and stronger.
+- **Online Cypha is unstable here.** With E1's rates the dev F1 jumps between passes (0.55 at best). Smaller rates and fewer O tokens lift it to 0.65.
+- **The typical error is a broken span.** Tags flip type inside a name ("Bay" PLACE, "Bengal" MISC) or run on past it ("General Motors New Zealand plant in Petone outside Wellington, until it closed in" as one MISC span). Most names come out as MISC (441 of 727 spans on the dev prompts).
+
+**The planner read** (250 GEN-A dev prompts, store `e9_text`, offline; Wilson intervals):
+
+| Candidate list | Prompts with a main-entity plan |
+|---|---:|
+| find1 (the current finder) | **24** (0.096 [0.065, 0.139]) |
+| find2 (Q1's finder) | 24 |
+| e2 alone | 18 (0.072 [0.046, 0.111]) |
+| e2 without MISC | 5 |
+| **e2 first, then find1** | **27** (0.108 [0.075, 0.153]) |
+| ngram ceiling (any token run that is a store subject) | 36 (0.144 [0.106, 0.193]) |
+
+- E2 alone loses 9 of find1's prompts and gains 3: −6 [−13, 0]. Its broken spans miss names find1 gets right (Gothenburg, Carl Friedrich Gauss, Charlemagne, Ken Livingstone).
+- E2 first, then find1: +3 [0, +7] against find1, with 2 more prompts on a different subject.
+- **By hand**, on the 5 prompts where E2 changes or adds the main subject: right 2 (Australia, Colin Powell), even 1 (Katharine Hepburn for The Philadelphia Story), wrong 2 ("Bengal" from "Bay of Bengal", "Greenwich" from "Greenwich Village").
+- **The store is the main limit.** Even a lookup of every token run reaches only 36 of 250. Every candidate with a fact already gets a main plan: in each list "any fact" equals "main".
 
 **Question.**
 - Can the Cypha classifier find named entities in Wikipedia prose, with E1's machinery?
@@ -158,6 +194,66 @@ Round 1 is far under its ceiling, unlike E1 (within 0.4 points). Two likely caus
 | A2 | It stays at least 0.05 under the LDA ceiling (0.708) |
 | A3 | O subsampling raises recall and lowers precision of every entity type |
 | A4 | The gate (0.80 on silver test) is missed |
+
+## Amendment 1 (dev, 2026-11-12)
+
+ε 0.1, `world_lr` 0.002, α 0.5; dev micro F1 after passes 1 / 2 / 3:
+
+| `delta_lr` | O kept | Pass 1 | Pass 2 | Pass 3 |
+|---|---|---:|---:|---:|
+| 0.003 | 1 | 0.485 | 0.590 | 0.568 |
+| 0.003 | 0.25 | **0.651** | 0.631 | 0.624 |
+| 0.001 | 1 | 0.566 | 0.561 | 0.594 |
+| 0.001 | 0.25 | 0.621 | 0.624 | 0.624 |
+
+- **The dev choice of the item:** `delta_lr` 0.003, O kept 0.25, 1 pass, dev 0.651. Round 1's best was 0.552. No other cell is within 0.005.
+- The test split and the hand set were then read once with it (command below). Dev in that run reproduced 0.6512 exactly.
+
+## The test read (once, 2026-11-12)
+
+```
+cypha_ner run --train train.tsv --dev bench/e2_ner/silver_dev.tsv --test bench/e2_ner/silver_test.tsv --read-test --hand bench/e2_ner/hand.tsv \
+  --alpha 0.5 --whiten 0.1 --delta-lr 0.003 --world-lr 0.002 --o-keep 0.25 --passes 1 \
+  --prompts bench/eval/gen_prompts_dev.tsv --prompt-out final_prompt_spans.tsv --pred-out final
+```
+
+Outputs in `bench/e2_ner/runs/`: `final.log`; the spans on the dev prompts, `final_prompt_spans.tsv`; the planner read, `e2_coverage.log` and `cov_final.tsv`; the predictions on dev, test and the hand set, `final.{dev,test,hand}.tsv`.
+
+## Decisions (by the registered rules)
+
+- **Rule 4: the gate is not met** (0.678 < 0.80).
+- **Rule 5:** E2 stays in the tree as a measured tool, with its selftest. Nothing uses it.
+- **The planner hook is not built.** Its first condition fails for E2 alone (main plans fall from 24 to 18). E2 first, then find1, adds 3 [0, +7], but 2 of the 5 changed subjects are wrong. The hook stays registered for a recogniser that passes the gate.
+
+## Predictions, scored
+
+| # | Prediction | Result |
+|---|---|---|
+| P1 | Stage 1 picks α 0.5 | **Hit** (0.708 against 0.704) |
+| P2 | Dev micro F1 of the dev choice 0.72–0.86 | **Miss:** 0.651 |
+| P3 | Test within 0.03 of dev; gate met or missed narrowly | **Partial:** +0.027 (hit); missed by 0.12 (miss) |
+| P4 | Test: NUMBER ≥ 0.90, DATE ≥ 0.85, PERSON 0.60–0.85, PLACE 0.50–0.80, ORG ≤ 0.50 | **Partial:** PLACE 0.56 and ORG 0.09 hit; NUMBER 0.85, DATE 0.68, PERSON 0.41 miss |
+| P5 | Hand set at least 0.10 under silver test | **Hit:** 0.426 against 0.678 |
+| P6 | LDA within 0.03 of online Cypha; counts alone at least 0.20 below | **Miss:** LDA 0.057 above; counts alone 0.12 below |
+| P7 | e2 18–30 main plans, e2+find1 24–30, neither above 36 | **Hit:** 18, 27, 36 |
+| P8 | E2's changed subject right in at least 60% | **Miss:** 2 of 5 (one even) |
+| P9 | Runs under 15 minutes; tagging at least 2,000 tokens/s | **Hit:** at most 8.7 minutes; 5,504 tokens/s |
+| A1 | Amendment's best at least 0.60 | **Hit:** 0.651 |
+| A2 | Still at least 0.05 under the LDA ceiling | **Hit:** 0.057 under |
+| A3 | O subsampling raises recall and lowers precision of every type | **Miss:** recall rose for all, but precision rose for PLACE, ORG and NUMBER |
+| A4 | The gate is missed | **Hit** |
+
+7 hits, 2 partial, 4 misses (P2, P6, P8, A3).
+
+## What is weak, and next
+
+- **The silver labels are not checked.** The hand set checks the model, not the silver labels. The page typing has visible errors ("Gustloff", a ship named after a man, typed PERSON). The coverage filter keeps easy sentences, so the silver test is kinder than real prose (0.68 against 0.43).
+- **ORG is nearly absent** from the silver data (2,147 training spans) and is not learned.
+- **Next, in order:**
+  1. E1's advice for E2: the averaged perceptron (sparse conjunctions) on the same silver data and reads, as a second arm. E1's perceptron beat Cypha by 2.75 points on tags; spans need conjunctions more.
+  2. BIO-constrained decoding (Viterbi over Cypha's scores, I-X only after B-X or I-X). It fixes run-on and broken spans without new learning.
+  3. A non-linear Cypha decision (class-conditional covariances or a mixture of components), the library item E1 named.
+- **For the planner, the store matters more than the finder:** 36 of 250 is the ceiling on `e9_text` for any finder.
 
 ## How to reproduce
 
