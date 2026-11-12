@@ -956,6 +956,19 @@ struct ByteScorer {
     // §13.24 pmi: log2 of the piece's probability with no context (the model's own prior on it), so the rerank can keep
     // only what the context adds. A byte model's prior favours short, common words, which K5 already weighs.
     virtual double prior(std::string_view) { return 0; }
+    // K5_MIXDEC.md: the word drawn from the weights w[0, k) by the scorer's own decoder (arithmetic decoding of random
+    // bytes); false: K5 draws it as before.
+    virtual bool decode(const double*, std::size_t, std::size_t&) { return false; }
+};
+
+// K5_MIXDEC.md (docs/DECODER.md): one continuation's mixer decoder (lm/decoder/mixdec.hpp), primed on the retrieved
+// article and the prompt. fork: a draft's word scorer after the committed text out (null: K5 draws alone); judge: the
+// gate term of a draft written after out; judge_w: its weight (0: none).
+struct MixDec {
+    virtual ~MixDec() = default;
+    virtual std::unique_ptr<ByteScorer> fork(std::string_view out, std::uint64_t seed) = 0;
+    virtual double judge(std::string_view out, std::string_view draft) = 0;
+    virtual double judge_w() const = 0;
 };
 
 class K5;
@@ -978,8 +991,11 @@ struct Options {
     // p_k5 * (p_bytes / p_bytes_prior)^w (DExperts' form: the byte model adds only what the context tells it). K5
     // still chooses the candidates and the nucleus (the plausibility gate of §13.16).
     std::function<std::unique_ptr<ByteScorer>()> scorer;
-    int scorer_mode = 1;
+    int scorer_mode = 1;  // K5_MIXDEC.md adds 4: a veto, words more than scorer_w bits below the best scorer's score dropped
     double scorer_w = 0.25;
+    // K5_MIXDEC.md: the mixer decoder of each continuation (start() makes it from the prompt and the retrieved article's
+    // text); null: off.
+    std::function<std::shared_ptr<MixDec>(std::string_view prompt, std::string_view article)> mixdec;
     bool cap = true;           // apply the model's copy cap (K5::load's cap; a model built with cap 0 has none)
     double temperature = 1.0;  // fuzzy_bake.py: 1.0
     double cand_mass = 0.995;  // --k5-cand-mass P
@@ -1514,6 +1530,7 @@ class K5 {
         int ret_round = 0;
         std::size_t ret_np = 0;
         std::string ret_prompt;
+        std::shared_ptr<MixDec> mix;  // K5_MIXDEC.md (null: off)
     };
     State start(std::string_view prompt, const Options& o) const {
         State s;
@@ -1541,6 +1558,23 @@ class K5 {
             for (std::size_t w = 0; w < lr.size(); ++w)
                 if (lr[w] != 0) (*m)[w] = std::exp2(o.lda_beta * lr[w]);
             s.topic_mult = std::move(m);
+        }
+        if (o.mixdec) {  // K5_MIXDEC.md: the retrieved documents' text (as K5 reads them: <unk> left out) primes the learner
+            std::string art;
+            if (o.ret.on() && ret_)
+                for (const std::uint32_t d : ret_->top(s.ctx, o.ret, kn_.index(), prompt)) {
+                    const auto [a, b] = ret_->span(d);
+                    const auto& ids = kn_.index().text();
+                    std::string prev;
+                    bool hp = false;
+                    for (std::size_t i = a; i < b; ++i) {
+                        if (ids[i] == kUnk || ids[i] == kBos) continue;
+                        art += piece(vocab_[ids[i]], prev, hp);
+                        prev = vocab_[ids[i]], hp = true;
+                    }
+                    art += "\n\n";
+                }
+            s.mix = o.mixdec(prompt, art);
         }
         return s;
     }
@@ -1831,10 +1865,11 @@ class K5 {
         const std::uint64_t cs = mix64(seed ^ mix64(0x6A7E000000ull + sent * 256 + static_cast<std::uint64_t>(k)));
         std::mt19937_64 rng(cs);
         const std::size_t b0 = c.out.size();
+        const std::unique_ptr<ByteScorer> fb = c.mix ? c.mix->fork(c.out, cs) : nullptr;  // K5_MIXDEC.md
         while (c.step < o.max_words && c.out.size() < o.bytes) {
             const std::uint64_t salt = mix64(cs ^ mix64(static_cast<std::uint64_t>(c.step) + 0x5EED));
             double l = 0;
-            const std::uint32_t w = step_word(c, rng, salt, o, g, nullptr, sc, &l);
+            const std::uint32_t w = step_word(c, rng, salt, o, g, fb.get(), sc, &l);
             words.push_back(w), lp.push_back(l);
             const std::size_t nb = c.out.size() - b0;
             const std::string& t = vocab_[w];
@@ -1970,6 +2005,7 @@ class K5 {
         std::vector<std::string> text(K1 == K0 ? K0 : KM);
         std::vector<eg::SentRoles> roles(KM);
         std::vector<double> tf(K1 == K0 ? K0 : KM), tp(tf.size()), tm(tf.size()), te(tf.size()), tt(tf.size()), mk(tf.size());
+        std::vector<double> tj(KM);  // K5_MIXDEC.md: the judge's term (KM, so the first sentence's K1 drafts fit)
         // K5_FIRST.md req: the prompt's content words (content_lower), and per first-sentence draft whether it holds one.
         std::set<std::string> pcw;
         std::vector<char> hit;
@@ -1989,6 +2025,7 @@ class K5 {
         for (std::uint64_t sent = 0; s.step < o.max_words && s.out.size() < o.bytes; ++sent) {
             const std::size_t K = sent == 0 ? K1 : K0;  // K5_FIRST.md
             if (K1 != K0) text.resize(K), tf.resize(K), tp.resize(K), tm.resize(K), te.resize(K), tt.resize(K), mk.resize(K);
+            tj.assign(K, 0.0);  // K5_MIXDEC.md
             const bool req = sent == 0 && !pcw.empty();
             for (std::size_t k = 0; k < K; ++k) {
                 State& c = cand[k];
@@ -2000,10 +2037,11 @@ class K5 {
                 double slp = 0, spmi = 0, stop = 0;
                 std::size_t nw = 0;
                 std::vector<std::string> toks;
+                const std::unique_ptr<ByteScorer> fb = c.mix ? c.mix->fork(c.out, cs) : nullptr;  // K5_MIXDEC.md
                 while (c.step < o.max_words && c.out.size() < o.bytes) {
                     const std::uint64_t salt = mix64(cs ^ mix64(static_cast<std::uint64_t>(c.step) + 0x5EED));
                     double lp = 0;
-                    const std::uint32_t w = step_word(c, rng, salt, o, gk[k], nullptr, sc, &lp);
+                    const std::uint32_t w = step_word(c, rng, salt, o, gk[k], fb.get(), sc, &lp);
                     slp += lp, spmi += assoc.empty() ? 0.0 : assoc[w], stop += tlr.empty() ? 0.0 : tlr[w], ++nw;
                     if (req && !hit[k] && pcw.count(content_lower(w))) hit[k] = 1;  // K5_FIRST.md
                     const std::string& t = vocab_[w];
@@ -2017,6 +2055,7 @@ class K5 {
                 const double nb = static_cast<double>(std::max<std::size_t>(c.out.size() - b0, 1)), n = static_cast<double>(std::max<std::size_t>(nw, 1));
                 tf[k] = slp / n, tp[k] = spmi / n, tt[k] = stop / n, mk[k] = static_cast<double>(m) / nb;
                 text[k] = c.out.substr(b0);
+                if (s.mix && s.mix->judge_w() != 0) tj[k] = s.mix->judge(s.out, text[k]);  // K5_MIXDEC.md
                 if (use_eg) {
                     roles[k] = eg_.roles(toks);
                     te[k] = o.eg_mode == 2 ? eg_.continuation_score(hist, roles[k]) : eg_.append_logp(hist, roles[k]);
@@ -2025,6 +2064,8 @@ class K5 {
             }
             if (o.mbr_sent_w != 0) tm = mbr::utilities(text);
             z(tf), z(tp), z(tm), z(te), z(tt);
+            const double jw = s.mix ? s.mix->judge_w() : 0.0;  // K5_MIXDEC.md: the judge, z-scored as the other terms
+            if (jw != 0) z(tj);
             std::size_t best = 0;
             double bscore = 0;
             const double xp = sent == 0 ? o.first_wp : 0.0, xl = sent == 0 ? o.first_wl : 0.0;  // K5_FIRST.md
@@ -2034,6 +2075,7 @@ class K5 {
                 if (any && !hit[k]) continue;  // K5_FIRST.md req
                 double score = o.gate_wf * tf[k] + o.gate_wp * tp[k] + o.mbr_sent_w * tm[k] + o.eg_w * te[k] + o.lda_w * tt[k] - o.gate_wm * mk[k];
                 if (xp != 0 || xl != 0) score += xp * tp[k] + xl * tt[k];
+                if (jw != 0) score += jw * tj[k];  // K5_MIXDEC.md
                 if (!have || score > bscore) bscore = score, best = k, have = true;
             }
             if (use_eg) eg_.append(hist, roles[best]);
@@ -2204,7 +2246,8 @@ class K5 {
                 for (std::size_t i = 0; i < k; ++i) zb += std::exp2(lb[i] - mx);
                 for (std::size_t i = 0; i < k; ++i) {
                     const double pb = std::exp2(lb[i] - mx) / zb;
-                    rw[i] = o.scorer_mode == 3 ? std::exp2(std::log2(std::max(rw[i], 1e-300)) + o.scorer_w * (lb[i] - mx))
+                    rw[i] = o.scorer_mode == 4 ? (lb[i] < mx - o.scorer_w ? 0.0 : rw[i])  // K5_MIXDEC.md: the veto
+                      : o.scorer_mode == 3 ? std::exp2(std::log2(std::max(rw[i], 1e-300)) + o.scorer_w * (lb[i] - mx))
                           : o.scorer_mode == 2 ? (1 - o.scorer_w) * rw[i] + o.scorer_w * pb
                                                : std::exp2((1 - o.scorer_w) * std::log2(std::max(rw[i], 1e-300)) +
                                                            o.scorer_w * std::log2(std::max(pb, 1e-300)));
@@ -2212,12 +2255,14 @@ class K5 {
                 }
                 for (double& x : rw) x /= zr;
             }
-            const double u = static_cast<double>(rng() >> 11) * 0x1.0p-53;
             std::size_t j = 0;
-            double cdf = 0;
-            for (; j + 1 < k; ++j) {
-                cdf += rw[j];
-                if (cdf > u) break;
+            if (!(bs && bs->decode(rw.data(), k, j))) {  // K5_MIXDEC.md: the decoder's arithmetic decoding, else K5's draw
+                const double u = static_cast<double>(rng() >> 11) * 0x1.0p-53;
+                double cdf = 0;
+                for (; j + 1 < k; ++j) {
+                    cdf += rw[j];
+                    if (cdf > u) break;
+                }
             }
             w = cand[kept[j]];
             str = std::move(pieces[kept[j]]);
@@ -2533,7 +2578,8 @@ class K5 {
             for (std::size_t i = 0; i < k; ++i) zb += std::exp2(lb[i] - mx);
             for (std::size_t i = 0; i < k; ++i) {
                 const double pb = std::exp2(lb[i] - mx) / zb;
-                rw[i] = o.scorer_mode == 3 ? std::exp2(std::log2(std::max(rw[i], 1e-300)) + o.scorer_w * (lb[i] - mx))
+                rw[i] = o.scorer_mode == 4 ? (lb[i] < mx - o.scorer_w ? 0.0 : rw[i])  // K5_MIXDEC.md: the veto
+                      : o.scorer_mode == 3 ? std::exp2(std::log2(std::max(rw[i], 1e-300)) + o.scorer_w * (lb[i] - mx))
                       : o.scorer_mode == 2 ? (1 - o.scorer_w) * rw[i] + o.scorer_w * pb
                                            : std::exp2((1 - o.scorer_w) * std::log2(std::max(rw[i], 1e-300)) +
                                                        o.scorer_w * std::log2(std::max(pb, 1e-300)));
@@ -2541,12 +2587,14 @@ class K5 {
             }
             for (double& x : rw) x /= zr;
         }
-        const double u = static_cast<double>(rng() >> 11) * 0x1.0p-53;
         std::size_t j = 0;
-        double cdf = 0;
-        for (; j + 1 < k; ++j) {
-            cdf += rw[j];
-            if (cdf > u) break;
+        if (!(bs && bs->decode(rw.data(), k, j))) {  // K5_MIXDEC.md: the decoder's arithmetic decoding, else K5's draw
+            const double u = static_cast<double>(rng() >> 11) * 0x1.0p-53;
+            double cdf = 0;
+            for (; j + 1 < k; ++j) {
+                cdf += rw[j];
+                if (cdf > u) break;
+            }
         }
         w = cand[kept[j]];
         str.assign(pieces(kept[j]));

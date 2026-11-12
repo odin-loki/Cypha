@@ -637,6 +637,8 @@ class DiscourseWriter final : public wkn::StructureWriter {
             for (const auto& t : c.sents.back().tok) prev.push_back(m.id(t));
             ar = m.prompt_assoc(prev);
         }
+        const double jw = s.mix ? s.mix->judge_w() : 0.0;  // K5_MIXDEC.md: the mixer decoder's judge (0: none)
+        std::vector<double> jt(pmi.size());
         std::vector<std::vector<std::string>> toks(pmi.size());
         std::vector<wkn::GenStats> gs(pmi.size());
         std::vector<std::uint32_t> words;
@@ -652,16 +654,19 @@ class DiscourseWriter final : public wkn::StructureWriter {
             if (!ar.empty()) rec[ku] = st::mean_assoc(ar, words);
             for (const auto w : words) toks[ku].push_back(m.vocab()[w]);
             topic[ku] = tok_topic(toks[ku], c.theta);
+            if (jw != 0) jt[ku] = s.mix->judge(s.out, std::string_view(out).substr(s.out.size()));  // K5_MIXDEC.md
             grid[ku] = md.grid.trained() ? md.grid.append_logp(c.grid, md.grid.roles(toks[ku])) : 0.0;
         }
         const auto zp = zscores(pmi), zt = zscores(topic), zg = zscores(grid);
         const auto zr = ar.empty() ? std::vector<double>{} : zscores(rec);
+        const auto zj = jw != 0 ? zscores(jt) : std::vector<double>{};  // K5_MIXDEC.md
         int best = 0;
         double bsc = -1e300;
         for (int k = 0; k < K; ++k) {
             const auto ku = static_cast<std::size_t>(k);
             double sc = p_.g_pmi * zp[ku] + p_.g_topic * zt[ku] + p_.g_grid * zg[ku] - o.gate_wm * mk[ku];
             if (!ar.empty()) sc += o.gate_wr * zr[ku];  // K5_COHERENCE.md
+            if (jw != 0) sc += jw * zj[ku];              // K5_MIXDEC.md
             if (k == 0 || sc > bsc) bsc = sc, best = k;
         }
         const auto bu = static_cast<std::size_t>(best);

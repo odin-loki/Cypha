@@ -284,6 +284,7 @@
 #include "cypha/lm/similar_context.hpp"
 #include "cypha/lm/token_model.hpp"  // BKN selftest: the reference Kneser-Ney
 #include "cypha/lm/word_kn.hpp"      // §13.19: sample --k5
+#include "cypha/lm/decoder/mixdec.hpp"  // K5_MIXDEC.md (docs/DECODER.md): sample --k5 ... --mixdec SPEC
 #include "cypha/lm/k5_mcmc.hpp"      // docs/reports/K5_MCMC.md: sample --k5 ... --k5-mcmc STEPS
 #include "cypha/lm/structure/writer.hpp"  // K5_STRUCTURE.md: sample --k5-struct
 #include "cypha/lm/planner/writer.hpp"    // K5_PLANNER.md: sample --k5-plan
@@ -423,6 +424,10 @@ struct Args {
     std::size_t k5_vmax = cypha::cyphalm::wkn::kVmax;    // K5_SCALE: --k5-vmax V
     std::string k5_lstm, k5_lstm_mix = "geo";     // §13.24: --k5-lstm FILE (lstm-train's), reranking K5's nucleus
     double k5_lstm_w = 0.25;                      // §13.24: --k5-lstm-w W, the byte LSTM's weight
+    // K5_MIXDEC.md (docs/DECODER.md): --mixdec SPEC turns the decoder on (off by default); its models' files.
+    std::string mixdec, mixdec_lstm = "/mnt/d/cypha_llm/mixdec/clean64.lstm", mixdec_trie = "/mnt/d/cypha_llm/corpus/trie/trie_1tb.pk";
+    std::string mixdec_generic = "/mnt/d/cypha_llm/k5scale/clean/train_all.txt";
+    std::size_t mixdec_generic_bytes = 524288;
     // FULL_DISTRIBUTION_MIXING.md: context8k's full mix (whole-distribution mixing, PAQ's way; on by default since
     // "Optimisation and default", --no-full-mix turns it off), --full-mix-dump FILE (its inputs, for full-mix-replay),
     // --full-mix-params k=v,...
@@ -565,6 +570,11 @@ Args parse(int argc, char** argv, int from) {
         else if (s == "--k5-lstm") a.k5_lstm = next();               // §13.24
         else if (s == "--k5-lstm-mix") a.k5_lstm_mix = next();       // §13.24: geo or lin
         else if (s == "--k5-lstm-w") a.k5_lstm_w = std::atof(next()); // §13.24
+        else if (s == "--mixdec") a.mixdec = next();                  // K5_MIXDEC.md
+        else if (s == "--mixdec-lstm") a.mixdec_lstm = next();
+        else if (s == "--mixdec-trie") a.mixdec_trie = next();
+        else if (s == "--mixdec-generic") a.mixdec_generic = next();
+        else if (s == "--mixdec-generic-bytes") a.mixdec_generic_bytes = std::strtoull(next(), nullptr, 10);
         else if (s == "--no-k5-more") a.k5_opts.emplace_back("--k5-more", "off");  // §13.48: K5's counts from its own text alone
         else if (s == "--no-k5-plan") a.no_k5_plan = true;          // §13.39: K5 alone, without the default planner
         else if (s.rfind("--k5-", 0) == 0) a.k5_opts.emplace_back(s, next());  // K5_UPGRADES.md (word_kn.hpp apply_flag)
@@ -2730,6 +2740,93 @@ int cmd_sample(const Args& a) {
             base.scorer_w = a.k5_lstm_w;
             std::cerr << "k5: the byte LSTM " << a.k5_lstm << " reranks the nucleus (" << a.k5_lstm_mix << ", w " << a.k5_lstm_w << ")\n";
         }
+        // K5_MIXDEC.md (docs/DECODER.md): the mixer decoder. The learner's models are loaded once and shared by every
+        // thread: the 1 TB trie, byte Kneser-Ney on K5's own text, the byte LSTM pretrained on it (lstm-train); the base
+        // learner is primed on the first bytes of generic clean prose; each continuation primes a copy on its retrieved
+        // article and its prompt, then writes with it frozen.
+        std::shared_ptr<cypha::cyphalm::decoder::Shared> mxs;
+        PackedModel mx_pm;
+        std::unique_ptr<cypha::cyphalm::bkn::ByteKN> mx_kn;
+        if (!a.mixdec.empty()) {
+            namespace dc = cypha::cyphalm::decoder;
+            const auto t0 = std::chrono::steady_clock::now();
+            mxs = std::make_shared<dc::Shared>();
+            std::string err;
+            if (!mxs->P.parse(a.mixdec, err)) {
+                std::cerr << err << "\n";
+                return 2;
+            }
+            mxs->M.copy = mxs->P.copy, mxs->M.ngram = mxs->P.ngram, mxs->M.lstm = mxs->P.lstm;
+            if (mxs->P.trie) {
+                Config tc;
+                try {
+                    mx_pm = PackedModel::load(a.mixdec_trie, mxs->M.tw, tc);
+                } catch (const std::exception& e) {
+                    std::cerr << "--mixdec: the trie " << a.mixdec_trie << ": " << e.what() << "\n";
+                    return 2;
+                }
+                mxs->M.trie = &mx_pm;
+            }
+            if (mxs->P.kn) {
+                std::ifstream kin(a.k5, std::ios::binary);
+                const std::string kt((std::istreambuf_iterator<char>(kin)), std::istreambuf_iterator<char>());
+                mx_kn = make_bkn(kBknDefault, reinterpret_cast<const std::uint8_t*>(kt.data()), kt.size());
+                if (!mx_kn) return 2;
+                mxs->M.kn = mx_kn.get();
+            }
+            if (mxs->P.lstm) {
+                mxs->lstm0 = cypha::online::ByteLSTM::load_file(a.mixdec_lstm);
+                if (!mxs->lstm0) {
+                    std::cerr << "--mixdec: cannot read the LSTM " << a.mixdec_lstm << " (cyphalm_trie lstm-train TEXT OUT)\n";
+                    return 2;
+                }
+            }
+            std::string gen;
+            {
+                std::ifstream gin(a.mixdec_generic, std::ios::binary);
+                gen.resize(a.mixdec_generic_bytes);
+                gin.read(gen.data(), static_cast<std::streamsize>(gen.size()));
+                gen.resize(static_cast<std::size_t>(gin.gcount()));
+            }
+            const double gb = [&] {
+                dc::Learner L(mxs->M, mxs->lstm0.get());
+                const double b = L.learn(gen);
+                mxs->base = std::make_unique<dc::Learner>(L);
+                mxs->base->trim();
+                return gen.empty() ? 0.0 : -b / static_cast<double>(gen.size());
+            }();
+            std::fprintf(stderr, "k5: %s; base primed on %zu bytes of %s at %.4f bits a byte; models ready in %.1f s\n",
+                         mxs->P.describe().c_str(), gen.size(), a.mixdec_generic.c_str(), gb,
+                         std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count());
+            // CYPHA_MIXDEC_EVAL=N: the learner's bits a byte on the first N prompts' human continuations, from the base
+            // (neutral) and primed on the prompt (no article), learning nothing while it reads the continuation.
+            if (const char* ev = std::getenv("CYPHA_MIXDEC_EVAL"); ev && !conts.empty()) {
+                const std::size_t N = std::min<std::size_t>(std::strtoull(ev, nullptr, 10), std::min(prompts.size(), conts.size()));
+                double bn = 0, bp = 0, nb = 0;
+                for (std::size_t i = 0; i < N; ++i) {
+                    dc::Learner ln(*mxs->base), lp(*mxs->base);
+                    ln.own(), lp.own();
+                    lp.learn("\n\n");
+                    lp.learn(prompts[i]);
+                    for (const char ch : conts[i]) {
+                        double P[256];
+                        ln.dist(P);
+                        bn -= std::log2(std::max(P[static_cast<std::uint8_t>(ch)], 1e-300));
+                        lp.dist(P);
+                        bp -= std::log2(std::max(P[static_cast<std::uint8_t>(ch)], 1e-300));
+                        ln.read(static_cast<std::uint8_t>(ch)), lp.read(static_cast<std::uint8_t>(ch));
+                    }
+                    nb += static_cast<double>(conts[i].size());
+                }
+                std::fprintf(stderr, "mixdec_eval prompts %zu bytes %.0f neutral_bpb %.4f primed_on_prompt_bpb %.4f\n", N, nb, bn / std::max(nb, 1.0),
+                             bp / std::max(nb, 1.0));
+            }
+            const dc::Shared* sp = mxs.get();
+            base.mixdec = [sp](std::string_view prompt, std::string_view art) -> std::shared_ptr<cypha::cyphalm::wkn::MixDec> {
+                return std::make_shared<dc::Dec>(*sp, prompt, art);
+            };
+            if (mxs->P.mode != 0) base.scorer_mode = mxs->P.mode, base.scorer_w = mxs->P.w;
+        }
         cypha::cyphalm::wkn::mcmc::SharedStats mstats;  // K5_MCMC.md
         if (mp.steps > 0) {
             namespace mc = cypha::cyphalm::wkn::mcmc;
@@ -2782,6 +2879,11 @@ int cmd_sample(const Args& a) {
                                                         a.temps.empty() ? std::vector<double>{1.0} : temps, printable, &base,
                                                         a.k5_seed, a.k5_vmax);
         if (mp.steps > 0) mstats.print(stderr);
+        if (mxs)  // K5_MIXDEC.md
+            std::fprintf(stderr, "mixdec: continuations %llu drafts %llu words scored %llu drafts judged %llu byte distributions %llu\n",
+                         static_cast<unsigned long long>(mxs->conts.load()), static_cast<unsigned long long>(mxs->drafts.load()),
+                         static_cast<unsigned long long>(mxs->words.load()), static_cast<unsigned long long>(mxs->judged.load()),
+                         static_cast<unsigned long long>(mxs->dists.load()));
         return krc;
     }
 
@@ -7202,6 +7304,10 @@ int cmd_selftest() {
     }
     if (std::string err; !cypha::cyphalm::wkn::mcmc::self_test(err)) {  // K5_MCMC.md: the paragraph sampler
         std::cerr << "selftest: K5 MCMC (k5_mcmc.hpp) " << err << "\n";
+        return 1;
+    }
+    if (std::string err; !cypha::cyphalm::decoder::self_test(err)) {  // K5_MIXDEC.md: the decoder's coder and rewind
+        std::cerr << "selftest: decoder (decoder/mixdec.hpp) " << err << "\n";
         return 1;
     }
     if (std::string err; !cypha::cyphalm::planner::discourse_self_test(err)) {  // PLAN_DISCOURSE.md
