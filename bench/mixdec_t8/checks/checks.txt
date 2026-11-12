@@ -1,0 +1,29 @@
+start C_T8 avail=44G 00:51:23
+rc=0 C_T8 01:00:06
+| trie samples (pooled) | 250 | 0.811 [0.785, 0.838] | 0.948 [0.943, 0.953] | 456 | 0.00 |
+GEN_EVAL copy32 T0.8 0.4873 verbatim13 0.0000 (0 of 250)
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 8:42.91
+	Maximum resident set size (kbytes): 11323120
+C_T8 CMP_EQUAL
+start C_K1 avail=32G 01:00:06
+rc=0 C_K1 01:07:25
+| trie samples (pooled) | 249 | 0.704 [0.673, 0.735] | 0.937 [0.932, 0.941] | 445 | 0.00 |
+GEN_EVAL copy32 T1.0 0.2750 verbatim13 0.0000 (0 of 250)
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 7:18.81
+	Maximum resident set size (kbytes): 11126984
+C_K1 CMP_EQUAL
+start C_MR avail=38G 01:07:25
+rc=0 C_MR 01:30:33
+| trie samples (pooled) | 250 | 0.810 [0.784, 0.836] | 0.945 [0.939, 0.950] | 488 | 0.00 |
+GEN_EVAL copy32 T1.0 0.2767 verbatim13 0.0000 (0 of 250)
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 23:07.24
+	Maximum resident set size (kbytes): 12582540
+C_MR CMP_EQUAL
+start C_MRJ avail=32G 01:30:33
+rc=0 C_MRJ 02:07:34
+| trie samples (pooled) | 250 | 0.802 [0.778, 0.829] | 0.949 [0.943, 0.954] | 498 | 0.02 |
+GEN_EVAL copy32 T1.0 0.2677 verbatim13 0.0000 (0 of 250)
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 37:00.97
+	Maximum resident set size (kbytes): 12586300
+C_MRJ CMP_EQUAL
+checks done

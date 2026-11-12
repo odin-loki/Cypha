@@ -1,0 +1,7 @@
+start T8MR avail=30G 02:09:07
+rc=0 T8MR 02:43:14
+| trie samples (pooled) | 250 | 0.868 [0.845, 0.891] | 0.947 [0.941, 0.953] | 478 | 0.05 |
+GEN_EVAL copy32 T0.8 0.4504 verbatim13 0.0000 (0 of 250)
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 34:06.54
+	Maximum resident set size (kbytes): 11576272
+start T8MRJ avail=25G 02:43:14
