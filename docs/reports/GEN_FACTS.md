@@ -100,3 +100,41 @@ Test reads already made (one each, read here as files; no new test read is made)
 | F6 | Of the supported dates of W1b, G16 and L1, at least half are checked only in part (the store has the year; the writer added month and day) |
 | F7 | Each test read lies within its dev arm's interval for share contradicted (W1b, G16, L1) |
 | F8 | Grader precision on the 40 hand-checked statements at least 0.85 |
+
+## Results of the registered measure (v1, 2026-11-12)
+
+Run after b174b9ce. `bench/gen_facts/` (dev), `bench/gen_facts/test/` (test reads), `bench/gen_facts/full_store/` (`--drop none`).
+
+| Arm | statements a sample | contradicted | supported | precision S/(S+C) | supported only in part |
+|---|---|---|---|---|---|
+| D0 | 1.12 [0.84, 1.43] | 0.228 [0.166, 0.290] | 0.349 [0.302, 0.395] | 0.605 [0.531, 0.682] | 0.60 |
+| W1b | 1.47 [1.15, 1.82] | 0.240 [0.187, 0.294] | 0.338 [0.295, 0.379] | 0.585 [0.530, 0.642] | 0.66 |
+| H1b | 0.56 [0.40, 0.72] | 0.007 [0.000, 0.022] | 0.165 [0.099, 0.227] | 0.958 [0.880, 1.000] | 0.00 |
+| G16 | 1.49 [1.17, 1.83] | 0.236 [0.184, 0.290] | 0.332 [0.289, 0.374] | 0.585 [0.530, 0.642] | 0.66 |
+| L1 | 1.48 [1.15, 1.82] | 0.238 [0.186, 0.294] | 0.335 [0.291, 0.378] | 0.585 [0.530, 0.642] | 0.66 |
+| HUMAN | 0.04 [0.01, 0.09] | 0 of 11 | 0 of 11 | none graded | – |
+
+The full store (`--drop none`) gives the same numbers for every writer (HUMAN: 12 statements, none graded).
+
+**The hand check (v1).** 40 statements drawn with seed 20261112 (`hand_check.tsv`). Every extraction is right. **Verdicts right: 36 of 40, 0.90 [0.77, 0.96].** Contradicted: 20 of 20 [0.84, 1.00]. Supported: 16 of 20, 0.80 [0.58, 0.92]. The four wrong ones are two faults:
+- **A coarse store date hid a precise one** (3 of 4). The store holds both "1931" and "1931-02-01" for Boris Yeltsin. "November 23, 1931" agrees with "1931", so it was marked supported, though the store's own full date contradicts it. The same for Bono and Nigella Lawson.
+- **Only the head of "A, B" was checked** (1 of 4). "Amakusa is a city in Japan, China" was supported on "Japan", though it puts Amakusa in China.
+
+So v1 makes no false contradictions in the sample, but it calls some wrong dates supported. Its share contradicted is a lower bound.
+
+Also seen, not in the sample: in HUMAN_TEST, "in Paris (1892-1895)" was read as the birth of Paris (rapper), a one-word name that matched a person's page. This is one false contradiction. It is not fixed here.
+
+## Amendment A1 (registered 2026-11-12, after the v1 hand check, before the v2 run)
+
+`gen_fact_check.py run --v2` fixes the two faults the hand check found. Nothing else changes; without `--v2` the output is the same as v1's (`cmp` on W1b's file).
+- **Dates:** only the store's finest dates for the subject count. If the store has a full date, a statement must agree with it.
+- **Places "A, B":** each part is graded alone. One contradicted part contradicts the statement; else one supported part supports it.
+
+**Run:** the same arms, into `bench/gen_facts/v2/` and `bench/gen_facts/v2/test/`.
+
+**A fresh hand check:** 40 more statements (20 contradicted, 20 supported) drawn from v2's five dev writers with seed 20261113, read as before (`hand_check_v2.tsv`).
+
+**Predictions:**
+- A1.1: the share contradicted of W1b, G16 and L1 rises by 0.05 to 0.12 (on N7, a file outside the arms, it rose from 0.24 to 0.33); precision falls to 0.40–0.55.
+- A1.2: H1b stays at or below 0.03 contradicted.
+- A1.3: grader precision on the fresh 40 at least 0.9.

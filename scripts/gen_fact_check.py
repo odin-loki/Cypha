@@ -594,8 +594,9 @@ class Extractor:
 
 
 class Grader:
-    def __init__(self, store):
+    def __init__(self, store, v2=False):
         self.st = store
+        self.v2 = v2  # GEN_FACTS amendment A1 (after the hand check): finest store dates; every part of "A, B"
 
     def grade(self, rel, k, obj):
         """-> (verdict, store values shown, note)"""
@@ -610,6 +611,9 @@ class Grader:
             sv = [(v, p) for v, p in sv if p is not None]
             if not sv:
                 return "unknown", "", "no " + fam + " in store"
+            if self.v2:  # A1: only the store's finest dates count ("1931" must not hide "1931-02-01")
+                top = max(sum(x is not None for x in p) for _, p in sv)
+                sv = [(v, p) for v, p in sv if sum(x is not None for x in p) == top]
             shown = ";".join(v for v, _ in sv)
             era_free = not re.search(r"(?:BC|BCE|AD|CE)", obj)  # "322" written for "322 BC" is no contradiction
             ok = [p for _, p in sv if date_agree(t, p, era_free)]
@@ -618,7 +622,21 @@ class Grader:
                 stated = sum(x is not None for x in t)
                 return "supported", shown, "" if best >= stated else f"checked {best} of {stated} parts"
             return "contradicted", shown, ""
+        if rel in PLACE_RELS and self.v2 and "," in obj:
+            # A1: "Japan, China" is graded part by part; one contradicted part contradicts the statement
+            res = [self.grade_place(rel, k, part.strip()) for part in obj.split(",") if part.strip()]
+            for want in ("contradicted", "supported"):
+                for r in res:
+                    if r[0] == want:
+                        return r[0], r[1], (r[2] + "; " if r[2] else "") + "by part"
+            return res[0] if res else ("unknown", "", "")
         if rel in PLACE_RELS:
+            return self.grade_place(rel, k, obj)
+        return self.grade_other(rel, k, obj)
+
+    def grade_place(self, rel, k, obj):
+        st = self.st
+        if True:
             q = norm(obj)
             qh = norm(obj.split(",")[0])
             if rel == "located_in":
@@ -653,6 +671,9 @@ class Grader:
             if tq and ts and not (tq & ts):
                 return "contradicted", shown, "different top places"
             return "unknown", shown, "places not comparable in store"
+
+    def grade_other(self, rel, k, obj):
+        st = self.st
         if rel == "nationality":
             vals = st.vals.get((k, "nationality"), set())
             shown = ";".join(sorted(vals))
@@ -859,7 +880,7 @@ def cmd_run(a):
         drop = (int(lo), int(hi))
     store = Store(a.store, drop)
     ext = Extractor(store)
-    grader = Grader(store)
+    grader = Grader(store, v2=a.v2)
     sys.stderr.write(f"store: {store.n_facts} facts, {len(store.subj_name)} subjects, {store.n_dropped} dropped by "
                      f"--drop; {len(ext.pats)} patterns compiled\n")
     os.makedirs(a.out, exist_ok=True)
@@ -877,7 +898,7 @@ def cmd_run(a):
         summ[name] = s
         sys.stderr.write(f"{name}: {len(samples)} samples, {len(rows)} statements\n")
     with open(os.path.join(a.out, "summary.json"), "w", encoding="utf-8") as f:
-        json.dump({"store": a.store, "drop": a.drop, "facts": store.n_facts, "dropped": store.n_dropped,
+        json.dump({"store": a.store, "drop": a.drop, "v2": a.v2, "facts": store.n_facts, "dropped": store.n_dropped,
                    "patterns": len(ext.pats), "arms": summ}, f, indent=1)
     lines = ["| Arm | samples | statements (S, C, U) | per sample [95%] | contradicted [95%] | supported [95%] | "
              "precision S/(S+C) [95%] | supported only in part | invalid dates |", "|---|---|---|---|---|---|---|---|---|"]
@@ -938,6 +959,7 @@ def main():
     r.add_argument("--drop", default="75497472:100000000")
     r.add_argument("--reps", type=int, default=2000)
     r.add_argument("--seed", type=int, default=20261112)
+    r.add_argument("--v2", action="store_true", help="GEN_FACTS amendment A1 (finest store dates; places by part)")
     r.add_argument("arms", nargs="+")
     d = sub.add_parser("draw")
     d.add_argument("--out", required=True)
