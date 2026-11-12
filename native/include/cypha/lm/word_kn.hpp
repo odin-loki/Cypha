@@ -991,7 +991,7 @@ struct Options {
     std::size_t classes = 256;                         // step 3: --k5-classes K (build; exchange classes; 0: none)
     int class_mode = 1;                                // --k5-class-mode backoff (1) | mix (2)
     double class_w = 0.1;                              // --k5-class-w W (mix)
-    int gate_k = 8;                                    // step 4: --k5-gate K[,wf=..][,wp=..][,wm=..][,min=..][,max=..] (1: off)
+    int gate_k = 16;                                   // GENERATION_PLAN §13.51 (TUNE_WRITE G16; was 8, K5_UPGRADES step 4): --k5-gate K[,wf=..][,wp=..][,wm=..][,min=..][,max=..] (1: off)
     double gate_wf = 0, gate_wp = 1, gate_wm = 5;
     std::size_t gate_min = 24, gate_max = 240;
     // K5_STRUCTURE.md: --k5-struct FILE (cyphalm_trie loads it); null: K5's own gate. desc goes on the MODEL line.
