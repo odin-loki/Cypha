@@ -2642,3 +2642,15 @@ Old binary main 9cbd277; old and new were started together.
   - fact precision 0.924 [0.883, 0.959] (HLT 0.924), contradicted 0.045;
   - copy32 0.264, no 13-word copies.
 - This is the first CyphaLM writer above SCRIBE's G4 bar of 0.70 on test (GPT-2 small: 0.767). SCRIBE alone is not the evidence (§13.57); the raters are: 0.860 and 0.880 against HLT.
+
+### 13.67 G3, K5 counts from C4 web prose too (2026-11-12; [K5_C4](reports/K5_C4.md); not adopted, nothing rated)
+
+- **Registered first** (51cd562), against HLT, the default when it started. Arms add the first 150, 300 or 600 MB of §13.64's clean C4 prose (C1) after `train_all.txt` in K5's more-text. The vocabulary, classes and LDA stay K5's.
+- **Screen** (GEN-A dev):
+  - SCRIBE v2 rose (HLT 0.595; C150 0.629, C300 0.632, C600 0.657);
+  - fact precision held (0.91–0.93);
+  - copy32 0.216–0.245;
+  - peak RAM 16–31 GB.
+- **Every arm fails the reading.** The web's voice gets into K5's free sentences: "Make money fast.", "Our model is wearing a size Medium.", "There will be more to your credit card payments." An unregistered count of first- or second-person words in the first 460 characters: HLT 0.080 (Wikipedia's own continuations 0.080); C150 0.516, C300 0.560, C600 0.616.
+- **By the rule, nothing goes to the raters; HLT stood** (K1 has since become the default, §13.66). SCRIBE rose where readers would not, as before (§13.57).
+- **What it says:** more text helps only in the prompts' own register. The next data step should be encyclopedic or book prose, not web pages. Retrieval (§13.66) gave the topical help that raw web counts do not.
