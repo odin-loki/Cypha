@@ -2627,6 +2627,13 @@ int cmd_sample(const Args& a) {
                 k5_plan = ds;
                 if (k5_plan_model.empty()) k5_plan_model = dm;
                 if (k5_plan_disc.empty()) k5_plan_disc = "on";  // §13.42: the discourse planner (Q3) is the default
+                // GENERATION_PLAN §13.63 (HONEST_DATES2 HLT; Odin: "Fix H2 somehow and use it."): the fill writes only the
+                // store's own dates and nationalities, with year-only skeletons trimmed from the bank, unless a
+                // --k5-plan-honest or --k5-plan-skel-add flag chose. --k5-plan-honest off restores L1.
+                bool hchosen = false;
+                for (const auto& kv : a.k5_opts) hchosen = hchosen || kv.first == "--k5-plan-honest" || kv.first == "--k5-plan-skel-add";
+                const std::string trim = "bench/honest_dates2/skel_trim.txt";
+                if (!hchosen && std::ifstream(trim)) k5_plan_q2.honest = 4, k5_plan_q2.skel_add = trim;
             } else {
                 std::cerr << "k5: planner files not found (" << ds << ", " << dm
                           << "; set CYPHA_K5_PLAN_STORE and CYPHA_K5_PLAN_MODEL); writing with K5 alone\n";

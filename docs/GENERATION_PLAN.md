@@ -2553,3 +2553,25 @@ Old binary main 9cbd277; old and new were started together.
   - Fewer orphan pronouns did not read better. **Not adopted; L1 stays.**
 - **The code stays on `wip/para-hook`, not merged.** Its gate changes overlap T4's `--k5-first` in `word_kn.hpp`, and neither is adopted. The report, runs and packets are on main.
 - **What it says:** fixing sentence-to-sentence form (pronouns, lead sentences) is not what readers notice. The gap the raters feel is content: the word thread between sentences (§13.59: 0.204 against 0.508) needs something to write about.
+
+### 13.63 H3, an honest fill that keeps its dates, is the default (2026-11-12; [HONEST_DATES2](reports/HONEST_DATES2.md); Odin: "Fix H2 somehow and use it.")
+
+- **The fault behind H2:** the store holds the full dates (7,463 of 11,117 subjects with a birth year also have a full birth date), but the planner's fact loader threw the month and day away (`CPS::canon`). So H2's fill had no true month or day to write, and every date skeleton was dropped.
+- **The fix:** `--k5-plan-honest life` (`planner/life_dates.hpp`, `native/tools/lm/k5_dates.cpp`). It is H2's `nations`, plus:
+  - a life book of each subject's dates, read from the store's own rows with the planner's drops applied;
+  - the fill writes only the book's month, day and year, each once and in time order;
+  - a skeleton is left out if it asks for more months or numbers than the book holds;
+  - year-only skeletons trimmed from the mined bank by a stated rule (`k5_dates trim`, 471 variants, `bench/honest_dates2/skel_trim.txt`).
+- **Registered first** (83be510), with Odin's instruction: the SCRIBE floor is reported but waived. The default is the arm with the highest fact precision among those the raters do not find worse (upper bound of the win share against L1 at least 0.5), with precision at least L1 + 0.15.
+- **Dev:**
+
+| Arm | Fact precision [95%] | Birth dates right / wrong | Death dates right / wrong | SCRIBE v2 |
+|---|---|---|---|---|
+| L1 | 0.437 [0.369, 0.507] | 70 / 55 | 6 / 53 | 0.610 |
+| HD2 | 0.865 | 0 / 0 | none | 0.570 |
+| HL | 0.928 | 56 / 4 | 23 / 0 | 0.590 |
+| **HLT** (HL + trimmed skeletons) | **0.935 [0.888, 0.974]** | 86 / 6 | 39 / 0 | 0.595 |
+
+- **Blind pairwise raters against L1** (packets 7108b16): HD2 0.520 [0.460, 0.580], HL 0.550 [0.500, 0.600], **HLT 0.540 [0.500, 0.590]**, rater pairs 0.52 and 0.56. None reads worse.
+- **By the rule, HLT becomes the default**: `sample --k5` adds `--k5-plan-honest life --k5-plan-skel-add bench/honest_dates2/skel_trim.txt` when the planner is on and the file is there. `--k5-plan-honest off` restores L1.
+- **Checks** (registered before they run): the default equals HLT's dev GEN file under `cmp`, and `--k5-plan-honest off` equals L1's. Then GEN-A test is read once.
