@@ -89,3 +89,37 @@ At most 2 candidates. If neither arm passes, nothing goes to the raters and I sa
 ## Results
 
 (Added after the runs, under this line.)
+
+### The screen (2026-11-13; dev, seed 0, 250 prompts)
+
+One arm at a time, 6 threads, on a shared PC. WSL restarted at about 02:53 during T8MRJ's first run, so it was run again alone. Files: `bench/mixdec_t8/runs/` (GEN, SCRIBE, summaries, the decoder's counters, `time -v`), `bench/mixdec_t8/screen/facts/` (`gen_fact_check.py run --v2`), `bench/mixdec_t8/screen/hook.md` (`hook_screen.py`, 460 characters, minus T8 with a 95% paired bootstrap), `bench/mixdec_t8/screen/reading.md` (the reading, by prompt).
+
+| Arm | verbatim13 | fact precision [95%] | SCRIBE v2 [95%] | v3.1 | copy32 | mean surprise − T8 [95%] | on_prev − T8 [95%] | stuff3 − T8 [95%] | sentences in 460 chars | whole sentences (12 prompts) | verbless fragments | keyword runs | wall | peak RAM | screen |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| T8 | 0 | 0.924 [0.876, 0.966] | 0.811 [0.785, 0.838] | 0.691 | 0.487 | — (7.579) | — (0.310) | — (0.0296) | 5.27 | 32 of 67 (0.48) | 23 (0.34) | 0 | 8:43 | 11.3 GB | baseline |
+| T8MR | 0 | 0.935 [0.888, 0.974] | **0.868** [0.845, 0.891] | 0.700 | 0.450 | −0.025 [−0.121, +0.073] | +0.003 [−0.026, +0.033] | +0.0122 [+0.0077, +0.0167] | 6.11 | 35 of 76 (**0.46**) | 27 (0.36) | 2 of 12 | 34:07 | 11.6 GB | **fail (reading, narrowly)** |
+| T8MRJ | 0 | 0.929 [0.881, 0.970] | 0.838 [0.813, 0.865] | 0.729 | 0.454 | +0.102 [+0.003, +0.202] | −0.001 [−0.030, +0.028] | +0.0180 [+0.0132, +0.0231] | 6.78 | 39 of 95 (**0.41**) | 40 (**0.42**) | **3 of 12** | 30:51 | 12.4 GB | **fail (reading)** |
+
+Both arms change 214 of 250 samples. The 36 they leave are planned prompts whose first 460 characters are all fact sentences.
+
+**Both arms pass the numbers:** verbatim13 0, fact precision above 0.874.
+
+**My reading** (the 12 prompts, side by side with T8):
+- **T8MRJ fails on all three registered marks.** It writes more, shorter pieces (6.8 in 460 characters against 5.3). Its share of whole sentences falls (0.41 against 0.48). Its share of verbless fragments rises (0.42 against 0.34). It repeats the subject's word in three or more sentences running in 3 of 12 prompts. Dev 9: "The method of the data analyzed. … In some cases, the data. … The model, data dredging, in a data set." Dev 12: five sentences running on "Alia", ending in "Alia was raised to the throne of England."
+- **T8MR fails narrowly.** It writes more whole sentences than T8 (35 against 32), but more pieces in all (76 against 67), so its share is lower (0.46 against 0.48). Its fragments (0.36) are within the bound (0.39). Its keyword runs are 2 of 12, within the bound. It is better on some prompts (dev 7: "It is also the biggest provider of distance education courses. The college was founded in 1965."; dev 12: "Alia was born a full Reverend Mother."). It is worse on others: it leaves the subject (dev 2 "In Japan, the cars were prone to giving up"; dev 10 "Such noise rock"), and dev 13 becomes a list of noun phrases ("The Messianic Movement. Most Jewish groups whose beliefs stress the Messiah. The organized Messianic Judaism."). By the registered rule (a share at least T8's) it fails. The margin is two sentences in 76; a count, as D2's rule was written, would have passed it. I keep the rule as registered.
+- On top of T8, the decoder's gain against K1 does not show the same way. T8 already stays on the subject's words, which was MR's gain over K1 (K5_MIXDEC). What is left is the decoder's price: more short pieces, more fragments, more repetition.
+- SCRIBE v2 rose again (T8MR +0.057). It has rewarded topic words that readers did not (§13.57), so it is not evidence by itself.
+
+**By the rule, neither arm passes the screen. Nothing goes to the raters; no packets are built.** T8 stays the default. The merge stays on `wip/mixdec-t8`, both flags off by default.
+
+**Predictions:**
+- P1, the four checks equal and the selftest passes: **hit**;
+- P2, verbatim13 0: **hit**;
+- P3, fact precision within ±0.03 of 0.924: **hit** (0.935, 0.929);
+- P4, copy32 within ±0.04 of 0.487: **hit** (0.450, 0.454);
+- P5, SCRIBE v2 up 0.01–0.06: **hit** (+0.057, +0.027);
+- P6, more sentences and stuff3 up 0.005–0.020: **hit** (6.11 and 6.78 against 5.27; +0.012, +0.018);
+- P7, mean surprise down 0.1–0.3 bits: **miss** (−0.025, +0.102);
+- P8, at least one arm fails on fragments or keyword repetition: **hit** (T8MRJ on both);
+- P9, raters: not run;
+- P10, 15–30 minutes and about 12.6 GB: **miss** on wall time (34:07, 30:51, on a loaded PC); RAM 11.6 and 12.4 GB.
