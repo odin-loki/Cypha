@@ -1,0 +1,15 @@
+file	where	bytes	sha256	what
+c4-train.00738-of-01024.jsonl	corpus/articles/c4	-	5a0e8a983bfeaa6f2031e52553e521d7b47d7980a71b1368c8e98e58fefceb22	GEN-W source shard (RedPajama C4; matches the official sum)
+c4-train.00737-of-01024.jsonl	corpus/articles/c4	-	b019015732eeefde79f270a779cb3704b72559dcf876325dacc7672db372aedd	SCRIBE-W pack shard
+c4-train.00736-of-01024.jsonl	corpus/articles/c4	-	d8c03443b18ab39b902ded0c58d071963b04adac52ecb94e4b0f9104b5703cd4	SCRIBE-W reference shard
+c4-train.00735-of-01024.jsonl	corpus/articles/c4	-	d9a569cdeb80df722821abe752fdb9654899f74a870ca41424035e08acfc26ff	SCRIBE-W rungs shard
+src.jsonl	/mnt/d/cypha_llm/genw	41166437	c010ce4cd416aaac1bb2fbb5b75376d04122305b367d16ed57cc3fea051c85fb	GEN-W source, 19,552 cleaned documents (line i = doc i)
+pool.jsonl	/mnt/d/cypha_llm/genw	16533282	61fbc406551e50e699fbafbccd44c139905eea70de8fad391364744ec56b71f7	scribe prompts pool, 12,816 rows, seed 20261112
+pack.jsonl	/mnt/d/cypha_llm/genw	40477365	d1b93fe82d610ff2691660448f863215c60d2c285018df6b362fb0d92dcb5491	SCRIBE-W pack, 18,830 documents
+ref.jsonl	/mnt/d/cypha_llm/genw	10507249	af3660014cf9191f1ff2dea18ea76d3866c6067bc2df7902d6ac0f0eb84d94d8	SCRIBE-W reference, 4,900 documents
+rungs.jsonl	/mnt/d/cypha_llm/genw	10594166	7ab0ed2dc364734620e412895fce69258149a43451bc732f4916c0b6a08ff4bf	SCRIBE-W rungs, 4,910 documents
+ladder_S.jsonl	/mnt/d/cypha_llm/genw	40411439	6a6e9ac7366811150f7b36340938834a33315651efae8ee820a0f9d7a74a0e98	ladder region S (source without test rows docs)
+vecW.vectors.f32	/mnt/d/cypha_llm/genw	60000000	f834ea58334e9cbfeb85c37d7a8e25fd762c27d0ff21e0612d0f515760468c17	SCRIBE-W vectors (ppmi_svd on the pack)
+vecW.vocab.tsv	/mnt/d/cypha_llm/genw	555885	77d2f606bae4d467669f31b243b46030dbf51aa19a27b8062982c820c6b8e8d1	SCRIBE-W vectors vocabulary
+gen_web_dev.tsv	bench/eval	171333	80f24331e1ca3be2364d2d4ed8f584f783386964e1f84559bd9e398f04375966	GEN-W dev, 250 rows
+gen_web_test.tsv	bench/eval	174220	928fb03c0c52950cffeca30349b0f265a53aa688bf7d6a4b33c33775a495f991	GEN-W test, 250 rows (frozen, not read)

@@ -1,0 +1,5 @@
+file	where	bytes	sha256	what
+c4-train.00000-of-01024.jsonl	corpus/articles/c4	-	892ba06863950befeb936da3e4485f3c323ee860b6f05fc853f28989cd6458ac	C1 source (official sum)
+c4-train.00001-of-01024.jsonl	corpus/articles/c4	-	7245909164af7eed3c2ac3536eb0fa888eb7860c2de367f39282f3081fa9e457	C1 source (official sum)
+c4-train.00002-of-01024.jsonl	corpus/articles/c4	-	91e0ec76f13a50d1eb8e74ad165d1c531107bb688233e7158216cfb49911b707	C1 source, first part (official sum)
+c1_train.txt	/mnt/d/cypha_llm/c4prose	1500000876	fcabaded2ed9571f5304159d08f7404a7f5be83d7da1241919844f244c44e362	C1, 764,046 documents, one per line; licence: C4 (ODC-BY, via RedPajama)
