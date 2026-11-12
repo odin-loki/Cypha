@@ -1,0 +1,23 @@
+	Command being timed: "scripts/gen_eval.sh dev T9 /home/odin/tw_runs --prompts 250 --k5 /mnt/d/cypha_llm/fuzzy/train.txt --temps 0.9"
+	User time (seconds): 940.73
+	System time (seconds): 10.90
+	Percent of CPU this job got: 252%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 6:16.36
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 11291964
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 3805473
+	Voluntary context switches: 86180
+	Involuntary context switches: 783
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 936
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0

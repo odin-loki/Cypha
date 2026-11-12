@@ -70,4 +70,46 @@ Each arm moves one setting from the default. Dev, seed 0, 250 prompts, `scripts/
 
 ## Results
 
-(After the runs.)
+### The screen (2026-11-12; dev, seed 0, 250 prompts; files in `bench/tune_write/runs/`)
+
+**Check:** my build's W1b GEN file equals `bench/gen_quality/runs/W1b.gen.txt` under `cmp`, MODEL line aside. **Hit.**
+
+| Arm | SCRIBE v2 [95%] | v3.1 | copy32 | verbatim13 | wall | peak RAM | samples unlike W1b | screen |
+|---|---|---|---|---|---|---|---|---|
+| W1b | 0.621 [0.588, 0.653] | 0.556 | 0.239 | 0 | 7:21 | 11.3 GB | – | baseline |
+| N7 | 0.617 [0.584, 0.648] | 0.522 | 0.289 | 0 | 8:59 | 11.3 GB | 214 | **pass** |
+| N9 | 0.576 [0.539, 0.614] | 0.566 | 0.193 | 0 | 6:23 | 11.3 GB | 214 | fail (SCRIBE; reads worse) |
+| T8 | 0.655 [0.624, 0.687] | 0.443 | 0.385 | 0 | 6:05 | 11.3 GB | 214 | fail (copy32) |
+| T9 | 0.624 [0.592, 0.657] | 0.487 | 0.312 | 0 | 6:16 | 11.3 GB | 214 | fail (copy32) |
+| O6 | 0.599 [0.565, 0.633] | 0.543 | 0.248 | 0 | 7:21 | 11.3 GB | 250 | **pass** |
+| O7 | 0.600 [0.565, 0.637] | 0.545 | 0.249 | 0 | 9:37 | 11.3 GB | 250 | pass, not chosen (O6 reads better) |
+| G4 | 0.574 [0.538, 0.609] | 0.532 | 0.237 | 0 | 5:09 | 11.3 GB | 204 | fail (SCRIBE) |
+| G16 | 0.630 [0.597, 0.659] | 0.547 | 0.241 | 0 | 7:21 | 11.3 GB | 210 | **pass** |
+| DG2 | 0.599 [0.569, 0.628] | 0.545 | 0.243 | 0 | 6:15 | 11.3 GB | 61 | fail (reads worse) |
+| DH4 | 0.621 [0.587, 0.653] | 0.556 | 0.239 | 0 | 6:00 | 11.3 GB | 9 | pass, not chosen (9 samples change) |
+| TC = N7 + O6 + G16 | 0.636 [0.604, 0.669] | 0.516 | 0.309 | 0 | 7:41 | 11.3 GB | 250 | fail (copy32) |
+
+Wall times are on a shared PC, two arms at once.
+
+**Reading** (dev prompts 0, 1, 2, 3, 4, 5, 7, 9, 10, 11, 12, 13, each beside W1b):
+- Every arm still drifts after the first one or two sentences. No setting fixes that.
+- **N7** reads a little cleaner than W1b: more whole clauses ("The simplest (and probably best) rule is to use a card - punch"). **N9** breaks more sentences.
+- **T8 and T9** write longer run-on sentences. They copy more (copy32 0.385 and 0.312), so they fail the screen. SCRIBE v2 rises for T8 while v3.1 falls (0.443): v3.1's MATCH judge sees the copying.
+- **O6** changes every sample, as the seed path moves. Its planned sentences hang together a little better ("After his return to England Brian Henderson was elected to the New Zealand House in 2001."). Free text about as W1b. **O7** invents more broken dates ("Brian Henderson (3 August 1931 - 34 March 2005)"). Longer reach did not raise copy32 (0.248): the 12-word cap holds it.
+- **G16** gives shorter, tidier sentences with more fragments ("He spent most of his life."); about as W1b. **G4** about as W1b, and SCRIBE falls.
+- **DG2** puts free fragments between fact sentences ("His funeral in early June.", "By late afternoon and evening."). It reads worse. **DH4** changes 9 samples only.
+- **TC** reads about as N7 and O6, but copies more (0.309) and fails the copy32 screen.
+
+**Candidates for the raters:** N7 (nucleus), O6 (order), G16 (gate). The combination failed the screen, so it is not rated. The §13.43 setting that wanders is not built (no flag).
+
+**Packets** (`bench/blind/tw_pair/`): W1b against N7, O6 and G16, the 50 prompts of `bench/blind/llm_rating/prompts.json`, seed 20261113. On those 50 prompts, N7 differs from W1b on 45, O6 on 50, G16 on 44. `KEY.json` is kept outside the repository; `key.b64` is committed.
+
+**Predictions so far:**
+- baseline reproduces: **hit**;
+- N7 and T8 cleaner, copy32 up 0.02–0.05: N7 **hit** (+0.050); T8 **miss** (+0.146);
+- nucleus and temperature SCRIBE v2 within ±0.02: N7 **hit**, T9 **hit**, N9 **miss** (−0.045), T8 **miss** (+0.034);
+- O6 and O7 copy32 0.30–0.40: **miss** (0.248, 0.249); O7 fails the copy32 screen: **miss** (it passes);
+- G16 SCRIBE v2 about +0.01: **hit** (+0.009); G4 about the same: **miss** (−0.047);
+- DG2 and DH4 within ±0.02, fewer than 80 samples changed: DH4 **hit**; DG2 **miss** on SCRIBE (−0.022), **hit** on samples (61);
+- peak RAM within 11.3 ± 1 GB: **hit** for all.
+- The raters' predictions (O6 about 0.60; the best of nucleus and temperature about 0.55) wait for the raters.
