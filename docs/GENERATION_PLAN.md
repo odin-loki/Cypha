@@ -2575,3 +2575,15 @@ Old binary main 9cbd277; old and new were started together.
 - **Blind pairwise raters against L1** (packets 7108b16): HD2 0.520 [0.460, 0.580], HL 0.550 [0.500, 0.600], **HLT 0.540 [0.500, 0.590]**, rater pairs 0.52 and 0.56. None reads worse.
 - **By the rule, HLT becomes the default**: `sample --k5` adds `--k5-plan-honest life --k5-plan-skel-add bench/honest_dates2/skel_trim.txt` when the planner is on and the file is there. `--k5-plan-honest off` restores L1.
 - **Checks** (registered before they run): the default equals HLT's dev GEN file under `cmp`, and `--k5-plan-honest off` equals L1's. Then GEN-A test is read once.
+
+### 13.64 CT0.3 and CT0.4 C1: GEN-W, a web benchmark, and clean C4 prose (2026-11-12; [GEN_WEB](reports/GEN_WEB.md))
+
+- **Registered first** (e77e565).
+- **Shards:** the only C4 shard the 1 TB trie never read (01023) exists on the PC only as a 9 MB slice with non-ASCII characters deleted, which breaks words. So GEN-W comes from trained shards in full UTF-8: 00738 for the rows; 00737, 00736 and 00735 for SCRIBE-W's pack, reference and rungs. The 1 TB trie counts only 2–4-byte contexts and cannot hold a span. No model that stores spans may read these four shards.
+- **GEN-W:** `bench/eval/gen_web_{dev,test}.tsv`, 250 + 250 rows in GEN-A's format, with 32-byte span checks against the writer's training text, SCRIBE-W and GEN-A. The harness is `scripts/gen_eval_web.sh`. The test file is not read.
+- **The ladder check:**
+  - SCRIBE v2 passes 4 of 5 pairs on both regions. The failing pair is random lexicon words above random letters (0.886 and 0.901; both rungs under 0.003).
+  - The rule asked for 5 of 5, so **GEN-W is reported only until Odin rules**: accept v2 at 4 of 5, make v3.1 the score of record on GEN-W, or keep it report-only.
+  - v3.1 passes 5 of 5 on the rungs and 4 of 5 on the source region.
+- **Today's default (L1) on GEN-W dev:** SCRIBE v2 0.691 [0.665, 0.718] (GEN-A dev 0.610), v3.1 0.622, K5's bits a byte on the human continuations 1.604 (GEN-A 1.357), copy32 0.199, no 13-word copy. The web reference is looser (sentences shuffled score 0.404 against 0.344), and the writer stays on Wikipedia topics whatever the prompt.
+- **C1:** `/mnt/d/cypha_llm/c4prose/c1_train.txt`, 1.50 GB, 764,046 documents from shards 00000–00002. The overlap rule removed 10.2% of the bytes; the final check found 0 forbidden spans. K5 has not read it.
