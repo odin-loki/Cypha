@@ -216,18 +216,29 @@ class Repairer {
     void word(const K5& m, K5::State& s, const Options& o, std::size_t pb) const {
         if (!s.rp) return;
         const auto i = static_cast<std::uint32_t>(s.ctx.size() - 1);
+        const auto at = static_cast<std::uint32_t>(s.out.size() - pb);  // where this word's piece starts
+        // rp_seg: [the gate's draft start (out offset), the last word K5 drew (ctx index), then (ctx index, out offset)
+        // of each word of the segment]. The draft start follows the gate's own rule (a draft ends at a sentence end
+        // once it holds gate_min bytes, at gate_max bytes, or at the limits), so a segment never reaches before the
+        // draft it is in, and a repair never rewrites text the gate has already read.
         auto& seg = s.rp_seg;
-        if (!seg.empty() && seg[seg.size() - 2] + 1 != i) seg.clear();  // not right after the last word K5 drew here
+        if (seg.size() < 2 || seg[1] + 1 != i) seg.assign({at, i});  // a new run of K5's words (prompt or planner before)
+        seg[1] = i;
         seg.push_back(i);
-        seg.push_back(static_cast<std::uint32_t>(s.out.size() - pb));
-        // The sentence gate also cuts a draft at gate_max bytes without a sentence end: the segment ends there too, so
-        // a repair never reaches before the draft it is in (seg starts with the draft: the last one ended here).
-        const bool cut = o.gate_k > 1 && s.out.size() - seg[1] >= o.gate_max;
-        if (!sentence_end(m.vocab()[s.ctx[i]]) && !cut && s.out.size() < o.bytes && s.step < o.max_words) return;
-        const auto t0 = std::chrono::steady_clock::now();
-        fix(m, s, o);
-        seg.clear();
-        st_.ns += static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - t0).count());
+        seg.push_back(at);
+        const bool end = sentence_end(m.vocab()[s.ctx[i]]);
+        const bool gated = o.gate_k > 1;
+        const bool cut = gated && s.out.size() - seg[0] >= o.gate_max;
+        if (end || cut || s.out.size() >= o.bytes || s.step >= o.max_words) {
+            const auto t0 = std::chrono::steady_clock::now();
+            fix(m, s, o);
+            seg.resize(2);
+            st_.ns += static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - t0).count());
+        }
+        if (gated) {  // does the gate end the draft here (its test, on the text after the repair)?
+            const std::size_t nb = s.out.size() - seg[0];
+            if (nb >= o.gate_max || (nb >= o.gate_min && end)) seg[0] = static_cast<std::uint32_t>(s.out.size()), seg.resize(2);
+        }
     }
 
     // log2 Pf(y[j] | y[0, j)): K5 as it writes (retrieval overlay ov, the class floor).
@@ -263,7 +274,8 @@ class Repairer {
     void fix(const K5& m, K5::State& s, const Options& o) const {
         const auto& seg = s.rp_seg;
         const auto& cont = *static_cast<const Cont*>(s.rp.get());
-        const std::size_t a = seg[0], e = s.ctx.size() - 1, out0 = seg[1];
+        if (seg.size() < 4 || seg[3] < seg[0]) return;  // (never: the segment starts inside the draft)
+        const std::size_t a = seg[2], e = s.ctx.size() - 1, out0 = seg[3];
         ++st_.sentences;
         st_.words += e - a + 1;
         if (e < a + 1 || a < 1) return;  // nothing that may change

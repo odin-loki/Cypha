@@ -145,3 +145,10 @@ Dev, seed 0, 250 prompts, the baseline's command plus:
 - **The fault.** The gate also ends a draft at 240 bytes without a sentence end. The pass's segment then ran on into the next draft, so a repair could rewrite text from before that draft began. The gate's own code reads the draft from its start offset, which the shorter rewrite had moved.
 - **The fix.** The segment also ends where the gate cuts a draft (`gate_max` bytes since the segment began). A repair then never reaches before the draft it is in. The method, arms, screen and predictions are unchanged.
 - The 8-prompt smoke run did not meet the fault. The selftest passes. The flag-off check stands (the change is inside the pass, which does not run when the flag is off).
+
+### Amendment 2 (2026-11-12, the same fault, fixed fully; recorded before the arms are rerun)
+
+- **What happened.** The rerun after amendment 1 stopped in the same way in all four arms. Again no SCRIBE ran, no text was read, nothing was scored.
+- **Why amendment 1 was not enough.** When a sentence ends before the gate's 24-byte minimum, the gate does not end the draft, but the pass had started a new segment there. Its 240-byte cut was then counted from the wrong place, and a segment could still run into the next draft.
+- **The fix.** The pass now follows the gate's own rule for where a draft ends: at a sentence end once the draft holds 24 bytes, at 240 bytes, or at the limits, tested on the text after the repair. It keeps the draft's start in the state, and a segment never begins before it. The method, arms, screen and predictions are unchanged.
+- **Checked before the rerun:** the selftest passes, and two 250-prompt stress runs on K5's own 7 MB text with a very loose flag (`tau=3`), one with and one without the planner, ran to the end.
