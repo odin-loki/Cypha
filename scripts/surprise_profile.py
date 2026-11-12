@@ -20,6 +20,8 @@ Steps (run from the repository root, in order):
   gap        human against writer for each signal. -> gap.md, gap.json
   agree      for each signal, the share of rated pairs where it picks the rater's choice, with 95% cluster
              bootstrap intervals (clusters: round x prompt). -> agree.md, agree.json
+  explore    not registered: a leave-one-round-out logistic combination, and agreement by group of rounds.
+             -> explore.md, explore.json
 
   python3 -I scripts/surprise_profile.py all --train /mnt/d/cypha_llm/fuzzy/train.txt --scribe ~/gq_bin/scribe
 """
@@ -659,16 +661,95 @@ def step_agree(a):
     print("\n".join(lines))
 
 
+# ---------------------------------------------------------------------------------------------------------------
+# Step: explore (not registered; read after agree)
+# ---------------------------------------------------------------------------------------------------------------
+
+
+def logit_fit(X, y, l2=1.0, iters=500, lr=0.5):
+    import numpy as np
+    w = np.zeros(X.shape[1])
+    for _ in range(iters):
+        p = 1 / (1 + np.exp(-X @ w))
+        g = X.T @ (p - y) / len(y) + l2 * w / len(y)
+        w -= lr * g
+    return w
+
+
+def step_explore(a):
+    """Exploratory, not ruled on: can a combination of the signals predict the raters on a round it never saw?
+    Logistic regression on the pair's signal differences (no intercept, so swapping X and Y flips the prediction),
+    leave one round out; and surp_mean without gq_pair, the one round whose writers count from different texts."""
+    import numpy as np
+    feats = load_features()
+    judg = [json.loads(ln) for ln in open(f"{OUT}/judgments.jsonl")]
+    ww = [j for j in judg if not j["identical"] and j["pref"] != 0.5 and not j["human"]]
+    lines = ["# Exploratory (not registered)\n"]
+    sets = {"text signals (15)": [n for n, _, _ in SIGNALS], "text signals + SCRIBE (17)": [n for n, _, _ in SIGNALS + SCRIBE_SIGNALS]}
+    res = {}
+    for label, names in sets.items():
+        rows = [j for j in ww if all(feats[j[k]].get(n) is not None for k in ("x", "y") for n in names)]
+        X = np.array([[feats[j["x"]][n] - feats[j["y"]][n] for n in names] for j in rows])
+        sd = X.std(0)
+        sd[sd == 0] = 1
+        X = X / sd
+        y = np.array([j["pref"] for j in rows])
+        rnds = sorted({j["round"] for j in rows})
+        pred = np.zeros(len(rows))
+        for r in rnds:
+            tr = np.array([j["round"] != r for j in rows])
+            w = logit_fit(X[tr], y[tr])
+            pred[~tr] = X[~tr] @ w
+        hits = np.where(pred == 0, 0.5, ((pred > 0) == (y == 1)).astype(float))
+        cl = collections.defaultdict(lambda: [0.0, 0])
+        for j, h in zip(rows, hits):
+            c = cl[(j["round"], j["dev"])]
+            c[0] += h
+            c[1] += 1
+        b = boot([tuple(v) for v in cl.values()])
+        per = {r: float(hits[[j["round"] == r for j in rows]].mean()) for r in rnds}
+        wall = logit_fit(X, y)
+        res[label] = {"loro": b, "per_round": per, "weights_all": dict(zip(names, map(float, wall))), "n": len(rows)}
+        lines.append(f"**{label}**, leave one round out: {b[0]:.3f} [{b[1]:.3f}, {b[2]:.3f}] on {len(rows)} pairs. Per round: "
+                     + ", ".join(f"{r} {v:.2f}" for r, v in per.items()) + ".\n")
+        lines.append("Weights fitted on all rounds (standardised differences): "
+                     + ", ".join(f"{n} {v:+.2f}" for n, v in sorted(zip(names, wall), key=lambda t: -abs(t[1]))) + ".\n")
+    for name, d in (("surp_mean", "-"), ("scribe_v2", "+")):
+        sub = [j for j in ww if j["round"] != "gq_pair"]
+        b = boot(agreement(sub, feats, name, d))
+        res[f"{name}_without_gq_pair"] = b
+        lines.append(f"{name} without gq_pair: {b[0]:.3f} [{b[1]:.3f}, {b[2]:.3f}] ({len(sub)} pairs).\n")
+    for grp, rs in (("plain K5 variants (llm_rating, llm_rating2, tw_pair, ng_pair, coh_pair, coh_long)",
+                     {"llm_rating", "llm_rating2", "tw_pair", "ng_pair", "coh_pair", "coh_long"}),
+                    ("planner and fill rounds (p1t_pair, planner_pair, q1t_pair, q3_pair, q3_long, fill_pair)",
+                     {"p1t_pair", "planner_pair", "q1t_pair", "q3_pair", "q3_long", "fill_pair"})):
+        sub = [j for j in ww if j["round"] in rs]
+        for name, d in (("surp_mean", "-"), ("surp_sd", "+"), ("commit_text", "+"), ("scribe_v2", "+")):
+            b = boot(agreement(sub, feats, name, d))
+            res[f"{name}|{grp}"] = b
+            lines.append(f"{grp}: {name} {b[0]:.3f} [{b[1]:.3f}, {b[2]:.3f}] ({len(sub)} pairs).\n")
+    sub = [j for j in ww if j["round"] in {"tw_pair", "ng_pair", "coh_pair", "coh_long"}]
+    for name, d in (("surp_mean", "-"), ("scribe_v2", "+"), ("scribe_v31", "+")):
+        b = boot(agreement(sub, feats, name, d))
+        dv = paired_vs(sub, feats, name, d)
+        res[f"{name}|today"] = {"agree": b, "minus_scribe_v2": dv}
+        lines.append(f"today's writer, K5 from 337 MB (tw_pair, ng_pair, coh_pair, coh_long): {name} {b[0]:.3f} "
+                     f"[{b[1]:.3f}, {b[2]:.3f}], minus SCRIBE v2 {dv[0]:+.3f} [{dv[1]:+.3f}, {dv[2]:+.3f}] ({len(sub)} pairs).\n")
+    open(f"{OUT}/explore.md", "w").write("\n".join(lines))
+    json.dump(res, open(f"{OUT}/explore.json", "w"), indent=1)
+    print("\n".join(lines))
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("step", choices=["judgments", "gapset", "features", "scribe", "gap", "agree", "all"])
+    p.add_argument("step", choices=["judgments", "gapset", "features", "scribe", "gap", "agree", "explore", "all"])
     p.add_argument("--train", default="/mnt/d/cypha_llm/fuzzy/train.txt")
     p.add_argument("--scribe", default=os.path.expanduser("~/gq_bin/scribe"))
     p.add_argument("--enwik8", default="/mnt/d/cypha_llm/enwik8")
     p.add_argument("--vectors", default="/mnt/d/cypha_llm/scribe/v32")
     p.add_argument("--current", default="k5_coherence/L1", help="the current default's dev GEN file (gap table)")
     a = p.parse_args()
-    steps = ["judgments", "gapset", "features", "scribe", "gap", "agree"] if a.step == "all" else [a.step]
+    steps = ["judgments", "gapset", "features", "scribe", "gap", "agree", "explore"] if a.step == "all" else [a.step]
     for s in steps:
         globals()[f"step_{s}"](a)
 
