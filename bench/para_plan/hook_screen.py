@@ -79,7 +79,7 @@ def main():
             t = graw.get(i, "")
             if len(t.strip()) >= 50:
                 pr = " ".join(rows[i]["prompt"].split())
-                tx = sp.uncut(sp.cut(t))
+                tx = sp.uncut(sp.cut(t, a.cut))
                 toks = sp.TOK.findall(tx)
                 bits = kn.surprise(sp.TOK.findall(pr), toks)
                 ws = [b for tk, b in zip(toks, bits) if sp.is_word(tk)]
