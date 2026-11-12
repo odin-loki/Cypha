@@ -35,9 +35,9 @@
 #include <string>
 #include <vector>
 
-// OPT_META_SIMD (GENERATION_PLAN §13.41 O8): M1's weight sets on AVX-512, compiled for that target only (GCC and Clang
-// on x86-64) and chosen at run time when the CPU has AVX-512F (CYPHA_META_AVX512=0 turns it off). Elsewhere the scalar
-// loops below run, with the same numbers.
+// OPT_META_SIMD (GENERATION_PLAN §13.41 O8): M1's weight sets in SSE2 lanes (the default) or AVX-512 lanes (compiled for
+// that target only, GCC and Clang on x86-64, chosen at run time). Elsewhere the scalar loops below run, with the same
+// numbers.
 #if defined(__x86_64__) && (defined(__GNUC__) || defined(__clang__))
 #include <immintrin.h>
 #define CYPHA_META_AVX512 1
@@ -53,11 +53,12 @@ using mix::FixedShare;
 using mix::squash;
 using mix::stretch_eps;
 
-/// Which kernels M1's bank runs: 0 the scalar loops, 1 SSE2 (two lanes, every x86-64), 2 AVX-512 (when the CPU has
-/// it). CYPHA_META_SIMD=scalar|sse2|avx512 chooses; CYPHA_META_AVX512=0 is scalar. All three give the same numbers.
+/// Which kernels M1's bank runs: 0 the scalar loops, 1 SSE2 (two lanes, every x86-64; the default, the fastest on
+/// Odin's PC: AVX-512 lowers the clock, OPT_META_SIMD.md), 2 AVX-512 (when the CPU has it). CYPHA_META_SIMD=
+/// scalar|sse2|avx512 chooses; CYPHA_META_AVX512=0 is scalar. All three give the same numbers.
 inline int meta_simd_mode() {
     static const int mode = [] {
-        int m = 2;
+        int m = 1;
         if (const char* e = std::getenv("CYPHA_META_AVX512"))
             if (std::atoi(e) == 0) m = 0;
         if (const char* e = std::getenv("CYPHA_META_SIMD")) {
@@ -164,8 +165,9 @@ inline void meta_update_sse2(float* row, int n, int R, const double* x, const do
 
 /// M1 at each of M2's rates, as one bank (OPT_META_SIMD.md, GENERATION_PLAN §13.41 O8). Mixer r is mix_core.hpp's
 /// LogisticMixer<float> with rates lr1[r], lr2[r] and no decay: the same inputs and contexts, its own weights. The R
-/// mixers' weights for one set and one context lie side by side, input after input (w[((c n) + i) R + r]), so one
-/// AVX-512 vector holds the R weight sets of one selector and each lane keeps its own sum in order. Every number is
+/// mixers' weights for one set and one context lie side by side, input after input (w[((c n) + i) R + r]), so the
+/// R weight sets of one selector sit in vector lanes (SSE2: two a vector; AVX-512: all R) and each lane keeps its own
+/// sum in order. Every number is
 /// the R separate mixers' (decay 0: the rate is lr0 exactly).
 class M1Bank {
  public:
