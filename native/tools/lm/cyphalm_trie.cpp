@@ -2604,6 +2604,17 @@ int cmd_sample(const Args& a) {
                 else std::cerr << "k5: more text not found (" << dm << "; set CYPHA_K5_MORE); K5 counts from its own text alone\n";
             }
         }
+        {  // GENERATION_PLAN §13.66 (K5_RETRIEVE K1): when K5 counts from the more-text, it reads the one document of
+           // that text most related to the prompt (BM25 over K5's word ids) for each continuation, unless a
+           // --k5-retrieve flag chose. --k5-retrieve off restores HLT.
+            bool chosen = false;
+            for (const auto& kv : a.k5_opts) chosen = chosen || kv.first == "--k5-retrieve";
+            std::string rerr;
+            if (!chosen && !base.more.empty() && !cypha::cyphalm::wkn::apply_flag("--k5-retrieve", "k=1,rel=0.5", base, rerr)) {
+                std::cerr << rerr << "\n";
+                return 2;
+            }
+        }
         {  // GENERATION_PLAN §13.53 (K5_COHERENCE L1): the LDA topic term in K5's sentence gate, learned from the same
            // 337 MB text, by default when K5 counts from it, unless a --k5-lda flag chose. --k5-lda 0 turns it off.
             bool chosen = false;

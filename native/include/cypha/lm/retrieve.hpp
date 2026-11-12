@@ -51,6 +51,7 @@ struct Params {
 
 // --k5-retrieve k=N,rel=R | k=N,w=L [,top=T][,maxdf=F]
 inline bool parse(const std::string& val, Params& p, std::string& err) {
+    if (val == "off") return p = Params{}, true;  // GENERATION_PLAN §13.66: off restores HLT (the default is K1)
     Params q;
     for (std::size_t a = 0; a <= val.size();) {
         std::size_t b = val.find(',', a);

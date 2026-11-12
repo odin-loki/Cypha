@@ -2625,3 +2625,12 @@ Old binary main 9cbd277; old and new were started together.
 - The link to the sentence before (coh_measures) 0.146 → K4 0.194, K1 0.179; the prompt's words at sentence 2: 0.280 → 0.44. Mean surprise +0.4 bits.
 - By reading, K1 and K4 write from the prompt's field (Dune → Alia and Leto; grappling → ground and pound), with no better grammar and mild repetition. K16 and K4H fail copy32.
 - **Candidates K4 and K1.** Packets `bench/blind/ret_pair` and `bench/blind/ret_long` are committed; the raters have not run.
+
+**§13.66 result** (2026-11-12): **K1 is the default.**
+- **Blind pairwise raters against HLT** (packets 77425b1, four fresh raters each reading):
+  - 460 characters: **K1 0.860 [0.790, 0.920]**, rater pairs 0.88 and 0.84; K4 0.820 [0.730, 0.900];
+  - 1,500 characters: K1 0.880 [0.780, 0.960], **K4 0.940 [0.880, 1.000]**, rater pairs 0.92 and 0.96.
+  - Both arms read better by the rule on both readings. This is the second-largest reading gain measured, after §13.48's 0.940.
+- **Choice between the two.** The registered order says "higher lower bound first, then lower copy32", but not on which reading. It is read conservatively, as the weaker of each arm's two lower bounds: K1 0.780, K4 0.730. K1 also has the lower copy32 (0.275 against 0.294) and costs less. **K1 becomes the default.** K4 reads better at 1,500 characters and stays a flag.
+- **The default:** when K5 counts from the more-text, `sample --k5` adds `--k5-retrieve k=1,rel=0.5`. `--k5-retrieve off` restores HLT.
+- **Checks** (registered before they run): the default equals K1's dev GEN file under `cmp`, and `--k5-retrieve off` equals HLT's. Then GEN-A test is read once, with the fact check.
