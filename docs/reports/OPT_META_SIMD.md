@@ -2,6 +2,8 @@
 
 **Odin Loch** · 2026-11-12 · branch `wip/opt-meta-simd` · GENERATION_PLAN §13.41 O8
 
+**Outcome first.** Exact everywhere, the full run included (`context8k_bpc` 1.4962). AVX-512, as registered, is no faster (meta-mix time +3.9%): it lowers this Xeon's clock. The same layout with SSE2 (amendment O8b, registered before its runs) cuts meta-mix time 14.8% and the full mix's own time 8%. Prediction −50%: **miss**. Kept with SSE2 as the default kernel; not on main.
+
 ## Registered before any run (2026-11-12)
 
 §13.41 registered O8: "the 14 × 5 weight sets are independent mixers doing the same operations, so one AVX-512 lane per set keeps each set's order. Exact; meta-mix time down at least 50%." This section adds the details §13.41 left open. It is committed and pushed before any timing or check runs.
@@ -58,3 +60,63 @@ Old is main 9cbd277 (`~/j3/b_main`), new is eb84f91 (`~/j3/b_o8`). The PC's load
 - **O8b:** the same bank and layout, with SSE2 kernels (two rates a 128-bit vector; 3 vectors for the 5 rates). SSE2 is part of every x86-64 CPU and does not lower the clock. `CYPHA_META_SIMD=scalar|sse2|avx512` chooses the kernel (all three must give the same numbers).
 - **Runs:** 3 rounds of 5 small runs started together: old default, new default with `avx512`, with `sse2`, with `scalar` (the new layout, no vectors), and old `--no-meta-mix` (the meta-free baseline for all, since the code without the meta mix is the same). Meta-mix time = default − baseline. Exact: `cmp` of each new stdout with old's.
 - The kernel kept is the fastest of the three, if it is faster than old; it becomes the default. O8's rule and prediction stand (exact; meta-mix time down at least 50%). My guess for SSE2: −10% to −25%. The meta mix is not mostly M1's dot products.
+
+## O8b results (2026-11-12, 10:42–11:03)
+
+New is c770565 (`~/j3/b_o8b`), the kernel chosen by `CYPHA_META_SIMD`. 5 runs started together each round; the PC's load average was about 15–25.
+
+**Exact.** In every round the stdout of `avx512`, `sse2` and `scalar` equals old's (`cmp`; `context8k_bpc` 1.7501 on the small setup).
+
+The full mix's own seconds (sum of the six parts); meta-mix time = default − old `--no-meta-mix`:
+
+| Round | Baseline (no meta) | Old | AVX-512 | SSE2 | Scalar, new layout |
+|---|---:|---:|---:|---:|---:|
+| 1 | 31.5 | 69.7 → meta 38.2 | 71.2 → 39.7 (+3.9%) | 63.9 → 32.4 (−15.2%) | 64.4 → 32.9 (−13.9%) |
+| 2 | 31.7 | 69.5 → 37.8 | 72.2 → 40.5 (+7.1%) | 63.9 → 32.2 (−14.8%) | 64.5 → 32.8 (−13.2%) |
+| 3 | 31.0 | 68.5 → 37.5 | 68.2 → 37.2 (−0.8%) | 63.4 → 32.4 (−13.6%) | 63.8 → 32.8 (−12.5%) |
+| **Median** | | | **+3.9%** | **−14.8%** | **−13.2%** |
+
+- The full mix's own time with SSE2: 69.5 → 63.9 s (−8%, median). Wall time does not move (6:25–6:52 for all): the full mix's main thread is not what the small run waits for at the end. Peak RSS is the same (1,340 MB).
+- **Most of the gain is the layout, not the vectors.** The scalar loops on the new layout are only 1–2 points behind SSE2. Putting the 5 rates' weights side by side means one context's 5 rows are one run of memory, not 5 rows in 5 tables.
+- AVX-512 is no faster than old: the clock drop costs what the wide lanes save.
+- The M1 bank is not most of the meta mix. Its dot products are about 70 × 30 multiply-adds a bit. The rest (M2A's four mixers, the M2G geometric mixers, five SSE stages, the masters, about 90 logs and exps a bit) does not change.
+- **SSE2 is the default kernel** (4935cee). AVX-512 and scalar stay behind `CYPHA_META_SIMD`.
+
+## The full run (2026-11-12, 11:33–12:02, under the lock)
+
+`cyphalm_trie context8k /mnt/d/cypha_llm/enwik8 …/databricks-dolly-15k.jsonl`, default threads, the default kernel (SSE2), binary 4935cee (`~/j3/b_o8c`).
+- **stdout equals the O5 full run's** (`/mnt/d/cypha_llm/opt/o5/F_new.out`, 260 lines, `cmp`): **`context8k_bpc` 1.4962**.
+- Wall 28:51, peak RSS 1,562 MB; the full mix's own time 376.6 s. O5's run (2026-11-06) took 36:34 and 507 s, but it ran on another day beside other jobs, so these are not compared.
+
+## Summary of checks
+
+| Check | Result |
+|---|---|
+| small default, 3 rounds (eb84f91, AVX-512) | `cmp` equal |
+| small `--no-meta-mix`, 3 rounds | equal |
+| small `--no-full-mix` | equal |
+| small default, scalar path (`CYPHA_META_AVX512=0`) | equal |
+| small default with `avx512`, `sse2`, `scalar`, 3 rounds each (c770565) | equal |
+| the planner's dev GEN file; `--no-k5-plan`'s | equal (GEN file, stdout; SCRIBE tables apart from the label) |
+| full default `context8k` (4935cee, SSE2) | equal to O5's full run; `context8k_bpc` 1.4962 |
+
+## Lines of code
+
+`meta_mixer.hpp`: 412 → 655 lines (+243). The bank and its three kernels (scalar, SSE2, AVX-512) and their comments came in; about 20 lines of the five-mixer code went.
+
+## §13.41 O8 prediction, scored
+
+| Prediction | Result | Score |
+|---|---|---|
+| exact | every check `cmp` equal; the full run reproduces 1.4962 | **hit** |
+| meta-mix time down at least 50% | AVX-512 (as registered): **+3.9%** (median, 3 rounds; +6.7% in the first 3); SSE2 (O8b): −14.8%; scalar on the new layout: −13.2% | **miss** |
+| Mine (O8b): SSE2 −10% to −25% | −14.8% | **hit** |
+
+**Kept, with SSE2** (the §13.40 rule: exact, and it lowers time with nothing worse): meta-mix time −15%, the full mix's own time −8%, the same RAM. It adds 243 lines. The wall time of a run does not move, because the run waits on the similar-context expert, not on the mix. Not on main: the lead merges.
+
+**What the meta mix's time is.** M1's 70 dot products were not most of it. The rest is about 90 logs and exps a bit (stretch and squash for M1's 70 sets, M2A, five SSE stages, the masters), M2A's four mixers, and the M2G geometric mixers per byte. A next step would be a cheaper exact stretch of the same squash (the stretch of squash(d) is d, up to the clamp and rounding, so it cannot be skipped exactly), or fewer meta arms.
+
+## Files
+
+- Code: `native/include/cypha/online/meta_mixer.hpp` only.
+- Runs on Odin's PC, `/mnt/d/cypha_llm/opt/o8/`: `R{1,2,3}_*` (first rounds), `nfm_*`, `def_scalar`, `small.log`; `b/` (the O8b rounds, `b.log`); `gen/` (the GEN pairs); `full/` (the full run, `full.log`, `F_o8.cmp`). Scripts: `~/j3/o8small.sh`, `~/j3/o8b.sh`, `~/j3/genpair.sh`, `~/j3/full.sh`, `~/j3/k8.sh`.
