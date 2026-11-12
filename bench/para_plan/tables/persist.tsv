@@ -1,0 +1,24 @@
+# J2 para_plan_mine.py, Odin Loch, 2026-11-12; counted from 89026 documents, 2417861 sentences
+# d, sentences i and i+d share a content word: n_shared n_all (any sentence i); then prompt d n_shared n_all (windows)
+sent	1	1283971	2328600
+sent	2	1070291	2239585
+sent	3	940219	2150570
+sent	4	851269	2066770
+sent	5	783793	1987723
+sent	6	728925	1913018
+sent	7	685146	1842165
+sent	8	645099	1775154
+sent	9	611212	1711773
+sent	10	580335	1651711
+prompt	1	213930	328075
+prompt	2	184282	316860
+prompt	3	164517	303688
+prompt	4	150200	291466
+prompt	5	138894	279817
+prompt	6	129759	268795
+prompt	7	122085	258345
+prompt	8	114936	248470
+prompt	9	108874	239231
+prompt	10	102956	230505
+prompt	11	98481	222081
+prompt	12	93889	214128
