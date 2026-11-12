@@ -2781,3 +2781,9 @@ Four fresh blind raters. Raters 1–2 rate the first 25 prompts, raters 3–4 th
   - Every arm fails the reading. Breaks that span several words stay broken while single words are swapped ("in his memory" → "in his opinion"). The subject's own words are replaced by common ones ("died in Edinburgh" → "Paris"), the K5_MCMC failure on a smaller scale. R6 also fails copy32.
 - **Not adopted, nothing rated.** The code stays on `wip/k5-repair` (it changes `word_kn.hpp` in many places). The report and runs are on main.
 - **What it says:** repair word by word cannot mend a broken clause. The next attempt, if any, should redraw the whole clause from both sides and protect the retrieved document's words.
+
+**§13.72 result** (2026-11-12/13):
+- **Full run, default flags** (1 TB trie + T1's values): **`context8k_bpc` 1.4786**, against 1.4900 (−0.0114, the same gain T1 found on the 8 MiB trie).
+- **Wall time and RAM**, from old and new started together under one turn of the lock (load average 30–47): wall 11:28 → 11:48 (**+2.9%**), peak RAM 2.90 → 3.08 GB (**+6.2%**), CPU time +22.7%. The first, unpaired run read 10:12 against the earlier 7:39; that comparison was between different loads, so it does not count (HANDOFF §2).
+- **Checks:** `qa` C1L dev rows byte-identical to M18's; the writer default equals T8's dev GEN file.
+- **By the rule, T1's values are `context8k`'s defaults on main.** Prediction 1.476–1.484: **hit** (1.4786).

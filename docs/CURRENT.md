@@ -4,6 +4,10 @@ The language model being taken forward is the packed byte trie. hp gate24 stays 
 
 **The default plan is now [`PLAN.md`](PLAN.md)** (2026-10-26). The 1 TB run below continues inside it as Track A, with its predictions registered there. The question-answering and 8K count-context results are in [`reports/CYPHALM_QA_AND_CONTEXT_TEST.md`](reports/CYPHALM_QA_AND_CONTEXT_TEST.md).
 
+## `context8k` today (2026-11-13): 1.4786
+
+The 1 TB trie with T1's tuned settings (GENERATION_PLAN §13.72): `context8k_bpc` **1.4786**. Without T1's values: 1.4900; with the 8 MiB trie and T1's values: 1.4848; the 8 MiB trie alone: 1.4962.
+
 ## Recommended for `context8k` (2026-11-12)
 
 The 1 TB trie, `--model /mnt/d/cypha_llm/corpus/trie/trie_1tb.pk` (Odin's PC only): `context8k_bpc` **1.4900** against 1.4962 for today's default with the 8 MiB trie. It takes 7:39 wall and peaks at 2.92 GB (GENERATION_PLAN §13.55). Since §13.56 it is the default where the file exists; `--no-1tb` (or `--train N`) trains the 8 MiB trie as before.
