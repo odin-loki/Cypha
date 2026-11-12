@@ -6206,8 +6206,10 @@ int cmd_qa(const Args& a, const QaOpts& o) {
     // on the first half (its context: the holdout stream itself) and its BPC and LCI gain on the second half.
     const std::size_t H = cfg.sample - cfg.train, half = H / 2;
     const bool copy_fit = o.copy || o.copy_out;  // B4C: the default copy expert reads the copy arrays too
-    std::vector<double> pt(H), pinf(H), pig(H), pcp(copy_fit ? H : 0);  // M13: each array only when it is read
-    std::vector<int> bk(H), cbk(copy_fit ? H : 0);
+    // M13: each array only when it is read. M18 (docs/reports/M18_RAM.md): each made where it is first written, and the
+    // mixtures written into the memory of the arrays they come from, so at most four are resident at a time.
+    std::vector<double> pt(H), pinf, pig, pcp;
+    std::vector<int> bk, cbk;
     double bits_all = 0;
     for (std::size_t k = 0; k < H; ++k) {
         const std::size_t i = cfg.train + k;
@@ -6224,6 +6226,7 @@ int cmd_qa(const Args& a, const QaOpts& o) {
     // pt), so lam0, InfiniGram's lambdas over the trie mixture without Kneser-Ney, can be fit for the answers.
     double lam[kBuckets] = {0}, lam0[kBuckets] = {0}, lc_t[kCopyBuckets] = {0}, lc_i[kCopyBuckets] = {0};
     FmInfiniGram::Cursor cur;
+    pinf.resize(H), bk.resize(H);
     for (std::size_t k = 0, prev = 0; k < H; ++k) {
         const std::size_t i = cfg.train + k;
         const std::size_t len = std::min<std::size_t>(i, 8192);
@@ -6248,16 +6251,53 @@ int cmd_qa(const Args& a, const QaOpts& o) {
     fit_lambdas(pinf, pt, bk, half, kBuckets, lam);
     double bits_trie2 = 0, bits_ig2 = 0;
     for (std::size_t k = 0; k < H; ++k) {
-        pig[k] = lam[bk[k]] * pinf[k] + (1 - lam[bk[k]]) * pt[k];
-        if (k >= half) bits_trie2 += -std::log2(pt[k]), bits_ig2 += -std::log2(pig[k]);
+        pinf[k] = lam[bk[k]] * pinf[k] + (1 - lam[bk[k]]) * pt[k];  // M18: pig, in pinf's memory (pinf is not read again)
+        if (k >= half) bits_trie2 += -std::log2(pt[k]), bits_ig2 += -std::log2(pinf[k]);
     }
-    std::vector<double>().swap(pinf);  // M13: not read again
+    pig = std::move(pinf);  // M13: pinf not read again
     std::vector<int>().swap(bk);
     std::cout.setf(std::ios::fixed);
     std::cout.precision(6);
     std::cout << "holdout_mix_bpc " << bits_all / static_cast<double>(H) << "\n";
     std::cout << "holdout2_trie_bpc " << bits_trie2 / static_cast<double>(H - half) << " holdout2_trie_ig_bpc "
               << bits_ig2 / static_cast<double>(H - half) << "\n";
+    // The copy expert's arrays (they read only the holdout bytes). M18: filled where they are read, so not resident
+    // through the class and similar-context passes.
+    auto fill_copy = [&] {
+        pcp.resize(H), cbk.resize(H);
+        for (std::size_t k = 0; k < H; ++k) {
+            int n = 0;
+            pcp[k] = copy_pred(data.data(), cfg.train + k, n) == data[cfg.train + k] ? 1.0 : 0.0;
+            cbk[k] = copy_bucket(n);
+        }
+    };
+    // 256 blocks of the second half: per block, bits per byte of b with copy mixed in at lam (lam 0: without it).
+    const std::size_t cnb = 256, cbl = (H - half) / cnb;
+    auto copy_blocks = [&](const double* lam, const std::vector<double>& b, std::vector<double>& out) {
+        out.assign(cnb, 0.0);
+        double sum = 0;
+        for (std::size_t k = half; k < half + cnb * cbl; ++k) {
+            const double x = -std::log2(lam[cbk[k]] * pcp[k] + (1 - lam[cbk[k]]) * b[k]);
+            out[(k - half) / cbl] += x / static_cast<double>(cbl);
+            sum += x;
+        }
+        return sum / static_cast<double>(cnb * cbl);
+    };
+    // M18: with the class expert, what copy alone adds over the trie and trie + InfiniGram (lambdas over pt, pig) is
+    // computed here, before the class expert is mixed into pt's and pig's memory below; it is printed with copy's lines.
+    double c0t = 0, c0i = 0;
+    std::vector<double> zt, zi;
+    if (copy_fit && cc) {
+        fill_copy();
+        double l0t[kCopyBuckets], l0i[kCopyBuckets];
+        fit_lambdas(pcp, pt, cbk, half, kCopyBuckets, l0t);
+        fit_lambdas(pcp, pig, cbk, half, kCopyBuckets, l0i);
+        copy_clip(l0t, o.copy_min);
+        copy_clip(l0i, o.copy_min);
+        c0t = copy_blocks(l0t, pt, zt), c0i = copy_blocks(l0i, pig, zi);
+        std::vector<double>().swap(pcp);
+        std::vector<int>().swap(cbk);
+    }
     // B4: the class-context expert over the same training bytes as InfiniGram (wiki train + chat), built above, lambdas
     // on the first half of the holdout over the trie (lcl_t) and over trie + InfiniGram (lcl_i).
     double lcl_t[ClassContext::kBuckets] = {0}, lcl_i[ClassContext::kBuckets] = {0};
@@ -6281,10 +6321,11 @@ int cmd_qa(const Args& a, const QaOpts& o) {
                   << bi / static_cast<double>(H - half) << "\n";
     }
     // The distribution the next experts are mixed into: trie (+ cls) and trie + InfiniGram (+ cls), then (+ sim).
-    std::vector<double> bt0 = pt, bi0 = pig;
+    // M18: in pt's and pig's memory (neither is read again), not copies of them.
+    std::vector<double> bt0 = std::move(pt), bi0 = std::move(pig);
     for (std::size_t k = 0; cc && k < H; ++k) {
-        bt0[k] = lcl_t[clb[k]] * pcl[k] + (1 - lcl_t[clb[k]]) * pt[k];
-        bi0[k] = lcl_i[clb[k]] * pcl[k] + (1 - lcl_i[clb[k]]) * pig[k];
+        bt0[k] = lcl_t[clb[k]] * pcl[k] + (1 - lcl_t[clb[k]]) * bt0[k];
+        bi0[k] = lcl_i[clb[k]] * pcl[k] + (1 - lcl_i[clb[k]]) * bi0[k];
     }
     std::vector<double>().swap(pcl);  // M13: not read again
     std::vector<int>().swap(clb);
@@ -6328,11 +6369,7 @@ int cmd_qa(const Args& a, const QaOpts& o) {
         }
     }
     if (copy_fit) {  // B4C: the default copy expert and --copy's models share these lambdas
-        for (std::size_t k = 0; k < H; ++k) {
-            int n = 0;
-            pcp[k] = copy_pred(data.data(), cfg.train + k, n) == data[cfg.train + k] ? 1.0 : 0.0;
-            cbk[k] = copy_bucket(n);
-        }
+        fill_copy();
         // With --cls the copy expert goes on after the class expert (B4, then copy, A1d): its lambdas are fit over
         // trie + cls and trie + InfiniGram + cls (bt, bi), and its gain is over those.
         const std::vector<double>&bt = bt0, &bi = bi0;  // A4: with --sim, trie (+ IG) (+ cls) + sim
@@ -6340,18 +6377,8 @@ int cmd_qa(const Args& a, const QaOpts& o) {
         fit_lambdas(pcp, bi, cbk, half, kCopyBuckets, lc_i);
         copy_clip(lc_t, o.copy_min);
         copy_clip(lc_i, o.copy_min);
-        // 256 blocks of the second half: per block, bits per byte of b with copy mixed in at lam (lam 0: without it).
-        const std::size_t nb = 256, bl = (H - half) / nb;
-        auto blocks = [&](const double* lam, const std::vector<double>& b, std::vector<double>& out) {
-            out.assign(nb, 0.0);
-            double sum = 0;
-            for (std::size_t k = half; k < half + nb * bl; ++k) {
-                const double x = -std::log2(lam[cbk[k]] * pcp[k] + (1 - lam[cbk[k]]) * b[k]);
-                out[(k - half) / bl] += x / static_cast<double>(bl);
-                sum += x;
-            }
-            return sum / static_cast<double>(nb * bl);
-        };
+        const std::size_t nb = cnb, bl = cbl;
+        auto& blocks = copy_blocks;
         auto lci = [](const std::string& name, const std::vector<double>& x, const std::vector<double>& y) {
             std::vector<double> d(x.size());
             for (std::size_t b = 0; b < d.size(); ++b) d[b] = x[b] - y[b];  // bits per byte saved
@@ -6370,13 +6397,7 @@ int cmd_qa(const Args& a, const QaOpts& o) {
         lci("copy_lci trie" + cl, yt, xt);
         lci("copy_lci trie_ig" + cl, yi, xi);
         if (cc) {  // what the class expert adds with copy present: copy alone (lambdas over pt, pig) against cls + copy
-            double l0t[kCopyBuckets], l0i[kCopyBuckets];
-            fit_lambdas(pcp, pt, cbk, half, kCopyBuckets, l0t);
-            fit_lambdas(pcp, pig, cbk, half, kCopyBuckets, l0i);
-            copy_clip(l0t, o.copy_min);
-            copy_clip(l0i, o.copy_min);
-            std::vector<double> zt, zi;
-            const double c0t = blocks(l0t, pt, zt), c0i = blocks(l0i, pig, zi);
+            // M18: c0t, c0i, zt and zi were computed before the class pass, from pt and pig.
             std::cout << "holdout2_trie_copy_bpc " << c0t << " holdout2_trie_ig_copy_bpc " << c0i << "\n";
             lci("cls_given_copy_lci trie", zt, xt);
             lci("cls_given_copy_lci trie_ig", zi, xi);
