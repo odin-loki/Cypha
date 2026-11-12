@@ -99,7 +99,10 @@ inline std::array<std::uint32_t, 256> make_qdec() {
 
 inline const std::array<std::uint32_t, 256> qdec = make_qdec();
 
-inline std::uint8_t quantize(std::uint32_t c) {
+// The quantiser before O3 (docs/reports/OPT_BOOLEAN.md), kept as the reference: the binary search over the ladder
+// finds lo, the first of 65 .. 254 with qdec[lo] >= c (255 if none); then the nearer of lo - 1 and lo (lo - 1 on a tie;
+// the unsigned differences wrap past qdec[255], as they always did).
+inline std::uint8_t quantize_search(std::uint32_t c) {
     if (c <= 64) return static_cast<std::uint8_t>(c);
     int lo = 65, hi = 255;
     while (lo < hi) {
@@ -111,11 +114,49 @@ inline std::uint8_t quantize(std::uint32_t c) {
     return static_cast<std::uint8_t>(lo);
 }
 
+// O3: the same lo without a branch on c. lo - 65 is the count of ladder steps 65 .. 254 below c. The steps below
+// 2^(w - 1), w = bit_width(c), are counted in advance (below[w]); the rest that are below c lie in [2^(w - 1), c), one
+// octave, and the 1.08 ladder has at most 10 steps in an octave, so 12 compares from the first step of the octave count
+// them (past step 254 the window holds 0xffffffff, which is never below c). The trie's training ran 30% of context8k's
+// branch misses in the search (GENERATION_PLAN §13.41 O3).
+struct QuantWindow {
+    static constexpr int kSpan = 12;
+    std::array<std::uint32_t, 190 + kSpan> win{};  // qdec[65 .. 254], then 0xffffffff
+    std::array<std::uint8_t, 33> below{};         // steps of 65 .. 254 below 2^(w - 1), w = 0 .. 32
+    QuantWindow() {
+        for (int s = 0; s < 190; ++s) win[static_cast<std::size_t>(s)] = qdec[static_cast<std::size_t>(65 + s)];
+        for (int s = 190; s < 190 + kSpan; ++s) win[static_cast<std::size_t>(s)] = 0xffffffffu;
+        for (int w = 0; w <= 32; ++w) {
+            const std::uint64_t t = w == 0 ? 0 : std::uint64_t{1} << (w - 1);
+            int n = 0;
+            while (n < 190 && win[static_cast<std::size_t>(n)] < t) ++n;
+            below[static_cast<std::size_t>(w)] = static_cast<std::uint8_t>(n);
+        }
+    }
+};
+inline const QuantWindow qwin;
+
+inline std::uint8_t quantize_ladder(std::uint32_t c) {  // c > 64
+    const unsigned b = qwin.below[static_cast<std::size_t>(std::bit_width(c))];
+    const std::uint32_t* w = qwin.win.data() + b;
+    unsigned lo = 65 + b;
+    for (int k = 0; k < QuantWindow::kSpan; ++k) lo += w[k] < c ? 1u : 0u;
+    const bool down = (lo > 65) & (c - qdec[lo - 1] <= qdec[lo] - c);
+    return static_cast<std::uint8_t>(lo - (down ? 1u : 0u));
+}
+
+inline std::uint8_t quantize(std::uint32_t c) {
+    // c itself up to 64, else the ladder's step; chosen by a mask, so no branch on c
+    const std::uint32_t big = 0u - static_cast<std::uint32_t>(c > 64);
+    const std::uint32_t lad = quantize_ladder(c > 64 ? c : 65);
+    return static_cast<std::uint8_t>((lad & big) | (c & ~big));
+}
+
+// Mode::Synth's count, without a branch on c: 0 for 0 and 1, c up to 64, else its ladder value.
 inline std::uint32_t used_count(std::uint32_t c, Mode mode) {
-    if (c == 0) return 0;
     if (mode == Mode::Synth) {
-        if (c < 2) return 0;
-        return qdec[quantize(c)];
+        const std::uint32_t keep = 0u - static_cast<std::uint32_t>(c >= 2);
+        return qdec[quantize(c)] & keep;
     }
     return c;
 }
@@ -396,13 +437,14 @@ struct Model {
         total = 0;
         if (node == kNil || nodes[node].total == 0) return false;
         if (mode == Mode::DropCtx && nodes[node].total == 1) return false;
+        // O3: every follower is written at n, and n moves on only when its count is kept (no branch on the count; a
+        // node has at most 256 followers, so n stays inside syms and cs).
         for (std::uint32_t f = nodes[node].fol_head; f != kNil; f = fols[f].next) {
             const std::uint32_t c = used_count(fols[f].count, mode);
-            if (c == 0) continue;
             syms[n] = fols[f].sym;
             cs[n] = c;
             total += c;
-            ++n;
+            n += c != 0;
         }
         return n > 0;
     }

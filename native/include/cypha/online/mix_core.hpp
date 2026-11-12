@@ -17,6 +17,8 @@
 ///
 /// Author: Odin Loch
 
+#include "cypha/lm/gate_class.hpp"
+
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -39,9 +41,9 @@ inline double stretch_eps(double p, double eps) {
 /// l a + (1 - l) b: one linear stage of the content mixer's chain.
 inline double lerp(double l, double a, double b) { return l * a + (1 - l) * b; }
 /// The previous byte's class, a context for weight sets: 0 space, 1 letter, 2 digit, 3 markup ([]{}<>|&=), 4 other.
-inline int byte_class(unsigned char pb) {
-    return std::isspace(pb) ? 0 : std::isalpha(pb) ? 1 : std::isdigit(pb) ? 2 : std::strchr("[]{}<>|&=", pb) && pb ? 3 : 4;
-}
+/// It was std::isspace(pb) ? 0 : std::isalpha(pb) ? 1 : std::isdigit(pb) ? 2 : std::strchr("[]{}<>|&=", pb) && pb ? 3 : 4
+/// (C locale); O3 (docs/reports/OPT_BOOLEAN.md) reads it from that chain's 256-byte table (cypha/lm/gate_class.hpp).
+inline int byte_class(unsigned char pb) { return cyphalm::gate_class(pb); }
 /// A mixer's settings "k=v,k=v": set(k, v) for each pair; false if a pair has no '=' or set refuses it.
 template <class Set> inline bool parse_kv(const std::string& s, Set set) {
     for (std::size_t at = 0; at < s.size();) {
@@ -228,7 +230,7 @@ inline void path_bits(const double* D, unsigned y, double out[8]) {
         for (unsigned s = lo; s < lo + h; ++s) s0 += D[s];
         for (unsigned s = lo + h; s < lo + size; ++s) s1 += D[s];
         out[j] = s0 + s1 > 0 ? s1 / (s0 + s1) : 0.5;
-        if ((y >> (7 - j)) & 1) lo += h;
+        lo += h & (0u - ((y >> (7 - j)) & 1u));  // O3: if bit j of y, lo += h, without a branch
         size = h;
     }
 }

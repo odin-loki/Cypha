@@ -2666,6 +2666,13 @@ find_package(Threads REQUIRED)
 target_link_libraries(cyphalm_trie PRIVATE Threads::Threads)
 add_test(NAME native_cyphalm_trie_selftest COMMAND "$<TARGET_FILE:cyphalm_trie>" selftest)
 set_tests_properties(native_cyphalm_trie_selftest PROPERTIES TIMEOUT 60)
+# docs/reports/OPT_BOOLEAN.md (GENERATION_PLAN §13.41 O3): each decision O3 rewrote, against its old form.
+add_executable(opt_boolean_smoke tools/lm/opt_boolean_smoke.cpp)
+target_include_directories(opt_boolean_smoke PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include" "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
+cypha_mingw_apply_exe_link_options(opt_boolean_smoke)
+target_link_libraries(opt_boolean_smoke PRIVATE Threads::Threads)
+add_test(NAME native_opt_boolean_smoke COMMAND "$<TARGET_FILE:opt_boolean_smoke>")
+set_tests_properties(native_opt_boolean_smoke PROPERTIES TIMEOUT 300)
 # docs/reports/K5_PLANNER.md: the planner's offline steps (skeleton mining, gate training) for sample --k5-plan.
 # K5's counts come from a suffix array (include/cypha/lm/count_index.hpp, GENERATION_PLAN §13.40 M1): libsais.
 add_executable(k5_planner tools/lm/k5_planner.cpp third_party/libsais/libsais.c)

@@ -318,8 +318,8 @@ class FullMixer {
         for (int s = 0; s < 256; ++s) q[nq][s] = std::max(1e-9, fl(ch[0][s]));
         ++nq;
         const int bc = mix::byte_class(static_cast<unsigned char>(in.prev));
-        const int g = cs_.final_gate == "copy" ? cyphalm::copy_bucket(in.cn) * 10 + bc * 2 + (in.ig_n >= 16 ? 1 : 0)
-                                               : std::min(in.ig_b, 15) * 5 + bc;
+        const int g = gate_copy_ ? cyphalm::copy_bucket(in.cn) * 10 + bc * 2 + (in.ig_n >= 16 ? 1 : 0)
+                                 : std::min(in.ig_b, 15) * 5 + bc;
         double F[256];
         for (int s = 0; s < 256; ++s) F[s] = fin_.predict(g, [&](int j) { return q[j][s]; });
         const double pf = F[y];
@@ -504,6 +504,7 @@ class FullMixer {
     }
     int kAll_ = 24, kRaw_ = 16;
     ChainSpec cs_;
+    bool gate_copy_ = cs_.final_gate == "copy";  // O3: the gate's string compare, once (cs_ is set before it)
     Params P_;
     std::size_t half_;
     int nr_ = 1, nfin_ = 0, nall_ = 0, nraw_ = 0;
