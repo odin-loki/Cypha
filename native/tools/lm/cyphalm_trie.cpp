@@ -2530,6 +2530,7 @@ int cmd_sample(const Args& a) {
         std::string k5_plan_fill = "beam";  // MERGE_FILL.md: --k5-plan-fill beam|dba, --k5-plan-beam N
         int k5_plan_beam = 0;
         std::string k5_plan_disc;  // PLAN_DISCOURSE.md: --k5-plan-discourse on|SPEC
+        std::string k5_repair;     // K5_REPAIR.md: --k5-repair on|off|SPEC (k5_repair.hpp)
         cypha::cyphalm::planner::FillOpts k5_plan_q2;  // PLAN_FILL.md (§13.42 Q2): --k5-plan-typed FILE, --k5-plan-s1..s4
         for (const auto& [k, v] : a.k5_opts) {  // K5_UPGRADES.md
             std::string err;
@@ -2555,6 +2556,10 @@ int cmd_sample(const Args& a) {
             if (k == "--k5-plan-fill" || k == "--k5-plan-beam") {  // MERGE_FILL.md: the fill's search
                 if (k == "--k5-plan-fill") k5_plan_fill = v;
                 else k5_plan_beam = std::atoi(v.c_str());
+                continue;
+            }
+            if (k == "--k5-repair") {  // K5_REPAIR.md
+                k5_repair = v;
                 continue;
             }
             if (k == "--k5-plan-discourse") {  // PLAN_DISCOURSE.md: on|SPEC, the whole paragraph planned (discourse.hpp)
@@ -2778,10 +2783,28 @@ int cmd_sample(const Args& a) {
             cypha::cyphalm::wkn::mcmc::install(base, mp, &mstats);
             std::cerr << "k5: whole-paragraph MCMC" << mp.describe() << "\n";
         }
+        if (!k5_repair.empty()) {  // K5_REPAIR.md: the bidirectional repair pass, off by default
+            namespace rp = cypha::cyphalm::wkn::repair;
+            rp::Params pr;
+            std::string err;
+            if (rp::parse(k5_repair, pr, err)) {
+                if (!rp::Repairer::supports(base, err)) {
+                    std::cerr << err << "\n";
+                    return 2;
+                }
+                base.repair = std::make_shared<rp::Repairer>(pr);
+                base.repair_desc = pr.describe();
+                std::cerr << "k5: bidirectional repair" << pr.describe() << "\n";
+            } else if (!err.empty()) {
+                std::cerr << err << "\n";
+                return 2;
+            }
+        }
         const int krc = cypha::cyphalm::wkn::run_sample(a.k5, a.k5_cap, prompts, conts, a.outs, a.prompts, static_cast<std::size_t>(a.bytes),
                                                         a.temps.empty() ? std::vector<double>{1.0} : temps, printable, &base,
                                                         a.k5_seed, a.k5_vmax);
         if (mp.steps > 0) mstats.print(stderr);
+        if (base.repair) base.repair->stats().print(stderr);  // K5_REPAIR.md
         return krc;
     }
 
@@ -7202,6 +7225,10 @@ int cmd_selftest() {
     }
     if (std::string err; !cypha::cyphalm::wkn::mcmc::self_test(err)) {  // K5_MCMC.md: the paragraph sampler
         std::cerr << "selftest: K5 MCMC (k5_mcmc.hpp) " << err << "\n";
+        return 1;
+    }
+    if (std::string err; !cypha::cyphalm::wkn::repair::self_test(err)) {  // K5_REPAIR.md: the repair pass
+        std::cerr << "selftest: K5 repair (k5_repair.hpp) " << err << "\n";
         return 1;
     }
     if (std::string err; !cypha::cyphalm::planner::discourse_self_test(err)) {  // PLAN_DISCOURSE.md

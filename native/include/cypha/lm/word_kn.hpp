@@ -366,18 +366,34 @@ class WordKN {
     }
     // docs/reports/K5_MCMC.md: P(w | ctx) alone, as dist would give it without an overlay; base_w is the floor's
     // probability of w (p1()[w], or the class floor's).
-    double prob(const std::uint32_t* ctx, std::size_t n, std::uint32_t w, double base_w) const {
+    // K5_REPAIR.md: ov, an overlay as dist reads it (null: none, as before).
+    double prob(const std::uint32_t* ctx, std::size_t n, std::uint32_t w, double base_w, const Overlay* ov = nullptr) const {
         double p = base_w;
         View v;
+        bool main_ok = true;
         for (int k = 2; k <= order_; ++k) {
             const std::size_t L = static_cast<std::size_t>(k - 1);
             if (n < L) break;
             Key key = 0;
             for (std::size_t i = 0; i < L; ++i) key |= Key{ctx[n - 1 - i]} << (16 * i);
-            if (!context(k, ctx, n, key, v)) break;
-            p *= v.gam;
-            const std::uint16_t* f = std::lower_bound(v.ids, v.ids + v.m, static_cast<std::uint16_t>(w));
-            if (f != v.ids + v.m && *f == w) p += v.disc[f - v.ids];
+            const bool c = main_ok && context(k, ctx, n, key, v);
+            main_ok = c;
+            const Overlay::Ctx* oc = ov && k <= ov->order ? ov->find(k, key) : nullptr;
+            const std::uint16_t* f = c ? std::lower_bound(v.ids, v.ids + v.m, static_cast<std::uint16_t>(w)) : nullptr;
+            const bool hit = c && f != v.ids + v.m && *f == w;
+            if (!oc) {
+                if (!c) break;
+                p *= v.gam;
+                if (hit) p += v.disc[f - v.ids];
+                continue;
+            }
+            const double T = c ? v.tot : 0.0, G = c ? v.gam * T : 0.0;  // dist's arithmetic, in its order
+            const double Lk = ov->rel > 0 && c ? ov->rel * T / oc->tot : ov->L;
+            const double den = T + Lk * oc->tot;
+            p *= (G + Lk * ov->Dd * static_cast<double>(oc->e.size())) / den;
+            if (hit) p += v.disc[f - v.ids] * T / den;
+            for (const auto& [x, d] : oc->e)
+                if (x == w) p += Lk * (d - ov->Dd) / den;
         }
         return p;
     }
@@ -961,6 +977,7 @@ struct ByteScorer {
 class K5;
 struct Options;
 struct GenStats;
+namespace repair { class Repairer; }  // K5_REPAIR.md (lm/k5_repair.hpp)
 // docs/reports/K5_STRUCTURE.md (GENERATION_PLAN §13.33): a writer that replaces generate's sentence choice (the structure
 // experts and their meta-mixer, cypha/lm/structure/writer.hpp). Shared by every thread, so generate is const.
 struct StructureWriter {
@@ -1037,6 +1054,9 @@ struct Options {
     // K5_RETRIEVE.md: --k5-retrieve k=N,rel=R|w=L: the n-grams of the N documents of the --k5-more text most related
     // to the prompt (BM25 over K5's ids) join K5's counts for that continuation. k 0 (the default): off.
     retrieve::Params ret;
+    // K5_REPAIR.md: --k5-repair SPEC, the bidirectional repair pass (lm/k5_repair.hpp). Null (the default): off.
+    std::shared_ptr<repair::Repairer> repair;
+    std::string repair_desc;
     bool zgate() const { return mbr_sent_w != 0 || eg_w != 0 || lda_w != 0; }
     // The settings that differ from K5's, for the MODEL line (empty for K5 itself).
     std::string describe() const {
@@ -1072,6 +1092,7 @@ struct Options {
         if (first_k || first_wp != 0 || first_wl != 0 || first_req)  // K5_FIRST.md
             add("first_k", first_k), add("first_wp", first_wp), add("first_wl", first_wl), add("first_req", first_req);
         if (ret.on()) s += ret.describe();  // K5_RETRIEVE.md
+        if (repair) s += repair_desc;       // K5_REPAIR.md
         return s;
     }
 };
@@ -1328,6 +1349,7 @@ class K5 {
             index_retrieval(more_ids_, lg ? lg : "");
             std::fprintf(stderr, "k5: retrieval over %s: %zu documents from id %zu%s\n", bo->more.c_str(), ret_->docs(), more_ids_, bo->ret.describe().c_str());
         }
+        if (bo && bo->repair) repair_build(*bo);  // K5_REPAIR.md: the backward model
         return true;
     }
 
@@ -1514,6 +1536,10 @@ class K5 {
         int ret_round = 0;
         std::size_t ret_np = 0;
         std::string ret_prompt;
+        // K5_REPAIR.md: the repair's part of the continuation, and the words K5 drew since its last repair (ctx index,
+        // out offset).
+        std::shared_ptr<const void> rp;
+        std::vector<std::uint32_t> rp_seg;
     };
     State start(std::string_view prompt, const Options& o) const {
         State s;
@@ -1542,6 +1568,7 @@ class K5 {
                 if (lr[w] != 0) (*m)[w] = std::exp2(o.lda_beta * lr[w]);
             s.topic_mult = std::move(m);
         }
+        if (o.repair) repair_begin(prompt, s, o);  // K5_REPAIR.md
         return s;
     }
     // K5_DISCOURSE.md: for every K5 word, log2 (p_topic(w | prompt) / p(w)) clipped to [-4, 4] for content words, 0
@@ -1845,6 +1872,10 @@ class K5 {
     }
     // K5_STRUCTURE.md: the training text's ids (documents start with <s>).
     const std::vector<std::uint32_t>& train_ids() const { return kn_.index().text(); }
+    // K5_REPAIR.md: the repair pass's hooks (defined in lm/k5_repair.hpp, included at the end of this file).
+    void repair_build(const Options& o);
+    void repair_begin(std::string_view prompt, State& s, const Options& o) const;
+    void repair_word(State& s, const Options& o, std::size_t pb) const;
     // K5_DISCOURSE.md: the drafts of --k5-mbr-doc N (N drafts of o) or --k5-meta SPEC (the pooled drafts of variants of
     // o), and the MBR choice among them (the highest mean chrF to the other drafts). Draft i draws from its own seed.
     std::vector<std::pair<std::string, Options>> pool_variants(const Options& o) const {
@@ -2064,6 +2095,7 @@ class K5 {
         learn(s, w, o);
         s.prev = vocab_[w];
         s.has_prev = true;
+        if (o.repair) repair_word(s, o, str.size());  // K5_REPAIR.md: at a sentence's end, the repair
         return w;
     }
     // step_word's choice, as generate_one makes it: the whole distribution, sorted. w gets the word, str its piece.
@@ -3246,3 +3278,5 @@ inline bool self_test(std::string& err) {
 }
 
 }  // namespace cypha::cyphalm::wkn
+
+#include "cypha/lm/k5_repair.hpp"  // K5_REPAIR.md: the repair pass and K5's hooks above
