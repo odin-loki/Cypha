@@ -296,6 +296,32 @@ def cmd_report(a):
         r["why"] = mk.get("why", "")
         r["prev"] = " ".join(x["tok"] for x in v[max(0, wi - 5):wi])
         marked.append(r)
+    # each T8 word's source, from the gate redraw: k5 (the plain gate's draft), disc (the discourse writer's free
+    # sentence) or fact (no draft reproduced it: the planner's fact sentences)
+    if a.items and gate:
+        texts = {}
+        with open(a.items, encoding="utf-8", errors="surrogateescape") as f:
+            for line in f:
+                p = line.rstrip("\n").split("\t")
+                if len(p) >= 4 and p[1] == "T8":
+                    texts[p[0]] = unesc_tsv(p[3])
+        TOKRE = re.compile(r"[A-Za-z]+(?:'[A-Za-z]+)*|[0-9]+(?:[.,][0-9]+)*|\n|[^\s]")
+        spans = defaultdict(list)
+        for g in gate:
+            spans[g["item"]].append((len(unesc_tsv(g["kept"])), g["path"]))
+        for i, v in T8.items():
+            t = texts.get(i, "")
+            bounds, at = [], 0
+            for n, pth in spans.get(i, []):
+                bounds.append((at, at + n, pth))
+                at += n
+            ends = [m.end() for m in TOKRE.finditer(t)]
+            for j, r in enumerate(v):
+                e = ends[j] if j < len(ends) else len(t)
+                r["src"] = next((pth for (lo, hi, pth) in bounds if lo < e <= hi), "k5" if not bounds else bounds[-1][2])
+        for mk in marked:
+            v = T8[mk["item"]]
+            mk["src"] = v[mk["wi"]]["src"] if "src" in v[mk["wi"]] else "?"
     allT = [r for v in T8.values() for r in v]
     if marked:
         n = len(marked)
@@ -337,10 +363,57 @@ def cmd_report(a):
         why = Counter(r["why"] for r in marked)
         emit("Kinds of break, by reading: " + "; ".join(f"{k} {v}" for k, v in why.most_common()) + ".\n")
         num["breaks"] = {"n": n, "tail": tail, "highprob": hp, "shares": brk, "mean_bits": mb, "why": dict(why)}
-        emit("| item | before | broken word | P | rank | order answered | context depth | overlay | K5's top word | kind |")
-        emit("|---|---|---|---|---|---|---|---|---|---|")
+        if all("src" in r for r in marked):
+            emit("### Table 4b. The broken spots by the sentence's source, and by kind\n")
+            emit("| group | spots | T8 words in group | mean bits at spot | answered by order 5 | backed off (order 4 or lower) | tail (rank > 10 or P < 0.02) | high-probability wrong (rank 1-3, P >= 0.1) | <unk> |")
+            emit("|---|---|---|---|---|---|---|---|---|")
+            groups = [("plain gate's draft (k5)", lambda r: r["src"] == "k5"), ("discourse free sentence", lambda r: r["src"] == "disc"),
+                      ("planner fact sentence", lambda r: r["src"] == "fact"), ("kind: grammar", lambda r: r["why"] == "grammar"),
+                      ("kind: sense", lambda r: r["why"] == "sense")]
+            gnum = {}
+            for label, f in groups:
+                R = [r for r in marked if f(r)]
+                W = [r for r in allT if f(dict(r, why=""))] if not label.startswith("kind") else allT
+                if not R:
+                    continue
+                k = len(R)
+                row = {
+                    "spots": k, "words": len(W), "bits": -sum(r["lp_full"] for r in R) / k,
+                    "o5": sum(r["ans_ord"] == 5 for r in R) / k, "back": sum(1 <= r["ans_ord"] <= 4 for r in R) / k,
+                    "tail": sum(1 for r in R if r["rank"] > 10 or r["lp_full"] < math.log2(0.02)) / k,
+                    "hp": sum(1 for r in R if r["rank"] <= 3 and r["lp_full"] >= math.log2(0.1)) / k,
+                    "unk": sum(r["unk"] for r in R) / k,
+                }
+                gnum[label] = row
+                emit(f"| {label} | {k} | {row['words']} | {row['bits']:.2f} | {row['o5']:.2f} | {row['back']:.2f} | {row['tail']:.2f} | {row['hp']:.2f} | {row['unk']:.2f} |")
+            emit("")
+            src_words = Counter(r["src"] for r in allT)
+            emit("T8 words by source: " + ", ".join(f"{k} {v}" for k, v in src_words.most_common()) + ".\n")
+            num["breaks_by_group"] = gnum
+            num["t8_words_by_src"] = dict(src_words)
+            # T8 words of K5's own sentences only (k5 + disc), against the planner's
+            for label, f in [("K5's own sentences (k5 + disc)", lambda r: r["src"] in ("k5", "disc")), ("planner fact sentences", lambda r: r["src"] == "fact")]:
+                R = [r for r in allT if f(r)]
+                if R:
+                    emit(f"- {label}: {len(R)} words; mean bits {-sum(r['lp_full'] for r in R if not r['unk']) / len(R):.2f}; outside the nucleus "
+                         f"{sum(1 for r in R if not r['nuc_in']) / len(R):.3f}; rank above 10 {sum(1 for r in R if r['rank'] > 10) / len(R):.3f}; <unk> {sum(r['unk'] for r in R) / len(R):.3f}.")
+            emit("")
+        if any(r["has_mix"] for r in marked):
+            M = [r for r in marked if r["has_mix"]]
+            A_ = [r for r in allT if r["has_mix"]]
+            def mix(R):
+                return sum(r["lp_mix"] for r in R) / len(R), sum(r["lp_mix"] - r["lp_prior"] for r in R) / len(R)
+            m1, m2 = mix(M), mix(A_)
+            # does the learner flag the broken word? share of spots where its ratio is below the text's median ratio
+            med = sorted(r["lp_mix"] - r["lp_prior"] for r in A_)[len(A_) // 2]
+            low = sum(1 for r in M if r["lp_mix"] - r["lp_prior"] < med) / len(M)
+            emit(f"The byte learner at the broken spots: log2 P {m1[0]:.2f} (all T8 words {m2[0]:.2f}); context ratio {m1[1]:+.2f} bits (all {m2[1]:+.2f}); "
+                 f"below the median ratio at {low:.2f} of the spots (chance 0.50).\n")
+            num["learner_at_breaks"] = {"lp": m1[0], "lp_all": m2[0], "ratio": m1[1], "ratio_all": m2[1], "below_median": low}
+        emit("| item | source | before | broken word | P | rank | order answered | context depth | overlay | K5's top word | kind |")
+        emit("|---|---|---|---|---|---|---|---|---|---|---|")
         for r in marked:
-            emit(f"| {r['item']} | …{r['prev']} | **{r['tok']}** | {2 ** r['lp_full']:.3f} | {r['rank']} | {r['ans_ord']} | {r['ctx_ord'] - 1} words | "
+            emit(f"| {r['item']} | {r.get('src', '?')} | …{r['prev']} | **{r['tok']}** | {2 ** r['lp_full']:.3f} | {r['rank']} | {r['ans_ord']} | {r['ctx_ord'] - 1} words | "
                  f"{'yes' if r['ov_ans'] else 'no'} | {r['top1']} ({2 ** r['lp_top1']:.2f}) | {r['why']} |")
         emit("")
 
@@ -455,6 +528,7 @@ def main():
     p = sp.add_parser("report")
     p.add_argument("--probe", required=True)
     p.add_argument("--marks")
+    p.add_argument("--items")
     p.add_argument("--out", required=True)
     p.add_argument("--examples", default="")
     a = ap.parse_args()
