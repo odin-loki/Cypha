@@ -71,6 +71,7 @@
 #include "cypha/lm/entity_grid.hpp"  // K5_DISCOURSE.md
 #include "cypha/lm/lda.hpp"          // K5_DISCOURSE.md
 #include "cypha/lm/mbr.hpp"          // K5_DISCOURSE.md
+#include "cypha/lm/retrieve.hpp"     // K5_RETRIEVE.md
 
 namespace cypha::cyphalm::wkn {
 
@@ -196,7 +197,9 @@ class Overlay {
         double tot = 0;
     };
     double L = 1.0, Dd = 0.5;
+    double rel = 0;  // K5_RETRIEVE.md: > 0, the weight in a context K5 saw is rel n(c) / d(c) in place of L
     int order = kOrder;
+    void cut() { hist_.clear(); }  // K5_RETRIEVE.md: the next push starts a new document
     void push(std::uint32_t w) {
         hist_.push_back(w);
         const std::size_t t = hist_.size() - 1;
@@ -352,12 +355,13 @@ class WordKN {
                 continue;
             }
             const double T = c ? v.tot : 0.0, G = c ? v.gam * T : 0.0;
-            const double den = T + ov->L * oc->tot;
-            const double g = (G + ov->L * ov->Dd * static_cast<double>(oc->e.size())) / den;
+            const double Lk = ov->rel > 0 && c ? ov->rel * T / oc->tot : ov->L;  // K5_RETRIEVE.md
+            const double den = T + Lk * oc->tot;
+            const double g = (G + Lk * ov->Dd * static_cast<double>(oc->e.size())) / den;
             for (std::size_t w = 0; w < V_; ++w) p[w] *= g;
             if (c)
                 for (std::size_t e = 0; e < v.m; ++e) p[v.ids[e]] += v.disc[e] * T / den;
-            for (const auto& [w, d] : oc->e) p[w] += ov->L * (d - ov->Dd) / den;
+            for (const auto& [w, d] : oc->e) p[w] += Lk * (d - ov->Dd) / den;
         }
     }
     // docs/reports/K5_MCMC.md: P(w | ctx) alone, as dist would give it without an overlay; base_w is the floor's
@@ -1030,6 +1034,9 @@ struct Options {
     int first_k = 0;
     double first_wp = 0, first_wl = 0;
     int first_req = 0;
+    // K5_RETRIEVE.md: --k5-retrieve k=N,rel=R|w=L: the n-grams of the N documents of the --k5-more text most related
+    // to the prompt (BM25 over K5's ids) join K5's counts for that continuation. k 0 (the default): off.
+    retrieve::Params ret;
     bool zgate() const { return mbr_sent_w != 0 || eg_w != 0 || lda_w != 0; }
     // The settings that differ from K5's, for the MODEL line (empty for K5 itself).
     std::string describe() const {
@@ -1064,6 +1071,7 @@ struct Options {
         if (lda_threads != d.lda_threads) add("lda_threads", lda_threads);
         if (first_k || first_wp != 0 || first_wl != 0 || first_req)  // K5_FIRST.md
             add("first_k", first_k), add("first_wp", first_wp), add("first_wl", first_wl), add("first_req", first_req);
+        if (ret.on()) s += ret.describe();  // K5_RETRIEVE.md
         return s;
     }
 };
@@ -1107,6 +1115,7 @@ inline bool apply_flag(const std::string& name, const std::string& val, Options&
     if (name == "--k5-cache2") return num(o.cache_w2, 0, 0.9);
     if (name == "--k5-cache-decay") return num(o.cache_r, 0.5, 1);
     if (name == "--k5-dyn") return num(o.dyn, 0, 1e6);
+    if (name == "--k5-retrieve") return retrieve::parse(val, o.ret, err);  // K5_RETRIEVE.md
     if (name == "--k5-order") return num(x, 2, kMaxOrder) && ((o.order = static_cast<int>(x)), true);
     if (name == "--k5-classes") return num(x, 0, 4096) && ((o.classes = static_cast<std::size_t>(x)), true);
     if (name == "--k5-class-w") return num(o.class_w, 0, 1);
@@ -1312,6 +1321,13 @@ class K5 {
             return false;
         }
         if (bo) build_discourse(text, *bo);
+        if (bo && bo->ret.on()) {  // K5_RETRIEVE.md: only the --k5-more text is searched
+            if (vocab_bytes_ == 0) return err = "--k5-retrieve needs --k5-more (it searches that text only)", false;
+            if (bo->dyn > 0) return err = "--k5-retrieve does not take --k5-dyn", false;
+            const char* lg = std::getenv("CYPHA_K5_RET_LOG");
+            index_retrieval(more_ids_, lg ? lg : "");
+            std::fprintf(stderr, "k5: retrieval over %s: %zu documents from id %zu%s\n", bo->more.c_str(), ret_->docs(), more_ids_, bo->ret.describe().c_str());
+        }
         return true;
     }
 
@@ -1405,6 +1421,7 @@ class K5 {
             }
             a = b + 1;
         }
+        more_ids_ = vocab_ids;  // K5_RETRIEVE.md: the first id past K5's own text
         std::vector<std::uint32_t> order_t(tview.size());
         for (std::uint32_t i = 0; i < order_t.size(); ++i) order_t[i] = i;
         std::stable_sort(order_t.begin(), order_t.end(), [&](std::uint32_t x, std::uint32_t y) { return tcount[x] > tcount[y]; });
@@ -1491,6 +1508,7 @@ class K5 {
         WordCache cache;
         int step = 0;
         std::shared_ptr<const std::vector<double>> topic_mult;  // K5_DISCOURSE.md: --k5-lda-beta's factor per word
+        std::shared_ptr<const Overlay> rov;                     // K5_RETRIEVE.md: the retrieved documents' counts
     };
     State start(std::string_view prompt, const Options& o) const {
         State s;
@@ -1506,6 +1524,7 @@ class K5 {
             s.ov.order = kn_.order();
             for (const std::uint32_t w : s.ctx) s.ov.push(w);
         }
+        if (o.ret.on() && ret_) s.rov = retrieved(prompt, s.ctx, o);  // K5_RETRIEVE.md
         if (o.cache_w > 0 || o.cache_w2 > 0) {
             s.cache.init(vocab_.size(), o.cache_r);
             for (const std::uint32_t w : s.ctx) s.cache.push(w);
@@ -1533,6 +1552,26 @@ class K5 {
             }
         return lr;
     }
+    // K5_RETRIEVE.md: the counts of the documents retrieved for the prompt, an overlay K5's walk reads.
+    std::shared_ptr<const Overlay> retrieved(std::string_view prompt, const std::vector<std::uint32_t>& q, const Options& o) const {
+        auto ov = std::make_shared<Overlay>();
+        ov->L = o.ret.rel > 0 ? 1.0 : o.ret.w;
+        ov->rel = o.ret.rel;
+        ov->order = kn_.order();
+        const std::vector<std::uint32_t>& ids = kn_.index().text();
+        for (const std::uint32_t d : ret_->top(q, o.ret, kn_.index(), prompt)) {
+            ov->cut();
+            const auto [a, b] = ret_->span(d);
+            for (std::size_t i = a; i < b; ++i) ov->push(ids[i]);
+        }
+        return ov;
+    }
+    const retrieve::Index* retrieval() const { return ret_.get(); }
+    // K5_RETRIEVE.md: the retrieval index over the documents from id `from` on (load: the --k5-more text's).
+    void index_retrieval(std::size_t from, std::string log = {}) {
+        ret_ = std::make_shared<retrieve::Index>();
+        ret_->build(kn_.index().text(), kBos, from, std::move(log));
+    }
     // The state reads word w (the online parts learn it).
     static void learn(State& s, std::uint32_t w, const Options& o) {
         s.ctx.push_back(w);
@@ -1548,7 +1587,7 @@ class K5 {
             cm_.dist(s.ctx.data(), s.ctx.size(), tmp.data());
             if (o.class_mode == 1) base = tmp.data();
         }
-        kn_.dist(s.ctx.data(), s.ctx.size(), p, o.dyn > 0 ? &s.ov : nullptr, base);
+        kn_.dist(s.ctx.data(), s.ctx.size(), p, o.dyn > 0 ? &s.ov : s.rov.get(), base);
         if (cm_.on() && o.class_mode == 2)
             for (std::size_t w = 0; w < V; ++w) p[w] = (1 - o.class_w) * p[w] + o.class_w * tmp[w];
         if (o.cache_w > 0 || o.cache_w2 > 0) s.cache.apply(p, V, o.cache_w, o.cache_w2);
@@ -1562,7 +1601,7 @@ class K5 {
 
     // docs/reports/K5_MCMC.md: model_dist's p[w] alone, after ctx[0, n) (its last word last). Without the online parts
     // and the class mix (o.dyn 0, no cache, class_mode backoff), which word_prob_ok checks.
-    static bool word_prob_ok(const Options& o) { return o.dyn <= 0 && o.cache_w <= 0 && o.cache_w2 <= 0 && o.class_mode == 1; }
+    static bool word_prob_ok(const Options& o) { return o.dyn <= 0 && !o.ret.on() && o.cache_w <= 0 && o.cache_w2 <= 0 && o.class_mode == 1; }
     double word_prob(const std::uint32_t* ctx, std::size_t n, std::uint32_t w) const {
         return kn_.prob(ctx, n, w, cm_.on() ? cm_.prob(ctx, n, w) : kn_.p1()[w]);
     }
@@ -2164,7 +2203,8 @@ class K5 {
 
     // docs/reports/OPT_NUCLEUS.md (GENERATION_PLAN §13.41, O6): the same choice as full_pick, without sorting the
     // vocabulary. It applies to K5's own walk (no dynamic counts, no cache, no class mix, no topic factor) at
-    // temperature 1.
+    // temperature 1. K5_RETRIEVE.md: with the retrieved documents' overlay, q is model_dist's (the same choice rule
+    // on that distribution; full_pick's sort is what made the overlay slow).
     bool fast_applies(const State& s, const Options& o) const {
         return fast_ && o.temperature == 1.0 && o.dyn <= 0 && o.cache_w <= 0 && o.cache_w2 <= 0 && !(cm_.on() && o.class_mode != 1) && !s.topic_mult;
     }
@@ -2245,7 +2285,7 @@ class K5 {
         if (++sc.cur == 0) std::fill(stamp.begin(), stamp.end(), 0), sc.cur = 1;
         const std::uint32_t cur = sc.cur;
         seen.clear(), qs.clear(), gs.clear();
-        kn_.walk(s.ctx.data(), s.ctx.size(), [&](double gam, const std::uint16_t* ids, const double* disc, std::size_t m) {
+        if (!s.rov) kn_.walk(s.ctx.data(), s.ctx.size(), [&](double gam, const std::uint16_t* ids, const double* disc, std::size_t m) {
             if (gs.empty()) {  // the first order: every entry is new (a context's entries are distinct)
                 gs.push_back(gam);
                 seen.resize(m), qs.resize(m);
@@ -2277,7 +2317,8 @@ class K5 {
         // 1. q over the vocabulary and z, in id order: every word's chain (vectorised; each lane rounds as dist
         // does), the seen words' values over them, then the sum, word by word.
         double* qq = q.data();
-        if (on) fill_unseen<true>(qq, V, pc, cls, pwc, zc, p1, gs.data(), gs.size());
+        if (s.rov) model_dist(s, o, qq, sc.tmp);  // K5_RETRIEVE.md
+        else if (on) fill_unseen<true>(qq, V, pc, cls, pwc, zc, p1, gs.data(), gs.size());
         else fill_unseen<false>(qq, V, pc, cls, pwc, zc, p1, gs.data(), gs.size());
         for (std::size_t i = 0; i < seen.size(); ++i) qq[seen[i]] = qs[i];
         qq[kUnk] = qq[kBos] = 0;
@@ -2564,6 +2605,8 @@ class K5 {
     eg::EntityGrid eg_;        // K5_DISCOURSE.md
     lda::LDA lda_;             // K5_DISCOURSE.md
     std::vector<long> k2l_;    // K5 id -> LDA content-word id (-1: none)
+    std::shared_ptr<retrieve::Index> ret_;  // K5_RETRIEVE.md
+    std::size_t more_ids_ = 0;              // K5_RETRIEVE.md: the first id past K5's own text
     // fuzzy_bake.py has_run's 13-token windows (the verbatim measure), a view on the suffix array.
     NgramSet run13() const { return NgramSet(&kn_.index(), 13, hs13_.get()); }
     std::unique_ptr<NgramSet::Hashes> hs13_, hscap_;  // the hash calls' windows, made on first use
@@ -2989,6 +3032,26 @@ inline bool self_test(std::string& err) {
         const double p0 = prob(k5_v1()), p1 = prob(d), p2 = prob(k5_v1());
         if (!(p1 > p0) || p2 != p0) {
             err = "dynamic counts do not raise the prompt's continuation";
+            return false;
+        }
+        // K5_RETRIEVE.md: off by default; parses; the retrieved documents' counts still sum to one, and raise a word
+        // the retrieved document put after the context (relative and absolute weights).
+        Options r = k5_v1();
+        std::string re;
+        if (Options{}.ret.on() || !apply_flag("--k5-retrieve", "k=2,rel=0.5", r, re) || r.ret.k != 2 || r.ret.rel != 0.5 ||
+            apply_flag("--k5-retrieve", "k=2", r, re) || apply_flag("--k5-retrieve", "k=2,x=1", r, re)) {
+            err = "--k5-retrieve parse";
+            return false;
+        }
+        m.index_retrieval(0);
+        if (!m.retrieval() || m.retrieval()->docs() == 0 || !sums(m, r, "retrieval (rel)")) return false;
+        Options ra = k5_v1();
+        ra.ret.k = 3, ra.ret.w = 4;
+        if (!sums(m, ra, "retrieval (w)")) return false;
+        r.ret.rel = 2, r.ret.skip_top = 0, r.ret.max_df = 1;
+        const double q0 = prob(k5_v1()), q1 = prob(r), q2 = prob(k5_v1());
+        if (!(q1 != q0) || q2 != q0) {
+            err = "retrieval does not change the walk, or changes the shared model";
             return false;
         }
         // K5's own path: cont_bits with default options is the plain walk.

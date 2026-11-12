@@ -2597,3 +2597,12 @@ Old binary main 9cbd277; old and new were started together.
   - birth dates 84 right and 5 wrong (L1: 66 and 58), death dates 41 and 1 (L1: 7 and 58).
 - **The default writer now states what CyphaLM's store holds.** G4's fact-precision bar of 0.9 is met on dev and test.
 - **Left:** invented birth places (12 right, 7 wrong on test) and K5's free sentences after the plan, which no flag touches.
+
+### 13.65 G2, K5 reads up on the subject before it writes (registered 2026-11-12, before any arm runs; [K5_RETRIEVE](reports/K5_RETRIEVE.md))
+
+- **Why:** the gap the raters feel is content. Only 0.204 of the writer's sentences share a word with the one before (human 0.508, §13.59). Gate terms and form fixes did not help (§13.53 R2, §13.62).
+- **The change:** `--k5-retrieve k=N,rel=R` (`lm/retrieve.hpp`, off by default, byte-identical when off). For each prompt, K5 finds the N documents of `train_all.txt` most related to the prompt (BM25 over its own word ids). It adds their n-grams to its counts for that continuation, as `--k5-dyn` adds the prompt's. With `rel=R` the documents hold about R / (1 + R) of each order's mass where they saw the context.
+- **Guards:** only `train_all.txt` is searched (GEN-A and SCRIBE overlap removed; never K5's own 7 MB text). A leak check counts retrieved documents from the prompt's own page title (must be 0). The 12-word cap holds against the documents, which are K5's training text.
+- **Arms** (HLT plus): K1 (k 1, rel 0.5), K4 (k 4), K16 (k 16), K4L (k 4, rel 0.2), K4H (k 4, rel 1.5).
+- **Screen:** verbatim13 0; copy32 at most 0.30; SCRIBE v2 at least HLT − 0.03; fact precision at least HLT − 0.05; the leak check 0; my strict reading (keyword stuffing fails). J2's link to the previous sentence, the prompt's words by sentence and mean surprise are reported. At most 2 candidates.
+- **Judge:** blind pairwise raters against HLT at 460 characters (`bench/blind/ret_pair`, seed 20261124) and 1,500 characters (`bench/blind/ret_long`, seed 20261125). Adopted if better by §13.38's rule on either reading and at least 0.5 on the other.
