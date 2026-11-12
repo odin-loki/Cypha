@@ -115,7 +115,7 @@ def ended(s):
 
 
 def year_of(t):
-    return len(t) == 4 and t.isdigit() and 1000 <= int(t) <= 2099
+    return len(t) == 4 and t.isascii() and t.isdigit() and 1000 <= int(t) <= 2099
 
 
 # ---------------------------------------------------------------- capitalisation table (K5_STRUCTURE's caps_)
