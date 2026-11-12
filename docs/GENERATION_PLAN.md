@@ -2787,3 +2787,18 @@ Four fresh blind raters. Raters 1–2 rate the first 25 prompts, raters 3–4 th
 - **Wall time and RAM**, from old and new started together under one turn of the lock (load average 30–47): wall 11:28 → 11:48 (**+2.9%**), peak RAM 2.90 → 3.08 GB (**+6.2%**), CPU time +22.7%. The first, unpaired run read 10:12 against the earlier 7:39; that comparison was between different loads, so it does not count (HANDOFF §2).
 - **Checks:** `qa` C1L dev rows byte-identical to M18's; the writer default equals T8's dev GEN file.
 - **By the rule, T1's values are `context8k`'s defaults on main.** Prediction 1.476–1.484: **hit** (1.4786).
+
+### 13.74 The absolute reading again, after T8 (registered 2026-11-13, before the raters run)
+
+- **The same round as §13.69:** `blind_rate.py make --mode rate --human`, the same 50 prompts, cut at 460 characters, four fresh blind raters, the same rubric. Seed 20261204.
+- **Arms:**
+  - **T8**, today's default (§13.71), `bench/k5_decode/runs/T8.gen.txt`;
+  - **K1**, the previous default, `bench/k5_retrieve/runs/K1.gen.txt`;
+  - **K5**, plain K5 on 7 MB, as the anchor;
+  - **human**.
+- **Reported:** means with 95% bootstrap intervals, the share rated 6 or more, and T8 minus K1 and minus human, paired.
+- **Predictions:**
+  - human 8.3–8.8;
+  - K1 2.1–2.5 (2.28 last time);
+  - K5 1.5–1.9;
+  - T8 2.6–3.3, with at most 5% rated 6 or more.
