@@ -9,7 +9,7 @@
 #   LABEL.A.gen.txt  subset A only (the metrics); LABEL.R.gen.txt the 50 rater prompts only (the packets);
 #   SCRIBE v2 and v3.1 on LABEL.A.gen.txt; fact precision (gen_fact_check.py run --v2) on it;
 #   copy32 and verbatim13 from sample's GEN_EVAL line (all 150 prompts).
-# Waits for >= 16 GB available before it starts. Leaves LABEL.done holding the exit code.
+# Waits for >= 16 GB available before it starts; the sample runs under ~/heavy.sh (one of the PC's 2 heavy slots). Leaves LABEL.done holding the exit code.
 #
 # Environment: DLOOP_BIN (cyphalm_trie, scribe) [~/dloop_bin], DLOOP_RUNS [~/dloop_runs], K5_THREADS [6].
 set -uo pipefail
@@ -29,7 +29,7 @@ done
 echo "start $LABEL avail=${av}G $(date +%T) flags: $*" > "$R/$LABEL.arm.log"
 export K5_THREADS=${K5_THREADS:-6}
 cd "$ROOT"
-/usr/bin/time -v -o "$R/$LABEL.time" nice -n 5 "$BIN/cyphalm_trie" sample "$E" "$R/$LABEL.raw.gen.txt" \
+"$HOME/heavy.sh" /usr/bin/time -v -o "$R/$LABEL.time" nice -n 5 "$BIN/cyphalm_trie" sample "$E" "$R/$LABEL.raw.gen.txt" \
     --prompts-file bench/decode_loop/loop_prompts.tsv --prompts 150 --plan-drop 75497472:100000000 \
     --k5 /mnt/d/cypha_llm/fuzzy/train.txt "$@" > "$R/$LABEL.sample.out" 2> "$R/$LABEL.sample.err"
 rc=$?

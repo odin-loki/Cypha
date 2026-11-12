@@ -1,0 +1,12 @@
+start r3_K2 avail=25G 03:12:07 flags: --temps 0.75 --k5-gate 16,wf=0.5 --k5-retrieve k=2,rel=0.5
+GEN_EVAL copy32 T0.75 0.5942 verbatim13 0.0000 (0 of 150)
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 11:16.73
+	Maximum resident set size (kbytes): 11324344
+start r3_K4 avail=31G 03:24:04 flags: --temps 0.75 --k5-gate 16,wf=0.5 --k5-retrieve k=4,rel=0.5
+GEN_EVAL copy32 T0.75 0.6033 verbatim13 0.0000 (0 of 150)
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 8:44.82
+	Maximum resident set size (kbytes): 11347960
+start r3_R25 avail=34G 03:33:34 flags: --temps 0.75 --k5-gate 16,wf=0.5 --k5-retrieve k=1,rel=0.25
+GEN_EVAL copy32 T0.75 0.4768 verbatim13 0.0000 (0 of 150)
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 8:38.92
+	Maximum resident set size (kbytes): 11315636

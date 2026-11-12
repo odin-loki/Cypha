@@ -222,3 +222,26 @@ Full table: `bench/decode_loop/rounds/r2.screen.md`. The WSL machine restarted a
 - Confirmations keep all 50 prompts, as registered (they are the comparable strict test). Their score on the differing items only is reported beside them as secondary.
 - The round rule, the seeds and everything else stay as registered.
 - What had run when this was written: round 3's candidates (retrieval, from wf 0.5) were being written; none was measured or read.
+
+### Round 3: retrieval (from wf 0.5), stopped part-way (2026-11-13, about 04:12)
+
+**Stopped on Odin's word**, relayed by the lead ("stop for now"). WSL hung once and restarted twice during the round (about 03:50 and 04:08), which killed the last arm twice. No packet was built; nothing of round 3 has been read.
+
+- **Finished and measured** (subset A; best = wf 0.5, i.e. `--temps 0.75 --k5-gate 16,wf=0.5`): k 2, k 4, rel 0.25. Table: `bench/decode_loop/rounds/r3_partial.screen.md`.
+
+| | wf 0.5 (best) | k 2 | k 4 | rel 0.25 |
+|---|---|---|---|---|
+| mean surprise (bits) | 7.75 | 7.93 | 7.94 | 7.07 |
+| link to the sentence before | 0.322 | 0.323 | 0.352 | 0.297 |
+| verbless | 0.215 | 0.215 | 0.206 | 0.244 |
+| stuff3 | 0.029 | 0.033 | 0.031 | 0.026 |
+| splice | 0.205 | 0.203 | 0.209 | (probe lost in the restart) |
+| SCRIBE v2 | 0.843 | 0.854 | 0.830 | 0.768 |
+| fact precision | 0.938 | 0.935 | 0.918 | 0.938 |
+| copy32 | 0.557 | 0.594 | 0.603 | 0.477 |
+| verbatim13 | 0 | 0 | 0 | 0 |
+
+- **Screen on these three:** k 2 and k 4 pass; rel 0.25 fails (mean surprise falls 0.68 bits, 0.85 human spreads further from human). Ranked k 2, then k 4. This is provisional: rel 1.0 (`k=1,rel=1.0`) has not been written, and the round's screen and ranking are over all four.
+- **To resume:** rerun `r3_R10` (`bench/decode_loop/loop_arm.sh r3_R10 --temps 0.75 --k5-gate 16,wf=0.5 --k5-retrieve k=1,rel=1.0`, now under `~/heavy.sh`), probe rel 0.25 and rel 1.0 (`loop_probe.py`), screen all four, build `loop_round.py packet 3 r2_WF5 S1 S2` (amendment 2's differing prompts), then confirmation 1: the round-3 best against START, all 50 prompts, four raters.
+- **Where the loop stands:** provisional best **T 0.75 + gate wf 0.5** (round 1: T 0.75 led T8 0.625, not significant; round 2: wf 0.5 led T 0.75 0.700 [0.575, 0.825]). Nothing is confirmed against START yet, and nothing is adopted. The metric-trust switch (after round 3) has not run.
+- `loop_arm.sh` now runs `sample` under `~/heavy.sh` (the PC's two heavy slots), as the lead asked after the WSL failures.
