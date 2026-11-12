@@ -434,6 +434,8 @@ struct Args {
     std::string meta_mix_params;
     bool no_k5_plan = false;  // §13.39: the planner is on by default under --k5; this turns it off
     std::vector<std::pair<std::string, std::string>> k5_opts;  // docs/reports/K5_UPGRADES.md: every other --k5-... flag
+    std::vector<std::string> given;  // T1 (TUNE_PREDICT.md): every --flag on the command line, so context8k's tuned
+                                     // defaults step aside for any flag given
 };
 
 std::string env_or(const char* name, const char* fallback) {
@@ -446,6 +448,7 @@ Args parse(int argc, char** argv, int from) {
     std::string wiki_flag, dolly_flag;
     for (int i = from; i < argc; ++i) {
         const std::string s = argv[i];
+        if (s.rfind("--", 0) == 0) a.given.push_back(s);
         auto next = [&]() -> const char* { return i + 1 < argc ? argv[++i] : (a.ok = false, ""); };
         if (s == "--wiki") wiki_flag = next();
         else if (s == "--dolly") dolly_flag = next();
@@ -1255,7 +1258,31 @@ struct FullMixRun {
     std::string headline_src() const { return mm ? "meta_mix " + MP.headline : "full_mix " + P.headline; }
 };
 
-int cmd_context8k(const Args& a) {
+// T1 (docs/reports/TUNE_PREDICT.md, GENERATION_PLAN §13.42): context8k's own defaults, tuned on enwik8's first 1.125 MiB
+// (never the standard holdout) and kept by the final pair. Only context8k reads them: qa, sample and chat keep theirs, so
+// answers do not change. A flag given on the command line wins; --full-mix-params and --meta-mix-params given are read
+// after the tuned ones (a key given replaces the tuned key). The pre-T1 line: --bkn 6:4:2:1 --doc cache --lstm-window 20
+// --ngram-cap 60 --ngram-lr 0.005 --ngram-orders 1,2,3,4,5,6,8,12 --full-mix-params lr1=0.001,lr2=0.0005,lrb=0.0002,
+// apm=0.03,eps=1e-6,floor=1e-6,decay=0 --meta-mix-params m1lr1=0.002,m1lr2=-1,m2eta=1,m2share=0.001,m2geta=1,
+// m2gshare=0.001,scales=0.25:0.5:1:2:4.
+constexpr const char* kT1FullMix = "apm=0.0331976,decay=0.0001,eps=2.31807e-05,floor=1.67652e-05,lr1=0.000564081,lr2=0.000150458,lrb=0.00181686";
+constexpr const char* kT1MetaMix = "m1lr1=0.00545053,m1lr2=0.000200209,m2eta=0.340135,m2geta=0.831624,m2gshare=0.00149035,m2share=0.0014615,scales=0.5:1:2";
+Args context8k_tuned(const Args& in) {
+    Args a = in;
+    auto given = [&](const char* f) { return std::find(in.given.begin(), in.given.end(), f) != in.given.end(); };
+    if (!given("--bkn") && !in.no_bkn) a.bkn = "10:4:2:1";
+    if (!given("--doc")) a.doc = "cache,cand=2048";
+    if (!given("--lstm-window")) a.lstm_window = 5;
+    if (!given("--ngram-cap")) a.ngram_cap = 8;
+    if (!given("--ngram-lr")) a.ngram_lr = 0.000625;
+    if (!given("--ngram-orders")) a.ngram_orders = "1,2,3,4,5,6,7,8,12,16";
+    a.full_mix_params = std::string(kT1FullMix) + (in.full_mix_params.empty() ? "" : "," + in.full_mix_params);
+    a.meta_mix_params = std::string(kT1MetaMix) + (in.meta_mix_params.empty() ? "" : "," + in.meta_mix_params);
+    return a;
+}
+
+int cmd_context8k(const Args& a_in) {
+    const Args a = context8k_tuned(a_in);
     // FULL_DISTRIBUTION_MIXING.md: the full mix replays the online chain and final layer, so it runs only where it can
     // replay them; elsewhere it is switched off with one note, and the old command's lines are printed as before.
     bool full_mix = a.full_mix;
