@@ -2844,3 +2844,15 @@ Not a cause: sentence starts (4 of 90 breaks).
 - rating `--no-k5-plan` against T8 and tightening fact fills (cause 2);
 - min-p and a fluency floor in the gate (causes 3–4);
 - later, a vocabulary from the 337 MB (cause 5).
+
+### 13.76 F1, fixing where the writing breaks (registered 2026-11-13, before any arm runs; [K5_FIXES](reports/K5_FIXES.md))
+
+- **Why:** X1 (§13.75) ranked the causes of T8's breaks. This job tries one fix per cause, each a flag in a new header `lm/k5_fixes.hpp`, off by default and byte-identical when off.
+- **Arms** (dev, against T8):
+  - **MP** `--k5-minp 0.1`: words below 0.1 of the top word's probability are cut before the nucleus (cause 3);
+  - **FF** `--k5-ff 1`: drafts more than 1 bit a word less fluent than the best are dropped, then the gate chooses as today (cause 4);
+  - **CJ** `--k5-cj 2`: a clause judge over K5's 337 MB suffix array; the gate keeps the half of the drafts with the fewest weak joins (a restart of the longest training match carried by 2 words or fewer), then chooses as today (cause 1);
+  - **NP** `--no-k5-plan` (cause 2);
+  - **C**, the passing single arms together, if 2 or more pass.
+- **Screen:** verbatim13 0; fact precision at least 0.874 (NP reports it); breaks per 100 words below T8's, marked blind by X1's rule on X1's 30 prompts; my strict reading. At most 2 single candidates, plus C.
+- **Judge:** blind pairwise raters against T8 at 460 characters (`bench/blind/fix_pair`, seed 20261220), §13.38's rule.

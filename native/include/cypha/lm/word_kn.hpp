@@ -69,6 +69,7 @@
 
 #include "cypha/lm/count_index.hpp"  // GENERATION_PLAN §13.40 M1: K5's counts and copy cap
 #include "cypha/lm/entity_grid.hpp"  // K5_DISCOURSE.md
+#include "cypha/lm/k5_fixes.hpp"     // K5_FIXES.md
 #include "cypha/lm/lda.hpp"          // K5_DISCOURSE.md
 #include "cypha/lm/mbr.hpp"          // K5_DISCOURSE.md
 #include "cypha/lm/retrieve.hpp"     // K5_RETRIEVE.md
@@ -1050,6 +1051,7 @@ struct Options {
     // K5_RETRIEVE.md: --k5-retrieve k=N,rel=R|w=L: the n-grams of the N documents of the --k5-more text most related
     // to the prompt (BM25 over K5's ids) join K5's counts for that continuation. k 0 (the default): off.
     retrieve::Params ret;
+    fix::Params fix;  // K5_FIXES.md: --k5-minp, --k5-ff, --k5-cj (all off by default)
     bool zgate() const { return mbr_sent_w != 0 || eg_w != 0 || lda_w != 0; }
     // The settings that differ from K5's, for the MODEL line (empty for K5 itself).
     std::string describe() const {
@@ -1086,6 +1088,7 @@ struct Options {
         if (first_k || first_wp != 0 || first_wl != 0 || first_req)  // K5_FIRST.md
             add("first_k", first_k), add("first_wp", first_wp), add("first_wl", first_wl), add("first_req", first_req);
         if (ret.on()) s += ret.describe();  // K5_RETRIEVE.md
+        s += fix.describe();                // K5_FIXES.md (empty when off)
         return s;
     }
 };
@@ -1130,6 +1133,7 @@ inline bool apply_flag(const std::string& name, const std::string& val, Options&
     if (name == "--k5-cache-decay") return num(o.cache_r, 0.5, 1);
     if (name == "--k5-dyn") return num(o.dyn, 0, 1e6);
     if (name == "--k5-retrieve") return retrieve::parse(val, o.ret, err);  // K5_RETRIEVE.md
+    if (fix::is_flag(name)) return fix::parse(name, val, o.fix, err);       // K5_FIXES.md
     if (name == "--k5-order") return num(x, 2, kMaxOrder) && ((o.order = static_cast<int>(x)), true);
     if (name == "--k5-classes") return num(x, 0, 4096) && ((o.classes = static_cast<std::size_t>(x)), true);
     if (name == "--k5-class-w") return num(o.class_w, 0, 1);
@@ -1986,7 +1990,7 @@ class K5 {
         std::vector<eg::SentRoles> roles(KM);
         std::vector<double> tf(K1 == K0 ? K0 : KM), tp(tf.size()), tm(tf.size()), te(tf.size()), tt(tf.size()), mk(tf.size());
         const bool use_wg = o.gate_wg != 0 && cm_.on();  // K5_DECODE.md
-        std::vector<double> tg;
+        std::vector<double> tg, fflu, fwj;               // fflu, fwj: K5_FIXES.md
         // K5_FIRST.md req: the prompt's content words (content_lower), and per first-sentence draft whether it holds one.
         std::set<std::string> pcw;
         std::vector<char> hit;
@@ -2036,6 +2040,10 @@ class K5 {
                 const double nb = static_cast<double>(std::max<std::size_t>(c.out.size() - b0, 1)), n = static_cast<double>(std::max<std::size_t>(nw, 1));
                 tf[k] = slp / n, tp[k] = spmi / n, tt[k] = stop / n, mk[k] = static_cast<double>(m) / nb;
                 if (use_wg) tg[k] = sg / n;  // K5_DECODE.md
+                if (o.fix.gate_on()) {       // K5_FIXES.md: FF's raw fluency, CJ's weak joins
+                    fflu.resize(K), fwj.resize(K), fflu[k] = tf[k];
+                    if (o.fix.cj >= 0) fwj[k] = fix::weak_joins(kn_.index(), c.ctx.data(), c.ctx.size(), nw, o.fix.cj, kUnk);
+                }
                 text[k] = c.out.substr(b0);
                 if (use_eg) {
                     roles[k] = eg_.roles(toks);
@@ -2051,8 +2059,10 @@ class K5 {
             const double xp = sent == 0 ? o.first_wp : 0.0, xl = sent == 0 ? o.first_wl : 0.0;  // K5_FIRST.md
             const bool any = req && std::find(hit.begin(), hit.end(), char{1}) != hit.end();
             bool have = false;
+            const std::vector<char> fok = o.fix.gate_on() ? fix::allowed(o.fix, fflu, fwj) : std::vector<char>{};  // K5_FIXES.md
             for (std::size_t k = 0; k < K; ++k) {
                 if (any && !hit[k]) continue;  // K5_FIRST.md req
+                if (!fok.empty() && !fok[k]) continue;  // K5_FIXES.md: FF, CJ
                 double score = o.gate_wf * tf[k] + o.gate_wp * tp[k] + o.mbr_sent_w * tm[k] + o.eg_w * te[k] + o.lda_w * tt[k] - o.gate_wm * mk[k];
                 if (xp != 0 || xl != 0) score += xp * tp[k] + xl * tt[k];
                 if (use_wg) score += o.gate_wg * tg[k];  // K5_DECODE.md
@@ -2186,6 +2196,13 @@ class K5 {
             double zk = 0;
             for (std::size_t i = 0; i < nc; ++i)
                 if (!rb[i] && !cb[i]) kept.push_back(static_cast<std::uint32_t>(i)), zk += p[cand[i]];
+            if (o.fix.minp > 0) {  // K5_FIXES.md MP: below P x the top word's P (before temperature) goes
+                const double cut = std::pow(o.fix.minp, 1.0 / o.temperature) * p[cand[0]];
+                std::size_t m = 1;
+                while (m < kept.size() && p[cand[kept[m]]] >= cut) ++m;
+                kept.resize(m), zk = 0;
+                for (const std::uint32_t i : kept) zk += p[cand[i]];
+            }
             // Nucleus over the kept words, then one draw (numpy's choice: the first cdf entry above u).
             std::size_t k = 0;
             double c2 = 0;
@@ -2260,7 +2277,7 @@ class K5 {
     // temperature 1. K5_RETRIEVE.md: with the retrieved documents' overlay, q is model_dist's (the same choice rule
     // on that distribution; full_pick's sort is what made the overlay slow).
     bool fast_applies(const State& s, const Options& o) const {
-        return fast_ && o.temperature == 1.0 && o.dyn <= 0 && o.cache_w <= 0 && o.cache_w2 <= 0 && !(cm_.on() && o.class_mode != 1) && !s.topic_mult;
+        return fast_ && o.temperature == 1.0 && o.fix.minp <= 0 && o.dyn <= 0 && o.cache_w <= 0 && o.cache_w2 <= 0 && !(cm_.on() && o.class_mode != 1) && !s.topic_mult;
     }
     // q[x] for x in [2, V): the floor times the walk's gammas g[0..ng), rounded after each product as dist rounds it.
     template <bool On, int NG>
@@ -3033,6 +3050,7 @@ inline bool self_test(std::string& err) {
             return false;
         }
     }
+    if (!fix::self_test<cidx::CountIndex<std::uint32_t>>(err)) return false;  // K5_FIXES.md
     // K5_UPGRADES.md: the flags, the online parts, orders 6 and 7, the classes and the gate.
     {
         Options o;

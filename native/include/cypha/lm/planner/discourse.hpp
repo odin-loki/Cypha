@@ -646,6 +646,7 @@ class DiscourseWriter final : public wkn::StructureWriter {
         const int K = static_cast<int>(drafts.size());
         std::vector<double> pmi(static_cast<std::size_t>(K)), topic(pmi.size()), grid(pmi.size()), mk(pmi.size()), rec(pmi.size());
         std::vector<double> flu(pmi.size()), gram(pmi.size());  // K5_DECODE.md
+        std::vector<double> fflu(pmi.size()), fwj(pmi.size());  // K5_FIXES.md
         std::vector<double> ar;  // K5_COHERENCE.md (--k5-gate K,wr=W): the association with the previous sentence
         if (o.gate_wr != 0 && !c.sents.empty()) {
             std::vector<std::uint32_t> prev;
@@ -668,21 +669,28 @@ class DiscourseWriter final : public wkn::StructureWriter {
             for (const auto w : words) toks[ku].push_back(m.vocab()[w]);
             topic[ku] = tok_topic(toks[ku], c.theta);
             if (o.gate_wf != 0 || o.gate_wg != 0) fluency_terms(m, o, drafts[ku], words, lp, flu, gram, ku);  // K5_DECODE.md
+            if (o.fix.gate_on()) {  // K5_FIXES.md: FF's raw fluency, CJ's weak joins
+                fflu[ku] = wkn::fix::mean(lp);
+                const auto& cx = drafts[ku].ctx;
+                if (o.fix.cj >= 0) fwj[ku] = wkn::fix::weak_joins(m.kn().index(), cx.data(), cx.size(), words.size(), o.fix.cj, wkn::kUnk);
+            }
             grid[ku] = md.grid.trained() ? md.grid.append_logp(c.grid, md.grid.roles(toks[ku])) : 0.0;
         }
         const auto zp = zscores(pmi), zt = zscores(topic), zg = zscores(grid);
         const auto zr = ar.empty() ? std::vector<double>{} : zscores(rec);
         const auto zf = o.gate_wf != 0 ? zscores(flu) : std::vector<double>{};  // K5_DECODE.md
         const auto zgr = o.gate_wg != 0 ? zscores(gram) : std::vector<double>{};
-        int best = 0;
+        int best = -1;  // K5_FIXES.md: -1 until a draft is allowed (was 0 with k == 0 below; the same choice when off)
         double bsc = -1e300;
+        const std::vector<char> fok = o.fix.gate_on() ? wkn::fix::allowed(o.fix, fflu, fwj) : std::vector<char>{};  // K5_FIXES.md
         for (int k = 0; k < K; ++k) {
             const auto ku = static_cast<std::size_t>(k);
+            if (!fok.empty() && !fok[ku]) continue;  // K5_FIXES.md: FF, CJ
             double sc = p_.g_pmi * zp[ku] + p_.g_topic * zt[ku] + p_.g_grid * zg[ku] - o.gate_wm * mk[ku];
             if (!ar.empty()) sc += o.gate_wr * zr[ku];  // K5_COHERENCE.md
             if (!zf.empty()) sc += o.gate_wf * zf[ku];   // K5_DECODE.md
             if (!zgr.empty()) sc += o.gate_wg * zgr[ku];
-            if (k == 0 || sc > bsc) bsc = sc, best = k;
+            if (best < 0 || sc > bsc) bsc = sc, best = k;
         }
         const auto bu = static_cast<std::size_t>(best);
         g.add(gs[bu]);
