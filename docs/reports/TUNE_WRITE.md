@@ -113,3 +113,19 @@ Wall times are on a shared PC, two arms at once.
 - DG2 and DH4 within ±0.02, fewer than 80 samples changed: DH4 **hit**; DG2 **miss** on SCRIBE (−0.022), **hit** on samples (61);
 - peak RAM within 11.3 ± 1 GB: **hit** for all.
 - The raters' predictions (O6 about 0.60; the best of nucleus and temperature about 0.55) wait for the raters.
+
+## Raters (2026-11-12)
+
+Four fresh blind raters, 50 prompts, packets and key committed first (7e401c7a). `blind_rate.py score --dir bench/blind/tw_pair --baseline W1b`:
+
+| Arm | Win share against W1b [95%] | Rater pairs | Rule |
+|---|---|---|---|
+| G16 | **0.670 [0.570, 0.770]** | 0.66, 0.68 | reads better |
+| N7 | **0.670 [0.560, 0.770]** | 0.64, 0.70 | reads better |
+| O6 | 0.580 [0.460, 0.690] | 0.58, 0.58 | no difference |
+
+- **Predictions:** O6 about 0.60: **hit** (0.58, not significant); the nucleus arm about 0.55 with the interval touching 0.5: **miss** in the good direction (0.670); G16 about even: **miss** (0.670).
+- **A tie the rule did not foresee.** G16 and N7 have the same share. Registered now, before any further run, so the choice is not made after seeing more data:
+  - **Tie-break:** the higher lower bound of the interval, then the lower copy32. G16 wins both (0.570 against 0.560; copy32 0.241 against 0.289), and it does not reshape K5's distribution. **G16 becomes the default** (`--k5-gate 16`), and GEN-A test is read once for it.
+  - **NG**, a new arm: N7 + G16 (`--k5-nucleus 0.7 --k5-gate 16`), not tried before (TC held O6 too and failed on copy32). It is screened on dev by the same rule. If it passes, raters compare it against G16, the new default, on the same 50 prompts with four fresh raters. It becomes the default only if it reads better by the §13.38 rule; then GEN-A test is read once for it.
+  - **Prediction for NG:** copy32 about 0.29 (N7's); against G16, a win share of 0.55–0.60, interval touching 0.5.
