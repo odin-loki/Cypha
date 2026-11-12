@@ -993,6 +993,10 @@ struct Options {
     double class_w = 0.1;                              // --k5-class-w W (mix)
     int gate_k = 16;                                   // GENERATION_PLAN §13.51 (TUNE_WRITE G16; was 8, K5_UPGRADES step 4): --k5-gate K[,wf=..][,wp=..][,wm=..][,min=..][,max=..] (1: off)
     double gate_wf = 0, gate_wp = 1, gate_wm = 5;
+    // K5_COHERENCE.md: --k5-gate K,wr=W adds W x a draft's mean association with the previous sentence (the prompt's
+    // last sentence for the first draft), the same PPMI as wp's prompt term. 0 (the default): off, nothing computed.
+    // Read by the plain gate and by the discourse writer's free sentences (z-scored there, as its other terms).
+    double gate_wr = 0;
     std::size_t gate_min = 24, gate_max = 240;
     // K5_STRUCTURE.md: --k5-struct FILE (cyphalm_trie loads it); null: K5's own gate. desc goes on the MODEL line.
     std::shared_ptr<const StructureWriter> structure;
@@ -1039,6 +1043,7 @@ struct Options {
             add("classes", static_cast<double>(classes)), add(class_mode == 2 ? "class_mix" : "class_backoff", class_mode == 2 ? class_w : 1);
         if (gate_k != d.gate_k || gate_wf != d.gate_wf || gate_wp != d.gate_wp || gate_wm != d.gate_wm || gate_min != d.gate_min || gate_max != d.gate_max)
             add("gate", gate_k > 1 ? gate_k : 0), add("wf", gate_wf), add("wp", gate_wp), add("wm", gate_wm);
+        if (gate_wr != 0) add("wr", gate_wr);  // K5_COHERENCE.md
         if (structure) s += "\tstruct=" + structure_desc;  // K5_STRUCTURE.md
         // K5_DISCOURSE.md
         if (mbr_sent_w != 0) add("mbr_sent", mbr_sent_w);
@@ -1153,6 +1158,7 @@ inline bool apply_flag(const std::string& name, const std::string& val, Options&
                 if (k == "wf") o.gate_wf = v;
                 else if (k == "wp") o.gate_wp = v;
                 else if (k == "wm") o.gate_wm = v;
+                else if (k == "wr") o.gate_wr = v;  // K5_COHERENCE.md
                 else if (k == "min") o.gate_min = static_cast<std::size_t>(v);
                 else if (k == "max") o.gate_max = static_cast<std::size_t>(v);
                 else return err = name + ": unknown field " + k, false;
@@ -1591,6 +1597,18 @@ class K5 {
         return a;
     }
 
+    // K5_COHERENCE.md: the last sentence of ids (from after the last ., !, ? or newline that is not ids' final token).
+    std::vector<std::uint32_t> last_sentence(const std::vector<std::uint32_t>& ids) const {
+        const auto stop = [&](std::uint32_t w) {
+            const std::string& t = vocab_[w];
+            return t == "." || t == "!" || t == "?" || t == "\n";
+        };
+        std::size_t j = ids.size();
+        if (j > 0 && stop(ids[j - 1])) --j;
+        while (j > 0 && !stop(ids[j - 1])) --j;
+        return std::vector<std::uint32_t>(ids.begin() + static_cast<std::ptrdiff_t>(j), ids.end());
+    }
+
     // fuzzy_bake.py generate_one: the continuation of prompt, seeded with seed. With o.gate_k > 1, the sentence gate.
     std::string generate(std::string_view prompt, std::uint64_t seed, const Options& o, GenStats* st = nullptr) const {
         if (o.structure) return o.structure->generate(*this, prompt, seed, o, st);  // K5_STRUCTURE.md
@@ -1616,23 +1634,29 @@ class K5 {
             // The sentence gate: K candidates from the same state, each with its own stream; the best by CyphaLM's
             // own score is kept.
             const std::vector<double> assoc = o.gate_wp != 0 ? prompt_assoc(s.ctx) : std::vector<double>{};
+            const bool use_wr = o.gate_wr != 0;  // K5_COHERENCE.md
+            std::vector<std::uint32_t> recent, cw, bw;
+            if (use_wr) recent = last_sentence(s.ctx);
             for (std::uint64_t sent = 0; s.step < o.max_words && s.out.size() < o.bytes; ++sent) {
                 State best;
                 GenStats bg;
                 double bscore = 0;
+                const std::vector<double> ar = use_wr ? prompt_assoc(recent) : std::vector<double>{};
                 for (int k = 0; k < o.gate_k; ++k) {
                     State c = s;
                     GenStats gk;
                     const std::uint64_t cs = mix64(seed ^ mix64(0x6A7E000000ull + sent * 256 + static_cast<std::uint64_t>(k)));
                     std::mt19937_64 rng(cs);
                     const std::size_t b0 = c.out.size();
-                    double slp = 0, spmi = 0;
+                    double slp = 0, spmi = 0, srec = 0;
                     std::size_t nw = 0;
+                    if (use_wr) cw.clear();
                     while (c.step < o.max_words && c.out.size() < o.bytes) {
                         const std::uint64_t salt = mix64(cs ^ mix64(static_cast<std::uint64_t>(c.step) + 0x5EED));
                         double lp = 0;
                         const std::uint32_t w = step_word(c, rng, salt, o, gk, nullptr, sc, &lp);
                         slp += lp, spmi += assoc.empty() ? 0.0 : assoc[w], ++nw;
+                        if (use_wr) srec += ar[w], cw.push_back(w);
                         const std::size_t nb = c.out.size() - b0;
                         const std::string& t = vocab_[w];
                         if (nb >= o.gate_max) break;
@@ -1641,10 +1665,15 @@ class K5 {
                     std::size_t mk = 0;
                     for (std::size_t i = b0; i < c.out.size(); ++i) mk += std::string_view("[]{}|=<>&*#").find(c.out[i]) != std::string_view::npos;
                     const double nb = static_cast<double>(std::max<std::size_t>(c.out.size() - b0, 1)), n = static_cast<double>(std::max<std::size_t>(nw, 1));
-                    const double score = o.gate_wf * slp / n + o.gate_wp * spmi / n - o.gate_wm * static_cast<double>(mk) / nb;
+                    double score = o.gate_wf * slp / n + o.gate_wp * spmi / n - o.gate_wm * static_cast<double>(mk) / nb;
+                    if (use_wr) score += o.gate_wr * srec / n;  // K5_COHERENCE.md
                     ++g.gate_cands;
-                    if (k == 0 || score > bscore) bscore = score, best = std::move(c), bg = gk;
+                    if (k == 0 || score > bscore) {
+                        bscore = score, best = std::move(c), bg = gk;
+                        if (use_wr) bw = cw;
+                    }
                 }
+                if (use_wr) recent = bw;
                 s = std::move(best);
                 g.add(bg);
                 ++g.gate_sents;
@@ -2847,7 +2876,8 @@ inline bool self_test(std::string& err) {
         if (!apply_flag("--k5-base", "k5", v1, e) || v1.nucleus != 0.9 || v1.classes != 0 || v1.gate_k != 0 ||
             !apply_flag("--k5-gate", "4,wf=1,wp=0.5,wm=5", o, e) || o.gate_k != 4 || o.gate_wp != 0.5 || !apply_flag("--k5-cache", "0.1", o, e) ||
             apply_flag("--k5-nucleus", "1.5", o, e) || apply_flag("--k5-bogus", "1", o, e) || !apply_flag("--k5-class-mode", "mix", o, e) ||
-            o.class_mode != 2 || Options{}.describe() != "") {
+            o.class_mode != 2 || Options{}.describe() != "" || Options{}.gate_wr != 0 || !apply_flag("--k5-gate", "16,wr=1.5", o, e) ||
+            o.gate_wr != 1.5 || o.gate_k != 16) {  // K5_COHERENCE.md: wr parses, off by default
             err = "apply_flag";
             return false;
         }

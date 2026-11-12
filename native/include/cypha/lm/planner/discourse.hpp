@@ -628,7 +628,13 @@ class DiscourseWriter final : public wkn::StructureWriter {
                        const std::vector<double>& assoc, std::vector<wkn::K5::State>& drafts, wkn::GenStats& g) const {
         const Model& md = *md_;
         const int K = static_cast<int>(drafts.size());
-        std::vector<double> pmi(static_cast<std::size_t>(K)), topic(pmi.size()), grid(pmi.size()), mk(pmi.size());
+        std::vector<double> pmi(static_cast<std::size_t>(K)), topic(pmi.size()), grid(pmi.size()), mk(pmi.size()), rec(pmi.size());
+        std::vector<double> ar;  // K5_COHERENCE.md (--k5-gate K,wr=W): the association with the previous sentence
+        if (o.gate_wr != 0 && !c.sents.empty()) {
+            std::vector<std::uint32_t> prev;
+            for (const auto& t : c.sents.back().tok) prev.push_back(m.id(t));
+            ar = m.prompt_assoc(prev);
+        }
         std::vector<std::vector<std::string>> toks(pmi.size());
         std::vector<wkn::GenStats> gs(pmi.size());
         std::vector<std::uint32_t> words;
@@ -641,16 +647,19 @@ class DiscourseWriter final : public wkn::StructureWriter {
             for (std::size_t i = s.out.size(); i < out.size(); ++i) nm += std::string_view("[]{}|=<>&*#").find(out[i]) != std::string_view::npos;
             mk[ku] = static_cast<double>(nm) / static_cast<double>(std::max<std::size_t>(out.size() - s.out.size(), 1));
             pmi[ku] = st::mean_assoc(assoc, words);
+            if (!ar.empty()) rec[ku] = st::mean_assoc(ar, words);
             for (const auto w : words) toks[ku].push_back(m.vocab()[w]);
             topic[ku] = tok_topic(toks[ku], c.theta);
             grid[ku] = md.grid.trained() ? md.grid.append_logp(c.grid, md.grid.roles(toks[ku])) : 0.0;
         }
         const auto zp = zscores(pmi), zt = zscores(topic), zg = zscores(grid);
+        const auto zr = ar.empty() ? std::vector<double>{} : zscores(rec);
         int best = 0;
         double bsc = -1e300;
         for (int k = 0; k < K; ++k) {
             const auto ku = static_cast<std::size_t>(k);
-            const double sc = p_.g_pmi * zp[ku] + p_.g_topic * zt[ku] + p_.g_grid * zg[ku] - o.gate_wm * mk[ku];
+            double sc = p_.g_pmi * zp[ku] + p_.g_topic * zt[ku] + p_.g_grid * zg[ku] - o.gate_wm * mk[ku];
+            if (!ar.empty()) sc += o.gate_wr * zr[ku];  // K5_COHERENCE.md
             if (k == 0 || sc > bsc) bsc = sc, best = k;
         }
         const auto bu = static_cast<std::size_t>(best);
