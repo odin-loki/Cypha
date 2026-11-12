@@ -278,6 +278,7 @@
 #include "cypha/lm/copy_expert.hpp"
 #include "cypha/lm/doc_cache.hpp"
 #include "cypha/knowledge/evidence.hpp"
+#include "cypha/lm/expert_pipeline.hpp"  // OPT_PIPELINE.md: context8k's experts ahead of the mixers
 #include "cypha/lm/fm_infinigram.hpp"
 #include "cypha/lm/packed_trie.hpp"
 #include "cypha/lm/similar_context.hpp"
@@ -431,6 +432,10 @@ struct Args {
     // them off), --meta-mix-params k=v,...; meta_mix_asked: --meta-mix or --meta-mix-params was given
     bool meta_mix = true, meta_mix_asked = false;
     std::string meta_mix_params;
+    // OPT_PIPELINE.md (GENERATION_PLAN §13.41 O2): context8k computes its experts in their own threads, ahead of the
+    // mixers, with the same output; N is the full mix's ring of row blocks. --no-pipeline runs every expert in place,
+    // in the old order (the full mix keeps its two blocks).
+    int pipeline = 4;
     bool no_k5_plan = false;  // §13.39: the planner is on by default under --k5; this turns it off
     std::vector<std::pair<std::string, std::string>> k5_opts;  // docs/reports/K5_UPGRADES.md: every other --k5-... flag
 };
@@ -531,6 +536,8 @@ Args parse(int argc, char** argv, int from) {
         else if (s == "--meta-mix") a.meta_mix = a.meta_mix_asked = true;  // META_MIXING.md (the default)
         else if (s == "--no-meta-mix") a.meta_mix = false;                // META_MIXING.md: the full mix's lines only
         else if (s == "--meta-mix-params") a.meta_mix_params = next(), a.meta_mix = a.meta_mix_asked = true;
+        else if (s == "--pipeline") a.pipeline = std::max(2, std::atoi(next()));  // OPT_PIPELINE.md
+        else if (s == "--no-pipeline") a.pipeline = 0;                           // OPT_PIPELINE.md: the old order
         else if (s == "--ngram") a.ngram = true;                        // ONLINE_LEARNING_UPGRADES
         else if (s == "--no-ngram") a.ngram = false;                    // ONLINE_LEARNING_UPGRADES: B0's lines
         else if (s == "--ngram-orders") a.ngram_orders = next(), a.ngram = true;
@@ -950,10 +957,81 @@ std::vector<double> mix_plan_into(const ContentPlanStore& st, const std::map<std
 // turns it off). Every expert's whole next-byte distribution for every holdout byte, streamed into
 // cypha::online::fullmix::FullMixer, which replays the online chain and final layer on whole distributions (checked
 // against the chain) and runs the PAQ-style arms. The n-gram's and the LSTM's byte loops run inside this one (run()), on
-// the chain's own instances, so each is computed once. Rows come in blocks: producer threads compute block b + 1 (the
-// static experts split over kStatic threads; similar-context, the LSTM and the n-gram each on one thread, in order)
-// while the main thread mixes block b. Every value is computed by the same code in the same order as before, so the
-// output is the same to the last bit.
+// the chain's own instances, so each is computed once. Every value is computed by the same code in the same order as
+// before, so the output is the same to the last bit.
+// OPT_PIPELINE.md (§13.41 O2): the rows come through a ring of `slots` blocks (cypha/lm/expert_pipeline.hpp). The
+// static experts (nstatic producers, each a fixed part of every block; with the pipeline one, which also reads the
+// document experts' stream over every row of the block), the LSTM and the n-gram each fill their part of a block as
+// soon as its slot is free, and run up to `slots` blocks ahead of the mixer's thread, which mixes the blocks in order.
+// The similar-context expert's rows are read from its one pass over the holdout (the chain's), and the document
+// experts' from a fresh stream over the chain's tables.
+// The meta mixer only reads what the full mix hands its hook (META_MIXING.md: a read-only hook), so with the pipeline
+// on, MetaRelay copies each byte's hand-over into a ring and the meta mixer reads the copies on its own thread, in the
+// same order: the same calls with the same numbers.
+struct MetaRelay final : cypha::online::fullmix::StepHook {
+    static constexpr int kMaxL = 49, kMaxX = 50;  // FullMixer's kMax + 1 inputs of B, kMax + 2 of the bitwise mixer
+    struct Rec {
+        cypha::online::fullmix::ByteIn in;
+        int nL = 0, g = 0, nb = 0, lstm_at = -1, nbit = 0;
+        const double* L[kMaxL] = {};
+        double Ld[kMaxL][256];
+        double PB[256];
+        double bits[kMaxL][8];
+        struct Bit {
+            int j = 0, bit = 0, nxa = 0;
+            unsigned c0 = 0;
+            int ctx[4] = {};
+            double xa[kMaxX];
+            double arm[7];
+        } b[8];
+        unsigned y = 0;
+        std::size_t k = 0;
+    };
+    cypha::online::fullmix::StepHook* to;
+    cypha::cyphalm::pipeline::SpscRing<Rec> ring;
+    Rec* w = nullptr;
+    MetaRelay(cypha::online::fullmix::StepHook* t, std::size_t n) : to(t), ring(n) {}
+    void byte_begin(const cypha::online::fullmix::ByteIn& in, const double* const* L, int nL, int g, const double* PB,
+                    const double (*bits)[8], int nb, int lstm_at) override {
+        w = &ring.write_slot();
+        w->in = in;  // the meta mixer reads only its scalars; its pointers are cleared, so none can be read late
+        for (auto& p : w->in.trie) p = nullptr;
+        for (auto& p : w->in.ig) p = nullptr;
+        for (auto& p : w->in.doc) p = nullptr;
+        w->in.kn = w->in.cls = w->in.sim = w->in.lstm = w->in.ngram = w->in.ngram_o = nullptr;
+        w->nL = std::min(nL, kMaxL), w->g = g, w->nb = std::min(nb, kMaxL), w->lstm_at = lstm_at, w->nbit = 0;
+        for (int j = 0; j < w->nL; ++j) {
+            w->L[j] = L[j] ? w->Ld[j] : nullptr;
+            if (L[j]) std::memcpy(w->Ld[j], L[j], sizeof w->Ld[j]);
+        }
+        std::memcpy(w->PB, PB, sizeof w->PB);
+        for (int j = 0; j < w->nb; ++j) std::memcpy(w->bits[j], bits[j], sizeof w->bits[j]);
+    }
+    void bit(int j, int bit, unsigned c0, const double* xa, int nxa, const int* ctx, const double* arm) override {
+        auto& b = w->b[w->nbit++];
+        b.j = j, b.bit = bit, b.c0 = c0, b.nxa = std::min(nxa, kMaxX);
+        std::memcpy(b.xa, xa, sizeof(double) * static_cast<std::size_t>(b.nxa));
+        std::memcpy(b.ctx, ctx, sizeof b.ctx);
+        std::memcpy(b.arm, arm, sizeof b.arm);
+    }
+    void byte_end(unsigned y, std::size_t k) override {
+        w->y = y, w->k = k;
+        ring.commit();
+    }
+    /// The meta mixer's thread: every byte, in order, until the full mix closes the ring.
+    void drain() {
+        while (Rec* r = ring.read_slot()) {
+            to->byte_begin(r->in, r->L, r->nL, r->g, r->PB, r->bits, r->nb, r->lstm_at);
+            for (int i = 0; i < r->nbit; ++i) {
+                const auto& b = r->b[i];
+                to->bit(b.j, b.bit, b.c0, b.xa, b.nxa, b.ctx, b.arm);
+            }
+            to->byte_end(r->y, r->k);
+            ring.release();
+        }
+    }
+};
+
 struct FullMixRun {
     static constexpr std::size_t kBlock = 512;
     static constexpr int kStatic = 3;
@@ -966,41 +1044,45 @@ struct FullMixRun {
     const FmInfiniGram& ig;
     const ClassContext* cc;
     std::vector<double> doc_lam;
-    const std::vector<float>* snap3;
-    std::unique_ptr<SimilarContext> sc;
-    std::unique_ptr<DocTopic> dt;
+    const std::vector<std::vector<float>>* snaps;      // the chain's snapshots; finish() reads the one after copy
+    const cypha::cyphalm::pipeline::SparseRows* sim;  // OPT_PIPELINE.md: the similar-context expert's distributions ...
+    const std::vector<int>* sim_b;                     // ... and buckets, from its one pass (nullptr: --no-sim)
+    const DocTopic* dt;                                // the chain's document experts (nullptr: --no-doc)
+    std::size_t slots;                                 // the ring's blocks (2: the old double buffer)
+    cypha::cyphalm::pipeline::Progress* sim_ready = nullptr;  // rows of sim done (nullptr: all are)
+    bool relay_meta = false;                                  // the meta mixer on its own thread (MetaRelay)
+    // OPT_PIPELINE.md: the static producers (each a fixed part of every block's rows; kStatic before, 1 with the
+    // pipeline: they are busy a quarter of the time), and the document experts' stream as a producer (the first static
+    // producer reads every row of a block, in order, after its own rows) instead of in the mixer's thread.
+    int nstatic = kStatic;
+    bool doc_ahead = false;
     cypha::online::fullmix::Params P;
     std::unique_ptr<cypha::online::fullmix::FullMixer> fm;
     cypha::online::metamix::Params MP;                    // META_MIXING.md: --meta-mix
     std::unique_ptr<cypha::online::metamix::MetaMixer> mm;
     int mhead = -1;
     int head = -1;
-    std::vector<double> chain_y;
-    double maxd3 = 0, maxng = 0, t_static = 0, t_sim = 0, t_lstm = 0, t_ng = 0, t_main = 0, t_wait = 0, seconds = 0;
+    std::vector<double> chain_y, snap3_y;
+    double maxng = 0, t_static = 0, t_lstm = 0, t_ng = 0, t_main = 0, t_wait = 0, t_pwait = 0, t_simwait = 0, seconds = 0;
+    double t_meta_wait = 0, t_relay_wait = 0, t_doc = 0;
 
     struct Block {
-        std::size_t k0 = 0, n = 0;
         int O = 0;
-        std::vector<double> trie, kn, ig, cls, sim, lstm, ng, ngo;
+        std::vector<double> trie, kn, ig, cls, lstm, ng, ngo, doc;
         std::vector<std::uint8_t> em, pred, ig_has;
-        std::vector<int> kn_b, ig_b, ig_n, cls_b, sim_b, cpred, cn;
-        void size(int orders) {
+        std::vector<int> kn_b, ig_b, ig_n, cls_b, cpred, cn, doc_b;
+        void size(int orders, bool docs) {
             O = orders;
             const std::size_t B = kBlock;
             trie.assign(B * 5 * 256, 0), kn.assign(B * 256, 0), ig.assign(B * 5 * 256, 0), cls.assign(B * 256, 0);
-            sim.assign(B * 256, 0), lstm.assign(B * 256, 0), ng.assign(B * 256, 0), ngo.assign(B * std::max(O, 1) * 256, 0);
+            lstm.assign(B * 256, 0), ng.assign(B * 256, 0), ngo.assign(B * std::max(O, 1) * 256, 0);
+            if (docs) doc.assign(B * 3 * 256, 0), doc_b.assign(B * 3, 0);
             em.assign(B, 0), pred.assign(B, 0), ig_has.assign(B, 0);
-            for (auto* v : {&kn_b, &ig_b, &ig_n, &cls_b, &sim_b, &cpred, &cn}) v->assign(B, 0);
+            for (auto* v : {&kn_b, &ig_b, &ig_n, &cls_b, &cpred, &cn}) v->assign(B, 0);
         }
     };
 
-    // The similar-context expert is built again: it learns online keys as it reads, so the chain's instance (which has
-    // read the whole holdout) would see the future. The document cache gets a fresh stream over the chain's tables.
     int init() {
-        int rc = 0;
-        sc = default_sim(a, data.data(), kTrain, rc);
-        if (rc) return rc;
-        if (!a.no_doc && !(dt = make_doc(a.doc.empty() ? std::string("cache") : a.doc, data.data(), kTrain, rc))) return rc ? rc : 1;
         if (!P.parse(a.full_mix_params)) {
             std::cerr << "--full-mix-params k=v,... (lr1 lr2 lrb apm eps floor decay ssef a2bits headline)\n";
             return 2;
@@ -1014,12 +1096,13 @@ struct FullMixRun {
         return 0;
     }
 
-    void static_rows(Block& b, std::size_t r0, std::size_t r1) const {
+    // Rows [r0, r1) of the block whose first holdout byte is k0.
+    void static_rows(Block& b, std::size_t k0, std::size_t r0, std::size_t r1) const {
         static const int caps[5] = {4, 16, 64, 512, 8192};
         FmInfiniGram::Cursor cur[5];
         int prev[5] = {-1, -1, -1, -1, -1};
         for (std::size_t r = r0; r < r1; ++r) {
-            const std::size_t i = kTrain + b.k0 + r;
+            const std::size_t i = kTrain + k0 + r;
             bool em = false;
             unsigned pred = 0;
             pm.fill_experts(data.data(), i, kTrain, Mode::Synth, reinterpret_cast<double(*)[256]>(&b.trie[r * 1280]), em, pred, false);
@@ -1054,9 +1137,10 @@ struct FullMixRun {
     int run(LSTM* L, cypha::online::OnlineNgram* ng, std::vector<double>& plstm, double& lb, std::vector<double>& pngram,
             std::vector<std::vector<float>>& pngram_o, double& nb) {
         namespace fx = cypha::online::fullmix;
+        namespace pl = cypha::cyphalm::pipeline;
         const auto t0 = std::chrono::steady_clock::now();
         fx::ChainSpec cs;
-        cs.kn = kn != nullptr, cs.cls = cc != nullptr, cs.sim = sc != nullptr, cs.copy = !a.no_copy, cs.doc = dt != nullptr;
+        cs.kn = kn != nullptr, cs.cls = cc != nullptr, cs.sim = sim != nullptr, cs.copy = !a.no_copy, cs.doc = dt != nullptr;
         cs.lstm = L != nullptr, cs.two_rates = a.two_rates, cs.final_gate = a.final_gate;
         cs.kn_buckets = kn ? kn->buckets() : 1, cs.ig_buckets = kBuckets, cs.cls_buckets = ClassContext::kBuckets;
         cs.sim_buckets = SimilarContext::kBuckets, cs.copy_buckets = kCopyBuckets, cs.doc_buckets = DocTopic::kBuckets;
@@ -1074,10 +1158,18 @@ struct FullMixRun {
             std::cerr << "--full-mix-params headline=ARM (F Fn Fs A As Rs B Bs ABs)\n";
             return 2;
         }
+        std::unique_ptr<MetaRelay> relay;
+        std::thread meta_th;
         if (a.meta_mix) {  // META_MIXING.md: a read-only hook; the full mix's arms are unchanged
             mm = std::make_unique<cypha::online::metamix::MetaMixer>(cs, P, MP, half);
             mhead = mm->arm(MP.headline);
-            fm->set_hook(mm.get());
+            if (relay_meta) {  // OPT_PIPELINE.md: the meta mixer reads copies of the hand-over on its own thread
+                relay = std::make_unique<MetaRelay>(mm.get(), 128);
+                fm->set_hook(relay.get());
+                meta_th = std::thread([&] { relay->drain(); });
+            } else {
+                fm->set_hook(mm.get());
+            }
         }
         std::ofstream df;
         if (!a.full_mix_dump.empty()) {
@@ -1096,60 +1188,100 @@ struct FullMixRun {
         if (L) plstm.resize(H);
         if (ng) pngram.resize(H), pngram_o.assign(static_cast<std::size_t>(O), std::vector<float>(H));
         chain_y.assign(H, 0.0);
+        snap3_y.assign(H, 0.0);
         std::unique_ptr<DocTopic::Stream> ds;
         if (dt) ds = std::make_unique<DocTopic::Stream>(*dt);
         using clk = std::chrono::steady_clock;
         auto secs = [](clk::time_point s) { return std::chrono::duration<double>(clk::now() - s).count(); };
-        double ts[kStatic] = {}, tsim = 0, tl = 0, tn = 0;
-        // Producers: block b's rows, every value as the chain computes it.
-        auto produce = [&](Block* bp, std::vector<std::thread>& th) {
-            for (int t = 0; t < kStatic; ++t)
-                th.emplace_back([&, bp, t] {
-                    const auto s = clk::now();
-                    static_rows(*bp, bp->n * t / kStatic, bp->n * (t + 1) / kStatic);
+        const std::size_t nblk = (H + kBlock - 1) / kBlock;
+        auto rows_of = [&](std::size_t b) { return std::min(kBlock, H - b * kBlock); };
+        const bool docp = ds && doc_ahead;  // the document stream in the first static producer (OPT_PIPELINE.md)
+        std::vector<Block> buf(slots);
+        for (auto& b : buf) b.size(O, docp);
+        const int ns = std::clamp(nstatic, 1, kStatic);
+        const int roles = ns + (L ? 1 : 0) + (ng ? 1 : 0);
+        pl::BlockRing ring(slots, roles);
+        double ts[kStatic] = {}, tl = 0, tn = 0, td = 0;
+        std::vector<std::thread> th;
+        // Producers: every value as the chain computes it; each role fills its own part of a block, in block order.
+        // FmInfiniGram's cursors and hints cost time, never a different answer (fm_infinigram.hpp), so how the rows are
+        // split between the static producers changes nothing.
+        for (int t = 0; t < ns; ++t)
+            th.emplace_back([&, t] {
+                for (std::size_t b = 0; b < nblk && ring.acquire(t, b); ++b) {
+                    auto s = clk::now();
+                    const std::size_t n = rows_of(b);
+                    Block& B = buf[ring.slot(b)];
+                    static_rows(B, b * kBlock, n * static_cast<std::size_t>(t) / static_cast<std::size_t>(ns),
+                                n * static_cast<std::size_t>(t + 1) / static_cast<std::size_t>(ns));
                     ts[t] += secs(s);
-                });
-            if (sc)
-                th.emplace_back([&, bp] {
+                    if (t == 0 && docp) {  // each row's on parts, then the byte, as the mixer's thread read them before
+                        s = clk::now();
+                        for (std::size_t r = 0; r < n; ++r) {
+                            for (int q = 0; q < 3; ++q)
+                                if (cs.doc_on[q]) B.doc_b[r * 3 + q] = ds->predict(q, &B.doc[(r * 3 + static_cast<std::size_t>(q)) * 256]);
+                            ds->feed(data[kTrain + b * kBlock + r]);
+                        }
+                        td += secs(s);
+                    }
+                    ring.publish(t, b);
+                }
+            });
+        int role = ns;
+        if (L) {
+            const int me = role++;
+            th.emplace_back([&, me] {  // the LSTM pass: plstm[k] = max(P(y), 1e-12), lb over the second half, then learn
+                for (std::size_t b = 0; b < nblk && ring.acquire(me, b); ++b) {
                     const auto s = clk::now();
-                    for (std::size_t r = 0; r < bp->n; ++r)
-                        bp->sim_b[r] = SimilarContext::bucket(sc->predict(data.data(), kTrain + bp->k0 + r, &bp->sim[r * 256]));
-                    tsim += secs(s);
-                });
-            if (L)
-                th.emplace_back([&, bp] {  // the LSTM pass: plstm[k] = max(P(y), 1e-12), lb over the second half, then learn
-                    const auto s = clk::now();
-                    for (std::size_t r = 0; r < bp->n; ++r) {
-                        const std::size_t k = bp->k0 + r;
-                        double* P = &bp->lstm[r * 256];
-                        L->dist(P);
-                        plstm[k] = std::max(P[data[kTrain + k]], 1e-12);
+                    Block& B = buf[ring.slot(b)];
+                    for (std::size_t r = 0, n = rows_of(b); r < n; ++r) {
+                        const std::size_t k = b * kBlock + r;
+                        double* Pl = &B.lstm[r * 256];
+                        L->dist(Pl);
+                        plstm[k] = std::max(Pl[data[kTrain + k]], 1e-12);
                         if (k >= half) lb += -std::log2(plstm[k]);
                         L->step(data[kTrain + k], true);
                     }
                     tl += secs(s);
-                });
-            if (ng)
-                th.emplace_back([&, bp] {  // the n-gram pass: its whole distributions first, then code() as the chain calls it
+                    ring.publish(me, b);
+                }
+            });
+        }
+        if (ng) {
+            const int me = role++;
+            th.emplace_back([&, me] {  // the n-gram pass: its whole distributions first, then code() as the chain calls it
+                double po[32];
+                for (std::size_t b = 0; b < nblk && ring.acquire(me, b); ++b) {
                     const auto s = clk::now();
-                    double po[32];
-                    for (std::size_t r = 0; r < bp->n; ++r) {
-                        const std::size_t k = bp->k0 + r;
+                    Block& B = buf[ring.slot(b)];
+                    for (std::size_t r = 0, n = rows_of(b); r < n; ++r) {
+                        const std::size_t k = b * kBlock + r;
                         const std::uint8_t y = data[kTrain + k];
-                        ng->dist(&bp->ng[r * 256], &bp->ngo[r * static_cast<std::size_t>(O) * 256]);
+                        ng->dist(&B.ng[r * 256], &B.ngo[r * static_cast<std::size_t>(O) * 256]);
                         const double pm = ng->code(y, po);
-                        maxng = std::max(maxng, std::abs(pm - bp->ng[r * 256 + y]));
+                        maxng = std::max(maxng, std::abs(pm - B.ng[r * 256 + y]));
                         pngram[k] = std::max(pm, 1e-12);
                         for (int q = 0; q < O; ++q) pngram_o[static_cast<std::size_t>(q)][k] = static_cast<float>(po[q]);
                         if (k >= half) nb += -std::log2(pngram[k]);
                     }
                     tn += secs(s);
-                });
-        };
-        auto consume = [&](Block& b) {
-            double Pd[3][256];
-            for (std::size_t r = 0; r < b.n; ++r) {
-                const std::size_t k = b.k0 + r, i = kTrain + k;
+                    ring.publish(me, b);
+                }
+            });
+        }
+        // The consumer, on this thread: the blocks in order.
+        double Pd[3][256], Ps[256];
+        bool sim_failed = false;
+        for (std::size_t bi = 0; bi < nblk && ring.await(bi); ++bi) {
+            if (sim_ready && !sim_ready->wait(bi * kBlock + rows_of(bi), &t_simwait)) {  // the expert stopped (an error)
+                sim_failed = true;
+                ring.cancel();
+                break;
+            }
+            const auto s = clk::now();
+            const Block& b = buf[ring.slot(bi)];
+            for (std::size_t r = 0, n = rows_of(bi); r < n; ++r) {
+                const std::size_t k = bi * kBlock + r, i = kTrain + k;
                 fx::ByteIn in;
                 in.y = data[i], in.prev = data[i - 1], in.prev2 = data[i - 2];
                 for (int j = 0; j < 5; ++j) in.trie[j] = &b.trie[(r * 5 + static_cast<std::size_t>(j)) * 256];
@@ -1159,52 +1291,46 @@ struct FullMixRun {
                     if ((b.ig_has[r] >> c) & 1) in.ig[c] = &b.ig[(r * 5 + static_cast<std::size_t>(c)) * 256];
                 in.ig_b = b.ig_b[r], in.ig_n = b.ig_n[r];
                 if (cc) in.cls = &b.cls[r * 256], in.cls_b = b.cls_b[r];
-                if (sc) in.sim = &b.sim[r * 256], in.sim_b = b.sim_b[r];
+                if (sim) sim->get(k, Ps), in.sim = Ps, in.sim_b = (*sim_b)[k];
                 in.cpred = b.cpred[r], in.cn = b.cn[r];
-                if (ds)
+                if (docp) {
+                    for (int q = 0; q < 3; ++q)
+                        if (cs.doc_on[q]) in.doc_b[q] = b.doc_b[r * 3 + q], in.doc[q] = &b.doc[(r * 3 + static_cast<std::size_t>(q)) * 256];
+                } else if (ds) {
                     for (int q = 0; q < 3; ++q)
                         if (cs.doc_on[q]) in.doc_b[q] = ds->predict(q, Pd[q]), in.doc[q] = Pd[q];
+                }
                 if (L) in.lstm = &b.lstm[r * 256];
                 if (ng) in.ngram = &b.ng[r * 256], in.ngram_o = &b.ngo[r * static_cast<std::size_t>(O) * 256];
                 fm->step(in, k);
                 if (df.is_open()) fx::dump_byte(df, in, O);
                 chain_y[k] = fm->chain_y();
-                if (snap3) maxd3 = std::max(maxd3, std::abs(static_cast<double>(static_cast<float>(fm->snap3_y())) - (*snap3)[k]));
-                if (ds) ds->feed(data[i]);
+                snap3_y[k] = fm->snap3_y();
+                if (ds && !docp) ds->feed(data[i]);
             }
-        };
-        Block buf[2];
-        buf[0].size(O), buf[1].size(O);
-        std::vector<std::thread> th;
-        auto start = [&](Block& b, std::size_t k0) {
-            b.k0 = k0, b.n = std::min(kBlock, H - k0);
-            produce(&b, th);
-        };
-        auto join = [&] {
-            const auto s = clk::now();
-            for (auto& t : th) t.join();
-            th.clear();
-            t_wait += secs(s);
-        };
-        start(buf[0], 0);
-        join();
-        for (std::size_t k0 = 0, cur = 0; k0 < H; k0 += kBlock, cur ^= 1) {
-            if (k0 + kBlock < H) start(buf[cur ^ 1], k0 + kBlock);  // the next block, while this one is mixed
-            const auto s = clk::now();
-            consume(buf[cur]);
             t_main += secs(s);
-            join();
+            ring.release(bi);
+        }
+        for (auto& t : th) t.join();
+        if (relay) {
+            relay->ring.close();
+            meta_th.join();
+            t_meta_wait = relay->ring.reader_waited(), t_relay_wait = relay->ring.writer_waited();
         }
         for (double t : ts) t_static += t;
-        t_sim = tsim, t_lstm = tl, t_ng = tn;
+        nstatic = ns;
+        t_lstm = tl, t_ng = tn, t_doc = td, t_wait = ring.consumer_waited(), t_pwait = ring.producers_waited();
         seconds = secs(t0);
-        return 0;
+        return sim_failed ? 1 : 0;
     }
 
     /// The full mix's lines (after online_final_bpc), checked against the chain.
     void finish(const std::vector<double>& base) {
-        double maxd = 0;
+        double maxd = 0, maxd3 = 0;
         for (std::size_t k = 0; k < H; ++k) maxd = std::max(maxd, std::abs(chain_y[k] - base[k]));
+        if (snaps && snaps->size() == 4)  // the replica chain after copy against the chain's, as float (GLNX's column)
+            for (std::size_t k = 0; k < H; ++k)
+                maxd3 = std::max(maxd3, std::abs(static_cast<double>(static_cast<float>(snap3_y[k])) - (*snaps)[3][k]));
         std::cout.flush();  // std::cout is not synced with stdio: its lines (online_final_bpc) go out first
         std::printf("full_mix_bpc %.4f (arm %s; first half %.4f)\n", fm->bpc(1, head), P.headline.c_str(), fm->bpc(0, head));
         std::fflush(stdout);
@@ -1214,9 +1340,14 @@ struct FullMixRun {
                     o.str().c_str(), maxd, maxd3, maxng);
         std::fflush(stdout);
         std::fprintf(stderr,
-                     "full_mix state_bytes %zu seconds %.1f | thread busy s: static %.1f (%d threads) sim %.1f lstm %.1f ngram %.1f "
-                     "mix %.1f; main waited %.1f | mixer s: %s\n",
-                     fm->bytes(), seconds, t_static, kStatic, t_sim, t_lstm, t_ng, t_main, t_wait, fm->profile().c_str());
+                     "full_mix state_bytes %zu seconds %.1f | ring %zu blocks of %zu | thread busy s: static %.1f (%d threads) "
+                     "doc %.1f lstm %.1f ngram %.1f mix %.1f; mix waited %.1f for blocks, %.1f for sim rows; producers waited "
+                     "%.1f%s | mixer s: %s\n",
+                     fm->bytes(), seconds, slots, kBlock, t_static, nstatic, t_doc, t_lstm, t_ng, t_main, t_wait, t_simwait, t_pwait,
+                     relay_meta && mm ? (" | meta thread waited " + std::to_string(t_meta_wait) + ", relay waited " +
+                                         std::to_string(t_relay_wait)).c_str()
+                                      : "",
+                     fm->profile().c_str());
         if (mm) {  // META_MIXING.md
             std::ostringstream m;
             mm->report(m);
@@ -1230,7 +1361,47 @@ struct FullMixRun {
     std::string headline_src() const { return mm ? "meta_mix " + MP.headline : "full_mix " + P.headline; }
 };
 
+// OPT_PIPELINE.md: lam[b] as fit_lambdas (content_mixer.hpp) gives it, for the InfiniGram caps' fit in context8k: each
+// bucket's items k < upto are gathered first, in order, so the log-likelihood of each lambda is the same sum in the same
+// order, read once instead of once per bucket.
+void fit_lambdas_gathered(const std::vector<double>& pe, const std::vector<double>& pb, const std::vector<int>& bk,
+                          std::size_t upto, int nb, double* lam) {
+    std::vector<std::vector<std::uint32_t>> at(static_cast<std::size_t>(nb));
+    for (std::size_t k = 0; k < upto; ++k) at[static_cast<std::size_t>(bk[k])].push_back(static_cast<std::uint32_t>(k));
+    for (int b = 0; b < nb; ++b) {
+        const auto& ks = at[static_cast<std::size_t>(b)];
+        double best = -1e300;
+        lam[b] = 0;
+        if (ks.empty()) continue;  // fit_lambdas: no item, so lambda 0
+        for (int g = 0; g < 200; ++g) {
+            const double l = g * 0.005;
+            double ll = 0;
+            for (const std::uint32_t k : ks) ll += std::log(l * pe[k] + (1 - l) * pb[k]);
+            if (ll > best) {
+                best = ll;
+                lam[b] = l;
+            }
+        }
+    }
+}
+
 int cmd_context8k(const Args& a) {
+    namespace pl = cypha::cyphalm::pipeline;
+    // OPT_PIPELINE.md (§13.41 O2): no default expert reads a mixer, so with the pipeline on (the default) each expert's
+    // pass over the holdout runs in its own thread as soon as what it reads exists, most of them while the trie trains.
+    // Each pass stores what the chain, the final layer and the full mix read from it; the mixers then read those in the
+    // old order, with the old arithmetic, so the output is the same. --no-pipeline runs each pass in place where the
+    // chain first reads it. The GLN (--gln) reads the chain's loss under --gln-feedback, so it stays in its place.
+    const bool pipe = a.pipeline > 0;
+    // The passes whose rows are independent (the trie's, InfiniGram's caps with the class expert and Kneser-Ney, the
+    // caps' fits) split over this many threads (CYPHA_PIPELINE_THREADS, 3 by default; 1 without the pipeline). The
+    // output is the same for any count.
+    const int pthreads = pipe ? std::clamp(std::atoi(env_or("CYPHA_PIPELINE_THREADS", "3").c_str()), 1, 16) : 1;
+    using clk = std::chrono::steady_clock;
+    const auto t_run = clk::now();
+    auto phase = [&](const char* what) {
+        std::fprintf(stderr, "pipeline %s %.1f s\n", what, std::chrono::duration<double>(clk::now() - t_run).count());
+    };
     // FULL_DISTRIBUTION_MIXING.md: the full mix replays the online chain and final layer, so it runs only where it can
     // replay them; elsewhere it is switched off with one note, and the old command's lines are printed as before.
     bool full_mix = a.full_mix;
@@ -1251,14 +1422,7 @@ int cmd_context8k(const Args& a) {
     PackedModel spm;
     if (served && !load_model(a, spm, w, cfg, data)) return 1;
     if (!served && !load_wiki(a, data)) return 1;
-    Model model;
-    if (!served) {
-        model.data = data.data();
-        model.init(cfg);
-        init_weights(w, cfg);
-        train_span(model, data, w, 0, cfg.train, cfg);
-    }
-
+    // The chat is read before the trie trains (reading it changes nothing), so the experts that read no trie can start.
     std::vector<Turn> turns;
     load_dolly(a.dolly, turns);
     if (turns.empty()) {
@@ -1275,6 +1439,282 @@ int cmd_context8k(const Args& a) {
     std::string chat;
     for (std::size_t i = 0; i < turns.size(); ++i)
         if (!held[i]) chat += turns[i].prompt + turns[i].answer + "\n\n";
+    const std::size_t kTrain = cfg.train, kSample = cfg.sample;
+    const std::size_t H = kSample - kTrain, half = H / 2;
+    // W: the wiki bytes [0, sample). data grows by the chat and shrinks back to these bytes below; W never moves, so the
+    // experts' threads read it. Every expert reads the same bytes as before.
+    const std::vector<std::uint8_t> W(data.begin(), data.begin() + static_cast<std::ptrdiff_t>(kSample));
+    // InfiniGram's and the class expert's training text, as training_text makes it: wiki train + the boundary + chat.
+    std::vector<std::uint8_t> T0;
+    T0.reserve(kTrain + std::strlen(kDocBoundary) + chat.size());
+    T0.assign(W.begin(), W.begin() + static_cast<std::ptrdiff_t>(kTrain));
+    T0.insert(T0.end(), kDocBoundary, kDocBoundary + std::strlen(kDocBoundary));
+    T0.insert(T0.end(), chat.begin(), chat.end());
+    auto fnv = [](const std::vector<std::uint8_t>& v) {
+        std::uint64_t h = 0xcbf29ce484222325ull;
+        for (const std::uint8_t c : v) h = (h ^ c) * 0x100000001b3ull;
+        return h;
+    };
+    const std::uint64_t t0_hash = fnv(T0);
+    const std::uint8_t* const hw = W.data();  // the experts' bytes
+
+    // ---------------- the experts' passes (OPT_PIPELINE.md). Each fills its own record and reads no mixer.
+    const bool dump = !a.dump_experts.empty();
+    const bool keep = dump || a.online_final;  // the per-byte arrays the dump and the final layer both read
+    const int caps[] = {4, 16, 64, 512, 8192};
+    // InfiniGram, then the class expert and Kneser-Ney on its text (M16: the class table is built after the index's
+    // scratch is gone), then their passes: InfiniGram at each cap with its own cursor (pinf, bucket; cap 8192's matched
+    // length), the class expert's and Kneser-Ney's probability of each byte and bucket.
+    std::unique_ptr<FmInfiniGram> igp;
+    std::unique_ptr<ClassContext> cc;
+    std::unique_ptr<cypha::cyphalm::bkn::ByteKN> kn;  // BKN2: byte Kneser-Ney on the same bytes, from the same copy
+    std::vector<double> cap_p[5], kn_pe, cls_pe;
+    std::vector<int> cap_b[5], kn_bk, cls_bk, n8k(H);
+    pl::Task t_index;
+    auto index_job = [&]() -> int {
+        const auto s0 = clk::now();
+        const std::size_t tn = T0.size();
+        igp = std::make_unique<FmInfiniGram>(std::move(T0));
+        std::vector<std::uint8_t>().swap(T0);
+        std::cerr << "index built over " << tn << " bytes\n";
+        int crc = 0;
+        if (!default_cls_spec(a).empty() || !a.bkn.empty()) {
+            const std::vector<std::uint8_t> t = igp->text();
+            if (!default_cls_spec(a).empty()) cc = default_cls(a, t.data(), t.size(), crc);
+            if (!crc && !a.bkn.empty() && !(kn = make_bkn(a.bkn, t.data(), t.size()))) return 2;
+        }
+        if (crc) return crc;
+        std::vector<std::function<void()>> jobs;
+        for (int c = 0; c < 5; ++c)
+            jobs.push_back([&, c] {
+                const int cap = caps[c];
+                cap_p[c].resize(H), cap_b[c].resize(H);
+                int prev = -1;
+                FmInfiniGram::Cursor cur;
+                for (std::size_t k = 0; k < H; ++k) {
+                    const std::size_t i = kTrain + k;
+                    const std::size_t len = std::min<std::size_t>(i, static_cast<std::size_t>(cap));
+                    const int hint = prev < 0 ? -1 : std::min(prev + 1, cap);
+                    const auto r = igp->query(hw + (i - len), len, cap, hint, 1, cur);
+                    prev = r.n;
+                    cap_p[c][k] = r.total ? static_cast<double>(r.count[hw[i]]) / static_cast<double>(r.total) : 0.0;
+                    cap_b[c][k] = bucket(r.n, r.total);
+                    if (cap == 8192) n8k[k] = r.n;
+                }
+            });
+        if (cc)
+            jobs.push_back([&] {  // as mix_cls_into reads it (and the final layer's row)
+                cls_pe.resize(H), cls_bk.resize(H);
+                for (std::size_t k = 0; k < H; ++k) {
+                    double P[256];
+                    cls_bk[k] = ClassContext::bucket(cc->predict(hw, kTrain + k, P));
+                    cls_pe[k] = P[hw[kTrain + k]];
+                }
+            });
+        if (kn)
+            jobs.push_back([&] {  // as mix_bkn_into reads it (and the final layer's row)
+                kn_pe.resize(H), kn_bk.resize(H);
+                for (std::size_t k = 0; k < H; ++k) kn_pe[k] = kn->prob_bucket(hw, kTrain + k, hw[kTrain + k], kn_bk[k]);
+            });
+        pl::parallel_jobs(jobs, pthreads);
+        std::fprintf(stderr, "pipeline index, class, Kneser-Ney and InfiniGram passes %.1f s\n",
+                     std::chrono::duration<double>(clk::now() - s0).count());
+        return 0;
+    };
+    // The similar-context expert (A4): one pass, in order (it learns online keys as it reads). It keeps P(y) and the
+    // bucket for the chain, and with the full mix every whole distribution, sparse (most entries are 0), for the full mix
+    // to read instead of building the expert again.
+    // Its rows can be read while it runs: sim_prog counts the rows done.
+    std::vector<double> ps;
+    std::vector<int> sb;
+    pl::SparseRows sim_rows;
+    pl::Progress sim_prog;
+    bool sim_on = false;
+    pl::Task t_sim;
+    auto sim_job = [&]() -> int {
+        int src = 0;
+        const auto sc = default_sim(a, hw, kTrain, src);
+        if (!sc) {
+            sim_prog.fail();
+            return src;
+        }
+        const auto s0 = clk::now();
+        ps.resize(H), sb.resize(H);
+        if (full_mix) sim_rows.reset(H);
+        for (std::size_t k = 0; k < H; ++k) {
+            double P[256];
+            sb[k] = SimilarContext::bucket(sc->predict(hw, kTrain + k, P));
+            ps[k] = P[hw[kTrain + k]];
+            if (full_mix) sim_rows.push(P);
+            if ((k + 1) % 512 == 0) sim_prog.advance(k + 1);
+        }
+        sim_on = true;
+        sim_prog.advance(H);
+        std::fprintf(stderr, "pipeline sim pass %.1f s (rows kept %zu entries, %.1f MB)\n",
+                     std::chrono::duration<double>(clk::now() - s0).count(), sim_rows.entries(), sim_rows.bytes() / 1e6);
+        return 0;
+    };
+    // GEN-C2: the document experts' cache over wiki train's words; one stream over the holdout gives each part's bucket
+    // and P(y), as mix_doc_into and the final layer's row read them. The copy expert's pass rides along (it reads bytes only).
+    std::unique_ptr<DocTopic> dt;
+    std::vector<double> doc_pe[DocTopic::kParts], copy_pe(H);
+    std::vector<int> doc_bk[DocTopic::kParts], copy_bk(H), copy_cp(H), copy_cn(H);
+    pl::Task t_doc, t_copy;
+    auto doc_job = [&]() -> int {
+        const auto s0 = clk::now();
+        int drc = 0;
+        dt = make_doc(a.doc.empty() ? std::string("cache") : a.doc, hw, kTrain, drc);
+        if (!dt) return drc ? drc : 1;
+        const auto& dp = dt->params();
+        const bool on[DocTopic::kParts] = {dp.trig, dp.cache, dp.topic};
+        for (int q = 0; q < DocTopic::kParts; ++q)
+            if (on[q]) doc_pe[q].resize(H), doc_bk[q].resize(H);
+        DocTopic::Stream st(*dt);
+        for (std::size_t k = 0; k < H; ++k) {
+            for (int q = 0; q < DocTopic::kParts; ++q)
+                if (on[q]) {
+                    double P[256];
+                    doc_bk[q][k] = st.predict(q, P);
+                    doc_pe[q][k] = P[hw[kTrain + k]];
+                }
+            st.feed(hw[kTrain + k]);
+        }
+        std::fprintf(stderr, "pipeline doc pass %.1f s\n", std::chrono::duration<double>(clk::now() - s0).count());
+        return 0;
+    };
+    auto copy_job = [&]() -> int {  // as mix_copy_into reads it (and the final layer's row)
+        const auto s0 = clk::now();
+        for (std::size_t k = 0; k < H; ++k) {
+            int n = 0;
+            const int cp = copy_pred(hw, kTrain + k, n);
+            copy_pe[k] = cp == hw[kTrain + k] ? 1.0 : 0.0;
+            copy_bk[k] = copy_bucket(n), copy_cp[k] = cp, copy_cn[k] = n;
+        }
+        std::fprintf(stderr, "pipeline copy pass %.1f s\n", std::chrono::duration<double>(clk::now() - s0).count());
+        return 0;
+    };
+    // ONLINE_LEARNING_UPGRADES --ngram: the online n-gram expert (cypha::online::OnlineNgram; hashed bit counts of orders
+    // --ngram-orders with 8-bit slot checks, pretrained on wiki train, then predicting and learning byte by byte over wiki
+    // train's last MiB and the holdout) as a chain stage (a lambda per InfiniGram bucket, online) before the LSTM, and as
+    // final-layer inputs: its mixed probability and each order's. The pretraining and the last MiB run here; the holdout
+    // is read here too without the full mix, and inside the full mix's ring with it.
+    cypha::online::OnlineNgram::Params np;
+    bool np_ok = true;
+    if (a.ngram) {
+        np.orders.clear();
+        for (std::size_t p0 = 0; p0 < a.ngram_orders.size();) {
+            const std::size_t p1 = std::min(a.ngram_orders.find(',', p0), a.ngram_orders.size());
+            np.orders.push_back(std::atoi(a.ngram_orders.substr(p0, p1 - p0).c_str()));
+            p0 = p1 + 1;
+        }
+        np.tb = a.ngram_tb;
+        np.cap = a.ngram_cap;
+        np.lr = a.ngram_lr;
+        np_ok = !(np.orders.empty() || np.orders.size() > 16 || !std::is_sorted(np.orders.begin(), np.orders.end()) ||
+                  np.orders.back() > 64 || np.cap < 2 || np.cap > 500);
+    }
+    std::unique_ptr<cypha::online::OnlineNgram> ng;
+    std::vector<double> pngram;
+    std::vector<std::vector<float>> pngram_o;
+    double ng_bits = 0, ng_mb = 0;
+    clk::time_point ng_t0;
+    pl::Task t_ng;
+    auto ng_job = [&]() -> int {
+        ng_t0 = clk::now();
+        ng = std::make_unique<cypha::online::OnlineNgram>(np);
+        const std::size_t warm = std::min<std::size_t>(kTrain, std::size_t{1} << 20);
+        ng->pretrain(hw, kTrain - warm);
+        double po[32];
+        for (std::size_t i = kTrain - warm; i < kTrain; ++i) ng->code(hw[i], po);
+        ng_mb = ng->bytes() / 1e6;
+        if (!full_mix) {
+            pngram.resize(H);
+            pngram_o.assign(static_cast<std::size_t>(ng->orders()), std::vector<float>(H));
+            for (std::size_t k = 0; k < H; ++k) {
+                pngram[k] = std::max(ng->code(hw[kTrain + k], po), 1e-12);
+                for (int q = 0; q < ng->orders(); ++q) pngram_o[static_cast<std::size_t>(q)][k] = static_cast<float>(po[q]);
+                if (k >= half) ng_bits += -std::log2(pngram[k]);
+            }
+            ng.reset();
+        }
+        return 0;
+    };
+    // §13.18 --lstm: the byte LSTM (cypha::online::ByteLSTM, learning online from scratch over the holdout, each byte
+    // predicted before it is learned). Without the full mix its whole pass runs here; with it, inside the full mix's ring.
+    // §13.24 --final-gate lstm: the LSTM's state also picks the final layer's weight set: the signs of 4 fixed random
+    // projections of the state that predicts the byte (16) x the previous byte's class (5).
+    const bool lstm_ok = a.lstm_window >= 1 && a.lstm_window <= 1000 &&
+                         (a.lstm_size == 64 || a.lstm_size == 128 || a.lstm_size == 256);
+    std::vector<double> plstm;
+    std::vector<std::uint8_t> lgate;
+    double lstm_bits = 0, lstm_s = 0;
+    bool lstm_ran = false;  // the pass below ran on the index's thread (OPT_PIPELINE.md)
+    auto lstm_alone = [&](auto& L) {
+        constexpr int LH = std::remove_reference_t<decltype(L)>::H;
+        const auto s0 = clk::now();
+        plstm.resize(H);
+        std::vector<double> R(4 * static_cast<std::size_t>(LH));
+        if (a.final_gate == "lstm") {
+            std::mt19937_64 rr(7);
+            std::normal_distribution<double> nd(0.0, 1.0);
+            for (double& x : R) x = nd(rr);
+            lgate.resize(H);
+        }
+        double P[256], lb = 0;
+        for (std::size_t k = 0; k < H; ++k) {
+            if (!lgate.empty()) {
+                int g = 0;
+                for (int m = 0; m < 4; ++m) {
+                    double d = 0;
+                    for (int q = 0; q < LH; ++q) d += R[static_cast<std::size_t>(m) * LH + q] * L.h()[static_cast<std::size_t>(q)];
+                    if (d > 0) g |= 1 << m;
+                }
+                lgate[k] = static_cast<std::uint8_t>(g);
+            }
+            L.dist(P);
+            plstm[k] = std::max(P[hw[kTrain + k]], 1e-12);
+            if (k >= half) lb += -std::log2(plstm[k]);
+            L.step(hw[kTrain + k], true);
+        }
+        lstm_bits = lb;
+        lstm_s = std::chrono::duration<double>(clk::now() - s0).count();
+    };
+    auto lstm_job = [&]() -> int {
+        if (a.lstm_size == 64) {
+            cypha::online::ByteLSTMT<64> L(0, 0.003, a.lstm_window);
+            lstm_alone(L);
+        } else if (a.lstm_size == 128) {
+            cypha::online::ByteLSTMT<128> L(0, 0.003, a.lstm_window);
+            lstm_alone(L);
+        } else {
+            cypha::online::ByteLSTMT<256> L(0, 0.003, a.lstm_window);
+            lstm_alone(L);
+        }
+        return 0;
+    };
+    const bool lstm_alone_pass = !a.no_lstm && !full_mix && lstm_ok;
+    // Every pass that reads bytes only starts now, while the trie trains; those that read the index start when it is built.
+    // Without the full mix, the LSTM's pass follows the index's passes on their thread, so the threads stay few.
+    if (pipe) {
+        t_index.start(
+            [&]() -> int {
+                const int rc = index_job();
+                if (!rc && lstm_alone_pass) (void)lstm_job(), lstm_ran = true;
+                return rc;
+            },
+            true);
+        t_sim.start(sim_job, true);
+        if (!a.no_doc) t_doc.start(doc_job, true);
+        if (!a.no_copy || keep) t_copy.start(copy_job, true);
+    }
+
+    Model model;
+    if (!served) {
+        model.data = data.data();
+        model.init(cfg);
+        init_weights(w, cfg);
+        train_span(model, data, w, 0, cfg.train, cfg);
+    }
     const std::size_t chat_at = append_chat(model, data, chat);
     if (!served) {
         train_span(model, data, w, chat_at, data.size(), cfg);
@@ -1286,26 +1726,23 @@ int cmd_context8k(const Args& a) {
     }
     const PackedModel pm = served ? std::move(spm) : pack(model);  // M4
     model.release();
+    phase("trie trained and packed at");
+    // The n-gram's tables (589 MB at 24 bits) are made only now, after the training form of the trie is gone.
+    if (pipe && a.ngram && np_ok) t_ng.start(ng_job, true);
 
-    // Index the training bytes only: wiki train + boundary + chat. No wiki holdout. The index takes T, then the class
-    // expert (B4C, a default; --no-cls leaves it out) is built on the same bytes, which the index gives back (M16: so
-    // the class table is not resident during the index's scratch), as in qa.
+    // Index the training bytes only: wiki train + boundary + chat. No wiki holdout. (The index was built from the same
+    // bytes above; training_text still gives data back its holdout-only form, and the two texts are checked equal.)
     std::vector<std::uint8_t> T;
-    const std::size_t all = training_text(data, cfg, T), tn = T.size();
-    const FmInfiniGram ig(std::move(T));
-    std::cerr << "index built over " << tn << " bytes\n";
-    int crc = 0;
-    std::unique_ptr<ClassContext> cc;
-    std::unique_ptr<cypha::cyphalm::bkn::ByteKN> kn;  // BKN2: byte Kneser-Ney on the same bytes, from the same copy
-    if (!default_cls_spec(a).empty() || !a.bkn.empty()) {
-        const std::vector<std::uint8_t> t = ig.text();
-        if (!default_cls_spec(a).empty()) cc = default_cls(a, t.data(), t.size(), crc);
-        if (!crc && !a.bkn.empty() && !(kn = make_bkn(a.bkn, t.data(), t.size()))) return 2;
+    const std::size_t all = training_text(data, cfg, T);
+    if (fnv(T) != t0_hash || data.size() != W.size() || !std::equal(data.begin(), data.end(), W.begin())) {
+        std::cerr << "context8k: the experts' bytes differ from the trie's (a bug)\n";
+        return 1;
     }
-    if (crc) return crc;
+    std::vector<std::uint8_t>().swap(T);
+    if (!t_index.started()) t_index.start(index_job, false);
+    if (const int irc = t_index.wait()) return irc;
+    const FmInfiniGram& ig = *igp;
 
-    const std::size_t kTrain = cfg.train, kSample = cfg.sample;
-    const std::size_t H = kSample - kTrain, half = H / 2;
     g_online_mix = a.online_mix;
     if (a.online_mix) std::cout << "online_mix on (the chain's lambdas learn online, GENERATION_PLAN §13.12)\n";
     // ONLINE_LEARNING_UPGRADES --doc-boost B: every online step (the chain's stages and the final layer) is x B for the
@@ -1322,17 +1759,28 @@ int cmd_context8k(const Args& a) {
         cypha::online::g_step_mult = &step_mult;
         std::cerr << "doc_boost " << a.doc_boost << " over the first " << a.doc_span << " bytes of " << pages << " pages\n";
     }
+    // The trie's pass: its mixture's probability of each byte, and for the final layer each expert's and the match.
+    // The rows are independent, so they are split over a few threads.
     std::vector<double> pt(H);
-    for (std::size_t k = 0; k < H; ++k) {
-        const std::size_t i = kTrain + k;
-        double e[5][256];
-        bool em = false;
-        unsigned pred = 0;
-        pm.fill_experts(data.data(), i, kTrain, Mode::Synth, e, em, pred, false);
-        double M[256];
-        mix_dist(w, e, em, pred, M);
-        pt[k] = M[data[i]];
-    }
+    std::vector<float> e5(keep ? H * 5 : 0);
+    std::vector<std::uint8_t> emf(keep ? H : 0);  // bit 0: the match fired; bit 1: ... predicting the byte
+    pl::parallel_rows(H, pthreads, [&](std::size_t k0, std::size_t k1) {
+        for (std::size_t k = k0; k < k1; ++k) {
+            const std::size_t i = kTrain + k;
+            double e[5][256];
+            bool em = false;
+            unsigned pred = 0;
+            pm.fill_experts(data.data(), i, kTrain, Mode::Synth, e, em, pred, false);
+            double M[256];
+            mix_dist(w, e, em, pred, M);
+            pt[k] = M[data[i]];
+            if (keep) {
+                for (int j = 0; j < 5; ++j) e5[k * 5 + static_cast<std::size_t>(j)] = static_cast<float>(e[j][data[i]]);
+                emf[k] = static_cast<std::uint8_t>((em ? 1 : 0) | (em && pred == data[i] ? 2 : 0));
+            }
+        }
+    });
+    phase("trie pass done at");
     double bits_trie = 0;
     for (std::size_t k = half; k < H; ++k) bits_trie += -std::log2(pt[k]);
     std::cout.setf(std::ios::fixed);
@@ -1345,12 +1793,11 @@ int cmd_context8k(const Args& a) {
     const bool kn_off_ans = kn && a.bkn_answers == "off";
     std::vector<double> pt0;
     if (kn_off_ans) pt0 = pt;
-    const bool dump = !a.dump_experts.empty();
-    const bool keep = dump || a.online_final;  // the per-byte arrays the dump and the final layer both read
     std::vector<float> pt_trie;  // the per-byte arrays below are float: the dump and the final layer read them as float
     if (keep) pt_trie.assign(pt.begin(), pt.end());
     std::vector<std::vector<float>> pinf_caps;
     std::vector<double> lkn;
+    std::vector<float> kn_pf, cls_pf;  // the final layer's row: Kneser-Ney's and the class expert's P(y), as float
     // §13.21 --two-rates: the chain also runs at a slow and a fast step from here on (online only); the final layer
     // reads both. The main chain's lines are unchanged.
     std::vector<std::vector<double>> rate_chains;
@@ -1358,90 +1805,126 @@ int cmd_context8k(const Args& a) {
         rate_chains.assign(2, pt);
         cypha::online::g_rate_chains = &rate_chains;
     }
-    if (kn) {
-        lkn = mix_bkn_into(*kn, data.data(), kTrain, half, kn_rep, pt);
+    if (kn) {  // mix_bkn_into, over its pass's pe and bucket
+        if (kn_rep) {
+            if (cypha::online::g_rate_chains)
+                for (auto& c : *cypha::online::g_rate_chains) c = kn_pe;  // §13.21: the slow and fast chains start where the main one does
+            pt = kn_pe;
+        } else {
+            lkn = mix_into(kn_pe, kn_bk, half, kn->buckets(), pt);
+        }
+        if (keep) kn_pf.assign(kn_pe.begin(), kn_pe.end());
+        std::vector<double>().swap(kn_pe);
         double b = 0;
         for (std::size_t k = half; k < H; ++k) b += -std::log2(pt[k]);
         std::cout << "trie_plus_bkn_bpc " << b / static_cast<double>(H - half) << "\n";
     }
 
-    const int caps[] = {4, 16, 64, 512, 8192};
+    // InfiniGram at five caps: each cap's lambdas (a grid, on the first half) over the trie mixture; the five fits are
+    // independent, so they run side by side; their lines print in order.
     double lam8k[kBuckets] = {0}, lam8k0[kBuckets] = {0};
-    std::vector<int> n8k(H), bk8k;
+    std::vector<int> bk8k;
     std::vector<double> pinf8k;
-    for (int cap : caps) {
-        std::vector<double> pinf(H);
-        std::vector<int> bk(H);
-        int prev = -1;
-        FmInfiniGram::Cursor cur;
-        for (std::size_t k = 0; k < H; ++k) {
-            const std::size_t i = kTrain + k;
-            const std::size_t len = std::min<std::size_t>(i, static_cast<std::size_t>(cap));
-            const int hint = prev < 0 ? -1 : std::min(prev + 1, cap);
-            const auto r = ig.query(data.data() + (i - len), len, cap, hint, 1, cur);
-            prev = r.n;
-            pinf[k] = r.total ? static_cast<double>(r.count[data[i]]) / static_cast<double>(r.total) : 0.0;
-            bk[k] = bucket(r.n, r.total);
-            if (cap == 8192) n8k[k] = r.n;
-        }
-        double lam[kBuckets];
-        for (int b = 0; b < kBuckets; ++b) {
-            double best = -1e300;
-            lam[b] = 0;
-            for (int g = 0; g < 200; ++g) {
-                const double l = g * 0.005;
-                double ll = 0;
-                bool any = false;
-                for (std::size_t k = 0; k < half; ++k)
-                    if (bk[k] == b) {
-                        ll += std::log(l * pinf[k] + (1 - l) * pt[k]);
-                        any = true;
-                    }
-                if (!any) break;
-                if (ll > best) {
-                    best = ll;
-                    lam[b] = l;
-                }
+    {
+        double lam[5][kBuckets] = {}, bits[5] = {};
+        std::vector<std::function<void()>> fits;
+        for (int c = 0; c < 5; ++c)
+            fits.push_back([&, c] {
+                fit_lambdas_gathered(cap_p[c], pt, cap_b[c], half, kBuckets, lam[c]);
+                for (std::size_t k = half; k < H; ++k)
+                    bits[c] += -std::log2(lam[c][cap_b[c][k]] * cap_p[c][k] + (1 - lam[c][cap_b[c][k]]) * pt[k]);
+            });
+        if (kn_off_ans) fits.push_back([&] { fit_lambdas_gathered(cap_p[4], pt0, cap_b[4], half, kBuckets, lam8k0); });
+        pl::parallel_jobs(fits, pthreads);
+        if (kn_off_ans) std::vector<double>().swap(pt0);
+        for (int c = 0; c < 5; ++c) {
+            std::cout << "trie_plus_context_" << caps[c] << "_bpc " << bits[c] / static_cast<double>(H - half) << "\n";
+            if (keep) pinf_caps.emplace_back(cap_p[c].begin(), cap_p[c].end());
+            if (caps[c] == 8192) {
+                std::copy(lam[c], lam[c] + kBuckets, lam8k);
+                pinf8k = std::move(cap_p[c]);
+                bk8k = std::move(cap_b[c]);
             }
-        }
-        double bits = 0;
-        for (std::size_t k = half; k < H; ++k) bits += -std::log2(lam[bk[k]] * pinf[k] + (1 - lam[bk[k]]) * pt[k]);
-        std::cout << "trie_plus_context_" << cap << "_bpc " << bits / static_cast<double>(H - half) << "\n";
-        if (cap == 8192 && kn_off_ans) {  // BKN3: the same grid fit over the trie mixture without Kneser-Ney
-            for (int b = 0; b < kBuckets; ++b) {
-                double best = -1e300;
-                lam8k0[b] = 0;
-                for (int g = 0; g < 200; ++g) {
-                    const double l = g * 0.005;
-                    double ll = 0;
-                    bool any = false;
-                    for (std::size_t k = 0; k < half; ++k)
-                        if (bk[k] == b) {
-                            ll += std::log(l * pinf[k] + (1 - l) * pt0[k]);
-                            any = true;
-                        }
-                    if (!any) break;
-                    if (ll > best) {
-                        best = ll;
-                        lam8k0[b] = l;
-                    }
-                }
-            }
-            std::vector<double>().swap(pt0);
-        }
-        if (keep) pinf_caps.emplace_back(pinf.begin(), pinf.end());
-        if (cap == 8192) {
-            std::copy(lam, lam + kBuckets, lam8k);
-            pinf8k = std::move(pinf);
-            bk8k = std::move(bk);
+            std::vector<double>().swap(cap_p[c]);
+            std::vector<int>().swap(cap_b[c]);
         }
     }
+    // The answers (below) read only the trie, Kneser-Ney, InfiniGram and the lambdas fit above, so they are written now,
+    // beside the rest, and printed in their place at the end.
+    auto gen = [&](const std::string& prompt, int& n0) {
+        std::vector<std::uint8_t> seq(prompt.begin(), prompt.end());
+        int prev = -1;
+        FmInfiniGram::Cursor cur;
+        n0 = -1;
+        for (int t = 0; t < 150; ++t) {
+            double e[5][256];
+            bool m = false;
+            unsigned pred = 0;
+            pm.fill_experts(seq.data(), seq.size(), all, Mode::Synth, e, m, pred, false);
+            double M[256];
+            mix_dist(w, e, m, pred, M);
+            if (kn && !kn_off_ans) bkn_mix(*kn, lkn.empty() ? nullptr : lkn.data(), kn_rep, seq.data(), seq.size(), M);  // BKN2; BKN3
+            const std::size_t len = std::min<std::size_t>(seq.size(), 8192);
+            const auto r = ig.query(seq.data() + (seq.size() - len), len, 8192, prev < 0 ? -1 : std::min(prev + 1, 8192),
+                                    1, cur);
+            prev = r.n;
+            if (t == 0) n0 = r.n;
+            const double l = (kn_off_ans ? lam8k0 : lam8k)[bucket(r.n, r.total)];  // BKN3: answers without Kneser-Ney
+            int best = 0;
+            double bp = -1;
+            for (int s = 0; s < 256; ++s) {
+                const double pc = r.total ? static_cast<double>(r.count[s]) / static_cast<double>(r.total) : 0.0;
+                const double p = l * pc + (1 - l) * M[s];
+                if (p > bp) {
+                    bp = p;
+                    best = s;
+                }
+            }
+            seq.push_back(static_cast<std::uint8_t>(best));
+        }
+        return std::string(seq.begin() + static_cast<std::ptrdiff_t>(prompt.size()), seq.end());
+    };
+    struct Q {
+        std::string kind, prompt, expect;
+    };
+    std::vector<Q> qs;
+    const std::size_t picks[3] = {0, turns.size() / 2, turns.size() - 1};
+    for (auto p : picks) qs.push_back({"seen", turns[p].prompt, turns[p].answer.substr(0, 30)});
+    for (auto p : picks) {
+        std::string s = turns[p].prompt;
+        s[6] = static_cast<char>(std::tolower(static_cast<unsigned char>(s[6])));
+        qs.push_back({"change_first_letter", s, turns[p].answer.substr(0, 30)});
+    }
+    for (auto p : picks) {
+        const std::string& s = turns[p].prompt;
+        qs.push_back({"add_Thanks_at_end", s.substr(0, s.size() - 12) + " Thanks.\nAssistant: ",
+                      turns[p].answer.substr(0, 30)});
+    }
+    qs.push_back({"paraphrase", "User: When did Virgin Blue begin flying?\nAssistant: ", "2000"});
+    qs.push_back({"paraphrase", "User: Who are the cast members of Southern Charm?\nAssistant: ", "Conover"});
+    qs.push_back({"paraphrase", "User: Tell me about the Masters golf tournament.\nAssistant: ", "Augusta"});
+    for (auto j : held_idx) qs.push_back({"heldout_dolly", turns[j].prompt, turns[j].answer.substr(0, 30)});
+    const std::pair<const char*, const char*> wiki[] = {
+        {"Who wrote Atlas Shrugged?", "Rand"},          {"What is the capital of Algeria?", "Algiers"},
+        {"Who was Aristotle's teacher?", "Plato"},      {"What is the capital of Andorra?", "Andorra la Vella"},
+        {"Who composed An American in Paris?", "Gershwin"}, {"What is the capital of Albania?", "Tirana"},
+        {"Who taught Alexander the Great?", "Aristotle"}, {"What does an aardvark eat?", "ant"}};
+    for (auto& [q, ans] : wiki) qs.push_back({"wiki_fact", std::string("User: ") + q + "\nAssistant: ", ans});
+    std::vector<std::string> gens(qs.size());
+    std::vector<int> gen_n0(qs.size(), 0);
+    pl::Task t_gen;
+    auto gen_job = [&]() -> int {
+        for (std::size_t q = 0; q < qs.size(); ++q) gens[q] = gen(qs[q].prompt, gen_n0[q]);
+        return 0;
+    };
+    if (pipe) t_gen.start(gen_job, true);
+
     // A4, B4C: the default experts over trie + InfiniGram (cap 8192), in qa's order: the class expert (built above),
     // the similar-context expert (keys over the wiki train bytes), the copy expert (m = --copy-min, over the holdout
     // stream). Each one's lambdas are fit on the first half over the distribution it is mixed into; its line reads the
-    // second half. --no-cls, --no-sim and --no-copy leave them out. The answers below are not touched: the experts are
-    // off inside answers (in_answer), and they are written without them. Kneser-Ney (BKN2) is part of the byte model
-    // above, so the answers use it.
+    // second half. --no-cls, --no-sim and --no-copy leave them out. The answers are not touched: the experts are off
+    // inside answers (in_answer), and they are written without them. Kneser-Ney (BKN2) is part of the byte model above,
+    // so the answers use it.
     std::vector<double> base(H);
     if (a.online_mix) {
         base = pt;
@@ -1464,20 +1947,96 @@ int cmd_context8k(const Args& a) {
         std::cout << chain << "_bpc " << bits / static_cast<double>(H - half) << "\n";
         ctx_bpc = bits / static_cast<double>(H - half), ctx_src = chain;
     };
-    if (cc) {
-        mix_cls_into(*cc, data.data(), kTrain, half, base);
+    if (cc) {  // mix_cls_into, over its pass's pe and bucket
+        mix_into(cls_pe, cls_bk, half, ClassContext::kBuckets, base);
+        if (keep) cls_pf.assign(cls_pe.begin(), cls_pe.end());
+        std::vector<double>().swap(cls_pe);
         chain_line("_cls");
     }
     if (keep) snaps.emplace_back(base.begin(), base.end());
-    int rc = 0;
-    if (const auto sc = default_sim(a, data.data(), kTrain, rc)) {
-        std::vector<double> ps(H);
-        std::vector<int> sb(H);
-        for (std::size_t k = 0; k < H; ++k) {
-            double P[256];
-            sb[k] = SimilarContext::bucket(sc->predict(data.data(), kTrain + k, P));
-            ps[k] = P[data[kTrain + k]];
+    // FULL_DISTRIBUTION_MIXING.md: with the full mix on, the n-gram's and the LSTM's byte loops run inside its row loop
+    // (FullMixRun::run), on these same instances; their lines and chain stages follow in the same order as below.
+    std::unique_ptr<FullMixRun> fmr;
+    int fmr_rc = 0;  // FullMixRun::init's code, returned where the full mix was made before
+    double fm_lb = 0, fm_s = 0;
+    auto make_fmr = [&](const std::vector<double>& lam) {
+        fmr.reset(new FullMixRun{a, pm, w, data, kTrain, H, half, kn.get(), ig, cc.get(), lam, &snaps,
+                                 a.no_sim ? nullptr : &sim_rows, a.no_sim ? nullptr : &sb, dt.get(),
+                                 pipe ? static_cast<std::size_t>(a.pipeline) : 2});
+        if (pipe) {  // OPT_PIPELINE.md: the meta mixer on its own thread, one static producer, the document stream ahead
+            fmr->relay_meta = true;
+            fmr->nstatic = 1;
+            fmr->doc_ahead = true;
         }
+        fmr_rc = fmr->init();
+    };
+    pl::Task t_fm;
+    auto fm_job = [&]() -> int {
+        const auto s0 = clk::now();
+        int frc = 0;
+        if (a.no_lstm) {
+            frc = fmr->run<cypha::online::ByteLSTM>(nullptr, ng.get(), plstm, fm_lb, pngram, pngram_o, ng_bits);
+        } else if (a.lstm_size == 64) {
+            cypha::online::ByteLSTMT<64> L(0, 0.003, a.lstm_window);
+            frc = fmr->run(&L, ng.get(), plstm, fm_lb, pngram, pngram_o, ng_bits);
+        } else if (a.lstm_size == 128) {
+            cypha::online::ByteLSTMT<128> L(0, 0.003, a.lstm_window);
+            frc = fmr->run(&L, ng.get(), plstm, fm_lb, pngram, pngram_o, ng_bits);
+        } else {
+            cypha::online::ByteLSTMT<256> L(0, 0.003, a.lstm_window);
+            frc = fmr->run(&L, ng.get(), plstm, fm_lb, pngram, pngram_o, ng_bits);
+        }
+        fm_s = std::chrono::duration<double>(clk::now() - s0).count();
+        return frc;
+    };
+    // OPT_PIPELINE.md: the full mix needs only the document stage's lambdas from the chain, and those are fit on the
+    // first half. Every chain stage reads byte k's experts before byte k + 1's, so the chain's first half needs only the
+    // experts' first half. So with the pipeline on, the first half of the similar-context, copy and document stages is
+    // run on a copy as soon as the similar-context expert has read the first half (the slow and fast chains are not
+    // touched), and the full mix starts on its own thread with those lambdas, while that expert reads the second half.
+    // The whole document stage below must then fit the same lambdas; it is checked.
+    if (pipe && full_mix && np_ok && (a.no_lstm || lstm_ok)) {
+        bool ready = true;
+        std::vector<double> lam_pre;
+        if (!a.no_doc) {
+            const std::size_t h = std::min(half, H);
+            std::vector<double> cur(base.begin(), base.begin() + static_cast<std::ptrdiff_t>(h));
+            auto* const rate_save = cypha::online::g_rate_chains;
+            cypha::online::g_rate_chains = nullptr;
+            if (!a.no_sim) {
+                ready = sim_prog.wait(h);
+                if (ready) online_mix(ps, sb, SimilarContext::kBuckets, cur);
+            }
+            if (ready && (!a.no_copy || keep)) (void)t_copy.wait();
+            if (ready && !a.no_copy) online_mix(copy_pe, copy_bk, kCopyBuckets, cur);  // mix_into's online path
+            ready = ready && t_doc.wait() == 0;
+            if (ready) {
+                const auto& dp = dt->params();
+                const bool on[DocTopic::kParts] = {dp.trig, dp.cache, dp.topic};
+                double lam[DocTopic::kParts][DocTopic::kBuckets] = {};
+                for (int q = 0; q < DocTopic::kParts; ++q) {
+                    if (!on[q]) continue;
+                    fit_lambdas_gathered(doc_pe[q], cur, doc_bk[q], h, DocTopic::kBuckets, lam[q]);
+                    for (std::size_t k = 0; k < h; ++k) cur[k] = lam[q][doc_bk[q][k]] * doc_pe[q][k] + (1 - lam[q][doc_bk[q][k]]) * cur[k];
+                }
+                lam_pre.assign(&lam[0][0], &lam[0][0] + DocTopic::kParts * DocTopic::kBuckets);
+            }
+            cypha::online::g_rate_chains = rate_save;
+        }
+        if (ready && a.ngram) (void)t_ng.wait();
+        if (ready) {
+            make_fmr(lam_pre);
+            if (!fmr_rc) {
+                fmr->sim_ready = a.no_sim ? nullptr : &sim_prog;
+                t_fm.start(fm_job, true);
+                phase("full mix started at");
+            }
+        }
+    }
+    if (!t_sim.started()) t_sim.start(sim_job, false);
+    if (const int rc = t_sim.wait()) return rc;
+    phase("similar-context ready at");
+    if (sim_on) {
         if (a.online_mix) {
             online_mix(ps, sb, SimilarContext::kBuckets, base);
         } else {
@@ -1490,45 +2049,62 @@ int cmd_context8k(const Args& a) {
             d_sim.assign(ps.begin(), ps.end());
             d_simb.assign(sb.begin(), sb.end());
         }
-    } else if (rc)
-        return rc;
+        std::vector<double>().swap(ps);
+    }
     if (keep) snaps.emplace_back(base.begin(), base.end());
-    if (!a.no_copy) {
-        mix_copy_into(data.data(), kTrain, half, a.copy_min, base);
+    if (!t_copy.started() && (!a.no_copy || keep)) t_copy.start(copy_job, false);
+    (void)t_copy.wait();
+    if (!a.no_copy) {  // mix_copy_into, over its pass's pe and bucket
+        mix_into(copy_pe, copy_bk, half, kCopyBuckets, base, a.copy_min);
         chain_line("_copy");
     }
+    std::vector<double>().swap(copy_pe);
     if (keep) snaps.emplace_back(base.begin(), base.end());
     // GEN-C2 (docs/reports/GEN_C_TOPIC_CACHE.md, "GEN-C2"): the document experts' cache (--doc SPEC to read another
     // setting), last, over wiki train's words; its lambdas on the first half, its line on the second. --no-doc leaves
     // it out. The answers below never read it.
     std::vector<double> doc_lam;  // --full-mix reads the doc stage's lambdas
     if (!a.no_doc) {
-        int drc = 0;
-        const auto dt = make_doc(a.doc.empty() ? std::string("cache") : a.doc, data.data(), kTrain, drc);
-        if (!dt) return drc ? drc : 1;
-        mix_doc_into(*dt, data.data(), kTrain, half, base, &doc_lam);
+        if (!t_doc.started()) t_doc.start(doc_job, false);
+        if (const int drc = t_doc.wait()) return drc;
+        // mix_doc_into over the stream's buckets and P(y): each part's lambdas fit on the first half over cur, in part
+        // order, mixed there; then the second half, part by part at each byte.
+        const auto& dp = dt->params();
+        const bool on[DocTopic::kParts] = {dp.trig, dp.cache, dp.topic};
+        const std::size_t h = std::min(half, H);
+        double lam[DocTopic::kParts][DocTopic::kBuckets] = {};
+        for (int q = 0; q < DocTopic::kParts; ++q) {
+            if (!on[q]) continue;
+            fit_lambdas(doc_pe[q], base, doc_bk[q], h, DocTopic::kBuckets, lam[q]);
+            for (std::size_t k = 0; k < h; ++k) base[k] = lam[q][doc_bk[q][k]] * doc_pe[q][k] + (1 - lam[q][doc_bk[q][k]]) * base[k];
+        }
+        doc_lam.assign(&lam[0][0], &lam[0][0] + DocTopic::kParts * DocTopic::kBuckets);
+        for (std::size_t k = h; k < H; ++k)
+            for (int q = 0; q < DocTopic::kParts; ++q)
+                if (on[q]) base[k] = lam[q][doc_bk[q][k]] * doc_pe[q][k] + (1 - lam[q][doc_bk[q][k]]) * base[k];
         chain_line("_doc");
-        if (keep) {  // GLNX: the document experts' parts over the whole holdout, as mix_doc_into reads them
-            const auto& dp = dt->params();
-            const bool on[DocTopic::kParts] = {dp.trig, dp.cache, dp.topic};
-            DocTopic::Stream st(*dt);
-            for (int q = 0; q < DocTopic::kParts; ++q) d_doc[q].assign(H, 0.0f), d_docb[q].assign(H, 0.0f);
-            for (std::size_t k = 0; k < H; ++k) {
-                for (int q = 0; q < DocTopic::kParts; ++q)
-                    if (on[q]) {
-                        double P[256];
-                        d_docb[q][k] = static_cast<float>(st.predict(q, P));
-                        d_doc[q][k] = static_cast<float>(P[data[kTrain + k]]);
-                    }
-                st.feed(data[kTrain + k]);
+        for (int q = 0; q < DocTopic::kParts; ++q) {
+            if (keep) {  // GLNX: the document experts' parts over the whole holdout, as mix_doc_into reads them
+                d_doc[q].assign(H, 0.0f), d_docb[q].assign(H, 0.0f);
+                if (on[q])
+                    for (std::size_t k = 0; k < H; ++k)
+                        d_docb[q][k] = static_cast<float>(doc_bk[q][k]), d_doc[q][k] = static_cast<float>(doc_pe[q][k]);
             }
+            std::vector<double>().swap(doc_pe[q]);
+            std::vector<int>().swap(doc_bk[q]);
         }
     }
+    if (fmr && fmr->doc_lam != doc_lam) {  // the full mix started early with the first half's fit: it must be this one
+        std::cerr << "context8k: the full mix started with other document lambdas (a bug)\n";
+        return 1;
+    }
+    phase("chain to the document experts done at");
     // §13.15 (Odin: "have the GLN feed into the mixers ... recurrent and online on every part"): --gln adds the bitwise
     // GLN with a byte LSTM inside it (cypha::online::BitwiseGLN; pretrained bit counts on wiki train, then learning online
     // over the holdout, every byte predicted before it is learned) as the chain's last stage, a lambda per InfiniGram
     // bucket, and as one more input of --online-final. --gln-feedback closes the loop: two more side values gate every GLN
     // neuron, the chain's recent loss and the GLN's loss against it (moving averages over about 32 bytes already seen).
+    // OPT_PIPELINE.md: with feedback the GLN reads the chain (a mixer's output), so it runs here, in the chain's order.
     std::vector<double> pgln;
     if (a.gln && !a.no_gln) {  // context8k --gln (§13.15, C3); off by default since 2026-11-04
         cypha::online::BitwiseGLN::Params gp;
@@ -1565,146 +2141,61 @@ int cmd_context8k(const Args& a) {
         mix_into(pgln, bk8k, half, kBuckets, base);
         chain_line("_gln");
     }
-    // §13.18 --lstm (Odin: "maybe just a simple LSTM ... that's what PAQ8 uses"): the byte LSTM (cypha::online::ByteLSTM,
-    // learning online from scratch over the holdout, each byte predicted before it is learned) as the chain's last stage,
-    // a lambda per InfiniGram bucket, and one more input of --online-final.
-    std::vector<double> plstm;
-    // §13.24 --final-gate lstm: the LSTM's state also picks the final layer's weight set, as the GLN's gates read it: the
-    // signs of 4 fixed random projections of the state that predicts the byte (16) x the previous byte's class (5).
-    std::vector<std::uint8_t> lgate;
     if (a.final_gate == "lstm" && a.no_lstm) {
         std::cerr << "--final-gate lstm needs the LSTM (drop --no-lstm)\n";
         return 2;
     }
-    // ONLINE_LEARNING_UPGRADES --ngram: the online n-gram expert (cypha::online::OnlineNgram; hashed bit counts of orders
-    // --ngram-orders with 8-bit slot checks, pretrained on wiki train, then predicting and learning byte by byte over wiki
-    // train's last MiB and the holdout) as a chain stage (a lambda per InfiniGram bucket, online) before the LSTM, and as
-    // final-layer inputs: its mixed probability and each order's.
-    std::vector<double> pngram;
-    std::vector<std::vector<float>> pngram_o;
-    // FULL_DISTRIBUTION_MIXING.md: with the full mix on, the n-gram's and the LSTM's byte loops run inside its row loop
-    // (FullMixRun::run), on these same instances; their lines and chain stages follow in the same order as below.
-    std::unique_ptr<FullMixRun> fmr;
-    if (full_mix) {
-        fmr.reset(new FullMixRun{a, pm, w, data, kTrain, H, half, kn.get(), ig, cc.get(), doc_lam,
-                                 snaps.size() == 4 ? &snaps[3] : nullptr});
-        if (const int frc = fmr->init()) return frc;
-    }
-    std::unique_ptr<cypha::online::OnlineNgram> ng_fused;
+    if (full_mix && !fmr) make_fmr(doc_lam);  // the full mix's place in the old order
+    if (fmr_rc) return fmr_rc;
     std::function<void()> ngram_tail;  // the n-gram's lines and chain stage, after its byte loop
-    double ng_bits = 0;
     if (a.ngram) {
-        cypha::online::OnlineNgram::Params np;
-        np.orders.clear();
-        for (std::size_t p0 = 0; p0 < a.ngram_orders.size();) {
-            const std::size_t p1 = std::min(a.ngram_orders.find(',', p0), a.ngram_orders.size());
-            np.orders.push_back(std::atoi(a.ngram_orders.substr(p0, p1 - p0).c_str()));
-            p0 = p1 + 1;
-        }
-        np.tb = a.ngram_tb;
-        np.cap = a.ngram_cap;
-        np.lr = a.ngram_lr;
-        if (np.orders.empty() || np.orders.size() > 16 || !std::is_sorted(np.orders.begin(), np.orders.end()) ||
-            np.orders.back() > 64 || np.cap < 2 || np.cap > 500) {
+        if (!np_ok) {
             std::cerr << "--ngram-orders: 1 to 16 ascending orders up to 64; --ngram-cap 2..500\n";
             return 2;
         }
-        const auto t0 = std::chrono::steady_clock::now();
-        auto ng = std::make_unique<cypha::online::OnlineNgram>(np);
-        const std::size_t warm = std::min<std::size_t>(kTrain, std::size_t{1} << 20);
-        ng->pretrain(data.data(), kTrain - warm);
-        double po[32];
-        for (std::size_t i = kTrain - warm; i < kTrain; ++i) ng->code(data[i], po);
-        const double ng_mb = ng->bytes() / 1e6;
-        ngram_tail = [&, np, t0, ng_mb] {
+        if (!t_ng.started()) t_ng.start(ng_job, false);
+        (void)t_ng.wait();
+        ngram_tail = [&] {
             std::cout << "ngram_alone_bpc " << ng_bits / static_cast<double>(H - half) << "\n";
             std::cerr << "ngram orders " << a.ngram_orders << " tb " << np.tb << " cap " << np.cap << " lr " << np.lr << ": "
-                      << ng_mb << " MB, " << std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count()
-                      << " s\n";
+                      << ng_mb << " MB, " << std::chrono::duration<double>(clk::now() - ng_t0).count() << " s\n";
             mix_into(pngram, bk8k, half, kBuckets, base);
             chain_line("_ngram");
         };
-        if (fmr) {
-            ng_fused = std::move(ng);  // its byte loop runs in the full mix's
-        } else {
-            pngram.resize(H);
-            pngram_o.assign(static_cast<std::size_t>(ng->orders()), std::vector<float>(H));
-            for (std::size_t k = 0; k < H; ++k) {
-                pngram[k] = std::max(ng->code(data[kTrain + k], po), 1e-12);
-                for (int q = 0; q < ng->orders(); ++q) pngram_o[static_cast<std::size_t>(q)][k] = static_cast<float>(po[q]);
-                if (k >= half) ng_bits += -std::log2(pngram[k]);
-            }
-            ng.reset();
-            ngram_tail();
-        }
+        if (!fmr) ngram_tail();  // its byte loop ran in its own pass; with the full mix it runs in the full mix's
     }
     if (fmr && a.no_lstm) {  // the full mix's row loop with the n-gram only
-        double lb0 = 0;
-        if (const int frc = fmr->run<cypha::online::ByteLSTM>(nullptr, ng_fused.get(), plstm, lb0, pngram, pngram_o, ng_bits))
-            return frc;
-        ng_fused.reset();
+        if (!t_fm.started()) t_fm.start(fm_job, false);
+        if (const int frc = t_fm.wait()) return frc;
+        ng.reset();
         if (ngram_tail) ngram_tail();
     }
     if (!a.no_lstm) {  // the default in context8k since §13.18's D1
         // ONLINE_LEARNING_UPGRADES: --lstm-size picks the hidden size (64, 128, 256) and --lstm-window the BPTT window; 64
         // and 20 are the LSTM of §13.18, unchanged.
-        auto lstm_pass = [&](auto& L) {
-            constexpr int LH = std::remove_reference_t<decltype(L)>::H;
-            const auto t0 = std::chrono::steady_clock::now();
-            plstm.resize(H);
-            std::vector<double> R(4 * static_cast<std::size_t>(LH));
-            if (a.final_gate == "lstm") {
-                std::mt19937_64 rr(7);
-                std::normal_distribution<double> nd(0.0, 1.0);
-                for (double& x : R) x = nd(rr);
-                lgate.resize(H);
-            }
-            double P[256], lb = 0;
-            if (fmr) {  // FULL_DISTRIBUTION_MIXING.md: this byte loop, and the n-gram's, inside the full mix's
-                if (const int frc = fmr->run(&L, ng_fused.get(), plstm, lb, pngram, pngram_o, ng_bits)) return frc;
-                ng_fused.reset();
-                if (ngram_tail) ngram_tail();
-            }
-            for (std::size_t k = 0; !fmr && k < H; ++k) {
-                if (!lgate.empty()) {
-                    int g = 0;
-                    for (int m = 0; m < 4; ++m) {
-                        double d = 0;
-                        for (int q = 0; q < LH; ++q) d += R[static_cast<std::size_t>(m) * LH + q] * L.h()[static_cast<std::size_t>(q)];
-                        if (d > 0) g |= 1 << m;
-                    }
-                    lgate[k] = static_cast<std::uint8_t>(g);
-                }
-                L.dist(P);
-                plstm[k] = std::max(P[data[kTrain + k]], 1e-12);
-                if (k >= half) lb += -std::log2(plstm[k]);
-                L.step(data[kTrain + k], true);
-            }
-            std::cout << "lstm_alone_bpc " << lb / static_cast<double>(H - half) << "\n";
-            std::cerr << "lstm hidden " << LH << " window " << a.lstm_window << ": "
-                      << std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count() << " s\n";
-            return 0;
-        };
         if (a.lstm_window < 1 || a.lstm_window > 1000) {
             std::cerr << "--lstm-window 1..1000\n";
             return 2;
         }
-        if (a.lstm_size == 64) {
-            cypha::online::ByteLSTMT<64> L(0, 0.003, a.lstm_window);
-            if (const int lrc = lstm_pass(L)) return lrc;
-        } else if (a.lstm_size == 128) {
-            cypha::online::ByteLSTMT<128> L(0, 0.003, a.lstm_window);
-            if (const int lrc = lstm_pass(L)) return lrc;
-        } else if (a.lstm_size == 256) {
-            cypha::online::ByteLSTMT<256> L(0, 0.003, a.lstm_window);
-            if (const int lrc = lstm_pass(L)) return lrc;
-        } else {
+        if (!lstm_ok) {
             std::cerr << "--lstm-size 64|128|256\n";
             return 2;
         }
+        if (fmr) {  // FULL_DISTRIBUTION_MIXING.md: this byte loop, and the n-gram's, inside the full mix's
+            if (!t_fm.started()) t_fm.start(fm_job, false);
+            if (const int frc = t_fm.wait()) return frc;
+            ng.reset();
+            if (ngram_tail) ngram_tail();
+            lstm_bits = fm_lb, lstm_s = fm_s;
+        } else if (!lstm_ran) {
+            (void)lstm_job();
+        }
+        std::cout << "lstm_alone_bpc " << lstm_bits / static_cast<double>(H - half) << "\n";
+        std::cerr << "lstm hidden " << a.lstm_size << " window " << a.lstm_window << ": " << lstm_s << " s\n";
         mix_into(plstm, bk8k, half, kBuckets, base);
         chain_line("_lstm");
     }
+    phase("full mix rows and the last chain stages done at");
     cypha::online::g_rate_chains = nullptr;  // §13.21: the slow and fast chains are complete
     cypha::online::g_step_mult = nullptr;    // the chain is complete; the final layer reads step_mult itself
     if (dump || a.online_final) {
@@ -1713,6 +2204,7 @@ int cmd_context8k(const Args& a) {
         // InfiniGram at caps 4, 16, 64, 512, 8192 (prob), its bucket and match length at 8192; class (prob, bucket);
         // similar-context (prob, bucket); copy (hit, bucket, match length); the document parts trig, cache, topic (prob,
         // bucket each); the chain after InfiniGram, class, similar-context, copy, and the final chain. Absent experts are 0.
+        // OPT_PIPELINE.md: every value comes from its expert's pass above (the same calls, so the same numbers).
         const int C = 1 + 7 + 1 + 2 + 7 + 2 + 2 + 3 + 6 + 5;  // 36: byte, trie 5 + match 2, trie mixture, ... (glnx.py COLS)
         std::vector<float> row(C);
         std::ofstream f;
@@ -1737,32 +2229,28 @@ int cmd_context8k(const Args& a) {
             const unsigned y = data[i];
             int c = 0;
             row[c++] = static_cast<float>(y);
-            double e[5][256];
-            bool em = false;
-            unsigned pred = 0;
-            pm.fill_experts(data.data(), i, kTrain, Mode::Synth, e, em, pred, false);
-            for (int j = 0; j < 5; ++j) row[c++] = static_cast<float>(e[j][y]);
-            row[c++] = em && pred == y ? 1.0f : 0.0f;
-            row[c++] = em ? 1.0f : 0.0f;
+            for (int j = 0; j < 5; ++j) row[c++] = e5[k * 5 + static_cast<std::size_t>(j)];
+            row[c++] = (emf[k] & 2) ? 1.0f : 0.0f;
+            row[c++] = (emf[k] & 1) ? 1.0f : 0.0f;
             row[c++] = static_cast<float>(pt_trie[k]);
             int kb = 0;
-            row[c++] = kn ? static_cast<float>(kn->prob_bucket(data.data(), i, y, kb)) : 0.0f;
+            row[c++] = kn ? kn_pf[k] : 0.0f;
+            if (kn) kb = kn_bk[k];
             row[c++] = static_cast<float>(kb);
             for (int q = 0; q < 5; ++q) row[c++] = q < static_cast<int>(pinf_caps.size()) ? static_cast<float>(pinf_caps[q][k]) : 0.0f;
             row[c++] = static_cast<float>(bk8k[k]);
             row[c++] = static_cast<float>(n8k[k]);
             if (cc) {
-                double P[256];
-                row[c + 1] = static_cast<float>(ClassContext::bucket(cc->predict(data.data(), i, P)));
-                row[c] = static_cast<float>(P[y]);
+                row[c + 1] = static_cast<float>(cls_bk[k]);
+                row[c] = cls_pf[k];
             } else {
                 row[c] = row[c + 1] = 0.0f;
             }
             c += 2;
             row[c++] = d_sim.empty() ? 0.0f : static_cast<float>(d_sim[k]);
             row[c++] = d_simb.empty() ? 0.0f : static_cast<float>(d_simb[k]);
-            int cn = 0;
-            const unsigned cpred = copy_pred(data.data(), i, cn);
+            const int cn = copy_cn[k];
+            const unsigned cpred = static_cast<unsigned>(copy_cp[k]);
             row[c++] = cpred == y && cn > 0 ? 1.0f : 0.0f;
             row[c++] = static_cast<float>(copy_bucket(cn));
             row[c++] = static_cast<float>(cn);
@@ -1805,6 +2293,7 @@ int cmd_context8k(const Args& a) {
             std::cout << "online_final_bpc " << fin_bits / static_cast<double>(H - half) << " (chain "
                       << chain_bits / static_cast<double>(H - half) << ")\n";
     }
+    phase("final layer done at");
     // FULL_DISTRIBUTION_MIXING.md: the full mix's lines (its rows ran with the n-gram's and the LSTM's, above).
     if (fmr && !fmr->fm) {  // no n-gram and no LSTM: nothing ran its row loop yet
         double lb0 = 0, nb0 = 0;
@@ -1829,71 +2318,13 @@ int cmd_context8k(const Args& a) {
     std::cout << "median_matched_context_bytes " << sorted[H / 2] << "\n";
     for (int e = 0; e < 8; ++e) std::cout << "matched " << names[e] << " " << 100.0 * cnt[e] / H << "%\n";
 
-    auto gen = [&](const std::string& prompt, int& n0) {
-        std::vector<std::uint8_t> seq(prompt.begin(), prompt.end());
-        int prev = -1;
-        FmInfiniGram::Cursor cur;
-        n0 = -1;
-        for (int t = 0; t < 150; ++t) {
-            double e[5][256];
-            bool m = false;
-            unsigned pred = 0;
-            pm.fill_experts(seq.data(), seq.size(), all, Mode::Synth, e, m, pred, false);
-            double M[256];
-            mix_dist(w, e, m, pred, M);
-            if (kn && !kn_off_ans) bkn_mix(*kn, lkn.empty() ? nullptr : lkn.data(), kn_rep, seq.data(), seq.size(), M);  // BKN2; BKN3
-            const std::size_t len = std::min<std::size_t>(seq.size(), 8192);
-            const auto r = ig.query(seq.data() + (seq.size() - len), len, 8192, prev < 0 ? -1 : std::min(prev + 1, 8192),
-                                    1, cur);
-            prev = r.n;
-            if (t == 0) n0 = r.n;
-            const double l = (kn_off_ans ? lam8k0 : lam8k)[bucket(r.n, r.total)];  // BKN3: answers without Kneser-Ney
-            int best = 0;
-            double bp = -1;
-            for (int s = 0; s < 256; ++s) {
-                const double pc = r.total ? static_cast<double>(r.count[s]) / static_cast<double>(r.total) : 0.0;
-                const double p = l * pc + (1 - l) * M[s];
-                if (p > bp) {
-                    bp = p;
-                    best = s;
-                }
-            }
-            seq.push_back(static_cast<std::uint8_t>(best));
-        }
-        return std::string(seq.begin() + static_cast<std::ptrdiff_t>(prompt.size()), seq.end());
-    };
-
-    struct Q {
-        std::string kind, prompt, expect;
-    };
-    std::vector<Q> qs;
-    const std::size_t picks[3] = {0, turns.size() / 2, turns.size() - 1};
-    for (auto p : picks) qs.push_back({"seen", turns[p].prompt, turns[p].answer.substr(0, 30)});
-    for (auto p : picks) {
-        std::string s = turns[p].prompt;
-        s[6] = static_cast<char>(std::tolower(static_cast<unsigned char>(s[6])));
-        qs.push_back({"change_first_letter", s, turns[p].answer.substr(0, 30)});
-    }
-    for (auto p : picks) {
-        const std::string& s = turns[p].prompt;
-        qs.push_back({"add_Thanks_at_end", s.substr(0, s.size() - 12) + " Thanks.\nAssistant: ",
-                      turns[p].answer.substr(0, 30)});
-    }
-    qs.push_back({"paraphrase", "User: When did Virgin Blue begin flying?\nAssistant: ", "2000"});
-    qs.push_back({"paraphrase", "User: Who are the cast members of Southern Charm?\nAssistant: ", "Conover"});
-    qs.push_back({"paraphrase", "User: Tell me about the Masters golf tournament.\nAssistant: ", "Augusta"});
-    for (auto j : held_idx) qs.push_back({"heldout_dolly", turns[j].prompt, turns[j].answer.substr(0, 30)});
-    const std::pair<const char*, const char*> wiki[] = {
-        {"Who wrote Atlas Shrugged?", "Rand"},          {"What is the capital of Algeria?", "Algiers"},
-        {"Who was Aristotle's teacher?", "Plato"},      {"What is the capital of Andorra?", "Andorra la Vella"},
-        {"Who composed An American in Paris?", "Gershwin"}, {"What is the capital of Albania?", "Tirana"},
-        {"Who taught Alexander the Great?", "Aristotle"}, {"What does an aardvark eat?", "ant"}};
-    for (auto& [q, ans] : wiki) qs.push_back({"wiki_fact", std::string("User: ") + q + "\nAssistant: ", ans});
-
+    if (!t_gen.started()) t_gen.start(gen_job, false);
+    (void)t_gen.wait();
     std::map<std::string, std::pair<int, int>> tally;
-    for (auto& q : qs) {
-        int n0 = 0;
-        const std::string g = gen(q.prompt, n0);
+    for (std::size_t qi = 0; qi < qs.size(); ++qi) {
+        const auto& q = qs[qi];
+        const int n0 = gen_n0[qi];
+        const std::string& g = gens[qi];
         const bool ok = lowered(g).find(lowered(q.expect)) != std::string::npos;
         tally[q.kind].first += ok;
         tally[q.kind].second += 1;
@@ -1904,6 +2335,7 @@ int cmd_context8k(const Args& a) {
     }
     for (auto& [k, v] : tally) std::cout << "TALLY " << k << " " << v.first << "/" << v.second << "\n";
     std::cout << "context8k_bpc " << ctx_bpc << " (" << ctx_src << ")\n";  // FULL_DISTRIBUTION_MIXING.md: the headline
+    phase("done at");
     return 0;
 }
 
