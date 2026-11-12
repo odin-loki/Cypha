@@ -1,0 +1,179 @@
+sample	sent	n_sents	relation	subject	entity	pronoun	object	verdict	store	note	date	pattern	sentence
+0:trie_T1.0	3	6	birth_place	Francis Upritchard	Francis Upritchard	0	New York	unknown		no birth_place in store		^ [S] was born in [O] ,	Francis Upritchard was born in New York, New Zealand.
+0:trie_T1.0	3	6	birth_place	Francis Upritchard	Francis Upritchard	0	New York , New Zealand	unknown		no birth_place in store		[S] was born in [O]	Francis Upritchard was born in New York, New Zealand.
+0:trie_T1.0	4	6	is_a	Auckland	Auckland	0	city	unknown	urban area	open list		[S] is a [O]	Auckland is a city located in the Belgian province of New Zealand.
+0:trie_T1.0	6	6	is_a	University of Auckland	University of Auckland	0	public	unknown		no is_a or occupation in store		[S] is a [O] ,	University of Auckland is a public, co - educational state located in Auckland, Sussex.
+6:trie_T1.0	3	6	nationality	Gene Simmons	Gene Simmons	0	Israeli	supported	Israeli			^ [S] is a [O]	Gene Simmons was an Israeli physicist and mathematician.
+6:trie_T1.0	3	6	is_a	Gene Simmons	Gene Simmons	0	physicist	unknown	musician	open list		ADD [S] is a [NAT] [OCC]	Gene Simmons was an Israeli physicist and mathematician.
+6:trie_T1.0	3	6	is_a	Gene Simmons	Gene Simmons	0	mathematician .	unknown	musician	open list		ADD [S] is a [NAT] [OCC]	Gene Simmons was an Israeli physicist and mathematician.
+7:trie_T1.0	1	10	birth_place	He		1	Chalmers University of Technology	unknown		subject not in store		[P] was born in [O]	He was born in Chalmers University of Technology in Sweden.
+16:trie_T1.0	2	7	is_a	Dhaka		0	town	unknown		subject not in store		[S] is a [O]	Dhaka is a town and municipality in the county of East Pakistan, India.
+16:trie_T1.0	2	7	is_a	Dhaka		0	municipality	unknown		subject not in store		ADD [S] is a [NAT] [OCC]	Dhaka is a town and municipality in the county of East Pakistan, India.
+16:trie_T1.0	3	7	is_a	Divisions of Bangladesh	Divisions of Bangladesh	0	area	unknown		no is_a or occupation in store		^ [S] is a [O] in	Divisions of Bangladesh is an area in the center of Bangladesh in Europe.
+16:trie_T1.0	4	7	is_a	South East Point		0	national park	unknown		subject not in store		^ [S] is a [O] in	South East Point is a national park in New South Wales (Bangladesh); Mormonism% south of Dhaka.
+21:trie_T1.0	2	8	birth_place	He		1	Los Angeles , California	unknown		subject not in store		[P] was born in [O]	He was born in Los Angeles, California.
+21:trie_T1.0	2	8	birth_place	He		1	Los Angeles	unknown		subject not in store		[P] was born in [O] ,	He was born in Los Angeles, California.
+21:trie_T1.0	5	8	is_a	Alameda		0	city	unknown		subject not in store		[S] is a [O]	Alameda is a city located in the Belgian province of California.
+21:trie_T1.0	7	8	is_a	Juneau		0	city	unknown		subject not in store		[S] is a [O]	Juneau was a city and municipality in the county of Alaska, Hawaii.
+21:trie_T1.0	7	8	is_a	Juneau		0	municipality	unknown		subject not in store		ADD [S] is a [NAT] [OCC]	Juneau was a city and municipality in the county of Alaska, Hawaii.
+29:trie_T1.0	2	7	is_a	Rhein - Neckar - Kreis	Rhein-Neckar-Kreis	0	municipality	unknown	district	open list		^ [S] is a [O] in	Rhein - Neckar - Kreis is a municipality in the canton of Baden - Württemberg in Germany.
+29:trie_T1.0	3	7	director	It		1	J . K . Rowling	unknown		subject not in store		[P] was directed by [O]	It was directed by J. K. Rowling has only one " This use of works to the Polish language.
+29:trie_T1.0	3	7	director	It		1	J . K	unknown		subject not in store		[P] was directed by [O] .	It was directed by J. K. Rowling has only one " This use of works to the Polish language.
+32:trie_T1.0	2	7	is_a	It	It (novel)	0	concept	unknown	pronoun	open list		[S] is a [O] that	It is a concept that free markets.
+36:trie_T1.0	1	8	birth_place	He		1	Amsterdam , Europe	unknown		subject not in store		[P] was born in [O]	He was born in Amsterdam, Europe, the son of a German soldier.
+36:trie_T1.0	6	8	is_a	Brussels	Brussels	0	town	unknown		no is_a or occupation in store		[S] is a [O]	Brussels is a town and city in the county of Belgium, Germany.
+36:trie_T1.0	6	8	is_a	Brussels	Brussels	0	city	unknown		no is_a or occupation in store		ADD [S] is a [NAT] [OCC]	Brussels is a town and city in the county of Belgium, Germany.
+54:trie_T1.0	2	8	is_a	Pope Gregory XV	Pope Gregory XV	0	daughter	unknown		no is_a or occupation in store		[S] is a [O]	Pope Gregory XV was a daughter of King Priam of Bologna.
+54:trie_T1.0	3	8	birth_place	Pope Gregory XIII	Pope Gregory XIII	0	Bologna	supported	Bologna			[S] was born in [O]	Pope Gregory XIII was born in Bologna.
+60:trie_T1.0	9	10	is_a	There		0	number	unknown		subject not in store		[S] are an [O]	There were a number of times.
+64:trie_T1.0	2	8	nationality	Carl Friedrich Gauss	Carl Friedrich Gauss	0	German	supported	German			^ [S] is a [O]	Carl Friedrich Gauss is a German soldier and politician.
+64:trie_T1.0	2	8	is_a	Carl Friedrich Gauss	Carl Friedrich Gauss	0	soldier	unknown	Mathematician;astronomer;mathematician;physicist;scientist	open list		ADD [S] is a [NAT] [OCC]	Carl Friedrich Gauss is a German soldier and politician.
+64:trie_T1.0	2	8	is_a	Carl Friedrich Gauss	Carl Friedrich Gauss	0	politician .	unknown	Mathematician;astronomer;mathematician;physicist;scientist	open list		ADD [S] is a [NAT] [OCC]	Carl Friedrich Gauss is a German soldier and politician.
+64:trie_T1.0	3	8	birth_place	Prince Carl Friedrich Gauss	Carl Friedrich Gauss	partial	Lake Indian Express , Göttingen	unknown	Braunschweig	places not comparable in store		^ [S] was born in [O] ,	Prince Carl Friedrich Gauss was born in the Lake Indian Express, Göttingen, so.
+64:trie_T1.0	7	8	birth_date	Michael J . P . Richardson	The Big Bopper	partial	1980	contradicted	1930-10-24		valid	[S] ( [O] -	For example, when her brother Michael J. P. Richardson (1980 - 1986.
+64:trie_T1.0	7	8	death_date	Michael J . P . Richardson	The Big Bopper	partial	1986	contradicted	1959-02-03		valid	[S] ( # - [O]	For example, when her brother Michael J. P. Richardson (1980 - 1986.
+66:trie_T1.0	1	9	is_a	Ankara	Ankara	0	city	unknown	capital	open list		[S] is a [O]	Ankara is a city located in the Belgian province of Turkey.
+66:trie_T1.0	3	9	is_a	The Euphrates	Euphrates	0	river	unknown		no is_a or occupation in store		^ [S] is a [O] in	The Euphrates is a river in the county of Turkey, Iraq.
+66:trie_T1.0	5	9	located_in	Mount Ararat	Mount Ararat	0	Internet	unknown	turkey	places not comparable in store		the [S] is a [O]	The Mount Ararat is an Internet in Turkey and Great Britain, France.
+66:trie_T1.0	6	9	birth_place	He		1	East Africa	unknown		subject not in store		[P] was born in [O]	He was born in East Africa.
+67:trie_T1.0	1	8	birth_place	He		1	Amsterdam , Europe	unknown		subject not in store		[P] was born in [O]	He was born in Amsterdam, Europe, the son of a German soldier.
+67:trie_T1.0	3	8	is_a	Athens	Athens	0	town	unknown	capital	open list		[S] is a [O]	Athens is a town located throughout the animal kingdom of Europe.
+70:trie_T1.0	1	7	birth_place	He		1	Calf of Man , Isle of Man	unknown		subject not in store		[P] was born in [O]	He was born in Calf of Man, Isle of Man, the son of a German soldier.
+75:trie_T1.0	1	8	birth_place	She		1	Berlin , Germany	unknown		subject not in store		[P] was born in [O]	She was born in Berlin, Germany.
+75:trie_T1.0	1	8	birth_place	She		1	Berlin	unknown		subject not in store		[P] was born in [O] ,	She was born in Berlin, Germany.
+75:trie_T1.0	5	8	death_place	He		1	Munich , Bavaria	unknown		subject not in store		[P] died in [O]	He died in Munich, Bavaria.
+75:trie_T1.0	7	8	is_a	The Ruhr	Ruhr	0	river	supported	river			^ [S] is a [O] in	The Ruhr is a river in the Sauerland area in central Europe.
+75:trie_T1.0	8	8	is_a	Brussels	Brussels	0	city	unknown		no is_a or occupation in store		[S] is a [O]	Brussels is a city and municipality in the county of Belgium, Germany.
+75:trie_T1.0	8	8	is_a	Brussels	Brussels	0	municipality	unknown		no is_a or occupation in store		ADD [S] is a [NAT] [OCC]	Brussels is a city and municipality in the county of Belgium, Germany.
+78:trie_T1.0	2	8	birth_place	Bernd Behr	Bernd Behr	0	New York	unknown		no birth_place in store		^ [S] was born in [O] ,	Bernd Behr was born in New York, London.
+78:trie_T1.0	2	8	birth_place	Bernd Behr	Bernd Behr	0	New York , London	unknown		no birth_place in store		[S] was born in [O]	Bernd Behr was born in New York, London.
+80:trie_T1.0	2	11	birth_place	Bert Hölldobler	Bert Hölldobler	0	New York	unknown		no birth_place in store		^ [S] was born in [O] ,	Bert Hölldobler was born in New York, german.
+80:trie_T1.0	4	11	is_a	Bavaria	Bavaria	0	city	unknown		no is_a or occupation in store		[S] is a [O]	Bavaria is a city located in the Belgian province of Germany.
+80:trie_T1.0	5	11	death_place	He	Heimrad Prem	1	Munich , Bavaria	unknown		no death_place in store		[P] died in [O]	He died in Munich, Bavaria.
+82:trie_T1.0	4	6	is_a	Beijing	Beijing	0	city	unknown	capital	open list		[S] is a [O]	Beijing is a city located in the Belgian province of China.
+85:trie_T1.0	4	9	birth_place	Berthe Morisot	Berthe Morisot	0	Dublin	unknown		no birth_place in store		[S] was born in [O]	Berthe Morisot was born in Dublin in 1841.
+85:trie_T1.0	8	9	is_a	He		0	pioneer	unknown		subject not in store		^ [S] is a [O] in	He was a pioneer in group theory.
+85:trie_T1.0	8	9	is_a	He	Berthe Morisot	1	pioneer	unknown	painter	open list		ADD [S] is a [NAT] [OCC]	He was a pioneer in group theory.
+86:trie_T1.0	2	6	is_a	Tsuen Wan District	Tsuen Wan District	0	city	unknown		no is_a or occupation in store		[S] is a [O]	Tsuen Wan District is a city located in the Belgian province of Hong Kong.
+89:trie_T1.0	1	8	is_a	The Saks Fifth Avenue	Saks Fifth Avenue	0	river	unknown	chain	open list		^ [S] is a [O] in	The Saks Fifth Avenue is a river in the USA name in French Canada.
+92:trie_T1.0	2	5	is_a	Solaris Operating Environment	Solaris Operating Environment	0	novel	unknown	computer;operating system	open list		[S] is a [O] of	Solaris Operating Environment is a novel of the Unix family.
+98:trie_T1.0	3	8	birth_place	He		1	New York City	unknown		subject not in store		[P] was born in [O]	He was born in New York City.
+109:trie_T1.0	2	9	birth_place	Claude Monet	Claude Monet	0	Paris	supported	Paris			[S] was born in [O]	Claude Monet was born in Paris.
+109:trie_T1.0	3	9	is_a	Brigitte Bardot	Brigitte Bardot	0	son	unknown	actor	open list		[S] is a [O]	Brigitte Bardot was a son of King Priam of Paris.
+109:trie_T1.0	4	9	is_a	Les Halles	Les Halles	0	area	supported	area			^ [S] is a [O] in	Les Halles is an area in the centre of Paris, France.
+110:trie_T1.0	3	8	birth_place	He		1	Berlin , Germany	unknown		subject not in store		[P] was born in [O]	He was born in Berlin, Germany.
+110:trie_T1.0	3	8	birth_place	He		1	Berlin	unknown		subject not in store		[P] was born in [O] ,	He was born in Berlin, Germany.
+110:trie_T1.0	4	8	is_a	Ruhr	Ruhr	0	city	unknown	river	open list		^ [S] is a [O] in	Ruhr is a city in the center of Germany in Europe.
+110:trie_T1.0	5	8	is_a	Berlin	Berlin	0	town	unknown	city	open list		^ [S] is a [O] in	Berlin is a town in the state of Europe, Russia.
+110:trie_T1.0	6	8	is_a	The Ruhr	Ruhr	0	river	supported	river			^ [S] is a [O] in	The Ruhr is a river in the Sauerland area in central Europe.
+110:trie_T1.0	8	8	is_a	Brussels	Brussels	0	city	unknown		no is_a or occupation in store		[S] is a [O]	Brussels is a city and municipality in the field of Belgium, Germany.
+110:trie_T1.0	8	8	is_a	Brussels	Brussels	0	municipality	unknown		no is_a or occupation in store		ADD [S] is a [NAT] [OCC]	Brussels is a city and municipality in the field of Belgium, Germany.
+111:trie_T1.0	2	8	birth_place	Alan Currall	Alan Currall	0	New York	contradicted	Staffordshire	different top places		^ [S] was born in [O] ,	Alan Currall was born in New York, Scotland.
+111:trie_T1.0	2	8	birth_place	Alan Currall	Alan Currall	0	New York , Scotland	contradicted	Staffordshire	different top places; by part		[S] was born in [O]	Alan Currall was born in New York, Scotland.
+111:trie_T1.0	4	8	is_a	Moray	Moray	0	term	unknown		no is_a or occupation in store		^ [S] is a [O] in	Moray is a term in Scotland, Ireland.
+111:trie_T1.0	5	8	is_a	Melrose	Melrose	0	town	supported	town			[S] is a [O]	Melrose is a town located in the Belgian province of Scottish Borders.
+111:trie_T1.0	7	8	is_a	David Brewster	David Brewster	0	native	unknown	astronomer;mathematician;philosopher;physicist;writer	open list		[S] is a [O] of	However, David Brewster was a native of Scottish Borders.
+111:trie_T1.0	8	8	is_a	Battle of Stirling Bridge	Battle of Stirling Bridge	0	public	unknown		no is_a or occupation in store		[S] is a [O] ,	Battle of Stirling Bridge is a public, co - educational university located in Stirling, Scotland.
+118:trie_T1.0	5	6	is_a	It	It (novel)	0	agreement	unknown	pronoun	open list		[S] is a [O]	It was an agreement to pay, which are generally held to be the ancient Israelites, a series of short - lived administration at any time, and his successors.
+122:trie_T1.0	3	7	is_a	Paul Klee	Paul Klee	0	native	unknown	painter	open list		[S] is a [O] of	Paul Klee was a native of Bern on the Mediterranean Sea in southern Europe.
+122:trie_T1.0	4	7	birth_place	Emil Theodor Kocher	Emil Theodor Kocher	0	Dublin	unknown	Bern	places not comparable in store		[S] was born in [O]	In 1841, Emil Theodor Kocher was born in Dublin.
+125:trie_T1.0	8	10	is_a	This		0	area	unknown		subject not in store		[S] is a [O] of	This is an area of low - lying on the ground.
+134:trie_T1.0	1	7	is_a	Mount Kosciuszko	Mount Kosciuszko	0	city	unknown	mountain	open list		^ [S] is a [O] in	Mount Kosciuszko is a city in the neighbourhood of Australia in Canberra.
+134:trie_T1.0	7	7	is_a	The Darling River	Darling River	0	river	unknown		no is_a or occupation in store		^ [S] is a [O] in	The Darling River is a river in the Bourke area in central Europe.
+135:trie_T1.0	1	8	is_a	Dublin	Dublin	0	city	unknown	capital	open list		^ [S] is a [O] in	Dublin is a city in the state of Europe, Russia.
+135:trie_T1.0	2	8	is_a	Munster	Munster	0	island	unknown	city	open list		^ [S] is a [O] in	Munster is an island in the center of Ireland in Dublin.
+135:trie_T1.0	5	8	birth_place	Alex Higgins	Alex Higgins	0	Belfast	supported	Belfast			[S] was born in [O]	Alex Higgins was born in Belfast.
+135:trie_T1.0	6	8	is_a	Michael Jackson	Michael Jackson (Anglican bishop)	0	native	unknown		no is_a or occupation in store		[S] is a [O] of	Michael Jackson was a native of County Armagh on the Thames River in southwestern Europe.
+136:trie_T1.0	1	3	is_a	It	It (novel)	0	novel	unknown	pronoun	open list		[S] is a [O]	It is a novel by American author Raymond " and " evil empire " is thought to derive from the fact that this approach would not be useful in ancient Persia, Palestine at the entrance to the national party.
+139:trie_T1.0	2	6	is_a	There		0	railway	unknown		subject not in store		[S] is a [O]	There is a railway line in 2004.
+141:trie_T1.0	1	9	birth_place	Inger Brattström	Inger Brattström	0	New York	unknown		no birth_place in store		^ [S] was born in [O] ,	Inger Brattström was born in New York, german.
+141:trie_T1.0	6	9	death_place	He	Heimrad Prem	1	Munich , Bavaria	unknown		no death_place in store		[P] died in [O]	He died in Munich, Bavaria.
+142:trie_T1.0	3	7	is_a	Athens	Athens	0	town	unknown	capital	open list		[S] is a [O]	Athens is a town located throughout the animal kingdom of Europe.
+142:trie_T1.0	7	7	is_a	Berlin	Berlin	0	city	supported	city			[S] is a [O]	Berlin is a city and municipality in the county of Germany, France.
+142:trie_T1.0	7	7	is_a	Berlin	Berlin	0	municipality	unknown	city	open list		ADD [S] is a [NAT] [OCC]	Berlin is a city and municipality in the county of Germany, France.
+143:trie_T1.0	4	6	is_a	Beijing	Beijing	0	city	unknown	capital	open list		[S] is a [O]	Beijing is a city located in the Belgian province of China.
+144:trie_T1.0	1	9	birth_place	Algernon Swinburne	Algernon Swinburne	0	London	supported	London			[S] was born in [O]	Algernon Swinburne was born in London.
+144:trie_T1.0	3	9	is_a	Arthur Phillip	Arthur Phillip	0	native	unknown		no is_a or occupation in store		[S] is a [O] of	However, Arthur Phillip was a native of London.
+144:trie_T1.0	4	9	is_a	Woolwich	Woolwich	0	city	unknown	town	open list		[S] is a [O]	Woolwich was a city built in the human side of London.)
+147:trie_T1.0	2	8	is_a	High School	High School (film)	0	town	unknown	documentary film	open list		^ [S] is a [O] in	High School is a town in the southern part of Los Angeles County, California, almost entirely replaced by the name of New York.
+147:trie_T1.0	3	8	death_place	He		1	Sacramento , California	unknown		subject not in store		[P] died in [O]	He died in Sacramento, California.
+147:trie_T1.0	5	8	is_a	Alameda		0	city	unknown		subject not in store		[S] is a [O]	Alameda is a city located in the Belgian province of California.
+147:trie_T1.0	7	8	is_a	Juneau		0	city	unknown		subject not in store		[S] is a [O]	Juneau was a city and municipality in the county of Alaska, Hawaii.
+147:trie_T1.0	7	8	is_a	Juneau		0	municipality	unknown		subject not in store		ADD [S] is a [NAT] [OCC]	Juneau was a city and municipality in the county of Alaska, Hawaii.
+150:trie_T1.0	3	8	birth_place	Chester A . Arthur	Chester A. Arthur	0	New York	contradicted	Fairfield, Vermont;Vermont	different top places		^ [S] was born in [O] ,	Chester A. Arthur was born in New York, american.
+151:trie_T1.0	4	7	birth_place	He		1	Birmingham , England	unknown		subject not in store		[P] was born in [O]	He was born in Birmingham, England.
+151:trie_T1.0	4	7	birth_place	He		1	Birmingham	unknown		subject not in store		[P] was born in [O] ,	He was born in Birmingham, England.
+152:trie_T1.0	1	9	located_in	Amakusa	Amakusa	0	Japan	supported	japan			[S] is a city in [O] ,	Amakusa is a city in Japan, China.
+152:trie_T1.0	1	9	located_in	Amakusa	Amakusa	0	Japan , China	contradicted	japan	different top places; by part		[S] is a city in [O]	Amakusa is a city in Japan, China.
+152:trie_T1.0	1	9	is_a	Amakusa	Amakusa	0	city	unknown		no is_a or occupation in store		^ [S] is a [O] in	Amakusa is a city in Japan, China.
+152:trie_T1.0	2	9	is_a	Dejima	Dejima	0	town	unknown		no is_a or occupation in store		^ [S] is a [O] in	Dejima is a town in the county of Japan, China.
+152:trie_T1.0	4	9	is_a	The Ayumi Hamasaki	Ayumi Hamasaki	0	river	unknown	musician;singer	open list		^ [S] is a [O] in	The Ayumi Hamasaki is a river in the Japan area in southern France.
+154:trie_T1.0	4	7	birth_place	He	Ernest Rutherford	1	London Borough of Lambeth	unknown		no birth_place in store		[P] was born in [O]	He was born in the London Borough of Lambeth, so there is a vector space over the field K is its argument in several respects.
+156:trie_T1.0	1	8	birth_date	San Francisco		0	6 May 1956	unknown		subject not in store	valid	[S] on [O]	It was reduced to get involved in the films, he was elected as the first president of the Confederacy had grown to 25,000 ft (near San Francisco on 6 May 1956.
+160:trie_T1.0	6	8	is_a	Florence	Florence	0	city	supported	city			[S] is a [O]	Florence is a city and municipality in the county of Tuscany, Italy.
+160:trie_T1.0	6	8	is_a	Florence	Florence	0	municipality	unknown	city	open list		ADD [S] is a [NAT] [OCC]	Florence is a city and municipality in the county of Tuscany, Italy.
+170:trie_T1.0	4	8	birth_place	He		1	Trölladyngja , Iceland	unknown		subject not in store		[P] was born in [O]	He was born in Trölladyngja, Iceland.
+170:trie_T1.0	4	8	birth_place	He		1	Trölladyngja	unknown		subject not in store		[P] was born in [O] ,	He was born in Trölladyngja, Iceland.
+172:trie_T1.0	1	10	birth_place	He		1	Flevoland , Netherlands	unknown		subject not in store		[P] was born in [O]	He was born in Flevoland, Netherlands, the son of a German soldier.
+172:trie_T1.0	4	10	is_a	The Meuse River	Meuse River	0	river	supported	river			^ [S] is a [O] in	The Meuse River is a river in France and Great Britain, France.
+172:trie_T1.0	5	10	death_place	He		1	Brussels , Belgium	unknown		subject not in store		[P] died in [O]	He died in Brussels, Belgium.
+172:trie_T1.0	7	10	is_a	Lelystad	Lelystad	0	town	unknown	municipality	open list		[S] is a [O]	Lelystad is a town and city in the county of Flevoland, Norway.
+172:trie_T1.0	7	10	is_a	Lelystad	Lelystad	0	city	unknown	municipality	open list		ADD [S] is a [NAT] [OCC]	Lelystad is a town and city in the county of Flevoland, Norway.
+172:trie_T1.0	8	10	is_a	Freddy Heineken	Freddy Heineken	0	son	unknown		no is_a or occupation in store		[S] is a [O]	Freddy Heineken was a son of King Priam of Amsterdam.
+173:trie_T1.0	5	5	is_a	D . Unreal	Unreal	partial	video game	unknown	computer game;first-person shooter	open list		[S] is a [O]	The Duke Nukem 3 D project is managed by 3 D Realms, D. Unreal is a video game developed by Epic Games during WWII.
+175:trie_T1.0	1	8	birth_place	Bill Gates	Bill Gates	0	Seattle	supported	Seattle;Seattle, Washington			[S] was born in [O]	Bill Gates was born in Seattle in Asia, Europe, and went off with a similar interest in sailing ships.
+176:trie_T1.0	1	9	located_in	Beaujolais	Beaujolais	0	France	supported	france			[S] is a city in [O] ,	Beaujolais was a city in France, Spain.
+176:trie_T1.0	1	9	located_in	Beaujolais	Beaujolais	0	France , Spain	contradicted	france	different top places; by part		[S] is a city in [O]	Beaujolais was a city in France, Spain.
+176:trie_T1.0	1	9	is_a	Beaujolais	Beaujolais	0	city	unknown	historical province;province	open list		^ [S] is a [O] in	Beaujolais was a city in France, Spain.
+176:trie_T1.0	2	9	birth_place	Jacques Tardi	Jacques Tardi	0	New Orleans	unknown		no birth_place in store		^ [S] was born in [O] ,	Jacques Tardi was born in New Orleans, France.
+176:trie_T1.0	2	9	birth_place	Jacques Tardi	Jacques Tardi	0	New Orleans , France	unknown		no birth_place in store		[S] was born in [O]	Jacques Tardi was born in New Orleans, France.
+176:trie_T1.0	4	9	is_a	The Meuse River	Meuse River	0	river	supported	river			^ [S] is a [O] in	The Meuse River is a river in France and Great Britain, France.
+176:trie_T1.0	5	9	death_place	He	Jacques Tardi	1	Brussels , Belgium	unknown		no death_place in store		[P] died in [O]	He died in Brussels, Belgium.
+177:trie_T1.0	2	8	is_a	Tsuen Wan District	Tsuen Wan District	0	town	unknown		no is_a or occupation in store		[S] is a [O]	Tsuen Wan District is a town located throughout the human side of Hong Kong.
+179:trie_T1.0	1	8	is_a	Islamabad	Islamabad	0	city	unknown		no is_a or occupation in store		[S] is a [O]	Islamabad is a city located in the Belgian province of Asia.
+179:trie_T1.0	2	8	is_a	Muztagh Tower	Muztagh Tower	0	town	unknown	mountain	open list		[S] is a [O]	Muztagh Tower is a town and a municipality in the southeastern Pakistan.
+179:trie_T1.0	5	8	is_a	Quetta		0	city	unknown		subject not in store		[S] is a [O]	Quetta was a city and town in the county of Balochistan, Norway.
+179:trie_T1.0	5	8	is_a	Quetta		0	town	unknown		subject not in store		ADD [S] is a [NAT] [OCC]	Quetta was a city and town in the county of Balochistan, Norway.
+181:trie_T1.0	3	5	is_a	Port Blair	Port (nautical)	partial	municipality	unknown	nautical term	open list		the [O] comprises the towns of [S]	The municipality comprises the towns of Port Blair, probably made from vegetable oil.
+196:trie_T1.0	1	9	is_a	Libreville	Libreville	0	island	unknown	capital city	open list		^ [S] is a [O] in	Libreville is an island in the center of Gabon in Europe.
+199:trie_T1.0	1	5	birth_place	Avery Hopwood	Avery Hopwood	0	Cleveland	unknown		no birth_place in store		[S] was born in [O]	Avery Hopwood was born in Cleveland in Asia, Europe, and went off with a similar interest in sailing ships.
+199:trie_T1.0	3	5	is_a	Jim Backus God	Jim Backus	partial	standard	unknown	Radio;actor;film;radio;television	open list		the [S] is a [O]	The Jim Backus God is a standard academic institution in Cleveland, named after the world - famous runner who was born and spent in the city.
+207:trie_T1.0	1	9	is_a	Bedford	Bedford	0	city	unknown	county town	open list		[S] is a [O]	Bedford was a city and a town in the southern Bedfordshire.
+207:trie_T1.0	3	9	is_a	The EasyJet	EasyJet	0	river	unknown		no is_a or occupation in store		^ [S] is a [O] in	The EasyJet is a river in the Luton area in central Europe.
+210:trie_T1.0	1	8	is_a	Amsterdam	Amsterdam	0	town	unknown		no is_a or occupation in store		^ [S] ( ) is a [O]	Amsterdam () is a town in the Dutch province of Europe.
+210:trie_T1.0	3	8	is_a	Athens	Athens	0	town	unknown	capital	open list		[S] is a [O]	Athens is a town located throughout the animal kingdom of Europe.
+210:trie_T1.0	5	8	is_a	Vienna		0	city	unknown		subject not in store		[S] is a [O]	Vienna is a city and municipality in the county of Austria, Germany.
+210:trie_T1.0	5	8	is_a	Vienna		0	municipality	unknown		subject not in store		ADD [S] is a [NAT] [OCC]	Vienna is a city and municipality in the county of Austria, Germany.
+210:trie_T1.0	8	8	is_a	The Gran Paradiso	Gran Paradiso	0	river	unknown		no is_a or occupation in store		^ [S] is a [O] in	The Gran Paradiso is a river in the Italy area in western Germany.
+216:trie_T1.0	3	8	birth_place	He		1	Paris	unknown		subject not in store		[P] was born in [O]	He was born in Paris.
+217:trie_T1.0	3	7	birth_place	He		1	Cairo , Egypt	unknown		subject not in store		[P] was born in [O]	He was born in Cairo, Egypt.
+217:trie_T1.0	3	7	birth_place	He		1	Cairo	unknown		subject not in store		[P] was born in [O] ,	He was born in Cairo, Egypt.
+217:trie_T1.0	4	7	is_a	Alexandria	Alexandria	0	city	unknown		no is_a or occupation in store		[S] is a [O]	Alexandria is a city located in the Belgian province of Egypt.
+217:trie_T1.0	5	7	is_a	University of Amr Diab	Amr Diab	partial	state	unknown	singer	open list		the [S] is a [O]	The University of Amr Diab was a state centred in Copenhagen, Egypt.
+217:trie_T1.0	6	7	nationality	Amr Diab	Amr Diab	0	Egyptian	supported	Egyptian			^ [S] is a [O]	Amr Diab was an Egyptian politician and diplomat.
+217:trie_T1.0	6	7	is_a	Amr Diab	Amr Diab	0	politician	unknown	singer	open list		ADD [S] is a [NAT] [OCC]	Amr Diab was an Egyptian politician and diplomat.
+217:trie_T1.0	6	7	is_a	Amr Diab	Amr Diab	0	diplomat .	unknown	singer	open list		ADD [S] is a [NAT] [OCC]	Amr Diab was an Egyptian politician and diplomat.
+222:trie_T1.0	1	8	nationality	Lola Graham	Lola Graham	0	Australian	supported	Australian;Classical			^ [S] is a [O]	Lola Graham was an Australian explorer.
+222:trie_T1.0	1	8	is_a	Lola Graham	Lola Graham	0	explorer .	unknown	musician	open list		ADD [S] is a [NAT] [OCC]	Lola Graham was an Australian explorer.
+222:trie_T1.0	4	8	death_place	He	Paul Kelly (musician)	1	Canberra , Australia	unknown		no death_place in store		[P] died in [O]	He died in Canberra, Australia.
+222:trie_T1.0	5	8	birth_place	He	Paul Kelly (musician)	1	Sydney , Australia	contradicted	New South Wales;South Australia	different top places; by part		[P] was born in [O]	He was born in Sydney, Australia.
+222:trie_T1.0	5	8	birth_place	He	Paul Kelly (musician)	1	Sydney	unknown	New South Wales;South Australia	places not comparable in store		[P] was born in [O] ,	He was born in Sydney, Australia.
+231:trie_T1.0	3	6	nationality	George Jackson	George Jackson (MP)	0	British	supported	British			^ [S] is a [O]	George Jackson was a British politician and diplomat.
+231:trie_T1.0	3	6	is_a	George Jackson	George Jackson (MP)	0	politician	unknown		no is_a or occupation in store		ADD [S] is a [NAT] [OCC]	George Jackson was a British politician and diplomat.
+231:trie_T1.0	3	6	is_a	George Jackson	George Jackson (MP)	0	diplomat .	unknown		no is_a or occupation in store		ADD [S] is a [NAT] [OCC]	George Jackson was a British politician and diplomat.
+234:trie_T1.0	4	9	birth_place	Blaise Pascal	Blaise Pascal	0	Dublin	unknown	Auvergne;Clermont-Ferrand	places not comparable in store		[S] was born in [O]	Blaise Pascal was born in Dublin in 1623.
+245:trie_T1.0	1	11	nationality	Boris Yeltsin	Boris Yeltsin	0	Soviet	supported	Soviet;not-american			^ [S] is a [O]	Boris Yeltsin was a Soviet cosmonaut, film director, and writer.
+245:trie_T1.0	1	11	is_a	Boris Yeltsin	Boris Yeltsin	0	cosmonaut ,	unknown	politician	open list		ADD [S] is a [NAT] [OCC]	Boris Yeltsin was a Soviet cosmonaut, film director, and writer.
+245:trie_T1.0	2	11	nationality	Konstantin Tsiolkovsky	Konstantin Tsiolkovsky	0	Soviet	supported	Russian;Soviet			^ [S] is a [O]	Konstantin Tsiolkovsky was a Soviet politician and diplomat who lives in Ottawa, Ontario.
+245:trie_T1.0	2	11	is_a	Konstantin Tsiolkovsky	Konstantin Tsiolkovsky	0	politician	unknown	inventor;scientist	open list		ADD [S] is a [NAT] [OCC]	Konstantin Tsiolkovsky was a Soviet politician and diplomat who lives in Ottawa, Ontario.
+245:trie_T1.0	2	11	is_a	Konstantin Tsiolkovsky	Konstantin Tsiolkovsky	0	diplomat	unknown	inventor;scientist	open list		ADD [S] is a [NAT] [OCC]	Konstantin Tsiolkovsky was a Soviet politician and diplomat who lives in Ottawa, Ontario.
+245:trie_T1.0	3	11	nationality	Vladimir Steklov	Vladimir Steklov	0	Soviet	supported	Russian;Soviet			^ [S] is a [O]	Vladimir Steklov was a Soviet cosmonaut who work in London, England.
+245:trie_T1.0	3	11	is_a	Vladimir Steklov	Vladimir Steklov	0	cosmonaut	unknown	mathematician;physicist	open list		ADD [S] is a [NAT] [OCC]	Vladimir Steklov was a Soviet cosmonaut who work in London, England.
+247:trie_T1.0	1	10	nationality	Amr Diab	Amr Diab	0	Egyptian	supported	Egyptian			^ [S] is a [O]	Amr Diab is an Egyptian novelist, film director, and writer.
+247:trie_T1.0	1	10	is_a	Amr Diab	Amr Diab	0	novelist ,	unknown	singer	open list		ADD [S] is a [NAT] [OCC]	Amr Diab is an Egyptian novelist, film director, and writer.
+247:trie_T1.0	2	10	nationality	Natacha Atlas	Natacha Atlas	0	Egyptian	supported	Belgian;Egyptian;Female			^ [S] is a [O]	Natacha Atlas is an Egyptian chemist and physicist.
+247:trie_T1.0	2	10	is_a	Natacha Atlas	Natacha Atlas	0	chemist	unknown	singer	open list		ADD [S] is a [NAT] [OCC]	Natacha Atlas is an Egyptian chemist and physicist.
+247:trie_T1.0	2	10	is_a	Natacha Atlas	Natacha Atlas	0	physicist .	unknown	singer	open list		ADD [S] is a [NAT] [OCC]	Natacha Atlas is an Egyptian chemist and physicist.
+247:trie_T1.0	3	10	nationality	Suad Husni	Suad Husni	0	Egyptian	supported	Egyptian			^ [S] is a [O]	Suad Husni is an Egyptian novelist.
+247:trie_T1.0	3	10	is_a	Suad Husni	Suad Husni	0	novelist .	unknown	actor	open list		ADD [S] is a [NAT] [OCC]	Suad Husni is an Egyptian novelist.
+247:trie_T1.0	6	10	birth_place	He	Suad Husni	1	Cairo , Egypt	unknown		no birth_place in store		[P] was born in [O]	He was born in Cairo, Egypt, and began playing the piano at the age of sixteen.

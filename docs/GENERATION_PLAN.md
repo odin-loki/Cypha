@@ -2522,3 +2522,19 @@ Old binary main 9cbd277; old and new were started together.
 - By reading, no arm really fixes the start. 3–4 of 12 first sentences are on the subject in every arm. The prompt-word filter mostly matches common words.
 
 **§13.56 checks** (2026-11-12): the small setup equals the binary before the change under `cmp`. The full default run (no flags, 1 TB file present) equals §13.55's `--model` run under `cmp`, at `context8k_bpc` **1.4900**. **The 1 TB trie is `context8k`'s default on Odin's PC.** The final tree (with §13.57–13.60 merged) also gives L1's dev GEN file on the 250 prompts.
+
+### 13.61 H2, a fill that does not invent dates (2026-11-12; [HONEST_DATES](reports/HONEST_DATES.md); not adopted)
+
+- **Registered first** (355edbf). `--k5-plan-honest` takes `off`, `on`, `dates` or `nations`.
+  - **HD1 (`dates`):** refuses only numbers and months that are not the fact's own words, with H1b's drop rule.
+  - **HD2 (`nations`):** also refuses nationality and country words not seen in the prompt or text so far.
+  - Off by default and byte-identical when off.
+- **Dev:**
+  - fact precision (§13.58's `--v2`): L1 0.437, **HD1 0.765 [0.620, 0.920], HD2 0.865 [0.757, 0.960]**;
+  - SCRIBE v2: L1 0.610, HD1 0.570, HD2 0.570. The floor is 0.580.
+- **Both fail the screen; nothing was rated.**
+- **Why:**
+  - Every date skeleton in the bank asks for a month and a day. The store mostly holds years, so a year-only plan never fills one, and the date sentence is dropped. True birth dates go from 70 right to 0.
+  - The replacement text is weaker.
+  - Refusing names was not the cost: HD1 refuses none and loses as much SCRIBE as H1b did.
+- **Next (H3):** let a year-only fact take a year-only skeleton, or cut the month and day out of the skeleton.
