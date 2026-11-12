@@ -1,6 +1,6 @@
 # Boolean minimisation in the hot loops (O3)
 
-2026-11-06 · Odin Loch
+2026-11-06, finished 2026-11-12 · Odin Loch
 
 **Odin:** "Keep looking. Come up with more. Try optimisation techniques, do it in boolean and run expresso on it, variable elimination on the gpu stuff like that. Go crazy on it."
 
@@ -12,7 +12,7 @@ Branch `wip/opt-boolean`, merged with main f26ea25 (M1 and M2 exact; the planner
 - **The minimised forms are not what the code now uses.** On a CPU a 256-byte table load, a bit test, or a count of compares is cheaper than any sum of products. Minimisation told us how big each function is; it did not give faster code.
 - What did move the time was removing **unpredictable branches**: the trie's count quantiser, the similar-context expert's top-k and its list lookup. That is if-conversion, not minimisation.
 - **Exact:** every check is `cmp`-identical, old against new. (Details below.)
-- **Time:** TBD.
+- **Time:** small `context8k` −9.6% wall, −9.3% user CPU (old and new together); without the meta mix −12%, without the full mix −17%. RAM the same.
 
 ## Where the branch misses were
 
@@ -105,7 +105,19 @@ Left as they were: the full mix's copy state (already minimal, and its branch sk
 
 ## Exactness
 
-TBD-EXACT
+2026-11-12 · Odin Loch. Old: main 9cbd277 (`git archive`); new: this branch (main merged, the O5 patch in place). GCC 13, Release, Ninja. Each pair started together, each run on its own 4 CPUs (`taskset`). Exact means `cmp` of the whole stdout.
+
+| Check | What was compared | Result |
+|---|---|---|
+| `ctest` `native_opt_boolean_smoke` (every changed function against its old form) | — | pass |
+| small `context8k`, default | stdout, 260 lines; `context8k_bpc` 1.7501 | `cmp` equal |
+| small, `--no-meta-mix` | stdout, 245 lines; 1.7633 | `cmp` equal |
+| small, `--no-full-mix` | stdout, 233 lines; 1.8384 | `cmp` equal |
+| dev GEN, the planner (default), 250 prompts, `--k5 fuzzy/train.txt` | GEN file (501 lines), stdout | `cmp` equal |
+| dev GEN, `--no-k5-plan` | GEN file (501 lines), stdout | `cmp` equal |
+| **full `context8k`, default** (its own turn of the lock; against the old full run of O2's pair) | stdout; `context8k_bpc` | `cmp` equal; **1.4962** |
+
+**O3 is exact.** Every check is `cmp` equal, and the full run reproduces `context8k_bpc` 1.4962.
 
 ## Time and branch misses, old against new
 
@@ -138,13 +150,29 @@ Where it went (the full mix's own thread timers, same pair): the static rows, wh
 
 The patches add little: all made 4.41 × 10⁹ misses, new 4.49 × 10⁹ (miss counts move little with load). The online n-gram's claim and bit pick, the InfiniGram buckets and the K5 gate are not where the misses were.
 
-TBD-TIME3
+**Resumed, 2026-11-12** (main 9cbd277 against this branch with the O5 patch; each pair started together, 4 CPUs each by `taskset`; load 10–45; `/usr/bin/time`, no counters this time):
+
+| Run | Wall, old → new | User CPU, old → new | Peak RSS, old → new |
+|---|---:|---:|---:|
+| small, default | 604.9 → 546.6 s (**−9.6%**) | 731.5 → 663.2 s (−9.3%) | 1,311 → 1,313 MB |
+| small, `--no-meta-mix` | 558.0 → 489.2 s (−12.3%) | 655.9 → 572.6 s (−12.7%) | 914 → 915 MB |
+| small, `--no-full-mix` | 444.1 → 370.9 s (−16.5%) | 470.4 → 414.7 s (−11.8%) | 672 → 672 MB |
+| dev GEN, planner | 228.3 → 226.6 s | | 617 → 617 MB |
+| dev GEN, `--no-k5-plan` | 271.7 → 290.8 s | | 144 → 145 MB |
+
+The GEN pairs moved −1% and +7%. That is within this PC's noise under load; the GEN files and stdout are the same.
+
+The full run (its own turn of the lock, 4 CPUs, not beside the old binary, so not a timing of record) took 1,429 s; the old one took 1,960 s on 6 CPUs in O2's pair.
 
 **The first form failed on time.** The first top-k (a sorted buffer, filled by counting) was branch-free but did work in proportion to k times the list. The default expert keeps k = 8192 of about 10,000 candidates, so it doubled the instructions (2.06 → 4.23 × 10¹²) and made `context8k` 29% slower (492 → 637 s), while cutting branch misses 55%. The output was still identical. It was replaced by the radix sort before any other check. A scratch benchmark of the methods on synthetic lists (one CPU; every method's output checked against `partial_sort`), n 12,000 and k 8,192: `partial_sort` on pairs 1,179 µs a query, on packed keys 893 µs, `nth_element` and `sort` 444 µs, radix sort 230 µs. For k = 32 the radix sort is the slowest (233 µs against 32 µs), so a small k keeps `partial_sort` on the keys, and k from 256 takes `nth_element` and `sort`.
 
 ## The O3 prediction, scored
 
-TBD-SCORE
+| Prediction (§13.41) | Result | |
+|---|---|---|
+| O3 exact | every check `cmp` equal; full run 1.4962 | **hit** |
+| small: under 3% time | −9.6% wall (−9.3% user CPU) in the resumed default pair; −7.2% in the first pair; −12% and −17% without the meta mix and without the full mix | **miss**: it gained more than predicted, from fewer branch misses (−59% in the first pair), not from minimised formulas |
+| reports how many Boolean functions and their minimised sizes | 15 functions, the table above | **done** |
 
 ## Where Boolean minimisation would buy something
 
@@ -164,3 +192,7 @@ The time is in arithmetic and memory: the trie's linked follower lists, the LSTM
 - K5 sampling: the nucleus's `partial_sort` heap (70% of K5's misses) is O6's lazy exact nucleus. The same packed-key trick applies if O6 keeps a sort.
 - `context8k`: byte KN's build sorts its pairs with `std::sort` (13% of the old misses); a radix sort on packed keys would remove most of them, if the order is total.
 - K5's repeat ban (18% of K5's cycles) is hash lookups, not logic.
+
+## What to use
+
+Keep it: exact on every check, and about 10% faster on the small setup with no RAM cost. Merging to main is Odin's call. The patches left for O6 (`word_kn.hpp`) and Q2 (`planner/writer.hpp`, it no longer applies) wait for those files' jobs; O2's (`cyphalm_trie.cpp`) must be redone on O2's branch, which rewrote that file.
