@@ -199,3 +199,82 @@ The gap grows with length. In long text the writer's link to the sentence before
 - PP1 and PP2 move these by half as much as PP3;
 - raters: PP3 about 0.55–0.60 against L1 at 460 characters, about 0.60 on the long reading. It does not fix drift by itself. It removes the clearest false signs of a kept subject.
 - What it cannot fix: the missing lexical thread (on_prev −0.30). That needs content to write about (the fact plan, CT3.1) or a draft source that carries words from sentence to sentence, not a chooser.
+
+## PP amendment (registered 2026-11-12, before any arm runs)
+
+**Odin Loch** · 2026-11-12 · branch `wip/para-hook` (main 2fdebcce with `wip/para-plan` ceb0a349 merged) · GENERATION_PLAN §13.53, the hook of this report
+
+The hook above is built. These details were not fixed above. They are fixed here, before any arm runs.
+
+### Who edits what
+
+- `native/include/cypha/lm/para_plan.hpp` is new. The two hook sites are edited by this job: `word_kn.hpp` (the z-scored gate, `gate_z`) and `planner/discourse.hpp` (the free sentences). Another job owns `planner/writer.hpp` and `slots.hpp`; they are not touched.
+- L1 already uses the z-scored gate (its LDA term). With the flag on, the z-scored gate is used even without LDA.
+
+### The term, exactly
+
+- **Labels:** the script's functions, ported line by line (`split_sents`, `toks`, `content`, `open_type`, `func_type`, `name_runs`, `subject_of`, `ref_type`). Python's `\w` is exact in ASCII and approximated outside it (letters and digits are word characters; punctuation, symbol and mark blocks are not).
+- **The capitalisation table** is the script's `bench/para_plan/caps.json` (counted on the first 30 MB). `open2.tsv` is not loaded: the term does not use it.
+- **A parity check** (done before this registration; it reads no arm): the C++ labels equal the script's on every one of 137,753 lines (subject, prompt function, and open, func and ref of each sentence). The text was GEN-A dev human, L1, G16 and L1_long, and 14,106 Wikipedia windows from the first 4,000 documents of `train_all.txt`.
+- **The previous sentence** is the last sentence of the text written so far, split as the script splits it. With nothing written yet, the previous state is `START:func(the prompt's last sentence)`.
+- **A draft** is read as one sentence (whitespace joined). Its ref anchor is the prompt's content words and the previous sentence's, as in the script's `window`.
+- **Smoothing:** P(next | prev) = (count + 0.5) / (row total + 0.5 × 40).
+- **orph:** the draft's ref is PRON and the previous sentence's ref is NONE. This is the orphan rate the screen reads (NONE → PRON). It never applies to the first draft: its previous sentence is the prompt.
+- **lead:** the draft's func is DEF or BIRTH, its ref is NONE (it does not refer to the subject), and it holds a name (a run of the script's `name_runs`). It applies to every draft, the first included: the prompt is the paragraph's first sentence.
+- **The gate:** term = log2 P − orph × [orphan] − lead × [lead]. It is z-scored over the 16 drafts, like the other terms, and w × z is added to the score.
+- **Off:** with no `--k5-para-plan`, nothing is loaded or computed, and the score is the same expression as before.
+
+### Checks before any arm is read
+
+- With the flag off, my build's dev GEN file equals `bench/k5_coherence/runs/L1.gen.txt` under `cmp` (MODEL line aside).
+- With the flag off, my build's long setup equals `bench/k5_coherence/runs/L1_long.gen.txt` under `cmp` (MODEL line aside). That file is the long baseline.
+- The selftest passes.
+
+### Arms (dev, seed 0, 250 prompts; L1 plus)
+
+- PP1 `--k5-para-plan bench/para_plan/tables,w=1`
+- PP2 `--k5-para-plan bench/para_plan/tables,w=2`
+- PP3 `--k5-para-plan bench/para_plan/tables,w=1,orph=2,lead=2`
+
+Run by `scripts/gen_eval.sh dev LABEL OUT --prompts 250 --k5 /mnt/d/cypha_llm/fuzzy/train.txt FLAGS`, with `cyphalm_trie` and `scribe` built by `g++ -O2` as `scripts/build_1tb_tools.sh` builds them (`libsais.o` linked into `scribe`), `WIKI=ENWIK8=/mnt/d/cypha_llm/enwik8`, `SCRIBE_VEC=/mnt/d/cypha_llm/scribe/v32`, `K5_THREADS=6`. Files go to `bench/para_plan/runs/`.
+
+### The screen, exactly
+
+An arm passes if all of these hold:
+- verbatim13 is 0;
+- copy32 is at most 0.30;
+- SCRIBE v2 is at least L1's minus 0.03 (L1: 0.610, so at least 0.580);
+- by `para_plan_mine.py compare` (460 characters), the orphan rate (NONE → PRON) and the DEF + BIRTH share are both below L1's;
+- by `coh_measures.py`, stuffing (3rd+ use) is up at most 0.01;
+- by my reading, it reads at least as well as L1 on T3's 12 dev prompts (0, 1, 2, 3, 4, 5, 7, 9, 10, 11, 12, 13), with no more keyword repetition.
+
+**Reported beside the screen, not ruled on:** J2's three measures (orphan pronouns, mid-paragraph lead sentences, the link to the previous sentence `on_prev`); kept_s1–s4, run, on_prompt; SCRIBE v3.1; samples unlike L1; wall time and peak RAM; and **WRITING_SIGNAL's mean surprise** (`surp_mean`: word trigram Kneser–Ney over `fuzzy/train.txt`, `scripts/surprise_profile.py` at 2124363f; texts cut as the raters see them; lower reads better between variants of one writer), each arm minus L1 with a 95% paired bootstrap interval over the prompts (2,000 resamples, seed 20261112). The measures are made by `bench/para_plan/hook_screen.py` (new).
+
+**Candidates:** at most two arms that pass, chosen by my reading first, then by the lower orphan rate.
+
+### The long reading
+
+- For each candidate: `cyphalm_trie sample` on the 250 dev prompts with `--bytes 1800 --k5-max-words 600` and the same seeds (K5_COHERENCE's `coh_arm.sh --long`). The baseline is `L1_long.gen.txt`, after its check above.
+- The long packet uses the 25 prompts K5_COHERENCE used for `coh_long` (`bench/blind/q3_long/prompts.json`; the same list as `bench/blind/coh_long/prompts.json`).
+
+### The packets
+
+- 460 characters: `python3 scripts/blind_rate.py make --out bench/blind/pp_pair --ids bench/blind/llm_rating/prompts.json --arm L1=bench/k5_coherence/runs/L1.gen.txt --arm X=... --mode pair --baseline L1 --seed 20261120`.
+- **The seed changed.** 20261117 was registered above, but K5_FIRST (`wip/k5-first`, `bench/blind/first_pair`) took it for its own L1 pair round. So this round uses 20261120.
+- Long: `--out bench/blind/pp_long --ids bench/blind/q3_long/prompts.json --arm L1=bench/k5_coherence/runs/L1_long.gen.txt --arm X=... --mode pair --baseline L1 --seed 20261118 --cut 1500`. 20261118 was checked: no other round uses it.
+- Four fresh blind Claude raters each. Packets, `key.b64` and `RATER_PROMPT.md` are committed and pushed before the raters run. `KEY.json` stays out of the repository.
+
+### The rule (as registered, written out)
+
+- The §13.38 rule: an arm reads better if its win share minus 0.5 is above 0, its 95% bootstrap interval excludes 0, and both rater pairs agree on the sign.
+- **Adopted** if it reads better by the rule on either reading (460 or long) and its win share on the other reading is at least 0.5 (as K5_COHERENCE). The best such arm (higher lower bound first, then lower copy32) becomes the default. Then GEN-A test is read once, for it only. Odin can veto.
+- If no arm is adopted, nothing changes.
+
+### Predictions added here
+
+- Both `cmp` checks and the selftest: hit expected.
+- PP3 passes the screen. PP1 and PP2 pass too.
+- Samples unlike L1: PP1 and PP2 150–220, PP3 180–230 (the term moves the choice in most paragraphs).
+- on_prev within ±0.03 of L1 for every arm; stuffing within ±0.005.
+- Mean surprise within ±0.15 bits of L1 for every arm.
+- Wall time +5% to +20% (16 drafts labelled per sentence); peak RAM +0.0 to +0.2 GB (the capitalisation table).

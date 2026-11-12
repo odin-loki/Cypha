@@ -390,6 +390,8 @@ class DiscourseWriter final : public wkn::StructureWriter {
         std::uint64_t free_no = 1000;  // the free sentences' streams (K5's draft numbers, as P1's tail)
         const int K = std::max(o.gate_k, 1);
         std::vector<wkn::K5::State> drafts(static_cast<std::size_t>(K));
+        const pp::ParaPlan* plan = o.para_plan.plan.get();  // PARA_PLAN.md: the paragraph-plan term (null: off)
+        const pp::ParaPlan::Track ptr = plan ? plan->begin(prompt) : pp::ParaPlan::Track{};
         while (s.out.size() < o.bytes && s.step < o.max_words) {
             ex.prepare(c);
             // the next fact: P1's plan in its order, then the highest focus weight
@@ -493,7 +495,7 @@ class DiscourseWriter final : public wkn::StructureWriter {
             if (dp.ents[dp.of[pick]].hop > 0) ++n_linked_;
             if (p_.gap > 0 && ++since_free >= p_.gap && s.out.size() < o.bytes && s.step < o.max_words) {
                 ex.prepare(c);
-                free_sentence(m, c, s, seed, free_no++, o, assoc, drafts, g);
+                free_sentence(m, c, s, seed, free_no++, o, assoc, drafts, g, plan ? &ptr : nullptr);
                 since_free = 0, ++n_mid;
             }
         }
@@ -503,7 +505,7 @@ class DiscourseWriter final : public wkn::StructureWriter {
         // past the facts: K5's free sentences, chosen with the whole paragraph
         while (s.step < o.max_words && s.out.size() < o.bytes) {
             ex.prepare(c);
-            free_sentence(m, c, s, seed, free_no++, o, assoc, drafts, g);
+            free_sentence(m, c, s, seed, free_no++, o, assoc, drafts, g, plan ? &ptr : nullptr);
             ++n_end;
         }
         n_free_mid_ += static_cast<std::uint64_t>(n_mid), n_free_end_ += static_cast<std::uint64_t>(n_end);
@@ -625,7 +627,8 @@ class DiscourseWriter final : public wkn::StructureWriter {
     }
     // One free K5 sentence: K drafts from s, the paragraph gate's choice (c prepared); s and c take it.
     void free_sentence(const wkn::K5& m, st::Context& c, wkn::K5::State& s, std::uint64_t seed, std::uint64_t no, const wkn::Options& o,
-                       const std::vector<double>& assoc, std::vector<wkn::K5::State>& drafts, wkn::GenStats& g) const {
+                       const std::vector<double>& assoc, std::vector<wkn::K5::State>& drafts, wkn::GenStats& g,
+                       const pp::ParaPlan::Track* ptr = nullptr) const {
         const Model& md = *md_;
         const int K = static_cast<int>(drafts.size());
         std::vector<double> pmi(static_cast<std::size_t>(K)), topic(pmi.size()), grid(pmi.size()), mk(pmi.size()), rec(pmi.size());
@@ -635,6 +638,9 @@ class DiscourseWriter final : public wkn::StructureWriter {
             for (const auto& t : c.sents.back().tok) prev.push_back(m.id(t));
             ar = m.prompt_assoc(prev);
         }
+        const pp::ParaPlan* plan = ptr ? o.para_plan.plan.get() : nullptr;  // PARA_PLAN.md
+        std::vector<double> para(plan ? pmi.size() : 0);
+        const pp::ParaPlan::Prev pprev = plan ? plan->prev(*ptr, s.out) : pp::ParaPlan::Prev{};
         std::vector<std::vector<std::string>> toks(pmi.size());
         std::vector<wkn::GenStats> gs(pmi.size());
         std::vector<std::uint32_t> words;
@@ -651,15 +657,18 @@ class DiscourseWriter final : public wkn::StructureWriter {
             for (const auto w : words) toks[ku].push_back(m.vocab()[w]);
             topic[ku] = tok_topic(toks[ku], c.theta);
             grid[ku] = md.grid.trained() ? md.grid.append_logp(c.grid, md.grid.roles(toks[ku])) : 0.0;
+            if (plan) para[ku] = plan->term(*ptr, pprev, std::string_view(out).substr(s.out.size()), o.para_plan.orph, o.para_plan.lead);
         }
         const auto zp = zscores(pmi), zt = zscores(topic), zg = zscores(grid);
         const auto zr = ar.empty() ? std::vector<double>{} : zscores(rec);
+        const auto zq = plan ? zscores(para) : std::vector<double>{};
         int best = 0;
         double bsc = -1e300;
         for (int k = 0; k < K; ++k) {
             const auto ku = static_cast<std::size_t>(k);
             double sc = p_.g_pmi * zp[ku] + p_.g_topic * zt[ku] + p_.g_grid * zg[ku] - o.gate_wm * mk[ku];
             if (!ar.empty()) sc += o.gate_wr * zr[ku];  // K5_COHERENCE.md
+            if (plan) sc += o.para_plan.w * zq[ku];  // PARA_PLAN.md
             if (k == 0 || sc > bsc) bsc = sc, best = k;
         }
         const auto bu = static_cast<std::size_t>(best);

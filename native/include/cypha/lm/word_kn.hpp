@@ -70,6 +70,7 @@
 #include "cypha/lm/entity_grid.hpp"  // K5_DISCOURSE.md
 #include "cypha/lm/lda.hpp"          // K5_DISCOURSE.md
 #include "cypha/lm/mbr.hpp"          // K5_DISCOURSE.md
+#include "cypha/lm/para_plan.hpp"    // PARA_PLAN.md (J2): --k5-para-plan
 
 namespace cypha::cyphalm::wkn {
 
@@ -1022,7 +1023,10 @@ struct Options {
     std::string disc_cache;     // --k5-disc-cache DIR: load the grid and LDA from DIR, or train and save them there
     unsigned disc_threads = 8;  // --k5-disc-threads N: the grid's counting threads (exact on any number)
     unsigned lda_threads = 1;   // --k5-lda-threads N: LDA's Gibbs threads (1: exact; more: AD-LDA, which fit worse here)
-    bool zgate() const { return mbr_sent_w != 0 || eg_w != 0 || lda_w != 0; }
+    // PARA_PLAN.md (J2): --k5-para-plan TABLEDIR[,w=W,orph=W,lead=W] adds w x z(para_plan.hpp's term) to the z-scored
+    // gate and to the discourse writer's free sentences. Off (no plan) by default: nothing is loaded or computed.
+    pp::Spec para_plan;
+    bool zgate() const { return mbr_sent_w != 0 || eg_w != 0 || lda_w != 0 || para_plan.plan; }
     // The settings that differ from K5's, for the MODEL line (empty for K5 itself).
     std::string describe() const {
         std::string s;
@@ -1054,6 +1058,7 @@ struct Options {
         if (!disc_text.empty()) s += "\tdisc_text=" + disc_text;
         if (disc_threads != d.disc_threads) add("disc_threads", disc_threads);
         if (lda_threads != d.lda_threads) add("lda_threads", lda_threads);
+        if (para_plan.plan) s += "\tpara_plan=" + para_plan.plan->dir(), add("pp_w", para_plan.w), add("pp_orph", para_plan.orph), add("pp_lead", para_plan.lead);
         return s;
     }
 };
@@ -1123,6 +1128,7 @@ inline bool apply_flag(const std::string& name, const std::string& val, Options&
     if (name == "--k5-disc-cache") return val.empty() ? (err = name + ": empty", false) : ((o.disc_cache = val), true);
     if (name == "--k5-disc-threads") return num(x, 1, 64) && ((o.disc_threads = static_cast<unsigned>(x)), true);
     if (name == "--k5-lda-threads") return num(x, 1, 64) && ((o.lda_threads = static_cast<unsigned>(x)), true);
+    if (name == "--k5-para-plan") return pp::parse_flag(val, o.para_plan, err);  // PARA_PLAN.md
     if (name == "--k5-meta") {
         if (val.empty()) return err = name + ": empty", false;
         for (std::size_t a = 0; a <= val.size();) {
@@ -1848,7 +1854,9 @@ class K5 {
         std::vector<GenStats> gk(K);
         std::vector<std::string> text(K);
         std::vector<eg::SentRoles> roles(K);
-        std::vector<double> tf(K), tp(K), tm(K), te(K), tt(K), mk(K);
+        std::vector<double> tf(K), tp(K), tm(K), te(K), tt(K), mk(K), tq(K);
+        const pp::ParaPlan* plan = o.para_plan.plan.get();  // PARA_PLAN.md: the paragraph-plan term (null: off)
+        const pp::ParaPlan::Track ptr = plan ? plan->begin(prompt) : pp::ParaPlan::Track{};
         const auto z = [](std::vector<double>& x) {
             double m = 0, v = 0;
             for (const double a : x) m += a;
@@ -1858,6 +1866,7 @@ class K5 {
             for (double& a : x) a = sd > 1e-12 ? (a - m) / sd : 0.0;
         };
         for (std::uint64_t sent = 0; s.step < o.max_words && s.out.size() < o.bytes; ++sent) {
+            const pp::ParaPlan::Prev pprev = plan ? plan->prev(ptr, s.out) : pp::ParaPlan::Prev{};
             for (std::size_t k = 0; k < K; ++k) {
                 State& c = cand[k];
                 c = s;
@@ -1884,6 +1893,7 @@ class K5 {
                 const double nb = static_cast<double>(std::max<std::size_t>(c.out.size() - b0, 1)), n = static_cast<double>(std::max<std::size_t>(nw, 1));
                 tf[k] = slp / n, tp[k] = spmi / n, tt[k] = stop / n, mk[k] = static_cast<double>(m) / nb;
                 text[k] = c.out.substr(b0);
+                if (plan) tq[k] = plan->term(ptr, pprev, text[k], o.para_plan.orph, o.para_plan.lead);
                 if (use_eg) {
                     roles[k] = eg_.roles(toks);
                     te[k] = o.eg_mode == 2 ? eg_.continuation_score(hist, roles[k]) : eg_.append_logp(hist, roles[k]);
@@ -1892,10 +1902,12 @@ class K5 {
             }
             if (o.mbr_sent_w != 0) tm = mbr::utilities(text);
             z(tf), z(tp), z(tm), z(te), z(tt);
+            if (plan) z(tq);
             std::size_t best = 0;
             double bscore = 0;
             for (std::size_t k = 0; k < K; ++k) {
-                const double score = o.gate_wf * tf[k] + o.gate_wp * tp[k] + o.mbr_sent_w * tm[k] + o.eg_w * te[k] + o.lda_w * tt[k] - o.gate_wm * mk[k];
+                double score = o.gate_wf * tf[k] + o.gate_wp * tp[k] + o.mbr_sent_w * tm[k] + o.eg_w * te[k] + o.lda_w * tt[k] - o.gate_wm * mk[k];
+                if (plan) score += o.para_plan.w * tq[k];  // PARA_PLAN.md
                 if (k == 0 || score > bscore) bscore = score, best = k;
             }
             if (use_eg) eg_.append(hist, roles[best]);
@@ -2879,6 +2891,14 @@ inline bool self_test(std::string& err) {
             o.class_mode != 2 || Options{}.describe() != "" || Options{}.gate_wr != 0 || !apply_flag("--k5-gate", "16,wr=1.5", o, e) ||
             o.gate_wr != 1.5 || o.gate_k != 16) {  // K5_COHERENCE.md: wr parses, off by default
             err = "apply_flag";
+            return false;
+        }
+        // PARA_PLAN.md: off by default; a missing table directory is an error; off clears it
+        if (!pp::self_test(err)) return false;
+        Options q;
+        if (Options{}.para_plan.plan || Options{}.zgate() != (Options{}.lda_w != 0) || apply_flag("--k5-para-plan", "/nonexistent/pp,w=1", q, e) ||
+            q.para_plan.plan || !apply_flag("--k5-para-plan", "off", q, e) || q.para_plan.plan || q.describe() != "") {
+            err = "apply_flag --k5-para-plan";
             return false;
         }
     }
