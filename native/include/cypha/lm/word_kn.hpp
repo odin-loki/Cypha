@@ -60,6 +60,7 @@
 #include <memory>
 #include <mutex>
 #include <random>
+#include <set>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -1022,6 +1023,13 @@ struct Options {
     std::string disc_cache;     // --k5-disc-cache DIR: load the grid and LDA from DIR, or train and save them there
     unsigned disc_threads = 8;  // --k5-disc-threads N: the grid's counting threads (exact on any number)
     unsigned lda_threads = 1;   // --k5-lda-threads N: LDA's Gibbs threads (1: exact; more: AD-LDA, which fit worse here)
+    // K5_FIRST.md: the first sentence only, in the z-scored gate (today's default). --k5-first k=N,wp=W,wl=W,req=1:
+    // N drafts instead of gate_k (the first gate_k are the usual ones); W more on z(pmi) and on z(topic); with req, only
+    // drafts holding a content word of the prompt compete when any draft does; req=2 counts only the prompt's rare
+    // content words (outside K5's 2000 most frequent words). All 0 (the default): off.
+    int first_k = 0;
+    double first_wp = 0, first_wl = 0;
+    int first_req = 0;
     bool zgate() const { return mbr_sent_w != 0 || eg_w != 0 || lda_w != 0; }
     // The settings that differ from K5's, for the MODEL line (empty for K5 itself).
     std::string describe() const {
@@ -1054,6 +1062,8 @@ struct Options {
         if (!disc_text.empty()) s += "\tdisc_text=" + disc_text;
         if (disc_threads != d.disc_threads) add("disc_threads", disc_threads);
         if (lda_threads != d.lda_threads) add("lda_threads", lda_threads);
+        if (first_k || first_wp != 0 || first_wl != 0 || first_req)  // K5_FIRST.md
+            add("first_k", first_k), add("first_wp", first_wp), add("first_wl", first_wl), add("first_req", first_req);
         return s;
     }
 };
@@ -1136,6 +1146,25 @@ inline bool apply_flag(const std::string& name, const std::string& val, Options&
             a = b + 1;
         }
         o.meta = val;
+        return true;
+    }
+    if (name == "--k5-first") {  // K5_FIRST.md: k=N,wp=W,wl=W,req=0|1 (any subset)
+        for (std::size_t a = 0; a <= val.size();) {
+            std::size_t b = val.find(',', a);
+            if (b == std::string::npos) b = val.size();
+            const std::string f = val.substr(a, b - a);
+            const std::size_t q = f.find('=');
+            char* e = nullptr;
+            const double v = q == std::string::npos ? 0 : std::strtod(f.c_str() + q + 1, &e);
+            if (q == std::string::npos || q + 1 >= f.size() || *e) return err = name + ": bad field " + f, false;
+            const std::string k = f.substr(0, q);
+            if (k == "k" && v >= 0 && v <= 255 && v == std::floor(v)) o.first_k = static_cast<int>(v);
+            else if (k == "wp") o.first_wp = v;
+            else if (k == "wl") o.first_wl = v;
+            else if (k == "req" && (v == 0 || v == 1 || v == 2)) o.first_req = static_cast<int>(v);
+            else return err = name + ": fields k=N (0-255), wp=W, wl=W, req=0|1|2; bad " + f, false;
+            a = b + 1;
+        }
         return true;
     }
     if (name == "--k5-gate") {
@@ -1597,6 +1626,26 @@ class K5 {
         return a;
     }
 
+    // K5_FIRST.md: word w in lower case if it is a content word (ASCII letters only, 4+ of them, not a function word
+    // of coh_measures.py's list, not one of K5's 100 most frequent words), else empty.
+    std::string content_lower(std::uint32_t w, std::size_t skip_top = 100) const {
+        static const std::set<std::string> stop = {"that", "this", "with", "from", "were", "have", "which", "their", "there", "they",
+            "been", "when", "also", "into", "than", "then", "them", "these", "those", "other", "about", "after", "before", "would",
+            "could", "should", "while", "where", "being", "because", "some", "such", "more", "most", "many", "much", "over", "under",
+            "only", "very", "what", "will", "your", "first", "second", "three", "during", "between", "within", "without", "through",
+            "against", "among", "upon", "each", "both", "either", "well", "just", "like", "even"};
+        if (w < 2 + skip_top || w >= vocab_.size()) return {};
+        const std::string& t = vocab_[w];
+        if (t.size() < 4) return {};
+        std::string l(t.size(), ' ');
+        for (std::size_t i = 0; i < t.size(); ++i) {
+            const char ch = t[i];
+            const bool lower = ch >= 'a' && ch <= 'z', upper = ch >= 'A' && ch <= 'Z';
+            if (!lower && !upper) return {};
+            l[i] = static_cast<char>(ch | 0x20);
+        }
+        return stop.count(l) ? std::string{} : l;
+    }
     // K5_COHERENCE.md: the last sentence of ids (from after the last ., !, ? or newline that is not ids' final token).
     std::vector<std::uint32_t> last_sentence(const std::vector<std::uint32_t>& ids) const {
         const auto stop = [&](std::uint32_t w) {
@@ -1843,12 +1892,22 @@ class K5 {
         eg::EntityGrid::History hist;
         if (use_eg)
             for (const auto& sent : eg::split_sentences(wkn::tokens(prompt))) eg_.append(hist, eg_.roles(sent));
-        const auto K = static_cast<std::size_t>(o.gate_k);
-        std::vector<State> cand(K);
-        std::vector<GenStats> gk(K);
-        std::vector<std::string> text(K);
-        std::vector<eg::SentRoles> roles(K);
-        std::vector<double> tf(K), tp(K), tm(K), te(K), tt(K), mk(K);
+        const auto K0 = static_cast<std::size_t>(o.gate_k);
+        const std::size_t K1 = o.first_k > 0 ? static_cast<std::size_t>(o.first_k) : K0;  // K5_FIRST.md
+        const std::size_t KM = std::max(K0, K1);
+        std::vector<State> cand(KM);
+        std::vector<GenStats> gk(KM);
+        std::vector<std::string> text(K1 == K0 ? K0 : KM);
+        std::vector<eg::SentRoles> roles(KM);
+        std::vector<double> tf(K1 == K0 ? K0 : KM), tp(tf.size()), tm(tf.size()), te(tf.size()), tt(tf.size()), mk(tf.size());
+        // K5_FIRST.md req: the prompt's content words (content_lower), and per first-sentence draft whether it holds one.
+        std::set<std::string> pcw;
+        std::vector<char> hit;
+        if (o.first_req) {
+            for (const std::uint32_t v : s.ctx)
+                if (std::string lw = content_lower(v, o.first_req == 2 ? 2000 : 100); !lw.empty()) pcw.insert(std::move(lw));
+            hit.assign(K1, 0);
+        }
         const auto z = [](std::vector<double>& x) {
             double m = 0, v = 0;
             for (const double a : x) m += a;
@@ -1858,6 +1917,9 @@ class K5 {
             for (double& a : x) a = sd > 1e-12 ? (a - m) / sd : 0.0;
         };
         for (std::uint64_t sent = 0; s.step < o.max_words && s.out.size() < o.bytes; ++sent) {
+            const std::size_t K = sent == 0 ? K1 : K0;  // K5_FIRST.md
+            if (K1 != K0) text.resize(K), tf.resize(K), tp.resize(K), tm.resize(K), te.resize(K), tt.resize(K), mk.resize(K);
+            const bool req = sent == 0 && !pcw.empty();
             for (std::size_t k = 0; k < K; ++k) {
                 State& c = cand[k];
                 c = s;
@@ -1873,6 +1935,7 @@ class K5 {
                     double lp = 0;
                     const std::uint32_t w = step_word(c, rng, salt, o, gk[k], nullptr, sc, &lp);
                     slp += lp, spmi += assoc.empty() ? 0.0 : assoc[w], stop += tlr.empty() ? 0.0 : tlr[w], ++nw;
+                    if (req && !hit[k] && pcw.count(content_lower(w))) hit[k] = 1;  // K5_FIRST.md
                     const std::string& t = vocab_[w];
                     if (use_eg) toks.push_back(t);
                     const std::size_t nb = c.out.size() - b0;
@@ -1894,9 +1957,14 @@ class K5 {
             z(tf), z(tp), z(tm), z(te), z(tt);
             std::size_t best = 0;
             double bscore = 0;
+            const double xp = sent == 0 ? o.first_wp : 0.0, xl = sent == 0 ? o.first_wl : 0.0;  // K5_FIRST.md
+            const bool any = req && std::find(hit.begin(), hit.end(), char{1}) != hit.end();
+            bool have = false;
             for (std::size_t k = 0; k < K; ++k) {
-                const double score = o.gate_wf * tf[k] + o.gate_wp * tp[k] + o.mbr_sent_w * tm[k] + o.eg_w * te[k] + o.lda_w * tt[k] - o.gate_wm * mk[k];
-                if (k == 0 || score > bscore) bscore = score, best = k;
+                if (any && !hit[k]) continue;  // K5_FIRST.md req
+                double score = o.gate_wf * tf[k] + o.gate_wp * tp[k] + o.mbr_sent_w * tm[k] + o.eg_w * te[k] + o.lda_w * tt[k] - o.gate_wm * mk[k];
+                if (xp != 0 || xl != 0) score += xp * tp[k] + xl * tt[k];
+                if (!have || score > bscore) bscore = score, best = k, have = true;
             }
             if (use_eg) eg_.append(hist, roles[best]);
             s = std::move(cand[best]);
@@ -2877,7 +2945,10 @@ inline bool self_test(std::string& err) {
             !apply_flag("--k5-gate", "4,wf=1,wp=0.5,wm=5", o, e) || o.gate_k != 4 || o.gate_wp != 0.5 || !apply_flag("--k5-cache", "0.1", o, e) ||
             apply_flag("--k5-nucleus", "1.5", o, e) || apply_flag("--k5-bogus", "1", o, e) || !apply_flag("--k5-class-mode", "mix", o, e) ||
             o.class_mode != 2 || Options{}.describe() != "" || Options{}.gate_wr != 0 || !apply_flag("--k5-gate", "16,wr=1.5", o, e) ||
-            o.gate_wr != 1.5 || o.gate_k != 16) {  // K5_COHERENCE.md: wr parses, off by default
+            o.gate_wr != 1.5 || o.gate_k != 16 ||  // K5_COHERENCE.md: wr parses, off by default
+            Options{}.first_k != 0 || Options{}.first_req != 0 || !apply_flag("--k5-first", "k=64,wp=2,wl=1.5,req=1", o, e) ||
+            o.first_k != 64 || o.first_wp != 2 || o.first_wl != 1.5 || o.first_req != 1 || apply_flag("--k5-first", "req=3", o, e) ||
+            apply_flag("--k5-first", "k", o, e)) {  // K5_FIRST.md: parses, off by default
             err = "apply_flag";
             return false;
         }
