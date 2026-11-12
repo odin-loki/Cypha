@@ -2753,3 +2753,11 @@ Four fresh blind raters. Raters 1–2 rate the first 25 prompts, raters 3–4 th
 - **The default:** `sample --k5` writes at T 0.8 when K5 counts from the more-text and no `--temps` is given. `--temps 1.0` restores K1. The code of D2's flags (`wf` in free sentences, `wg`) is merged, off by default.
 - **The cost:** T8 lies more often in 32-byte spans of the training text (copy32 0.49 against 0.28). It never completes 13 training words (verbatim13 0). The 12-word cap is the rule; this is within it.
 - **Checks** (registered before they run): the default equals T8's dev GEN file under `cmp`; `--temps 1.0` equals K1's. Then GEN-A test is read once, with the fact check.
+
+**§13.71 checks and test read** (2026-11-12):
+- `cmp` on the 250 dev prompts: the default equals T8's dev GEN file, and `--temps 1.0` equals K1's. Selftest passes.
+- **The one test read** (`bench/k5_decode/test_read/`):
+  - SCRIBE v2 **0.819 [0.791, 0.845]** (K1 0.706; GPT-2 small 0.767), v3.1 0.703 (0.666);
+  - fact precision 0.924 (K1 0.924);
+  - copy32 0.476, no 13-word copies.
+- **SCRIBE rises partly because lower temperature copies more and stays on topic words** (§13.57). The raters' 0.855 is the evidence. A new 1–10 round (§13.69) will say how far the absolute score moved.
