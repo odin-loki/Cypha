@@ -43,6 +43,73 @@ if(CYPHA_ENABLE_LTO)
   endif()
 endif()
 
+# --- O1: a faster build with the same outputs (GENERATION_PLAN §13.41 O1, docs/reports/OPT_BUILD.md) ----------------
+# CYPHA_FAST_BUILD (off by default) builds the targets in CYPHA_FAST_TARGETS with flags that keep every output byte for
+# byte (checked with cmp, old binary against new, for cyphalm_trie and scribe):
+#   -march=native (AVX-512 on Odin's PC) with -ffp-contract=off, so no fused multiply-add changes a sum (CYPHA_FAST_ARCH);
+#   link-time optimisation (CYPHA_FAST_LTO): GCC -flto=4, Clang ThinLTO with lld (4 jobs).
+# Nothing that reorders floating point: no -ffast-math or any part of it (-fassociative-math, -fno-math-errno, ...), no
+# -mrecip. CYPHA_PGO=generate|use adds profile-guided optimisation (GCC or Clang); profiles live in CYPHA_PGO_DIR (Clang
+# reads CYPHA_PGO_DIR/cypha.profdata). scripts/pgo_build.sh trains and builds it. With -march=native the binaries run
+# only on CPUs like the build machine's. Applied at the end of this file, once the targets exist; nothing changes when
+# it is off.
+option(CYPHA_FAST_BUILD "O1: -march=native -ffp-contract=off and LTO for CYPHA_FAST_TARGETS" OFF)
+option(CYPHA_FAST_ARCH "O1: with CYPHA_FAST_BUILD, -march=native (always with -ffp-contract=off)" ON)
+option(CYPHA_FAST_LTO "O1: with CYPHA_FAST_BUILD, link-time optimisation" ON)
+set(CYPHA_FAST_TARGETS "cyphalm_trie;scribe" CACHE STRING "O1: targets that CYPHA_FAST_BUILD and CYPHA_PGO apply to")
+set(CYPHA_PGO "OFF" CACHE STRING "O1: profile-guided optimisation for CYPHA_FAST_TARGETS: OFF, generate or use")
+set_property(CACHE CYPHA_PGO PROPERTY STRINGS OFF generate use)
+set(CYPHA_PGO_DIR "${CMAKE_BINARY_DIR}/pgo" CACHE PATH "O1: profile directory (GCC .gcda files; Clang cypha.profdata)")
+if((CYPHA_FAST_BUILD OR NOT CYPHA_PGO STREQUAL "OFF") AND NOT MSVC)
+  set(_cypha_fast_c "")
+  set(_cypha_fast_l "")
+  if(CYPHA_FAST_BUILD)
+    list(APPEND _cypha_fast_c -ffp-contract=off)
+    if(CYPHA_FAST_ARCH)
+      list(APPEND _cypha_fast_c -march=native)
+    endif()
+  endif()
+  if(CYPHA_PGO STREQUAL "generate")
+    # Plain counters: atomic ones made the instrumented context8k about 10x slower. Threads may lose a few counts;
+    # the use step tolerates that (GCC -fprofile-correction). Profiles only steer optimisation, never the outputs.
+    list(APPEND _cypha_fast_c "-fprofile-generate=${CYPHA_PGO_DIR}" -fprofile-update=single)
+  elseif(CYPHA_PGO STREQUAL "use")
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+      # Code the training did not run is optimised as without a profile, not for size.
+      list(APPEND _cypha_fast_c "-fprofile-use=${CYPHA_PGO_DIR}" -fprofile-partial-training -fprofile-correction
+           -Wno-missing-profile)
+    else()
+      list(APPEND _cypha_fast_c "-fprofile-use=${CYPHA_PGO_DIR}/cypha.profdata" -Wno-profile-instr-unprofiled
+           -Wno-profile-instr-out-of-date)
+    endif()
+  elseif(NOT CYPHA_PGO STREQUAL "OFF")
+    message(FATAL_ERROR "CYPHA_PGO must be OFF, generate or use (got '${CYPHA_PGO}')")
+  endif()
+  if(CYPHA_FAST_BUILD AND CYPHA_FAST_LTO)  # explicit flags, not CMake's IPO (whose GCC -flto=auto uses every thread)
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+      list(APPEND _cypha_fast_c -flto=4 -fno-fat-lto-objects)
+    elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+      list(APPEND _cypha_fast_c -flto=thin)
+      list(APPEND _cypha_fast_l -fuse-ld=lld -Wl,--thinlto-jobs=4)
+    endif()
+  endif()
+  list(PREPEND _cypha_fast_l ${_cypha_fast_c})
+  function(_cypha_fast_build_apply)
+    foreach(_t IN LISTS CYPHA_FAST_TARGETS)
+      if(NOT TARGET ${_t})
+        message(WARNING "CYPHA_FAST_TARGETS: no target ${_t}")
+        continue()
+      endif()
+      target_compile_options(${_t} PRIVATE "$<$<COMPILE_LANGUAGE:C,CXX>:${_cypha_fast_c}>")
+      target_link_options(${_t} PRIVATE ${_cypha_fast_l})
+    endforeach()
+  endfunction()
+  cmake_language(DEFER CALL _cypha_fast_build_apply)
+  message(STATUS "O1 fast build on ${CYPHA_FAST_TARGETS}: compile ${_cypha_fast_c}; link ${_cypha_fast_l}; "
+                 "LTO ${CYPHA_FAST_LTO} (with CYPHA_FAST_BUILD ${CYPHA_FAST_BUILD}); PGO ${CYPHA_PGO}")
+endif()
+# --- end O1 block ----------------------------------------------------------------------------------------------------
+
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
