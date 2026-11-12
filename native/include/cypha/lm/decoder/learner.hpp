@@ -226,22 +226,23 @@ class Learner {
         }
         const std::uint8_t pb = n ? h[n - 1] : 32;
         set_ = copy_bucket(cn) * 5 + ::cypha::online::mix::byte_class(pb);
-        mixed(&w_[static_cast<std::size_t>(set_) * kIn], P);
-        if (M_->mix2 > 0) {  // MIXDEC_TUNE.md: the second mixer and the final one
+        if (M_->mix2 > 0) {  // MIXDEC_TUNE.md: the second mixer and the final one, on the mixers' log probabilities
             const std::uint8_t pb2 = n > 1 ? h[n - 2] : 32;
             set2_ = M_->mix2 == 1 ? pb : static_cast<int>(((pb2 * 0x9E37u) ^ (pb * 0x85EBu) ^ pb) & 4095u);
             cls_ = ::cypha::online::mix::byte_class(pb);
-            for (int s = 0; s < 256; ++s) P1_[s] = P[s];
-            mixed(&w2_[static_cast<std::size_t>(set2_) * kIn], P2_);
+            mixed_log(&w_[static_cast<std::size_t>(set_) * kIn], P1_);
+            mixed_log(&w2_[static_cast<std::size_t>(set2_) * kIn], P2_);
             const double* f = &wf_[static_cast<std::size_t>(cls_) * 2];
             double z[256], mx = -1e300;
             for (int s = 0; s < 256; ++s) {
-                z[s] = f[0] * std::log(std::max(P1_[s], 1e-300)) + f[1] * std::log(std::max(P2_[s], 1e-300));
+                z[s] = f[0] * P1_[s] + f[1] * P2_[s];
                 mx = std::max(mx, z[s]);
             }
             double t = 0;
             for (int s = 0; s < 256; ++s) t += (P[s] = std::exp(z[s] - mx));
             for (int s = 0; s < 256; ++s) P[s] /= t;
+        } else {
+            mixed(&w_[static_cast<std::size_t>(set_) * kIn], P);
         }
         for (int s = 0; s < 256; ++s) P_[s] = P[s];
     }
@@ -252,15 +253,17 @@ class Learner {
         double P[256];
         dist(P);
         if (M_->mix2 > 0) {
-            step(&w_[static_cast<std::size_t>(set_) * kIn], P1_, y, n_.empty() ? nullptr : &n_[static_cast<std::size_t>(set_)]);
-            step(&w2_[static_cast<std::size_t>(set2_) * kIn], P2_, y, n2_.empty() ? nullptr : &n2_[static_cast<std::size_t>(set2_)]);
+            double Q1[256], Q2[256];  // the mixers' log probabilities (P1_, P2_) as probabilities, for their steps
+            for (int s = 0; s < 256; ++s) Q1[s] = std::exp(P1_[s]), Q2[s] = std::exp(P2_[s]);
+            step(&w_[static_cast<std::size_t>(set_) * kIn], Q1, y, n_.empty() ? nullptr : &n_[static_cast<std::size_t>(set_)]);
+            step(&w2_[static_cast<std::size_t>(set2_) * kIn], Q2, y, n2_.empty() ? nullptr : &n2_[static_cast<std::size_t>(set2_)]);
             double* f = &wf_[static_cast<std::size_t>(cls_) * 2];
             const double* in[2] = {P1_, P2_};
             const double lr = rate(nf_.empty() ? nullptr : &nf_[static_cast<std::size_t>(cls_)]);
             for (int j = 0; j < 2; ++j) {
                 double e = 0;
-                for (int s = 0; s < 256; ++s) e += P[s] * std::log(std::max(in[j][s], 1e-300));
-                f[j] -= lr * (e - std::log(std::max(in[j][y], 1e-300)));
+                for (int s = 0; s < 256; ++s) e += P[s] * in[j][s];
+                f[j] -= lr * (e - in[j][y]);
             }
         } else {
             step(&w_[static_cast<std::size_t>(set_) * kIn], P, y, n_.empty() ? nullptr : &n_[static_cast<std::size_t>(set_)]);
@@ -350,6 +353,19 @@ class Learner {
         for (int s = 0; s < 256; ++s) t += (P[s] = std::exp(z[s] - mx));
         for (int s = 0; s < 256; ++s) P[s] /= t;
     }
+    // The same mixer's log probabilities (z - max - log of the sum): no exp-then-log for the final mixer.
+    void mixed_log(const double* w, double* LP) const {
+        double z[256] = {};
+        for (int j = 0; j < kIn; ++j)
+            if (has_[j] && w[j] != 0)
+                for (int s = 0; s < 256; ++s) z[s] += w[j] * lin_[j][s];
+        double mx = z[0];
+        for (int s = 1; s < 256; ++s) mx = std::max(mx, z[s]);
+        double t = 0;
+        for (int s = 0; s < 256; ++s) t += std::exp(z[s] - mx);
+        const double lt = mx + std::log(t);
+        for (int s = 0; s < 256; ++s) LP[s] = z[s] - lt;
+    }
     double rate(std::uint32_t* t) const {
         if (!t) return M_->lr;
         return M_->lr / (1.0 + static_cast<double>((*t)++) * M_->decay);
@@ -379,7 +395,7 @@ class Learner {
     double lin_[kIn][256] = {};
     bool has_[kIn] = {};
     int set_ = 0, set2_ = 0, cls_ = 0;
-    double P_[256] = {}, P1_[256] = {}, P2_[256] = {};
+    double P_[256] = {}, P1_[256] = {}, P2_[256] = {};  // P1_, P2_: the two mixers' log probabilities (mix2)
 };
 
 }  // namespace cypha::cyphalm::decoder
