@@ -2727,3 +2727,29 @@ Four fresh blind raters. Raters 1–2 rate the first 25 prompts, raters 3–4 th
   - By reading, whole-clause share rises from 0.27 to 0.36. But many whole sentences are nonsense ("He was about 100 km long."), and the class cut causes agreement errors ("They is living…").
 - **Blind pairwise raters against K1** (packets 6e004cc): SH 0.400 [0.300, 0.500], rater pairs 0.36 and 0.44; SHF 0.470 [0.360, 0.580]. **Not adopted; K1 stays.**
 - **What it says:** grammatical form without sense reads no better than broken form. The code stays on `wip/k5-skelfree`, unmerged: D4 edits `discourse.hpp` now. The report, runs and packets are on main.
+
+### 13.71 D2, decoding for grammar: temperature 0.8 is the default (2026-11-12; [K5_DECODE](reports/K5_DECODE.md))
+
+- **Registered first** (3391a4c). Arms against K1:
+  - lower temperature (T9, T8);
+  - a fluency gate (`--k5-gate 16,wf=1|2`, now also read by the discourse writer's free sentences);
+  - a class-sequence grammar term (`wg=1`, new, off by default).
+  - Screen: verbatim13 0 (Odin's 12-word cap) and fact precision. SCRIBE and copy32 are reported, not screened: our copy32 screen had kept T8/T9 from readers in §13.51, though they never broke Odin's cap.
+- **Screen** (dev; whole sentences in a strict reading of 12 prompts):
+
+| Arm | Whole sentences | copy32 | Fact precision | Result |
+|---|---|---|---|---|
+| K1 | 0.40 | 0.275 | 0.918 | baseline |
+| T8 | 0.46 | 0.487 | 0.924 | candidate |
+| F1 | 0.45 | 0.339 | 0.924 | candidate |
+| T9 | fails reading | — | — | run-ons |
+| F2, GR | fail reading | — | — | leave the subject |
+| T8 + F1 | — | — | — | breaks the 12-word cap once |
+
+- **Blind pairwise raters against K1** (packets c2c75b2, four fresh raters):
+  - **T8 0.855 [0.780, 0.920]**, rater pairs 0.86 and 0.85;
+  - F1 0.590 [0.490, 0.690].
+  - **T8 reads better; it is the default.**
+- **The default:** `sample --k5` writes at T 0.8 when K5 counts from the more-text and no `--temps` is given. `--temps 1.0` restores K1. The code of D2's flags (`wf` in free sentences, `wg`) is merged, off by default.
+- **The cost:** T8 lies more often in 32-byte spans of the training text (copy32 0.49 against 0.28). It never completes 13 training words (verbatim13 0). The 12-word cap is the rule; this is within it.
+- **Checks** (registered before they run): the default equals T8's dev GEN file under `cmp`; `--temps 1.0` equals K1's. Then GEN-A test is read once, with the fact check.

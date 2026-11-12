@@ -2779,7 +2779,7 @@ int cmd_sample(const Args& a) {
             std::cerr << "k5: whole-paragraph MCMC" << mp.describe() << "\n";
         }
         const int krc = cypha::cyphalm::wkn::run_sample(a.k5, a.k5_cap, prompts, conts, a.outs, a.prompts, static_cast<std::size_t>(a.bytes),
-                                                        a.temps.empty() ? std::vector<double>{1.0} : temps, printable, &base,
+                                                        a.temps.empty() ? std::vector<double>{base.more.empty() ? 1.0 : 0.8} : temps, printable, &base,  // §13.71: T 0.8 by default with the 337 MB counts; --temps 1.0 restores K1
                                                         a.k5_seed, a.k5_vmax);
         if (mp.steps > 0) mstats.print(stderr);
         return krc;
