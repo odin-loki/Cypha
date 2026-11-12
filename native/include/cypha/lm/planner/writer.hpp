@@ -28,6 +28,7 @@
 
 #include "cypha/lm/planner/fallback.hpp"  // PLAN_FACTS: --k5-plan-fallback pattern
 #include "cypha/lm/planner/facts.hpp"
+#include "cypha/lm/planner/life_dates.hpp"  // HONEST_DATES2 (H3): --k5-plan-honest life
 #include "cypha/lm/planner/skeleton.hpp"
 #include "cypha/lm/planner/slots.hpp"  // §13.42 Q2: typed slots and the smoothing places (docs/reports/PLAN_FILL.md)
 #include "cypha/lm/structure/experts.hpp"
@@ -104,6 +105,7 @@ class Filler {
             by_cls_[cls[w]].push_back(w);
         }
         if (fo) tau_ = fo->tau, s1_ = fo->s1, s1_mode_ = fo->s1_mode, honest_ = fo->honest;
+        if (honest_ == 4) book_ = life_book(m);  // HONEST_DATES2 (H3): the store's life dates
         if (honest_) {  // GENERATION_PLAN §13.48 H1: the words that state a number, a date or a name (HONEST_DATES: 2 numbers
                         // and months only; 3 those and nationalities or countries)
             static const char* const months[] = {"January", "February", "March", "April", "May", "June", "July",
@@ -117,7 +119,7 @@ class Filler {
                 for (const char* mo : months) month = month || t == mo;
                 if (digit || month) claim_[w] = 2;                     // a number or a month: only from the fact
                 else if (honest_ == 1 && !t.empty() && t[0] >= 'A' && t[0] <= 'Z') claim_[w] = 1;  // a name: from the fact or the text so far
-                else if (honest_ == 3 && nation(t)) claim_[w] = 1;  // HONEST_DATES HD2: a nationality or a country, as a name
+                else if (honest_ >= 3 && nation(t)) claim_[w] = 1;  // HONEST_DATES HD2: a nationality or a country, as a name
             }
         }
     }
@@ -165,9 +167,43 @@ class Filler {
             double lp = 0;
             std::string seg, prev;
             bool has_prev = false;
+            std::uint8_t used = 0;  // HONEST_DATES2: the life words written (bits of lw)
+            int date = 0, open = -1;  // the first date still to be written (0 birth, 1 death); the date begun, or -1
         };
         std::vector<It> cur(1), nxt;
         cur[0].prev = s.prev, cur[0].has_prev = s.has_prev;
+        // HONEST_DATES2 (H3, --k5-plan-honest life): the subject's life dates from the store. A month, a day or a year
+        // of them may be written at a class position, each once, in order: the dates in time order (birth, death), a
+        // date's words together (its year ends it), O's own year at its slot (reserved for it there).
+        const std::vector<LifeWord>* lw = nullptr;
+        int o_date = -1;
+        if (book_) {
+            lw = book_->of(S);
+            if (lw && lw->size() > 8) lw = nullptr;
+            if (lw)
+                for (std::size_t i = 0; i < lw->size(); ++i) {
+                    const auto& w = (*lw)[i];
+                    bool in_o = false;
+                    for (const auto& t : O) in_o = in_o || m_.id(t) == w.id;
+                    if (w.part == 2 && o_date < 0 && in_o) o_date = w.date, cur[0].used |= static_cast<std::uint8_t>(1u << i);
+                }
+        }
+        const auto life_take = [&](const It& it, std::uint32_t w) {  // the life word w may be written as: its index, or -1
+            int best = -1;
+            if (!lw) return best;
+            for (std::size_t i = 0; i < lw->size(); ++i) {
+                const auto& x = (*lw)[i];
+                if (x.id != w || (it.used >> i) & 1u || x.date < it.date || (it.open >= 0 && it.open != x.date)) continue;
+                if (best < 0 || x.date < (*lw)[static_cast<std::size_t>(best)].date) best = static_cast<int>(i);
+            }
+            return best;
+        };
+        const auto life_put = [&](It& x, int i) {
+            const auto& w = (*lw)[static_cast<std::size_t>(i)];
+            x.used |= static_cast<std::uint8_t>(1u << i);
+            if (w.part == 2) x.open = -1, x.date = w.date + 1;
+            else x.open = w.date, x.date = w.date;
+        };
         thread_local wkn::K5::State tmp;
         thread_local std::vector<double> p, scratch;
         p.resize(m_.vocab().size());
@@ -190,11 +226,15 @@ class Filler {
                 for (const auto& t : *v) own.push_back(m_.id(t));
             seen.assign(s.ctx.begin(), s.ctx.end());
             seen.insert(seen.end(), own.begin(), own.end());
+            if (lw) {  // HONEST_DATES2: with life dates, O's own year is written at its slot only (the life rule)
+                own.clear();
+                for (const auto& t : S) own.push_back(m_.id(t));
+            }
             std::sort(own.begin(), own.end()), std::sort(seen.begin(), seen.end());
         }
-        const auto invents = [&](std::uint32_t w, bool first) {
+        const auto invents = [&](std::uint32_t w, bool first, const It& it) {
             if (!honest_ || w >= claim_.size() || claim_[w] == 0) return false;
-            if (claim_[w] == 2) return !std::binary_search(own.begin(), own.end(), w);
+            if (claim_[w] == 2) return !std::binary_search(own.begin(), own.end(), w) && life_take(it, w) < 0;
             return !first && !std::binary_search(seen.begin(), seen.end(), w);
         };
         std::pair<int, int> nb[4];
@@ -212,6 +252,10 @@ class Filler {
             for (const auto& it : cur) {
                 if (code == kSlotS || code == kSlotO) {
                     It x = it;
+                    if (code == kSlotO && o_date >= 0) {  // HONEST_DATES2: O's year, in its place among the dates
+                        if (x.date > o_date || (x.open >= 0 && x.open != o_date)) continue;
+                        x.open = -1, x.date = o_date + 1;
+                    }
                     for (const auto& t : code == kSlotS ? S : O) {
                         const double z = dist(x);
                         const std::uint32_t id = m_.id(t);
@@ -233,15 +277,26 @@ class Filler {
                 std::sort(top.begin(), top.end(), [](const auto& a, const auto& b) { return a.first > b.first || (a.first == b.first && a.second < b.second); });
                 // §13.48 H1b: if the class's most probable word here is a claim the fill may not make, the position
                 // asks for a fact the plan does not hold; this fill ends (no junk word of the class stands in for it).
-                if (!top.empty() && invents(top[0].second, it.ids.empty())) {
-                    ++refused_;
-                    continue;
+                // HONEST_DATES2 (H3): with life dates, a position whose most probable word is a date the plan does not
+                // hold takes one the store holds (a date word of its class the life rule allows), if there is one.
+                bool only_life = false;
+                if (!top.empty() && invents(top[0].second, it.ids.empty(), it)) {
+                    if (lw && claim_[top[0].second] == 2)
+                        for (const auto& [pw, w] : top)
+                            if (claim_[w] == 2 && life_take(it, w) >= 0) {
+                                only_life = true;
+                                break;
+                            }
+                    if (!only_life) {
+                        ++refused_;
+                        continue;
+                    }
                 }
                 int took = 0;
                 for (const auto& [pw, w] : top) {
                     if (took >= expand_) break;
                     if (capped && cs.has(wkn::fnv_step(hp, w))) continue;
-                    if (invents(w, it.ids.empty())) {  // §13.48 H1
+                    if (invents(w, it.ids.empty(), it) || (only_life && claim_[w] != 2)) {  // §13.48 H1
                         ++refused_;
                         continue;
                     }
@@ -255,6 +310,8 @@ class Filler {
                     x.lp += std::log2(std::max(pw / z, 1e-12));
                     x.ids.push_back(w), x.tok.push_back(m_.vocab()[w]);
                     x.seg += pc, x.prev = m_.vocab()[w], x.has_prev = true;
+                    if (lw && w < claim_.size() && claim_[w] == 2 && !std::binary_search(own.begin(), own.end(), w))
+                        life_put(x, life_take(it, w));  // HONEST_DATES2
                     nxt.push_back(std::move(x));
                     ++took;
                 }
@@ -427,7 +484,8 @@ class Filler {
     const SlotTypes* types_ = nullptr;  // §13.42 Q2
     double tau_ = 2.0, s1_ = 0;
     int s1_mode_ = 0;
-    int honest_ = 0;                     // §13.48 H1 (1); HONEST_DATES HD1 (2), HD2 (3)
+    int honest_ = 0;                     // §13.48 H1 (1); HONEST_DATES HD1 (2), HD2 (3); HONEST_DATES2 life (4)
+    const LifeBook* book_ = nullptr;     // HONEST_DATES2: the store's life dates (honest 4)
     std::vector<std::uint8_t> claim_;    // §13.48 H1: 2 a number or a month, 1 a capitalised word, 0 neither
     mutable std::uint64_t dists_ = 0, refused_ = 0;
     std::vector<std::vector<std::uint32_t>> by_cls_;
@@ -490,6 +548,12 @@ class Model {
     FillOpts fo;
     std::shared_ptr<SlotTypes> types;
     mutable std::atomic<std::uint64_t> refused{0}, skel_dropped{0}, refilled{0};
+    mutable std::atomic<std::uint64_t> skel_unfit{0};  // HONEST_DATES2: skeletons left out by the life fit
+    // HONEST_DATES2: K5's month and number classes (life_dates.hpp), once.
+    const DateClasses& date_classes(const wkn::K5& m) const {
+        std::call_once(dc_once_, [&] { dc_ = DateClasses(m); });
+        return dc_;
+    }
     const SlotTypes* bind_types(const wkn::K5& m) const {
         if (!types) return nullptr;
         std::call_once(types_once_, [&] {
@@ -561,6 +625,23 @@ class Model {
             }
             if (kept == 0) std::fill(drop.begin(), drop.end(), 0);
             else for (std::size_t i = 0; i < sk.size(); ++i) skel_dropped += i != exclude && drop[i];
+        }
+        if (fo.honest == 4) {  // HONEST_DATES2 (H3): skeletons that ask for more months or numbers than the store holds
+            const LifeBook* bk = life_book(m);
+            const DateClasses& dc = date_classes(m);
+            const auto* lw = bk ? bk->of(S) : nullptr;
+            std::vector<std::uint32_t> oid;
+            for (const auto& t : O) oid.push_back(m.id(t));
+            std::vector<char> unfit(sk.size(), 0);
+            std::size_t kept = 0;
+            for (std::size_t i = 0; i < sk.size(); ++i) {
+                if (i == exclude || drop[i]) continue;
+                unfit[i] = !skel_fit(dc, sk[i].codes, lw, oid);
+                kept += !unfit[i];
+            }
+            if (kept > 0)  // else as H2: the fill decides
+                for (std::size_t i = 0; i < sk.size(); ++i)
+                    if (unfit[i]) drop[i] = 1, ++skel_unfit;
         }
         std::vector<std::pair<double, std::size_t>> sc;
         for (std::size_t i = 0; i < sk.size(); ++i) {
@@ -681,6 +762,8 @@ class Model {
     mutable st::TrainRuns tr_;
     mutable std::once_flag types_once_;
     mutable std::vector<float> ent_post_;
+    mutable std::once_flag dc_once_;
+    mutable DateClasses dc_;
 };
 
 struct Plan {
@@ -797,6 +880,8 @@ class Writer final : public wkn::StructureWriter {
             std::fprintf(stderr, "k5-plan: q2 %s: %llu class words refused next to typed slots, %llu skeletons dropped, %llu fact steps refilled untyped\n",
                          md.fo.desc().c_str(), static_cast<unsigned long long>(md.refused.load()), static_cast<unsigned long long>(md.skel_dropped.load()),
                          static_cast<unsigned long long>(md.refilled.load()));
+        if (md.fo.honest == 4)  // HONEST_DATES2
+            std::fprintf(stderr, "k5-plan: life: %llu skeletons left out by the life fit\n", static_cast<unsigned long long>(md.skel_unfit.load()));
     }
     std::string generate(const wkn::K5& m, std::string_view prompt, std::uint64_t seed, const wkn::Options& o, wkn::GenStats* gst) const override {
         if (m.vocab().size() <= 2) return {};
@@ -940,6 +1025,18 @@ inline bool apply_plan_flags(const std::string& store, const std::string& model,
     if (fo.any()) {  // §13.42 Q2 (docs/reports/PLAN_FILL.md)
         md->fo = fo;
         md->bank.s4 = fo.s4;
+        for (std::size_t a = 0; !fo.skel_add.empty() && a <= fo.skel_add.size();) {  // HONEST_DATES2: --k5-plan-skel-add
+            std::size_t b = fo.skel_add.find(',', a);
+            if (b == std::string::npos) b = fo.skel_add.size();
+            const std::string path = fo.skel_add.substr(a, b - a);
+            const long n = md->bank.extend(path, err);
+            if (n < 0) return false;
+            std::fprintf(stderr, "k5-plan: skel-add %s: %ld skeletons added; bank %zu skeletons\n", path.c_str(), n, md->bank.skeletons());
+            a = b + 1;
+        }
+        if (fo.honest == 4) {  // HONEST_DATES2: the store's life dates, read once K5 is known (life_book)
+            life_spec().dir = store, life_spec().drops = drops, life_spec().fs = &md->fs;
+        }
         if (!fo.typed.empty()) {
             md->types = std::make_shared<SlotTypes>();
             if (!md->types->load(fo.typed, err)) return false;

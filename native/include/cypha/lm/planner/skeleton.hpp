@@ -146,6 +146,29 @@ class SkelBank {
             for (const auto& [b, n] : mp) out_[a] += n, in_[b] += n, all_ += n;
         return true;
     }
+    // HONEST_DATES2 (--k5-plan-skel-add): the skeletons of another bank file appended to their relations, after the
+    // bank's own (so its indices stay), those already in the relation left out; its transitions are not read.
+    // Returns the number added, or -1 (err) if the file cannot be read.
+    long extend(const std::string& path, std::string& err) {
+        std::ifstream in(path);
+        std::string line, tag;
+        if (!std::getline(in, line) || line != "K5PLAN-SKEL 1") return err = "cannot read the skeleton bank " + path, -1;
+        long added = 0;
+        while (std::getline(in, line)) {
+            std::istringstream ls(line);
+            ls >> tag;
+            if (tag != "skel") continue;
+            std::string r, c;
+            Skel s;
+            ls >> r >> s.count;
+            while (ls >> c) s.codes.push_back(c == "S" ? kSlotS : c == "O" ? kSlotO : static_cast<std::uint16_t>(std::stoi(c)));
+            auto& v = by_rel_[r];
+            if (std::any_of(v.begin(), v.end(), [&](const Skel& x) { return x.codes == s.codes; })) continue;
+            v.push_back(std::move(s));
+            ++added;
+        }
+        return added;
+    }
     const std::vector<Skel>* of(const std::string& rel) const {
         const auto it = by_rel_.find(rel);
         return it == by_rel_.end() || it->second.empty() ? nullptr : &it->second;

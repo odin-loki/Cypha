@@ -66,9 +66,12 @@ struct FillOpts {
     double s3 = 1;       // --k5-plan-s3 K: add-K on skeleton counts (1: today's log2(1 + count))
     double s4 = 0;       // --k5-plan-s4 L: the plan's relation transitions, L of the relations' marginal mixed in
     // --k5-plan-honest: 0 off; 1 on, the fill invents no number, month or name (GENERATION_PLAN §13.48 H1b);
-    // 2 dates, no number or month only (HONEST_DATES HD1); 3 nations, HD1 and no nationality or country (HD2)
+    // 2 dates, no number or month only (HONEST_DATES HD1); 3 nations, HD1 and no nationality or country (HD2);
+    // 4 life, HD2 and the subject's life dates from the store (HONEST_DATES2, H3; life_dates.hpp)
     int honest = 0;
-    bool any() const { return !typed.empty() || s1 > 0 || s2 != 1 || s3 != 1 || s4 > 0 || honest; }
+    // --k5-plan-skel-add FILE[,FILE]: skeleton banks added to the model's (HONEST_DATES2: k5_dates mine or trim)
+    std::string skel_add;
+    bool any() const { return !typed.empty() || s1 > 0 || s2 != 1 || s3 != 1 || s4 > 0 || honest || !skel_add.empty(); }
     std::string desc() const {
         std::string d;
         const auto add = [&](const std::string& k, double v) {
@@ -81,7 +84,10 @@ struct FillOpts {
         if (s2 != 1) add("s2", s2);
         if (s3 != 1) add("s3", s3);
         if (s4 > 0) add("s4", s4);
-        if (honest) d += (d.empty() ? "" : ",") + std::string(honest == 2 ? "honest=dates" : honest == 3 ? "honest=nations" : "honest");
+        if (honest)
+            d += (d.empty() ? "" : ",") +
+                 std::string(honest == 2 ? "honest=dates" : honest == 3 ? "honest=nations" : honest == 4 ? "honest=life" : "honest");
+        if (!skel_add.empty()) d += (d.empty() ? "" : ",") + std::string("skel_add=") + skel_add;
         return d;
     }
 };
@@ -106,8 +112,11 @@ inline bool fill_flag(const std::string& k, const std::string& v, FillOpts& f, s
     else if (k == "--k5-plan-s3") num(0, 1e6, f.s3);
     else if (k == "--k5-plan-s4") num(0, 1, f.s4);
     else if (k == "--k5-plan-honest") {
-        if (v != "on" && v != "off" && v != "dates" && v != "nations") err = k + " takes on, off, dates or nations";
-        f.honest = v == "on" ? 1 : v == "dates" ? 2 : v == "nations" ? 3 : 0;
+        if (v != "on" && v != "off" && v != "dates" && v != "nations" && v != "life") err = k + " takes on, off, dates, nations or life";
+        f.honest = v == "on" ? 1 : v == "dates" ? 2 : v == "nations" ? 3 : v == "life" ? 4 : 0;
+    } else if (k == "--k5-plan-skel-add") {
+        if (v.empty()) err = k + " takes FILE[,FILE]";
+        f.skel_add = v;
     } else return false;
     if (k == "--k5-plan-s3" && err.empty() && f.s3 <= 0) err = k + " takes a number above 0";
     return true;
