@@ -2774,6 +2774,8 @@ int cmd_sample(const Args& a) {
         std::shared_ptr<cypha::cyphalm::decoder::Shared> mxs;
         PackedModel mx_pm;
         std::unique_ptr<cypha::cyphalm::bkn::ByteKN> mx_kn;
+        std::unique_ptr<ClassContext> mx_cls;  // MIXDEC_TUNE.md
+        std::unique_ptr<DocTopic> mx_doc;
         if (!a.mixdec.empty()) {
             namespace dc = cypha::cyphalm::decoder;
             const auto t0 = std::chrono::steady_clock::now();
@@ -2784,6 +2786,10 @@ int cmd_sample(const Args& a) {
                 return 2;
             }
             mxs->M.copy = mxs->P.copy, mxs->M.ngram = mxs->P.ngram, mxs->M.lstm = mxs->P.lstm;
+            // MIXDEC_TUNE.md: the tuned settings (their defaults are the learner's own)
+            mxs->M.ng_orders = mxs->P.ngo, mxs->M.ng_tb = mxs->P.ngtb, mxs->M.ng_cap = mxs->P.ngcap, mxs->M.ng_lr = mxs->P.nglr;
+            mxs->M.floor = mxs->P.floor, mxs->M.lr = mxs->P.mlr, mxs->M.decay = mxs->P.decay, mxs->M.mix2 = mxs->P.mix2;
+            base.mixdec_artk = mxs->P.artk;
             if (mxs->P.trie) {
                 Config tc;
                 try {
@@ -2794,12 +2800,28 @@ int cmd_sample(const Args& a) {
                 }
                 mxs->M.trie = &mx_pm;
             }
-            if (mxs->P.kn) {
+            if (mxs->P.kn || mxs->P.cls || mxs->P.doc) {
                 std::ifstream kin(a.k5, std::ios::binary);
                 const std::string kt((std::istreambuf_iterator<char>(kin)), std::istreambuf_iterator<char>());
-                mx_kn = make_bkn(kBknDefault, reinterpret_cast<const std::uint8_t*>(kt.data()), kt.size());
-                if (!mx_kn) return 2;
-                mxs->M.kn = mx_kn.get();
+                const auto* ku = reinterpret_cast<const std::uint8_t*>(kt.data());
+                if (mxs->P.kn) {
+                    mx_kn = make_bkn(mxs->P.bkn.empty() ? kBknDefault : mxs->P.bkn, ku, kt.size());
+                    if (!mx_kn) return 2;
+                    mxs->M.kn = mx_kn.get();
+                }
+                if (mxs->P.cls) {  // MIXDEC_TUNE.md: the class expert (word shapes), counted on K5's text
+                    int rc = 0;
+                    Args ca;
+                    mx_cls = default_cls(ca, ku, kt.size(), rc);
+                    if (!mx_cls) return rc ? rc : 2;
+                    mxs->M.cls = mx_cls.get();
+                }
+                if (mxs->P.doc) {  // MIXDEC_TUNE.md: the document cache (T1's cand 2048), its words from K5's text
+                    int rc = 0;
+                    mx_doc = make_doc("cache,cand=2048", ku, kt.size(), rc);
+                    if (!mx_doc) return rc ? rc : 2;
+                    mxs->M.doc = mx_doc.get();
+                }
             }
             if (mxs->P.lstm) {
                 mxs->lstm0 = cypha::online::ByteLSTM::load_file(a.mixdec_lstm);
@@ -2808,18 +2830,25 @@ int cmd_sample(const Args& a) {
                     return 2;
                 }
             }
-            std::string gen;
+            std::string gen, pre;  // MIXDEC_TUNE.md: pre, the n-gram's pretraining bytes (those after gen)
             {
                 std::ifstream gin(a.mixdec_generic, std::ios::binary);
                 gen.resize(a.mixdec_generic_bytes);
                 gin.read(gen.data(), static_cast<std::streamsize>(gen.size()));
                 gen.resize(static_cast<std::size_t>(gin.gcount()));
+                if (mxs->P.ngpre > 0 && mxs->P.ngram) {
+                    pre.resize(mxs->P.ngpre);
+                    gin.read(pre.data(), static_cast<std::streamsize>(pre.size()));
+                    pre.resize(static_cast<std::size_t>(gin.gcount()));
+                }
             }
             const double gb = [&] {
                 dc::Learner L(mxs->M, mxs->lstm0.get());
+                L.pretrain_ngram(pre);  // MIXDEC_TUNE.md (empty: nothing)
                 const double b = L.learn(gen);
                 mxs->base = std::make_unique<dc::Learner>(L);
                 mxs->base->trim();
+                mxs->base->doc_reset();  // MIXDEC_TUNE.md (no document cache: nothing)
                 return gen.empty() ? 0.0 : -b / static_cast<double>(gen.size());
             }();
             std::fprintf(stderr, "k5: %s; base primed on %zu bytes of %s at %.4f bits a byte; models ready in %.1f s\n",
@@ -2827,7 +2856,61 @@ int cmd_sample(const Args& a) {
                          std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count());
             // CYPHA_MIXDEC_EVAL=N: the learner's bits a byte on the first N prompts' human continuations, from the base
             // (neutral) and primed on the prompt (no article), learning nothing while it reads the continuation.
-            if (const char* ev = std::getenv("CYPHA_MIXDEC_EVAL"); ev && !conts.empty()) {
+            // MIXDEC_TUNE.md: with CYPHA_MIXDEC_ARTS=DIR, the primed learner reads the retrieved documents as a
+            // continuation's learner does (CYPHA_MIXDEC_DUMP's files: DIR/<FNV-1a of the prompt>.<i>.art), then the
+            // prompt; prompts run on K5_THREADS threads; CYPHA_MIXDEC_EVAL_BYTES caps each continuation;
+            // CYPHA_MIXDEC_EVAL_ONLY=1 stops after the evaluation.
+            if (const char* ev = std::getenv("CYPHA_MIXDEC_EVAL"), *ad = std::getenv("CYPHA_MIXDEC_ARTS"); ev && ad && !conts.empty()) {
+                const std::size_t N = std::min<std::size_t>(std::strtoull(ev, nullptr, 10), std::min(prompts.size(), conts.size()));
+                const std::size_t cap = std::getenv("CYPHA_MIXDEC_EVAL_BYTES") ? std::strtoull(std::getenv("CYPHA_MIXDEC_EVAL_BYTES"), nullptr, 10) : 0;
+                const int kd = mxs->P.artk > 0 ? mxs->P.artk : 1;
+                std::vector<double> bn(N), bp(N), nb(N), na(N);
+                std::atomic<std::size_t> next{0};
+                const auto t1 = std::chrono::steady_clock::now();
+                auto work = [&] {
+                    for (std::size_t i; (i = next++) < N;) {
+                        std::uint64_t hsh = 1469598103934665603ull;
+                        for (const char c : prompts[i]) hsh = (hsh ^ static_cast<std::uint8_t>(c)) * 1099511628211ull;
+                        std::string art;
+                        for (int d = 0; d < kd; ++d) {
+                            char fn[64];
+                            std::snprintf(fn, sizeof fn, "/%016llx.%d.art", static_cast<unsigned long long>(hsh), d);
+                            std::ifstream f(std::string(ad) + fn, std::ios::binary);
+                            if (!f) break;
+                            art.append((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+                            art += "\n\n";
+                        }
+                        na[i] = static_cast<double>(std::min(art.size(), mxs->P.art));
+                        dc::Learner ln(*mxs->base), lp(*mxs->base);
+                        ln.own(), lp.own();
+                        dc::prime(lp, prompts[i], art, mxs->P.art);
+                        ln.doc_freeze();
+                        const std::string_view ct = cap ? std::string_view(conts[i]).substr(0, cap) : std::string_view(conts[i]);
+                        for (const char ch : ct) {
+                            double P[256];
+                            ln.dist(P);
+                            bn[i] -= std::log2(std::max(P[static_cast<std::uint8_t>(ch)], 1e-300));
+                            lp.dist(P);
+                            bp[i] -= std::log2(std::max(P[static_cast<std::uint8_t>(ch)], 1e-300));
+                            ln.read(static_cast<std::uint8_t>(ch)), lp.read(static_cast<std::uint8_t>(ch));
+                        }
+                        nb[i] = static_cast<double>(ct.size());
+                    }
+                };
+                int nt = 6;
+                if (const char* e = std::getenv("K5_THREADS")) nt = std::max(1, std::atoi(e));
+                std::vector<std::thread> th;
+                for (int t = 1; t < nt; ++t) th.emplace_back(work);
+                work();
+                for (auto& x : th) x.join();
+                double sn = 0, sp = 0, sb = 0, sa = 0;
+                for (std::size_t i = 0; i < N; ++i) sn += bn[i], sp += bp[i], sb += nb[i], sa += na[i];
+                std::fprintf(stderr, "mixdec_eval_art prompts %zu bytes %.0f article_bytes %.0f neutral_bpb %.4f primed_bpb %.4f gain %.4f s %.1f\n", N, sb, sa,
+                             sn / std::max(sb, 1.0), sp / std::max(sb, 1.0), (sn - sp) / std::max(sb, 1.0),
+                             std::chrono::duration<double>(std::chrono::steady_clock::now() - t1).count());
+                for (std::size_t i = 0; i < N; ++i) std::fprintf(stderr, "mixdec_eval_row %zu %.0f %.5f %.5f\n", i, nb[i], bn[i] / std::max(nb[i], 1.0), bp[i] / std::max(nb[i], 1.0));
+                if (const char* eo = std::getenv("CYPHA_MIXDEC_EVAL_ONLY"); eo && std::atoi(eo) == 1) return 0;
+            } else if (const char* ev = std::getenv("CYPHA_MIXDEC_EVAL"); ev && !conts.empty()) {
                 const std::size_t N = std::min<std::size_t>(std::strtoull(ev, nullptr, 10), std::min(prompts.size(), conts.size()));
                 double bn = 0, bp = 0, nb = 0;
                 for (std::size_t i = 0; i < N; ++i) {

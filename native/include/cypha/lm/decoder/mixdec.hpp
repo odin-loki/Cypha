@@ -30,6 +30,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <vector>
 
 namespace cypha::cyphalm::decoder {
 
@@ -37,6 +38,12 @@ namespace cypha::cyphalm::decoder {
 /// judge's weight in the gate, z-scored as the gate's other terms); ad=0|1 (arithmetic decoding; 1 by default once a
 /// word term is on); art=N (article bytes primed; 8192); top=N (the nucleus's N most probable words are scored; 16;
 /// 0: all); lstm=0, ngram=0, copy=0, kn=0, trie=0 (leave an expert out).
+/// MIXDEC_TUNE.md adds (all off by default): cls=1 (the class expert), doc=1 (the document cache), ngo=A:B:... (the
+/// n-gram's orders), ngtb=N, ngcap=N, nglr=X, ngpre=BYTES (n-gram counts pretrained on that much generic prose), bkn=SPEC
+/// (Kneser-Ney's spec, as --bkn), floor=X, mlr=X, decay=X (the mixers'), mix2=1|2 (a second mixer and a final one),
+/// artk=N (the learner is primed on the N best retrieved documents, not K5's k), t1=1 (T1's tuned settings, §13.72:
+/// ngo=1:2:3:4:5:6:7:8:12:16, ngcap=8, nglr=0.000625, bkn=10:4:2:1, floor=1.67652e-05, mlr=0.00181686, decay=0.0001;
+/// a later field overrides it).
 struct Params {
     int mode = 0;  // 0: no word term; 3: ratio; 4: veto (word_kn.hpp's scorer modes)
     double w = 0;
@@ -45,6 +52,17 @@ struct Params {
     std::size_t art = 8192;
     std::size_t top = 16;  // the nucleus's most probable words scored (the rest: the scored words' mean ratio, or kept)
     bool lstm = true, ngram = true, copy = true, kn = true, trie = true;
+    // MIXDEC_TUNE.md
+    bool cls = false, doc = false;
+    std::vector<int> ngo{1, 2, 3, 4, 6};
+    int ngtb = 18, ngcap = 60, mix2 = 0, artk = 0;
+    double nglr = 0.005, floor = 1e-6, mlr = 0.002, decay = 0;
+    std::size_t ngpre = 0;
+    std::string bkn;
+    bool tuned() const {
+        return cls || doc || ngo != std::vector<int>{1, 2, 3, 4, 6} || ngtb != 18 || ngcap != 60 || mix2 != 0 || artk != 0 ||
+               nglr != 0.005 || floor != 1e-6 || mlr != 0.002 || decay != 0 || ngpre != 0 || !bkn.empty();
+    }
     bool on() const { return mode != 0 || judge != 0 || ad > 0; }
     bool decode() const { return ad > 0 || (ad < 0 && mode != 0); }
     bool parse(const std::string& spec, std::string& err) {
@@ -69,6 +87,33 @@ struct Params {
             else if (k == "copy") copy = x != 0;
             else if (k == "kn") kn = x != 0;
             else if (k == "trie") trie = x != 0;
+            else if (k == "cls") cls = x != 0;  // MIXDEC_TUNE.md from here
+            else if (k == "doc") doc = x != 0;
+            else if (k == "ngo") {
+                ngo.clear();
+                const std::string v = f.substr(q + 1);
+                for (std::size_t b = 0; b < v.size();) {
+                    std::size_t c = v.find(':', b);
+                    if (c == std::string::npos) c = v.size();
+                    ngo.push_back(std::atoi(v.substr(b, c - b).c_str()));
+                    b = c + 1;
+                }
+                if (ngo.empty() || ngo.size() > static_cast<std::size_t>(Learner::kMaxOrders)) return err = "--mixdec: ngo takes 1 to 16 orders", false;
+            }
+            else if (k == "ngtb") ngtb = static_cast<int>(x);
+            else if (k == "ngcap") ngcap = static_cast<int>(x);
+            else if (k == "nglr") nglr = x;
+            else if (k == "ngpre") ngpre = static_cast<std::size_t>(x);
+            else if (k == "bkn") bkn = f.substr(q + 1);
+            else if (k == "floor") floor = x;
+            else if (k == "mlr") mlr = x;
+            else if (k == "decay") decay = x;
+            else if (k == "mix2") mix2 = static_cast<int>(x);
+            else if (k == "artk") artk = static_cast<int>(x);
+            else if (k == "t1") {
+                if (x != 0) ngo = {1, 2, 3, 4, 5, 6, 7, 8, 12, 16}, ngcap = 8, nglr = 0.000625, bkn = "10:4:2:1", floor = 1.67652e-05,
+                            mlr = 0.00181686, decay = 0.0001;
+            }
             else return err = "--mixdec: unknown key " + k, false;
         }
         if (!on()) return err = "--mixdec: nothing on (ratio=, veto=, judge= or ad=1)", false;
@@ -79,7 +124,15 @@ struct Params {
         std::snprintf(b, sizeof b, "mixdec %s%g top %zu judge %g ad %d art %zu experts%s%s%s%s%s", mode == 3 ? "ratio " : mode == 4 ? "veto " : "none ",
                       w, top, judge, decode() ? 1 : 0, art, trie ? " trie" : "", kn ? " kn" : "", copy ? " copy" : "", ngram ? " ngram" : "",
                       lstm ? " lstm" : "");
-        return b;
+        if (!tuned()) return b;
+        std::string s = b;  // MIXDEC_TUNE.md: only when set, so the default line is as before
+        std::string o;
+        for (const int v : ngo) o += (o.empty() ? "" : ":") + std::to_string(v);
+        char t[512];
+        std::snprintf(t, sizeof t, " | tune cls %d doc %d ngo %s ngtb %d ngcap %d nglr %g ngpre %zu bkn %s floor %g mlr %g decay %g mix2 %d artk %d",
+                      cls ? 1 : 0, doc ? 1 : 0, o.c_str(), ngtb, ngcap, nglr, ngpre, bkn.empty() ? "default" : bkn.c_str(), floor, mlr, decay, mix2,
+                      artk);
+        return s + t;
     }
 };
 
@@ -103,6 +156,17 @@ inline double end_lp(const double* P) {
 }
 
 class Dec;
+
+/// One continuation's priming: the article (its first art bytes) and the prompt, learned; then the document cache, if
+/// any, is frozen. The evaluation (CYPHA_MIXDEC_EVAL) primes the same way.
+inline void prime(Learner& L, std::string_view prompt, std::string_view article, std::size_t art) {
+    L.learn("\n\n");
+    L.learn(article.substr(0, std::min(article.size(), art)));
+    L.learn("\n\n");
+    L.learn(prompt);
+    L.trim();
+    L.doc_freeze();
+}
 
 /// One draft's scorer: a copy of the committed learner that reads the draft's words (frozen), scores K5's candidates
 /// with prefix sharing and an exact rewind, and decodes the word by arithmetic decoding.
@@ -142,11 +206,8 @@ class Dec : public wkn::MixDec {
     Dec(const Shared& S, std::string_view prompt, std::string_view article) : S_(S), com_(*S.base), neu_(*S.base) {
         com_.own();
         neu_.own();
-        com_.learn("\n\n");
-        com_.learn(article.substr(0, std::min(article.size(), S.P.art)));
-        com_.learn("\n\n");
-        com_.learn(prompt);
-        com_.trim();
+        prime(com_, prompt, article, S.P.art);
+        neu_.doc_freeze();  // MIXDEC_TUNE.md (no document cache: nothing)
         ++S.conts;
     }
     std::unique_ptr<wkn::ByteScorer> fork(std::string_view out, std::uint64_t seed) override {
@@ -260,6 +321,7 @@ inline void prime_base(Shared& S, std::string_view generic) {
     S.base = std::make_unique<Learner>(S.M, S.lstm0.get());
     S.base->learn(generic);
     S.base->trim();
+    S.base->doc_reset();
 }
 
 /// Selftest: the arithmetic coder's round trip, and the learner's exact rewind (a learner with the copy and n-gram
