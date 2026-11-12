@@ -1,0 +1,287 @@
+sample	sent	n_sents	relation	subject	entity	pronoun	object	verdict	store	note	date	pattern	sentence
+0:trie_T1.0	4	6	is_a	Auckland	Auckland	0	town	unknown	urban area	open list		[S] is a [O]	Auckland is a town located throughout the animal kingdom of New Zealand.
+0:trie_T1.0	6	6	birth_place	He	Brian Henderson	1	Victoria University of Wellington , New Zealand	unknown		no birth_place in store		[P] was born in [O]	He was born in Victoria University of Wellington, New Zealand.
+0:trie_T1.0	6	6	birth_place	He	Brian Henderson	1	Victoria University of Wellington	unknown		no birth_place in store		[P] was born in [O] ,	He was born in Victoria University of Wellington, New Zealand.
+5:trie_T1.0	2	6	birth_date	George Grenville	George Grenville	0	November 13 , 1765	contradicted	1712-10-14		valid	^ [S] ( [O]	George Grenville (November 13, 1765) is a US musician.
+6:trie_T1.0	2	9	nationality	New Historians	New Historians	0	Israeli	supported	Israeli			^ [S] is a [O]	New Historians was an Israeli physicist and mathematician.
+6:trie_T1.0	2	9	is_a	New Historians	New Historians	0	physicist	unknown	historian	open list		ADD [S] is a [NAT] [OCC]	New Historians was an Israeli physicist and mathematician.
+6:trie_T1.0	2	9	is_a	New Historians	New Historians	0	mathematician .	unknown	historian	open list		ADD [S] is a [NAT] [OCC]	New Historians was an Israeli physicist and mathematician.
+6:trie_T1.0	5	9	birth_place	Moshe Carmel	Moshe Carmel	0	Vienna , Berlin	unknown		no birth_place in store		^ [S] was born in [O] ,	Moshe Carmel was born in Vienna, Berlin, on January 17, 1911.
+6:trie_T1.0	7	9	birth_date	Izhak Graziani	Izhak Graziani	0	1924	supported	1924		valid	^ [S] ( born [O]	Izhak Graziani (born 1924) is a US comedian and actor.
+6:trie_T1.0	8	9	birth_date	Levi Eshkol	Levi Eshkol	0	1895	supported	1895		valid	^ [S] ( [O] -	Levi Eshkol (1895 - 1969) is a US musician.
+6:trie_T1.0	8	9	death_date	Levi Eshkol	Levi Eshkol	0	1969	supported	1969		valid	^ [S] ( # - [O] )	Levi Eshkol (1895 - 1969) is a US musician.
+7:trie_T1.0	1	8	birth_place	He		1	Chalmers University of Technology	unknown		subject not in store		[P] was born in [O]	He was born in Chalmers University of Technology in Sweden.
+7:trie_T1.0	3	8	birth_date	Björn Ulvaeus	Björn Ulvaeus	0	April 25 , 1945	supported	1945-04-25		valid	^ [S] ( born [O]	Björn Ulvaeus (born April 25, 1945) is a US musician.
+12:trie_T1.0	2	8	death_place	He		1	Edinburgh	unknown		subject not in store		[P] died in [O]	He died in Edinburgh, where he died of a heart attack.
+16:trie_T1.0	2	6	is_a	Dhaka		0	town	unknown		subject not in store		[S] is a [O]	Dhaka is a town and municipality in the county of East Pakistan, India.
+16:trie_T1.0	2	6	is_a	Dhaka		0	municipality	unknown		subject not in store		ADD [S] is a [NAT] [OCC]	Dhaka is a town and municipality in the county of East Pakistan, India.
+16:trie_T1.0	3	6	is_a	Divisions of Bangladesh	Divisions of Bangladesh	0	city	unknown		no is_a or occupation in store		^ [S] is a [O] in	Divisions of Bangladesh is a city in the state of Bangladesh, India.
+16:trie_T1.0	4	6	is_a	High School	High School (film)	0	town	unknown	documentary film	open list		^ [S] is a [O] in	High School is a town in the southern part of Dhaka County, Bangladesh, almost entirely surrounded by the city of Los Angeles.
+16:trie_T1.0	5	6	birth_place	Tareq Aziz	Tareq Aziz	0	Vienna , Berlin	unknown		no birth_place in store		^ [S] was born in [O] ,	Tareq Aziz was born in Vienna, Berlin, on September 4, 1983.
+17:trie_T1.0	7	8	birth_place	He		1	United States , Europe	unknown		subject not in store		[P] was born in [O]	He was born in the United States, Europe, and Japan.
+20:trie_T1.0	2	9	birth_place	Litsa Spathi	Litsa Spathi	0	Dublin	unknown		no birth_place in store		[S] was born in [O]	In 1958, Litsa Spathi was born in Dublin.
+21:trie_T1.0	3	6	is_a	Sacramento		0	city	unknown		subject not in store		[S] is a [O]	Sacramento is a city and municipality in the county of California, Hawaii.
+21:trie_T1.0	3	6	is_a	Sacramento		0	municipality	unknown		subject not in store		ADD [S] is a [NAT] [OCC]	Sacramento is a city and municipality in the county of California, Hawaii.
+21:trie_T1.0	5	6	is_a	Alameda		0	city	unknown		subject not in store		^ [S] is a [O] in	Alameda is a city in the state of California, Hawaii.
+26:trie_T1.0	3	8	birth_date	King Philip III of Spain	Philip III of Spain	partial	1960	contradicted	1578		valid	[S] ( [O]	Maria thus became queen of King Philip III of Spain (1960) and in 1608.
+27:trie_T1.0	2	8	is_a	It	It (novel)	0	place	unknown	pronoun	open list		[S] is a [O] of	It is a place of great importance.
+27:trie_T1.0	6	8	is_a	This		0	list	unknown		subject not in store		[S] is a [O] of	This is a list of cities in the province are seen to be seen as both irrational.
+27:trie_T1.0	7	8	is_a	Mead		0	natural number	unknown		subject not in store		[S] is a [O]	Others suggest that they are the only ones that had long been the freedom from jealousy which Mead is a natural number n such that they can make their way across the Atlantic Ocean.
+28:trie_T1.0	4	9	birth_place	Henri Gouraud	Henri Gouraud (computer scientist)	0	Dublin	unknown		no birth_place in store		[S] was born in [O]	In 1944, Henri Gouraud was born in Dublin.
+29:trie_T1.0	2	7	is_a	Rhein - Neckar - Kreis	Rhein-Neckar-Kreis	0	village	unknown	district	open list		[S] is a small [O] in	Rhein - Neckar - Kreis is a small village in the southern state of Baden - Württemberg.
+29:trie_T1.0	3	7	is_a	Baden - Württemberg	Baden-Württemberg	0	city	unknown	federal state	open list		[S] is a [O]	Baden - Württemberg was a city built in the human side of Germany.
+35:trie_T1.0	8	9	birth_date	She	Antoninus Pius	1	378	contradicted	0086		valid	[P] was born in [O]	She was born in 378 and died in 385.
+36:trie_T1.0	1	8	is_a	Amsterdam	Amsterdam	0	area	unknown		no is_a or occupation in store		^ [S] is a [O] in	Amsterdam is an area in the center of Europe in Europe.
+36:trie_T1.0	2	8	is_a	Alps	Alps	0	city	unknown		no is_a or occupation in store		[S] is a [O]	Alps is a city located in today's global domination of Europe.
+36:trie_T1.0	8	8	birth_date	Betty Williams	Betty Williams (Northern Ireland)	0	1943	supported	1943		valid	^ [S] ( born [O]	Betty Williams (born 1943) is a US comedian and actor.
+38:trie_T1.0	4	6	birth_date	Johannes Nicolaus Brønsted	Johannes Nicolaus Brønsted	0	February 22 , 1879	supported	1879-02-22		valid	^ [S] ( born [O]	Johannes Nicolaus Brønsted (born February 22, 1879) is a US comedian and actor from New Orleans, Louisiana.
+38:trie_T1.0	5	6	birth_date	Martin Lowry	Martin Lowry	0	26 October 1874	supported	1874-10-26		valid	^ [S] ( [O] -	Martin Lowry (26 October 1874 - 2 November 1936) is a US musician.
+38:trie_T1.0	5	6	death_date	Martin Lowry	Martin Lowry	0	2 November 1936	supported	1936-11-02		valid	[S] ( # <M> # - [O]	Martin Lowry (26 October 1874 - 2 November 1936) is a US musician.
+40:trie_T1.0	3	6	birth_date	Victor Balaguer	Victor Balaguer	0	1824	supported	1824		valid	^ [S] ( [O] -	Victor Balaguer (1824 - 1901) is a US musician.
+40:trie_T1.0	3	6	death_date	Victor Balaguer	Victor Balaguer	0	1901	supported	1901		valid	^ [S] ( # - [O] )	Victor Balaguer (1824 - 1901) is a US musician.
+43:trie_T1.0	4	7	is_a	She		0	giant	unknown		subject not in store		[S] is a [O]	She is a giant attacks, on both the seat, he was no longer alive.
+54:trie_T1.0	2	8	is_a	Pope Gregory XV	Pope Gregory XV	0	daughter	unknown		no is_a or occupation in store		[S] is a [O]	Pope Gregory XV was a daughter of King Priam of Bologna.
+54:trie_T1.0	3	8	birth_place	Pope Gregory XIII	Pope Gregory XIII	0	Bologna	supported	Bologna			[S] was born in [O]	Pope Gregory XIII was born in Bologna.
+54:trie_T1.0	4	8	birth_date	Pope Gregory XV	Pope Gregory XV	0	c . 1554	supported	1554-01-09		valid	^ [S] ( [O]	Pope Gregory XV (c. 1554) was active as the successor of Pope Paul III of Naples.
+54:trie_T1.0	5	8	birth_date	Louis Giorgio Bassani	Giorgio Bassani	partial	March 4 1916	supported	1916-03-04		valid	^ [S] ( [O] -	Louis Giorgio Bassani (March 4 1916 - April 13 2000) is a US science fiction author.
+54:trie_T1.0	5	8	death_date	Louis Giorgio Bassani	Giorgio Bassani	partial	April 13 2000	supported	2000-04-13		valid	[S] ( <M> # # - [O] )	Louis Giorgio Bassani (March 4 1916 - April 13 2000) is a US science fiction author.
+54:trie_T1.0	6	8	birth_date	Pope Innocent IX	Pope Innocent IX	0	1519	supported	1519-07-20		valid	[S] ( born [O] in	Pope Innocent IX (born 1519 in New York, New York) is a US musician.
+54:trie_T1.0	7	8	birth_date	Pope Gregory XIII	Pope Gregory XIII	0	January 7 , 1502	supported	1502-01-07		valid	^ [S] ( born [O]	Pope Gregory XIII (born January 7, 1502) is a US ally.
+54:trie_T1.0	8	8	birth_date	Pope Benedict XIV	Pope Benedict XIV	0	March 31 , 1675	supported	1675-03-31		valid	^ [S] ( [O] -	Pope Benedict XIV (March 31, 1675 - May 3, 1758) is a US writer.
+54:trie_T1.0	8	8	death_date	Pope Benedict XIV	Pope Benedict XIV	0	May 3 , 1758	supported	1758-05-03		valid	^ [S] ( <M> # , # - [O] )	Pope Benedict XIV (March 31, 1675 - May 3, 1758) is a US writer.
+63:trie_T1.0	1	7	birth_place	Hirohito	Hirohito	0	Dublin	unknown		no birth_place in store		[S] was born in [O]	In 1901, Hirohito was born in Dublin.
+63:trie_T1.0	2	7	birth_date	Hirohito	Hirohito	0	1901	supported	1901		valid	^ [S] ( [O] -	Hirohito (1901 - 1989), is an ancient writer....
+63:trie_T1.0	2	7	death_date	Hirohito	Hirohito	0	1989	supported	1989		valid	^ [S] ( # - [O] )	Hirohito (1901 - 1989), is an ancient writer....
+64:trie_T1.0	4	8	birth_place	Friedrich Wöhler	Friedrich Wöhler	0	Vienna , Berlin	unknown	Eschersheim	places not comparable in store		^ [S] was born in [O] ,	Friedrich Wöhler was born in Vienna, Berlin, on July 31, 1800.
+66:trie_T1.0	1	9	is_a	Ankara	Ankara	0	city	unknown	capital	open list		^ [S] ( ) is a [O]	Ankara () is a city in the southern coast of Turkey.
+66:trie_T1.0	2	9	is_a	Afyonkarahisar	Afyonkarahisar	0	town	unknown		no is_a or occupation in store		[S] is a [O]	Afyonkarahisar is a town located throughout the animal kingdom of Turkey.
+66:trie_T1.0	4	9	is_a	The Euphrates	Euphrates	0	river	unknown		no is_a or occupation in store		^ [S] is a [O] in	The Euphrates is a river in the Eastern Turkey city in western Europe.
+67:trie_T1.0	1	8	is_a	Amsterdam	Amsterdam	0	town	unknown		no is_a or occupation in store		[S] is a [O]	Amsterdam is a town located throughout the animal kingdom of Europe.
+67:trie_T1.0	2	8	is_a	Alps	Alps	0	city	unknown		no is_a or occupation in store		^ [S] ( ) is a [O]	Alps () is a city in the southern coast of Europe.
+70:trie_T1.0	1	13	birth_place	He		1	Calf of Man , Isle of Man	unknown		subject not in store		[P] was born in [O]	He was born in Calf of Man, Isle of Man, the son of a Jewish architect.
+70:trie_T1.0	13	13	is_a	The House		0	daughter	unknown		subject not in store		[S] is a [O] of	The House was a daughter of the 6 th century.
+75:trie_T1.0	4	10	is_a	Ruhr	Ruhr	0	city	unknown	river	open list		[S] is a [O]	Ruhr was a city built in the human side of Germany.
+75:trie_T1.0	7	10	is_a	Berlin	Berlin	0	city	supported	city			^ [S] is a [O] in	Berlin is a city in the center of Europe in Europe.
+75:trie_T1.0	8	10	birth_date	Ernst Zündel	Ernst Zündel	0	2005	contradicted	1939		valid	^ [S] ( born [O]	Ernst Zündel (born 2005) is a US comedian and actor from New Orleans, Louisiana.
+75:trie_T1.0	9	10	death_place	He	Ernst Zündel	1	Munich , Bavaria	unknown		no death_place in store		[P] died in [O]	He died in Munich, Bavaria.
+78:trie_T1.0	1	8	birth_place	Ken Livingstone	Ken Livingstone	0	Brooklyn	unknown		no birth_place in store		^ [S] was born in [O] ,	Ken Livingstone was born in Brooklyn, Bath; on June 17, 1945.
+78:trie_T1.0	1	8	birth_place	Ken Livingstone	Ken Livingstone	0	Brooklyn , Bath	unknown		no birth_place in store		[S] was born in [O]	Ken Livingstone was born in Brooklyn, Bath; on June 17, 1945.
+80:trie_T1.0	2	10	birth_place	Bert Hölldobler	Bert Hölldobler	0	New York	unknown		no birth_place in store		^ [S] was born in [O] ,	Bert Hölldobler was born in New York, german.
+80:trie_T1.0	4	10	birth_date	Heinrich Lübke	Heinrich Lübke	0	April 6 , 1892	contradicted	1894-10-14		valid	^ [S] ( born [O]	Heinrich Lübke (born April 6, 1892) was a German politician.
+80:trie_T1.0	5	10	birth_date	Kaspar von Barth	Kaspar von Barth	0	1587	supported	1587		valid	[S] ( [O] -	He was the son of Kaspar von Barth (1587 - 1658), German poet.
+80:trie_T1.0	5	10	death_date	Kaspar von Barth	Kaspar von Barth	0	1658	supported	1658		valid	[S] ( # - [O] )	He was the son of Kaspar von Barth (1587 - 1658), German poet.
+80:trie_T1.0	5	10	nationality	Kaspar von Barth	Kaspar von Barth	0	German	supported	German;german			[S] ( # - # ) , [O]	He was the son of Kaspar von Barth (1587 - 1658), German poet.
+80:trie_T1.0	6	10	birth_date	Jakob Balde	Jakob Balde	0	1604	supported	1604		valid	^ [S] ( [O] -	Jakob Balde (1604 - 1668) is a US musician.
+80:trie_T1.0	6	10	death_date	Jakob Balde	Jakob Balde	0	1668	supported	1668		valid	^ [S] ( # - [O] )	Jakob Balde (1604 - 1668) is a US musician.
+80:trie_T1.0	9	10	is_a	Bavaria	Bavaria	0	town	unknown		no is_a or occupation in store		[S] is a [O]	Bavaria is a town located throughout the animal kingdom of Germany.
+82:trie_T1.0	5	7	birth_date	Wang Pi	Wang Pi	0	226	supported	0226		valid	^ [S] ( born [O]	Wang Pi (born 226) is a US comedian and actor from New Orleans, Louisiana.
+82:trie_T1.0	6	7	birth_date	Mary Jin Shengtan	Jin Shengtan	partial	1608	supported	1608		valid	^ [S] ( [O] -	Mary Jin Shengtan (1608 - 1661) is a US science fiction author.
+82:trie_T1.0	6	7	death_date	Mary Jin Shengtan	Jin Shengtan	partial	1661	supported	1661		valid	^ [S] ( # - [O] )	Mary Jin Shengtan (1608 - 1661) is a US science fiction author.
+82:trie_T1.0	7	7	birth_date	Liu Chih	Liu Chih	0	1892	supported	1892		valid	^ [S] ( [O] -	Liu Chih (1892 - 1972) is a US musician.
+82:trie_T1.0	7	7	death_date	Liu Chih	Liu Chih	0	1972	supported	1972		valid	^ [S] ( # - [O] )	Liu Chih (1892 - 1972) is a US musician.
+85:trie_T1.0	3	6	birth_date	Claude Monet	Claude Monet	0	November 14 , 1840	supported	1840-11-14		valid	^ [S] ( [O] -	Claude Monet (November 14, 1840 - December 5, 1926) is a US musician.
+85:trie_T1.0	3	6	death_date	Claude Monet	Claude Monet	0	December 5 , 1926	supported	1926-12-05		valid	^ [S] ( <M> # , # - [O] )	Claude Monet (November 14, 1840 - December 5, 1926) is a US musician.
+85:trie_T1.0	4	6	birth_date	Frédéric Bazille	Frédéric Bazille	0	December 6 , 1841	supported	1841-12-06		valid	^ [S] ( born [O]	Frédéric Bazille (born December 6, 1841) is a US comedian and actor from New Orleans, Louisiana.
+85:trie_T1.0	5	6	birth_date	Walter Sickert	Walter Sickert	0	May 31 , 1860	supported	1860-05-31		valid	^ [S] ( born [O]	Walter Sickert (born May 31, 1860) was a writer, poet and politician.
+85:trie_T1.0	6	6	birth_date	Gustave Caillebotte	Gustave Caillebotte	0	19 August 1848	supported	1848-08-19		valid	^ [S] ( [O] -	Gustave Caillebotte (19 August 1848 - 21 February 1894) is a US ally.
+85:trie_T1.0	6	6	death_date	Gustave Caillebotte	Gustave Caillebotte	0	21 February 1894	supported	1894-02-21		valid	[S] ( # <M> # - [O]	Gustave Caillebotte (19 August 1848 - 21 February 1894) is a US ally.
+86:trie_T1.0	1	7	is_a	The Dragonair	Dragonair	0	river	unknown	airline	open list		^ [S] is a [O] in	The Dragonair is a river in the Hong Kong company in central Europe.
+86:trie_T1.0	2	7	is_a	Tsuen Wan District	Tsuen Wan District	0	town	unknown		no is_a or occupation in store		[S] is a [O]	Tsuen Wan District is a town located throughout the human side of Hong Kong.
+90:trie_T1.0	1	4	is_a	She		0	illusion	unknown		subject not in store		[S] is a [O] of	She is an illusion of behavioral choices just as a continuous sequence of interest in the traditional conservative coalition with the Country Party.
+92:trie_T1.0	2	7	is_a	Solaris Operating Environment	Solaris Operating Environment	0	novel	unknown	computer;operating system	open list		[S] is a [O] of	Solaris Operating Environment is a novel of the Unix family.
+92:trie_T1.0	3	7	is_a	Solaris Operating Environment	Solaris Operating Environment	0	history	unknown	computer;operating system	open list		[S] is a [O] of	Solaris Operating Environment is a history of health problems caused by Sun Microsystems and made for Microsoft Windows and Apple Macintosh operating systems.
+102:trie_T1.0	2	9	death_place	He		1	November	unknown		subject not in store		[P] died in [O]	He died in November 2001, he founded the first Spanish permanent settlements in the area.
+102:trie_T1.0	2	9	death_date	He		1	November 2001	unknown		subject not in store	valid	[P] died in [O]	He died in November 2001, he founded the first Spanish permanent settlements in the area.
+107:trie_T1.0	1	8	birth_date	Charlemagne	Charlemagne	0	742	supported	0742		valid	^ [S] ( [O] -	Charlemagne (742 - 814) is a US musician.
+107:trie_T1.0	1	8	death_date	Charlemagne	Charlemagne	0	814	supported	0814		valid	^ [S] ( # - [O] )	Charlemagne (742 - 814) is a US musician.
+109:trie_T1.0	2	8	birth_place	Claude Monet	Claude Monet	0	Paris	supported	Paris			[S] was born in [O]	Claude Monet was born in Paris.
+109:trie_T1.0	3	8	is_a	Brigitte Bardot	Brigitte Bardot	0	son	unknown	actor	open list		[S] is a [O]	Brigitte Bardot was a son of King Priam of Paris.
+109:trie_T1.0	4	8	birth_date	Saint Anatole France	Anatole France	partial	April 16 1844	supported	1844-04-16		valid	^ [S] ( [O] -	Saint Anatole France (April 16 1844 - October 12 1924) is a US science fiction author.
+109:trie_T1.0	4	8	death_date	Saint Anatole France	Anatole France	partial	October 12 1924	supported	1924-10-12		valid	[S] ( <M> # # - [O] )	Saint Anatole France (April 16 1844 - October 12 1924) is a US science fiction author.
+109:trie_T1.0	5	8	birth_date	André Gide	André Gide	0	November 22 , 1869	supported	1869-11-22		valid	^ [S] ( born [O]	André Gide (born November 22, 1869) is a US comedian and actor from New Orleans, Louisiana.
+109:trie_T1.0	6	8	birth_date	Louis Braille	Louis Braille	0	4 January 1809	supported	1809-01-04		valid	^ [S] ( [O] -	Louis Braille (4 January 1809 - 6 January 1852) is a US musician.
+109:trie_T1.0	6	8	death_date	Louis Braille	Louis Braille	0	6 January 1852	supported	1852-01-06		valid	[S] ( # <M> # - [O]	Louis Braille (4 January 1809 - 6 January 1852) is a US musician.
+110:trie_T1.0	3	8	is_a	High School	High School (film)	0	town	unknown	documentary film	open list		^ [S] is a [O] in	High School is a town in the southern part of Berlin Conference, Germany, having just completed by the name of New York.
+110:trie_T1.0	4	8	is_a	Ruhr	Ruhr	0	island	unknown	river	open list		^ [S] is a [O] in	Ruhr is an island in the center of Germany in Europe.
+110:trie_T1.0	5	8	is_a	The Ruhr	Ruhr	0	river	supported	river			^ [S] is a [O] in	The Ruhr is a river in the Sauerland area in central Europe.
+110:trie_T1.0	6	8	is_a	Berlin	Berlin	0	city	supported	city			^ [S] is a [O] in	Berlin is a city in the state of Europe, Russia.
+110:trie_T1.0	7	8	birth_date	Hermann Zapf	Hermann Zapf	0	1918	supported	1918		valid	^ [S] ( born [O]	Hermann Zapf (born 1918) is a US comedian and actor from New Orleans, Louisiana.
+110:trie_T1.0	8	8	is_a	Munich	Munich (district)	0	city	unknown		no is_a or occupation in store		[S] is a [O]	Munich is a city and municipality in the county of Bavaria, Germany.
+110:trie_T1.0	8	8	is_a	Munich	Munich (district)	0	municipality	unknown		no is_a or occupation in store		ADD [S] is a [NAT] [OCC]	Munich is a city and municipality in the county of Bavaria, Germany.
+111:trie_T1.0	1	9	birth_place	Ray Wilson	Ray Wilson (musician)	0	New York	unknown		no birth_place in store		^ [S] was born in [O] ,	Ray Wilson was born in New York, Scotland.
+111:trie_T1.0	1	9	birth_place	Ray Wilson	Ray Wilson (musician)	0	New York , Scotland	unknown		no birth_place in store		[S] was born in [O]	Ray Wilson was born in New York, Scotland.
+111:trie_T1.0	3	9	is_a	Douglas Gordon	Douglas Gordon	0	punk rock	unknown		no is_a or occupation in store		[S] are an [O]	Douglas Gordon were a punk rock band, formed in 1966 during childbirth, Scotland.
+111:trie_T1.0	4	9	is_a	Moray	Moray	0	town	unknown		no is_a or occupation in store		[S] is a [O]	Moray is a town located throughout the animal kingdom of Scotland.
+111:trie_T1.0	5	9	birth_date	Robert Baillie	Robert Baillie	0	1602	supported	1602		valid	^ [S] ( [O] -	Robert Baillie (1602 - 1662) is a US musician.
+111:trie_T1.0	5	9	death_date	Robert Baillie	Robert Baillie	0	1662	supported	1662		valid	^ [S] ( # - [O] )	Robert Baillie (1602 - 1662) is a US musician.
+111:trie_T1.0	8	9	birth_date	David Lyndsay	David Lyndsay	0	1490	supported	1490		valid	^ [S] ( born [O]	David Lyndsay (born 1490) is a US comedian and actor from New Orleans, Louisiana.
+111:trie_T1.0	9	9	is_a	Melrose	Melrose	0	town	supported	town			[S] is a [O]	Melrose is a town and a municipality in the northern Scottish Borders.
+113:trie_T1.0	2	9	birth_place	He		1	Liverpool , England	unknown		subject not in store		[P] was born in [O]	He was born in Liverpool, England.
+113:trie_T1.0	2	9	birth_place	He		1	Liverpool	unknown		subject not in store		[P] was born in [O] ,	He was born in Liverpool, England.
+122:trie_T1.0	3	7	birth_place	Paul Klee	Paul Klee	0	Bern	supported	Bern			[S] was born in [O]	Paul Klee was born in Bern throughout Asia, Europe, and went off with a similar interest in sailing ships.
+122:trie_T1.0	6	7	birth_date	Friedrich Traugott Wahlen	Friedrich Traugott Wahlen	0	10 April 1899	supported	1899-04-10		valid	^ [S] ( [O] -	Friedrich Traugott Wahlen (10 April 1899 - 7 November 1985) is a US musician.
+122:trie_T1.0	6	7	death_date	Friedrich Traugott Wahlen	Friedrich Traugott Wahlen	0	7 November 1985	supported	1985-11-07		valid	[S] ( # <M> # - [O]	Friedrich Traugott Wahlen (10 April 1899 - 7 November 1985) is a US musician.
+122:trie_T1.0	7	7	birth_date	Karl Schenk	Karl Schenk	0	December 1 , 1823	supported	1823-12-01		valid	^ [S] ( born [O]	Karl Schenk (born December 1, 1823) is a US comedian and actor.
+124:trie_T1.0	4	11	is_a	It	It (novel)	0	patron saint	unknown	pronoun	open list		[S] is a [O] of	It is a patron saint of Poland.
+134:trie_T1.0	1	7	is_a	Mount Kosciuszko	Mount Kosciuszko	0	city	unknown	mountain	open list		^ [S] ( ) is a [O]	Mount Kosciuszko () is a city in the southern coast of Australia.
+134:trie_T1.0	2	7	is_a	The Mount Kosciuszko	Mount Kosciuszko	0	river	unknown	mountain	open list		^ [S] is a [O] in	The Mount Kosciuszko is a river in the New South Wales town throughout northern Europe.
+135:trie_T1.0	1	8	is_a	Dublin	Dublin	0	city	unknown	capital	open list		[S] is a [O]	Dublin is a city located in today's global domination of Europe.
+135:trie_T1.0	2	8	is_a	Munster	Munster	0	city	supported	city			^ [S] is a [O] in	Munster is a city in the neighbourhood of Ireland in Dublin.
+135:trie_T1.0	5	8	birth_date	Alex Higgins	Alex Higgins	0	March 18 , 1949	supported	1949-03-18		valid	^ [S] ( born [O]	Alex Higgins (born March 18, 1949) is a US comedian and actor from New Orleans, Louisiana.
+135:trie_T1.0	7	8	birth_date	Billy Wright	Billy Wright (terrorist)	0	July 7 , 1960	supported	1960-07-07		valid	^ [S] ( [O] -	Billy Wright (July 7, 1960 - December 27, 1997) is a US musician.
+135:trie_T1.0	7	8	death_date	Billy Wright	Billy Wright (terrorist)	0	December 27 , 1997	supported	1997-12-27		valid	^ [S] ( <M> # , # - [O] )	Billy Wright (July 7, 1960 - December 27, 1997) is a US musician.
+135:trie_T1.0	8	8	birth_date	Thomas Moore	Thomas Moore	0	May 28 , 1779	supported	1779-05-28		valid	^ [S] ( [O] -	Thomas Moore (May 28, 1779 - February 25, 1852 onwards was a writer, poet, and novelist.
+135:trie_T1.0	8	8	death_date	Thomas Moore	Thomas Moore	0	February 25 , 1852	supported	1852-02-25		valid	^ [S] ( <M> # , # - [O]	Thomas Moore (May 28, 1779 - February 25, 1852 onwards was a writer, poet, and novelist.
+138:trie_T1.0	4	7	birth_date	Irene van Dyk	Irene van Dyk	0	1971	supported	1971		valid	^ [S] ( born [O]	Irene van Dyk (born 1971) is a US comedian and actor.
+141:trie_T1.0	1	8	birth_place	Inger Brattström	Inger Brattström	0	New York	unknown		no birth_place in store		^ [S] was born in [O] ,	Inger Brattström was born in New York, german.
+141:trie_T1.0	3	8	birth_date	Arthur C . Heinrich Lübke	Heinrich Lübke	partial	April 6 , 1892	contradicted	1894-10-14		valid	[S] ( born [O]	His most famous german temples of the Soto th century were: Heimrad Prem, Arthur C. Heinrich Lübke (born April 6, 1892) was a German politician.
+141:trie_T1.0	4	8	birth_date	Kaspar von Barth	Kaspar von Barth	0	1587	supported	1587		valid	[S] ( [O] -	He was the son of Kaspar von Barth (1587 - 1658), German poet.
+141:trie_T1.0	4	8	death_date	Kaspar von Barth	Kaspar von Barth	0	1658	supported	1658		valid	[S] ( # - [O] )	He was the son of Kaspar von Barth (1587 - 1658), German poet.
+141:trie_T1.0	4	8	nationality	Kaspar von Barth	Kaspar von Barth	0	German	supported	German;german			[S] ( # - # ) , [O]	He was the son of Kaspar von Barth (1587 - 1658), German poet.
+141:trie_T1.0	5	8	birth_date	Jakob Balde	Jakob Balde	0	1604	supported	1604		valid	^ [S] ( [O] -	Jakob Balde (1604 - 1668) is a US musician.
+141:trie_T1.0	5	8	death_date	Jakob Balde	Jakob Balde	0	1668	supported	1668		valid	^ [S] ( # - [O] )	Jakob Balde (1604 - 1668) is a US musician.
+141:trie_T1.0	6	8	birth_date	Heimrad Prem	Heimrad Prem	0	1934	supported	1934		valid	^ [S] ( born [O]	Heimrad Prem (born 1934) was a Jewish poet and writer.
+141:trie_T1.0	7	8	birth_date	Helmut Sturm	Helmut Sturm	0	1932	supported	1932		valid	^ [S] ( born [O]	Helmut Sturm (born 1932) is a US comedian and actor.
+141:trie_T1.0	8	8	birth_date	Bert Hölldobler	Bert Hölldobler	0	1936	supported	1936		valid	^ [S] ( born [O]	Bert Hölldobler (born 1936) is a US actor and director from New Orleans, Louisiana.
+142:trie_T1.0	1	10	is_a	Amsterdam	Amsterdam	0	town	unknown		no is_a or occupation in store		[S] is a [O]	Amsterdam is a town located throughout the animal kingdom of Europe.
+142:trie_T1.0	2	10	is_a	Alps	Alps	0	city	unknown		no is_a or occupation in store		^ [S] ( ) is a [O]	Alps () is a city in the southern coast of Europe.
+142:trie_T1.0	6	10	birth_place	Mary McAleese	Mary McAleese	0	Brooklyn	unknown	Belfast	places not comparable in store		^ [S] was born in [O] ,	Mary McAleese was born in Brooklyn, Bath; on June 27, 1951.
+142:trie_T1.0	6	10	birth_place	Mary McAleese	Mary McAleese	0	Brooklyn , Bath	unknown	Belfast	places not comparable in store		[S] was born in [O]	Mary McAleese was born in Brooklyn, Bath; on June 27, 1951.
+142:trie_T1.0	9	10	is_a	European Environment Agency	European Environment Agency	0	computer	unknown		no is_a or occupation in store		[S] is a [O]	European Environment Agency is a computer based in Copenhagen, the Senate, Fairbanks.
+143:trie_T1.0	2	9	nationality	Confucius	Confucius	0	Chinese	supported	Chinese			[S] is a [O] poet	Confucius was a Chinese poet and novelist.
+143:trie_T1.0	2	9	is_a	Confucius	Confucius	0	poet	unknown	philosopher	open list		ADD [S] is a [NAT] [OCC]	Confucius was a Chinese poet and novelist.
+143:trie_T1.0	2	9	is_a	Confucius	Confucius	0	novelist .	unknown	philosopher	open list		ADD [S] is a [NAT] [OCC]	Confucius was a Chinese poet and novelist.
+143:trie_T1.0	4	9	birth_date	George Liu Chih	Liu Chih	partial	1892	supported	1892		valid	^ [S] ( [O] -	George Liu Chih (1892 - 1972) is a US science fiction author.
+143:trie_T1.0	4	9	death_date	George Liu Chih	Liu Chih	partial	1972	supported	1972		valid	^ [S] ( # - [O] )	George Liu Chih (1892 - 1972) is a US science fiction author.
+143:trie_T1.0	6	9	birth_date	Wang Wei	Wang Wei	0	698	supported	0698		valid	^ [S] ( born [O]	Wang Wei (born 698) is an Islamic scholar and writer.
+143:trie_T1.0	7	9	birth_date	Wang Anshi	Wang Anshi	0	c . 1021	supported	1021		valid	^ [S] ( [O] -	Wang Anshi (c. 1021 - i.
+143:trie_T1.0	8	9	birth_date	Wang Pi	Wang Pi	0	226	supported	0226		valid	[S] ( born [O] in	Wang Pi (born 226 in New York, New York) is a US musician.
+144:trie_T1.0	1	7	birth_place	Algernon Swinburne	Algernon Swinburne	0	London	supported	London			[S] was born in [O]	Algernon Swinburne was born in London.
+144:trie_T1.0	4	7	is_a	Woolwich	Woolwich	0	town	supported	town			[S] is a [O]	Woolwich is a town located throughout the animal kingdom of London.
+144:trie_T1.0	5	7	birth_date	Arthur Phillip	Arthur Phillip	0	11 October 1738	supported	1738-10-11		valid	^ [S] ( [O] -	Arthur Phillip (11 October 1738 - 31 August 1814) is a US musician.
+144:trie_T1.0	5	7	death_date	Arthur Phillip	Arthur Phillip	0	31 August 1814	supported	1814-08-31		valid	[S] ( # <M> # - [O]	Arthur Phillip (11 October 1738 - 31 August 1814) is a US musician.
+144:trie_T1.0	7	7	birth_date	Algernon Swinburne	Algernon Swinburne	0	April 5 , 1837	supported	1837-04-05		valid	^ [S] ( born [O]	Algernon Swinburne (born April 5, 1837) is a US comedian and actor.
+146:trie_T1.0	3	6	birth_date	Karl Weyprecht	Karl Weyprecht	0	1838	supported	1838		valid	^ [S] ( [O] -	Karl Weyprecht (1838 - 1881) is a US musician.
+146:trie_T1.0	3	6	death_date	Karl Weyprecht	Karl Weyprecht	0	1881	supported	1881		valid	^ [S] ( # - [O] )	Karl Weyprecht (1838 - 1881) is a US musician.
+146:trie_T1.0	4	6	birth_date	Georg von Neumayer	Georg von Neumayer	0	21 June 1826	supported	1826-06-21		valid	^ [S] ( [O] -	Georg von Neumayer (21 June 1826 - 24 May 1909) is a US ally.
+146:trie_T1.0	4	6	death_date	Georg von Neumayer	Georg von Neumayer	0	24 May 1909	supported	1909-05-24		valid	[S] ( # <M> # - [O]	Georg von Neumayer (21 June 1826 - 24 May 1909) is a US ally.
+147:trie_T1.0	1	9	birth_place	He		1	California , American West	unknown		subject not in store		[P] was born in [O]	He was born in California, American West, the son of a Jewish architect.
+147:trie_T1.0	3	9	death_place	He		1	Sacramento , California	unknown		subject not in store		[P] died in [O]	He died in Sacramento, California.
+147:trie_T1.0	5	9	birth_date	Forrest J . Ackerman	Forrest J. Ackerman	0	November 24 , 1916	supported	1916-11-24		valid	^ [S] ( born [O]	Forrest J. Ackerman (born November 24, 1916) is an American actor and director from New Orleans, Louisiana.
+147:trie_T1.0	8	9	birth_date	Janet Leigh	Janet Leigh	0	July 6 , 1927	supported	1927-07-06		valid	^ [S] ( born [O]	Janet Leigh (born July 6, 1927) is a American screenwriter and producer.
+148:trie_T1.0	3	7	birth_place	John Flamsteed	John Flamsteed	0	Dublin	unknown		no birth_place in store		[S] was born in [O]	John Flamsteed was born in Dublin in 1646.
+148:trie_T1.0	4	7	birth_date	James Bradley	James Bradley	0	1693	supported	1693-03		valid	^ [S] ( born [O]	James Bradley (born 1693) is a US comedian and actor from New Orleans, Louisiana.
+150:trie_T1.0	3	6	birth_place	Chester A . Arthur	Chester A. Arthur	0	New York	contradicted	Fairfield, Vermont;Vermont	different top places		^ [S] was born in [O] ,	Chester A. Arthur was born in New York, american.
+150:trie_T1.0	4	6	birth_date	Chester A . Arthur	Chester A. Arthur	0	November 18 , 1829	contradicted	1829-10-05		valid	^ [S] ( born [O]	Chester A. Arthur (born November 18, 1829) was an American actor and comedian.
+150:trie_T1.0	5	6	birth_date	George Allen	George Allen (politician)	0	March 8 , 1952	supported	1952-03-08		valid	^ [S] ( born [O]	George Allen (born March 8, 1952) is a American screenwriter and producer from New Orleans, Louisiana.
+150:trie_T1.0	6	6	birth_date	Leonard Bacon	Leonard Bacon	0	1802	supported	1802		valid	^ [S] ( born [O]	Leonard Bacon (born 1802) is a US musician and songwriter from Los Angeles, California.
+152:trie_T1.0	1	8	is_a	Amakusa	Amakusa	0	town	unknown		no is_a or occupation in store		^ [S] ( ) is a [O]	Amakusa () is a town in the southeastern corner of Japan.
+152:trie_T1.0	2	8	is_a	Dejima	Dejima	0	city	unknown		no is_a or occupation in store		[S] is a [O]	Dejima was a city built in the human history of Japan.
+152:trie_T1.0	8	8	birth_date	Maaya Sakamoto	Maaya Sakamoto	0	1980	supported	1980		valid	^ [S] ( born [O]	Maaya Sakamoto (born 1980) is a US comedian and actor from New Orleans, Louisiana.
+155:trie_T1.0	3	7	birth_date	Averroes	Averroes	0	1126	supported	1126		valid	^ [S] ( [O] -	Averroes (1126 - 1198) is a US musician.
+155:trie_T1.0	3	7	death_date	Averroes	Averroes	0	1198	supported	1198		valid	^ [S] ( # - [O] )	Averroes (1126 - 1198) is a US musician.
+155:trie_T1.0	4	7	birth_date	Joe Avicenna	Avicenna	partial	980	supported	0980		valid	^ [S] ( [O] -	Joe Avicenna (980 - 1037) is a US science fiction author.
+155:trie_T1.0	4	7	death_date	Joe Avicenna	Avicenna	partial	1037	supported	1037		valid	^ [S] ( # - [O] )	Joe Avicenna (980 - 1037) is a US science fiction author.
+155:trie_T1.0	5	7	birth_date	Ayn Rand	Ayn Rand	0	c . 1905	supported	1905		valid	^ [S] ( [O] -	Ayn Rand (c. 1905 - 1982) is a Greek painter and sculptor. " The many narrative possibilities of this complex character are so the idea that Ayn Rand had said to his country more often than any other in the Atlas Shrugged history.
+155:trie_T1.0	5	7	death_date	Ayn Rand	Ayn Rand	0	1982	supported	1982		valid	[S] ( c . # - [O]	Ayn Rand (c. 1905 - 1982) is a Greek painter and sculptor. " The many narrative possibilities of this complex character are so the idea that Ayn Rand had said to his country more often than any other in the Atlas Shrugged history.
+160:trie_T1.0	4	9	birth_place	Cimabue	Cimabue	0	Dublin	contradicted	Tuscany	different top places		[S] was born in [O]	In 1240, Cimabue was born in Dublin.
+160:trie_T1.0	6	9	birth_date	Giovanni Pisano	Giovanni Pisano	0	c . 1250	supported	1250		valid	^ [S] ( [O]	Giovanni Pisano (c. 1250) was active as the son of Sir William II of Sicily.
+160:trie_T1.0	7	9	birth_date	Nicola Pisano	Nicola Pisano	0	1220	supported	1220		valid	^ [S] ( born [O]	Nicola Pisano (born 1220) is a US comedian and actor.
+170:trie_T1.0	2	10	is_a	The Askja	Askja	0	river	unknown		no is_a or occupation in store		^ [S] is a [O] in	The Askja is a river in the Iceland city in western Europe.
+172:trie_T1.0	1	9	birth_place	He		1	Flevoland , Netherlands	unknown		subject not in store		[P] was born in [O]	He was born in Flevoland, Netherlands, the son of a Jewish architect.
+172:trie_T1.0	2	9	is_a	Overijssel	Overijssel	0	city	unknown	province	open list		[S] is a [O]	Overijssel was a city built in the human side of Netherlands.
+172:trie_T1.0	3	9	is_a	Amsterdam	Amsterdam	0	town	unknown		no is_a or occupation in store		[S] is a [O]	Amsterdam is a town and a municipality in the northern Netherlands.
+172:trie_T1.0	4	9	is_a	The Meuse River	Meuse River	0	river	supported	river			^ [S] is a [O] in	The Meuse River is a river in today's France region in central Europe.
+172:trie_T1.0	5	9	is_a	Brussels	Brussels	0	city	unknown		no is_a or occupation in store		[S] is a [O]	Brussels is a city and town in the county of Belgium, France.
+172:trie_T1.0	5	9	is_a	Brussels	Brussels	0	town	unknown		no is_a or occupation in store		ADD [S] is a [NAT] [OCC]	Brussels is a city and town in the county of Belgium, France.
+172:trie_T1.0	6	9	death_place	He		1	Zwolle , Overijssel	unknown		subject not in store		[P] died in [O]	He died in Zwolle, Overijssel.
+172:trie_T1.0	8	9	birth_date	Freddy Heineken	Freddy Heineken	0	4 November 1923	supported	1923-11-04		valid	^ [S] ( [O] -	Freddy Heineken (4 November 1923 - 3 January 2002) was a British novelist and playwright.
+172:trie_T1.0	8	9	death_date	Freddy Heineken	Freddy Heineken	0	3 January 2002	supported	2002-01-03		valid	[S] ( # <M> # - [O]	Freddy Heineken (4 November 1923 - 3 January 2002) was a British novelist and playwright.
+172:trie_T1.0	9	9	is_a	Freddy Heineken	Freddy Heineken	0	son	unknown		no is_a or occupation in store		[S] is a [O]	Freddy Heineken was a son of King Priam of Amsterdam.
+175:trie_T1.0	2	8	birth_place	He		1	Soundgarden	unknown		subject not in store		[P] was born in [O]	He was born in Soundgarden in Seattle.
+175:trie_T1.0	3	8	is_a	Seattle Pacific University	Seattle Pacific University	0	computer	unknown	university	open list		[S] is a [O]	Seattle Pacific University is a computer based in Seattle, the Senate, Fairbanks.
+175:trie_T1.0	4	8	birth_date	Bill Gates	Bill Gates	0	October 28 , 1955	supported	1955-10-28		valid	^ [S] ( [O]	Bill Gates (October 28, 1955) is a US musician.
+176:trie_T1.0	1	9	is_a	Beaujolais	Beaujolais	0	city	unknown	historical province;province	open list		[S] is a [O]	Beaujolais was a city built in the human history of France.
+176:trie_T1.0	2	9	birth_place	Jacques Tardi	Jacques Tardi	0	New Orleans	unknown		no birth_place in store		^ [S] was born in [O] ,	Jacques Tardi was born in New Orleans, France.
+176:trie_T1.0	2	9	birth_place	Jacques Tardi	Jacques Tardi	0	New Orleans , France	unknown		no birth_place in store		[S] was born in [O]	Jacques Tardi was born in New Orleans, France.
+176:trie_T1.0	5	9	is_a	Meuse River	Meuse River	0	computer	unknown	river	open list		[S] is a [O]	Meuse River is a computer based in France; the crew, France.
+176:trie_T1.0	6	9	is_a	Brussels	Brussels	0	city	unknown		no is_a or occupation in store		[S] is a [O]	Brussels is a city and municipality in the county of Belgium, France.
+176:trie_T1.0	6	9	is_a	Brussels	Brussels	0	municipality	unknown		no is_a or occupation in store		ADD [S] is a [NAT] [OCC]	Brussels is a city and municipality in the county of Belgium, France.
+176:trie_T1.0	9	9	birth_date	Amélie Mauresmo	Amélie Mauresmo	0	July 5 , 1979	supported	1979-07-05		valid	^ [S] ( born [O]	Amélie Mauresmo (born July 5, 1979) is a US comedian and actor from New York, Boston.
+177:trie_T1.0	1	11	is_a	The Dragonair	Dragonair	0	river	unknown	airline	open list		^ [S] is a [O] in	The Dragonair is a river in the Hong Kong company in central Europe.
+177:trie_T1.0	2	11	is_a	Tsuen Wan District	Tsuen Wan District	0	town	unknown		no is_a or occupation in store		[S] is a [O]	Tsuen Wan District is a town located throughout the human side of Hong Kong.
+179:trie_T1.0	1	6	is_a	Islamabad	Islamabad	0	town	unknown		no is_a or occupation in store		[S] is a [O]	Islamabad is a town located throughout the animal kingdom of Asia.
+179:trie_T1.0	2	6	is_a	Muztagh Tower	Muztagh Tower	0	town	unknown	mountain	open list		[S] is a [O]	Muztagh Tower is a town and a municipality in the southeastern Pakistan.
+183:trie_T1.0	1	8	birth_place	Mats Hellström	Mats Hellström	0	New York	unknown		no birth_place in store		^ [S] was born in [O] ,	Mats Hellström was born in New York, swedish.
+183:trie_T1.0	4	8	birth_date	Johan Asplund	Johan Asplund	0	1980	contradicted	1937		valid	^ [S] ( born [O]	Johan Asplund (born 1980) is a US comedian and actor.
+183:trie_T1.0	5	8	birth_date	Johnny Johan Christopher Toll	Johan Christopher Toll	partial	1743	supported	1743		valid	^ [S] ( [O] -	Johnny Johan Christopher Toll (1743 - 1817) is a US science fiction author.
+183:trie_T1.0	5	8	death_date	Johnny Johan Christopher Toll	Johan Christopher Toll	partial	1817	supported	1817		valid	^ [S] ( # - [O] )	Johnny Johan Christopher Toll (1743 - 1817) is a US science fiction author.
+183:trie_T1.0	6	8	birth_date	Frederick William von Hessenstein	Frederick William von Hessenstein	0	c . 1735	supported	1735		valid	^ [S] ( [O] -	Frederick William von Hessenstein (c. 1735 - 1808) was a Swedish soldier and politician.
+183:trie_T1.0	6	8	death_date	Frederick William von Hessenstein	Frederick William von Hessenstein	0	1808	supported	1808		valid	[S] ( c . # - [O]	Frederick William von Hessenstein (c. 1735 - 1808) was a Swedish soldier and politician.
+183:trie_T1.0	7	8	birth_date	Maria Leissner	Maria Leissner	0	1956	supported	1956		valid	^ [S] ( born [O]	Maria Leissner (born 1956) is a US musician and composer from New Orleans, Louisiana.
+185:trie_T1.0	6	6	birth_date	Stephen J . Steve Ditko	Steve Ditko	partial	November 2 , 1927	supported	1927-11-02		valid	[S] ( born [O]	The most important Comics characters of the 2 nd century were: Steve Ditko, Stephen J. Steve Ditko (born November 2, 1927) is a US comedian and actor.
+190:trie_T1.0	1	8	is_a	The Cornell University	Cornell University	0	river	unknown	university	open list		^ [S] is a [O] in	The Cornell University is a river in the Ithaca area in central Europe.
+193:trie_T1.0	2	6	birth_place	Litsa Spathi	Litsa Spathi	0	Dublin	unknown		no birth_place in store		[S] was born in [O]	Litsa Spathi was born in Dublin in 1958.
+195:trie_T1.0	10	10	birth_date	That Hamilton Woman		0	1941	unknown		subject not in store	valid	[S] ( [O]	They filmed That Hamilton Woman (1941) with Olivier in A Little Time ").
+196:trie_T1.0	1	9	is_a	Libreville	Libreville	0	island	unknown	capital city	open list		^ [S] is a [O] in	Libreville is an island in the center of Gabon in Europe.
+199:trie_T1.0	1	6	is_a	Avery Hopwood God	Avery Hopwood	partial	standard	unknown	playwright	open list		the [S] is a [O]	The Avery Hopwood God is a standard academic institution in Cleveland, named after the world - famous runner who was born and established in the area.
+199:trie_T1.0	5	6	birth_date	Jim Backus	Jim Backus	0	25 February 1913	supported	1913-02-25		valid	^ [S] ( [O] -	Jim Backus (25 February 1913 - 3 July 1989) is a US musician.
+199:trie_T1.0	5	6	death_date	Jim Backus	Jim Backus	0	3 July 1989	supported	1989-07-03		valid	[S] ( # <M> # - [O]	Jim Backus (25 February 1913 - 3 July 1989) is a US musician.
+199:trie_T1.0	6	6	birth_date	Avery Hopwood	Avery Hopwood	0	May 28 , 1882	supported	1882-05-28		valid	^ [S] ( [O] -	Avery Hopwood (May 28, 1882 - July 1, 1928 onward was a US ally.
+199:trie_T1.0	6	6	death_date	Avery Hopwood	Avery Hopwood	0	July 1 , 1928	supported	1928-07-01		valid	^ [S] ( <M> # , # - [O]	Avery Hopwood (May 28, 1882 - July 1, 1928 onward was a US ally.
+207:trie_T1.0	1	10	is_a	Bedford	Bedford	0	company	unknown	county town	open list		^ [S] is a [O] in	Bedford was a company in Bedfordshire, Wisconsin.
+210:trie_T1.0	1	9	is_a	Amsterdam	Amsterdam	0	area	unknown		no is_a or occupation in store		^ [S] is a [O] in	Amsterdam is an area in the center of Europe in Europe.
+210:trie_T1.0	2	9	is_a	Alps	Alps	0	town	unknown		no is_a or occupation in store		[S] is a [O]	Alps is a town located throughout the animal kingdom of Europe.
+210:trie_T1.0	8	9	is_a	Gran Paradiso	Gran Paradiso	0	municipality	unknown		no is_a or occupation in store		[S] is a [O]	Gran Paradiso is a municipality and a town in the southern Alps.
+210:trie_T1.0	9	9	located_in	Gran Paradiso	Gran Paradiso	0	Internet	unknown	alps;italy	places not comparable in store		the [S] is a [O]	The Gran Paradiso is an Internet in the Italy area in western Europe.
+214:trie_T1.0	4	9	birth_place	Henri Gouraud	Henri Gouraud (computer scientist)	0	Dublin	unknown		no birth_place in store		[S] was born in [O]	In 1944, Henri Gouraud was born in Dublin.
+217:trie_T1.0	4	8	is_a	Alexandria	Alexandria	0	city	unknown		no is_a or occupation in store		[S] is a [O]	Alexandria is a city located in today's global domination of Egypt.
+217:trie_T1.0	5	8	is_a	University of Amr Diab	Amr Diab	partial	state	unknown	singer	open list		the [S] is a [O]	The University of Amr Diab was a state centred in Copenhagen, Egypt.
+217:trie_T1.0	7	8	is_a	Alexandria	Alexandria	0	city	unknown		no is_a or occupation in store		^ [S] is a [O] in	Alexandria is a city in the state of Virginia, Kentucky.
+217:trie_T1.0	8	8	is_a	The First Battle of El Alamein	First Battle of El Alamein	0	river	unknown		no is_a or occupation in store		^ [S] is a [O] in	The First Battle of El Alamein is a river in the El Alamein site in western Europe.
+219:trie_T1.0	1	10	birth_date	Juan Alfonso XI of Castile	Alfonso XI of Castile	partial	1312	supported	1312-08-13		valid	^ [S] ( [O]	Juan Alfonso XI of Castile (1312 / vocals) is a US science fiction author.
+222:trie_T1.0	1	10	nationality	Lola Graham	Lola Graham	0	Australian	supported	Australian;Classical			^ [S] is a [O]	Lola Graham was an Australian explorer.
+222:trie_T1.0	1	10	is_a	Lola Graham	Lola Graham	0	explorer .	unknown	musician	open list		ADD [S] is a [NAT] [OCC]	Lola Graham was an Australian explorer.
+222:trie_T1.0	2	10	nationality	Richie Benaud	Richie Benaud	0	Australian	supported	Australian			^ [S] is a [O]	Richie Benaud is an Australian novelist and poet who lives in Ottawa, Ontario.
+222:trie_T1.0	2	10	is_a	Richie Benaud	Richie Benaud	0	novelist	unknown	cricket	open list		ADD [S] is a [NAT] [OCC]	Richie Benaud is an Australian novelist and poet who lives in Ottawa, Ontario.
+222:trie_T1.0	2	10	is_a	Richie Benaud	Richie Benaud	0	poet	unknown	cricket	open list		ADD [S] is a [NAT] [OCC]	Richie Benaud is an Australian novelist and poet who lives in Ottawa, Ontario.
+222:trie_T1.0	3	10	nationality	Paul Kelly	Paul Kelly (musician)	0	Australian	supported	Australian			^ [S] is a [O]	Paul Kelly is an Australian journalist and writer.
+222:trie_T1.0	3	10	is_a	Paul Kelly	Paul Kelly (musician)	0	journalist	supported	journalist;musician;political journalist;singer-songwriter			ADD [S] is a [NAT] [OCC]	Paul Kelly is an Australian journalist and writer.
+222:trie_T1.0	3	10	is_a	Paul Kelly	Paul Kelly (musician)	0	writer .	unknown	journalist;musician;political journalist;singer-songwriter	open list		ADD [S] is a [NAT] [OCC]	Paul Kelly is an Australian journalist and writer.
+222:trie_T1.0	4	10	birth_date	P . L . Travers	P. L. Travers	0	1899	supported	1899		valid	^ [S] ( [O] -	P. L. Travers (1899 - 1996) is a US musician.
+222:trie_T1.0	4	10	death_date	P . L . Travers	P. L. Travers	0	1996	supported	1996		valid	^ [S] ( # - [O] )	P. L. Travers (1899 - 1996) is a US musician.
+222:trie_T1.0	5	10	birth_date	J . F . Archibald	J.F. Archibald	0	1856	supported	1856		valid	^ [S] ( born [O]	J. F. Archibald (born 1856) is a US comedian and actor from New Orleans, Louisiana.
+222:trie_T1.0	6	10	death_place	He	J.F. Archibald	1	Canberra , Australia	unknown		no death_place in store		[P] died in [O]	He died in Canberra, Australia.
+222:trie_T1.0	7	10	birth_place	He	J.F. Archibald	1	Sydney , Australia	unknown		no birth_place in store		[P] was born in [O]	He was born in Sydney, Australia.
+222:trie_T1.0	7	10	birth_place	He	J.F. Archibald	1	Sydney	unknown		no birth_place in store		[P] was born in [O] ,	He was born in Sydney, Australia.
+222:trie_T1.0	9	10	birth_date	Hamilton Hume	Hamilton Hume	0	June 19 , 1797	supported	1797-06-19		valid	^ [S] ( born [O]	Hamilton Hume (born June 19, 1797) is a US writer and poet.
+227:trie_T1.0	3	5	is_a	There		0	number	unknown		subject not in store		[S] are an [O]	There are a number of terms in arithmetic does not hold in every ring of algebraic integers.
+231:trie_T1.0	4	8	birth_place	Andrew Geddes Bain	Andrew Geddes Bain	0	Dublin	unknown		no birth_place in store		[S] was born in [O]	In 1797, Andrew Geddes Bain was born in Dublin.
+231:trie_T1.0	5	8	birth_date	Nigella Lawson	Nigella Lawson	0	January 6 , 1960	supported	1960-01-06		valid	^ [S] ( born [O]	Nigella Lawson (born January 6, 1960) was a philosopher, mathematician and astronomer.
+231:trie_T1.0	6	8	birth_date	Aubrey Beardsley	Aubrey Beardsley	0	21 August 1872	supported	1872-08-21		valid	^ [S] ( [O] -	Aubrey Beardsley (21 August 1872 - 16 March 1898) was a British novelist and playwright.
+231:trie_T1.0	6	8	death_date	Aubrey Beardsley	Aubrey Beardsley	0	16 March 1898	supported	1898-03-16		valid	[S] ( # <M> # - [O]	Aubrey Beardsley (21 August 1872 - 16 March 1898) was a British novelist and playwright.
+231:trie_T1.0	7	8	birth_date	Walter J . Turner	Walter J. Turner	0	1884	supported	1884		valid	^ [S] ( born [O]	Walter J. Turner (born 1884) is a Jewish musician and composer.
+234:trie_T1.0	4	8	birth_date	Blaise Pascal	Blaise Pascal	0	1623	supported	1623-06-19		valid	^ [S] ( [O] -	Blaise Pascal (1623 - 1662) is a US musician.
+234:trie_T1.0	4	8	death_date	Blaise Pascal	Blaise Pascal	0	1662	supported	1662-08-19		valid	^ [S] ( # - [O] )	Blaise Pascal (1623 - 1662) is a US musician.
+234:trie_T1.0	5	8	birth_date	Alvin Plantinga	Alvin Plantinga	0	1932	supported	1932		valid	^ [S] ( born [O]	Alvin Plantinga (born 1932) is a US comedian and actor.
+234:trie_T1.0	6	8	birth_place	Bono	Bono	0	Brooklyn	contradicted	County Dublin	different top places		^ [S] was born in [O] ,	Bono was born in Brooklyn, Bath; on May 10, 1960.
+234:trie_T1.0	6	8	birth_place	Bono	Bono	0	Brooklyn , Bath	contradicted	County Dublin	different top places; by part		[S] was born in [O]	Bono was born in Brooklyn, Bath; on May 10, 1960.
+234:trie_T1.0	8	8	birth_date	Richard Swinburne	Richard Swinburne	0	December 26 , 1934	supported	1934-12-26		valid	^ [S] ( born [O]	Richard Swinburne (born December 26, 1934) is a US writer and poet.
+235:trie_T1.0	1	11	birth_date	The L É Deirdre	Carolus Linnaeus	partial	1910	contradicted	1707-05-23		valid	^ [S] ( [O]	The L É Deirdre (1910).
+244:trie_T1.0	1	8	birth_date	Avery Hopwood	Avery Hopwood	0	28 May 1882	supported	1882-05-28		valid	^ [S] ( [O] -	Avery Hopwood (28 May 1882 - 1 July 1928) was an American politician.
+244:trie_T1.0	1	8	death_date	Avery Hopwood	Avery Hopwood	0	1 July 1928	supported	1928-07-01		valid	[S] ( # <M> # - [O]	Avery Hopwood (28 May 1882 - 1 July 1928) was an American politician.
+244:trie_T1.0	2	8	is_a	Avery Hopwood	Avery Hopwood	0	free	unknown	playwright	open list		[S] is a [O] of	Born, Avery Hopwood is a free of Cleveland.
+244:trie_T1.0	3	8	birth_date	Philip Johnson	Philip Johnson	0	July 8 , 1906	supported	1906-07-08		valid	^ [S] ( born [O]	Philip Johnson (born July 8, 1906) was an Arabian mathematician and astronomer.
+244:trie_T1.0	5	8	birth_date	Jim Backus	Jim Backus	0	February 25 , 1913	supported	1913-02-25		valid	^ [S] ( [O] -	Jim Backus (February 25, 1913 - July 3, 1989) was an African lion. " He then served under the pseudonym for many hours.
+244:trie_T1.0	5	8	death_date	Jim Backus	Jim Backus	0	July 3 , 1989	supported	1989-07-03		valid	^ [S] ( <M> # , # - [O] )	Jim Backus (February 25, 1913 - July 3, 1989) was an African lion. " He then served under the pseudonym for many hours.
+245:trie_T1.0	4	7	birth_place	Vladimir Steklov	Vladimir Steklov	0	Brooklyn , Bath	unknown		no birth_place in store		^ [S] was born in [O] ,	Vladimir Steklov was born in Brooklyn, Bath, on May 30, 1864.
+245:trie_T1.0	5	7	birth_date	Maxim Gorky	Maxim Gorky	0	1868	supported	1868		valid	^ [S] ( [O] -	Maxim Gorky (1868 - 1936) was a Soviet cosmonaut.
+245:trie_T1.0	5	7	death_date	Maxim Gorky	Maxim Gorky	0	1936	supported	1936		valid	^ [S] ( # - [O] )	Maxim Gorky (1868 - 1936) was a Soviet cosmonaut.
+245:trie_T1.0	6	7	birth_date	Andrey Kolmogorov	Andrey Kolmogorov	0	1903	supported	1903		valid	^ [S] ( born [O]	Andrey Kolmogorov (born 1903) was a Bohemian composer and musician from New Orleans, Louisiana.
+245:trie_T1.0	7	7	birth_date	Sergey Mikhalkov	Sergey Mikhalkov	0	March 13 , 1913	supported	1913-03-13		valid	^ [S] ( born [O]	Sergey Mikhalkov (born March 13, 1913) is a Jewish musician and composer.
+246:trie_T1.0	2	10	is_a	There		0	football club	unknown		subject not in store		^ [S] is a [O] in	There is a football club in England.
+247:trie_T1.0	3	10	nationality	Suad Husni	Suad Husni	0	Egyptian	supported	Egyptian			^ [S] is a [O]	Suad Husni was an Egyptian territory during the wars of Julius Caesar.
+247:trie_T1.0	3	10	is_a	Suad Husni	Suad Husni	0	territory	unknown	actor	open list		ADD [S] is a [NAT] [OCC]	Suad Husni was an Egyptian territory during the wars of Julius Caesar.
+247:trie_T1.0	8	10	birth_date	Natacha Atlas	Natacha Atlas	0	March 20 , 1964	supported	1964-03-20		valid	^ [S] ( born [O]	Natacha Atlas (born March 20, 1964) is an actor, writer and producer.
+247:trie_T1.0	9	10	birth_place	Omar Sharif	Omar Sharif	0	Dublin	unknown		no birth_place in store		[S] was born in [O]	In 1957, Omar Sharif was born in Dublin.
+247:trie_T1.0	10	10	birth_date	Suad Husni	Suad Husni	0	1942	supported	1942		valid	^ [S] ( born [O]	Suad Husni (born 1942) is a US comedian and actor.

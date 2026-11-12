@@ -211,6 +211,7 @@ class Filler {
         const auto dist = [&](const It& it) {
             tmp.ctx = s.ctx;
             tmp.ctx.insert(tmp.ctx.end(), it.ids.begin(), it.ids.end());
+            if (o_.ret.fill) tmp.rov = s.rov;  // K5_RETRIEVE2.md (R-fill): the fill reads the retrieved documents' counts
             m_.model_dist(tmp, o_, p.data(), scratch);
             ++dists_;
             if (s1_ > 0) smooth(tmp, p, scratch);  // §13.42 Q2, S1
@@ -394,6 +395,7 @@ class Filler {
         const auto dist = [&](const It& it) {
             tmp.ctx = s.ctx;
             tmp.ctx.insert(tmp.ctx.end(), it.ids.begin(), it.ids.end());
+            if (o_.ret.fill) tmp.rov = s.rov;  // K5_RETRIEVE2.md (R-fill): the fill reads the retrieved documents' counts
             m_.model_dist(tmp, o_, p.data(), scratch);
             ++dists_;
             return std::max(1 - p[wkn::kUnk] - p[wkn::kBos], 1e-12);

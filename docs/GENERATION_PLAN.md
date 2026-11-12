@@ -2654,3 +2654,19 @@ Old binary main 9cbd277; old and new were started together.
 - **Every arm fails the reading.** The web's voice gets into K5's free sentences: "Make money fast.", "Our model is wearing a size Medium.", "There will be more to your credit card payments." An unregistered count of first- or second-person words in the first 460 characters: HLT 0.080 (Wikipedia's own continuations 0.080); C150 0.516, C300 0.560, C600 0.616.
 - **By the rule, nothing goes to the raters; HLT stood** (K1 has since become the default, §13.66). SCRIBE rose where readers would not, as before (§13.57).
 - **What it says:** more text helps only in the prompts' own register. The next data step should be encyclopedic or book prose, not web pages. Retrieval (§13.66) gave the topical help that raw web counts do not.
+### 13.68 G4, build on the retrieval win (registered 2026-11-12, before any arm runs; [K5_RETRIEVE2](reports/K5_RETRIEVE2.md))
+
+- **Why:** K1 (§13.66) left known limits: the planner's fact-sentence fill does not read the overlay; one k for all lengths; in long text the link to the sentence before does not move.
+- **The change** (new `--k5-retrieve` fields, off by default, byte-identical when off): `fill=1` (R-fill: the fill reads the overlay; the honest fill rules stay); `grow=B,k2=N` (R-grow: past each B bytes, at a sentence boundary, the overlay is rebuilt from N documents); `qtext=1` (the later query is the prompt and the text so far).
+- **Arms** (K1 plus): RF (`fill=1`), RG (`grow=500,k2=4`), RQ (`grow=500,k2=4,qtext=1`), RFG (`fill=1,grow=500,k2=4`); each also long (`--bytes 1800 --k5-max-words 600`).
+- **Screen:** verbatim13 0; copy32 at most 0.30, short and long; SCRIBE v2 at least K1 − 0.03 (long: K1_long − 0.03); fact precision at least 0.874; the leak check 0; my strict reading (keyword patchwork fails). At most 2 candidates, one per idea where possible.
+- **Judge:** blind pairwise raters against K1 at 460 characters (`bench/blind/ret2_pair`, seed 20261127) and 1,500 characters (`bench/blind/ret2_long`, seed 20261128). Adopted if better by §13.38's rule on either reading and at least 0.5 on the other; best by the weaker of its two lower bounds, then lower copy32. An arm equal to K1 at 460 characters counts 0.5 there.
+
+**§13.67 screen** (2026-11-12; [K5_RETRIEVE2](reports/K5_RETRIEVE2.md) "Results"):
+- Checks: main's build and my build with the new fields off equal K1, short and long (`cmp`). Leak check: **0** in every arm, short and long.
+- Dev (K1 → arm): SCRIBE v2 0.704 → RF 0.699, RG 0.705, RQ 0.710, RFG 0.700; fact precision 0.918 → 0.918–0.919; long SCRIBE v2 0.575 → 0.575, 0.598, 0.644, 0.606; long copy32 0.270 → 0.268, 0.299, **0.303**, 0.296; verbatim13 0.
+- RF changes 65 of 250 samples (fact sentences only). By reading its fills are no better: a garbled birthplace on dev 0 and one stock clause pasted into two prompts. RF fails; RFG with it. RQ fails long copy32.
+- RG equals K1 in the first 460 characters (by design) and stays nearer the subject past 500 bytes on about half the long prompts read; stuff3 down; the link to the sentence before unmoved.
+- **Candidate RG.** Packet `bench/blind/ret2_long` (25 long prompts, seed 20261128) is committed; no short packet (the same text). The raters have not run.
+
+**§13.68 result** (2026-11-12): blind pairwise raters against K1 on the long reading (packet e31b425, four fresh raters, 25 prompts): **RG 0.620 [0.440, 0.780]**, rater pairs 0.54 and 0.69. The interval includes 0.5, so by the rule **RG is not adopted; K1 stays the default.** It leans better, and could be retried on more long prompts. The flags (`fill=1`, `grow=B,k2=N[,qtext=1]` on `--k5-retrieve`) are merged, off by default, byte-identical when off.

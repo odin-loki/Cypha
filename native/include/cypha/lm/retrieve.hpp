@@ -41,15 +41,27 @@ struct Params {
     double w = 0;          // absolute weight L (--k5-dyn's); used when rel is 0
     int skip_top = 100;    // query words: outside K5's skip_top most frequent words
     double max_df = 0.05;  // and in at most this share of the documents
+    // K5_RETRIEVE2.md (G4), all off by default:
+    bool fill = false;   // fill=1 (R-fill): the planner's fact-sentence fill (planner/writer.hpp Filler) reads the overlay
+    int grow = 0;        // grow=B (R-grow): at each B bytes written (at a sentence boundary), retrieve again
+    int k2 = 0;          // k2=N: the documents of a later retrieval (0: k)
+    bool qtext = false;  // qtext=1: a later retrieval's query is the prompt and the text so far (else the prompt alone,
+                         // so only the first later retrieval runs)
     bool on() const { return k > 0; }
     std::string describe() const {
-        char b[200];
+        char b[300];
         std::snprintf(b, sizeof b, "\tretrieve_k=%d\tretrieve_rel=%g\tretrieve_w=%g\tretrieve_top=%d\tretrieve_maxdf=%g", k, rel, w, skip_top, max_df);
-        return b;
+        std::string s = b;
+        if (fill) s += "\tretrieve_fill=1";  // K5_RETRIEVE2.md: only when set, so the MODEL line is as before
+        if (grow > 0) {
+            std::snprintf(b, sizeof b, "\tretrieve_grow=%d\tretrieve_k2=%d\tretrieve_qtext=%d", grow, k2, qtext ? 1 : 0);
+            s += b;
+        }
+        return s;
     }
 };
 
-// --k5-retrieve k=N,rel=R | k=N,w=L [,top=T][,maxdf=F]
+// --k5-retrieve k=N,rel=R | k=N,w=L [,top=T][,maxdf=F][,fill=1][,grow=B][,k2=N][,qtext=1] (the last four: K5_RETRIEVE2.md)
 inline bool parse(const std::string& val, Params& p, std::string& err) {
     if (val == "off") return p = Params{}, true;  // GENERATION_PLAN §13.66: off restores HLT (the default is K1)
     Params q;
@@ -67,7 +79,11 @@ inline bool parse(const std::string& val, Params& p, std::string& err) {
         else if (key == "w" && v >= 0 && v <= 1e6) q.w = v;
         else if (key == "top" && v >= 0 && v <= 60000 && v == std::floor(v)) q.skip_top = static_cast<int>(v);
         else if (key == "maxdf" && v > 0 && v <= 1) q.max_df = v;
-        else return err = "--k5-retrieve: fields k=N (0-256), rel=R, w=L, top=T, maxdf=F; bad " + f, false;
+        else if (key == "fill" && (v == 0 || v == 1)) q.fill = v == 1;  // K5_RETRIEVE2.md
+        else if (key == "grow" && v >= 0 && v <= 1e6 && v == std::floor(v)) q.grow = static_cast<int>(v);
+        else if (key == "k2" && v >= 0 && v <= 256 && v == std::floor(v)) q.k2 = static_cast<int>(v);
+        else if (key == "qtext" && (v == 0 || v == 1)) q.qtext = v == 1;
+        else return err = "--k5-retrieve: fields k=N (0-256), rel=R, w=L, top=T, maxdf=F, fill=0|1, grow=B, k2=N, qtext=0|1; bad " + f, false;
         a = b + 1;
     }
     if (q.k > 0 && q.rel <= 0 && q.w <= 0) return err = "--k5-retrieve: give rel=R or w=L", false;
@@ -97,8 +113,10 @@ class Index {
     // the line number (from 0) of a document of that text.
     std::pair<std::size_t, std::size_t> span(std::uint32_t d) const { return {start_[d], start_[d + 1]}; }
 
-    // The k best documents for the query ids (a prompt's tokens), best first. prompt: for the log only.
-    std::vector<std::uint32_t> top(const std::vector<std::uint32_t>& q, const Params& p, const CI& ci, std::string_view prompt) const {
+    // The k best documents for the query ids (a prompt's tokens), best first. prompt: for the log only. tag
+    // (K5_RETRIEVE2.md, a later retrieval): logged as a fourth field; each distinct (prompt, tag, documents) once.
+    std::vector<std::uint32_t> top(const std::vector<std::uint32_t>& q, const Params& p, const CI& ci, std::string_view prompt,
+                                   std::string_view tag = {}) const {
         std::vector<std::uint32_t> words;
         const std::uint32_t lo = 2 + static_cast<std::uint32_t>(p.skip_top);
         for (const std::uint32_t v : q)
@@ -138,20 +156,24 @@ class Index {
         });
         std::vector<std::uint32_t> out;
         for (std::size_t i = 0; i < k; ++i) out.push_back(all[i].second);
-        if (!log_.empty()) write_log(prompt, words.size(), all, k);
+        if (!log_.empty()) write_log(prompt, words.size(), all, k, tag);
         return out;
     }
 
  private:
-    void write_log(std::string_view prompt, std::size_t nq, const std::vector<std::pair<double, std::uint32_t>>& all, std::size_t k) const {
+    void write_log(std::string_view prompt, std::size_t nq, const std::vector<std::pair<double, std::uint32_t>>& all, std::size_t k,
+                   std::string_view tag) const {
         std::string key(prompt);
+        std::string ds;
+        for (std::size_t i = 0; i < k; ++i) ds += (i ? "," : "") + std::to_string(all[i].second);
         std::lock_guard<std::mutex> g(*mu_);
-        if (!logged_->insert(key).second) return;
+        if (!logged_->insert(tag.empty() ? key : key + '\x01' + std::string(tag) + '\x01' + ds).second) return;
         for (char& c : key)
             if (c == '\t' || c == '\n' || c == '\r') c = ' ';
         if (FILE* f = std::fopen(log_.c_str(), "a")) {
             std::fprintf(f, "%s\t%zu\t", key.c_str(), nq);
             for (std::size_t i = 0; i < k; ++i) std::fprintf(f, "%s%u:%.3f", i ? "," : "", all[i].second, all[i].first);
+            if (!tag.empty()) std::fprintf(f, "\t%.*s", static_cast<int>(tag.size()), tag.data());
             std::fprintf(f, "\n");
             std::fclose(f);
         }

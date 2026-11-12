@@ -204,7 +204,11 @@ def cmd_copy(a):
                 parts = line.rstrip("\n").split("\t")
                 i = prompts.get(" ".join(parts[0].split()))
                 if i is not None and len(parts) >= 3:
-                    docs[i] = [int(x.split(":")[0]) for x in parts[2].split(",") if x]
+                    # K5_RETRIEVE2.md (grow): a prompt may have several lines (later retrievals); its documents are
+                    # all of them, in first-seen order (one line per prompt: as before)
+                    for x in parts[2].split(","):
+                        if x and int(x.split(":")[0]) not in docs.setdefault(i, []):
+                            docs[i].append(int(x.split(":")[0]))
         cov = tot = 0
         longest = 0
         n13 = 0

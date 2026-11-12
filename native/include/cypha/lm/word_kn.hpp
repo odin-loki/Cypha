@@ -1509,6 +1509,11 @@ class K5 {
         int step = 0;
         std::shared_ptr<const std::vector<double>> topic_mult;  // K5_DISCOURSE.md: --k5-lda-beta's factor per word
         std::shared_ptr<const Overlay> rov;                     // K5_RETRIEVE.md: the retrieved documents' counts
+        // K5_RETRIEVE2.md (--k5-retrieve grow=B): the later retrievals run so far (out's size / B at the last), the
+        // prompt's ids in ctx (bos and the prompt), and the prompt (for the log). Set only with grow.
+        int ret_round = 0;
+        std::size_t ret_np = 0;
+        std::string ret_prompt;
     };
     State start(std::string_view prompt, const Options& o) const {
         State s;
@@ -1525,6 +1530,7 @@ class K5 {
             for (const std::uint32_t w : s.ctx) s.ov.push(w);
         }
         if (o.ret.on() && ret_) s.rov = retrieved(prompt, s.ctx, o);  // K5_RETRIEVE.md
+        if (o.ret.on() && ret_ && o.ret.grow > 0) s.ret_np = s.ctx.size(), s.ret_prompt.assign(prompt);  // K5_RETRIEVE2.md
         if (o.cache_w > 0 || o.cache_w2 > 0) {
             s.cache.init(vocab_.size(), o.cache_r);
             for (const std::uint32_t w : s.ctx) s.cache.push(w);
@@ -1554,17 +1560,41 @@ class K5 {
     }
     // K5_RETRIEVE.md: the counts of the documents retrieved for the prompt, an overlay K5's walk reads.
     std::shared_ptr<const Overlay> retrieved(std::string_view prompt, const std::vector<std::uint32_t>& q, const Options& o) const {
+        return retrieved(prompt, q, o.ret, {});
+    }
+    std::shared_ptr<const Overlay> retrieved(std::string_view prompt, const std::vector<std::uint32_t>& q, const retrieve::Params& rp,
+                                             std::string_view tag) const {
         auto ov = std::make_shared<Overlay>();
-        ov->L = o.ret.rel > 0 ? 1.0 : o.ret.w;
-        ov->rel = o.ret.rel;
+        ov->L = rp.rel > 0 ? 1.0 : rp.w;
+        ov->rel = rp.rel;
         ov->order = kn_.order();
         const std::vector<std::uint32_t>& ids = kn_.index().text();
-        for (const std::uint32_t d : ret_->top(q, o.ret, kn_.index(), prompt)) {
+        for (const std::uint32_t d : ret_->top(q, rp, kn_.index(), prompt, tag)) {
             ov->cut();
             const auto [a, b] = ret_->span(d);
             for (std::size_t i = a; i < b; ++i) ov->push(ids[i]);
         }
         return ov;
+    }
+    // K5_RETRIEVE2.md (R-grow, --k5-retrieve grow=B[,k2=N][,qtext=1]): once B more bytes are written, at a sentence
+    // boundary, the overlay is rebuilt from the k2 documents best for the query: the prompt (only the first time; it
+    // gives the same documents after) or, with qtext, the prompt and the text so far (a moving query). boundary: the
+    // caller is at a sentence boundary (else the last word must end a sentence). Off (grow 0): nothing.
+    void regrow(State& s, const Options& o, bool boundary = false) const {
+        if (o.ret.grow <= 0 || !ret_ || s.ret_np == 0) return;
+        const int r = static_cast<int>(s.out.size() / static_cast<std::size_t>(o.ret.grow));
+        if (r <= s.ret_round) return;
+        if (!boundary && s.ctx.size() > s.ret_np) {
+            const std::string& t = vocab_[s.ctx.back()];
+            if (t != "." && t != "!" && t != "?" && t != "\n") return;
+        }
+        const bool first = s.ret_round == 0;
+        s.ret_round = r;
+        if (!o.ret.qtext && !first) return;
+        retrieve::Params rp = o.ret;
+        if (rp.k2 > 0) rp.k = rp.k2;
+        const std::vector<std::uint32_t> q = o.ret.qtext ? s.ctx : std::vector<std::uint32_t>(s.ctx.begin(), s.ctx.begin() + static_cast<std::ptrdiff_t>(s.ret_np));
+        s.rov = retrieved(s.ret_prompt, q, rp, "grow=" + std::to_string(r));
     }
     const retrieve::Index* retrieval() const { return ret_.get(); }
     // K5_RETRIEVE.md: the retrieval index over the documents from id `from` on (load: the --k5-more text's).
@@ -1726,6 +1756,7 @@ class K5 {
             std::vector<std::uint32_t> recent, cw, bw;
             if (use_wr) recent = last_sentence(s.ctx);
             for (std::uint64_t sent = 0; s.step < o.max_words && s.out.size() < o.bytes; ++sent) {
+                regrow(s, o, true);  // K5_RETRIEVE2.md: once, before the K candidates copy the state
                 State best;
                 GenStats bg;
                 double bscore = 0;
@@ -2016,6 +2047,7 @@ class K5 {
     // word's probability under the model before temperature, <unk> and <s> removed (the gate's fluency).
     std::uint32_t step_word(State& s, std::mt19937_64& rng, std::uint64_t salt, const Options& o, GenStats& g, ByteScorer* bs,
                             Scratch& sc, double* lp) const {
+        regrow(s, o);  // K5_RETRIEVE2.md (off: nothing)
         ++g.steps;
         ++s.step;
         std::uint32_t w = 0;
@@ -3042,6 +3074,16 @@ inline bool self_test(std::string& err) {
             apply_flag("--k5-retrieve", "k=2", r, re) || apply_flag("--k5-retrieve", "k=2,x=1", r, re)) {
             err = "--k5-retrieve parse";
             return false;
+        }
+        {  // K5_RETRIEVE2.md: the new fields parse and are off by default
+            Options r2 = k5_v1();
+            const retrieve::Params d0{};
+            if (d0.fill || d0.grow != 0 || d0.k2 != 0 || d0.qtext ||
+                !apply_flag("--k5-retrieve", "k=1,rel=0.5,fill=1,grow=400,k2=4,qtext=1", r2, re) || !r2.ret.fill || r2.ret.grow != 400 ||
+                r2.ret.k2 != 4 || !r2.ret.qtext || apply_flag("--k5-retrieve", "k=1,rel=0.5,fill=2", r2, re)) {
+                err = "--k5-retrieve parse (K5_RETRIEVE2)";
+                return false;
+            }
         }
         m.index_retrieval(0);
         if (!m.retrieval() || m.retrieval()->docs() == 0 || !sums(m, r, "retrieval (rel)")) return false;
