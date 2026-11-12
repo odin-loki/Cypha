@@ -87,7 +87,7 @@
 //        docs/reports/K5_UPGRADES.md: by default K5 now writes with nucleus 0.8, 256 exchange classes as its backoff
 //        floor and an 8-candidate sentence gate by prompt association; --k5-base k5 (first) restores §13.19's K5. Other
 //        --k5-... flags (word_kn.hpp apply_flag): -seed, -nucleus, -cand-mass, -cand-max, -cache, -cache2, -cache-decay,
-//        -dyn, -order, -classes, -class-mode, -class-w, -gate.
+//        -dyn, -order, -classes, -class-mode, -class-w, -gate, -retrieve (K5_RETRIEVE.md).
 //        docs/reports/K5_SCALE.md: --k5-seed S (default 20261101; prompt id i draws from S + i; an S below 20261101 is an offset, so
 //        --k5-seed 1000 is 20262101, as K5_UPGRADES.md's seeds) and --k5-vmax V (the
 //        vocabulary cap, default 32000, at most 65536).

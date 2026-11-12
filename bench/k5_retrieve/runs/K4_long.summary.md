@@ -1,0 +1,32 @@
+# gen_eval K4_long (dev split)
+
+GEN lines 250, kept after SCRIBE's cleaning 250
+
+| rung | n | SCRIBE v2 [95%] | surface S [95%] | mean bytes | D_I |
+|---|---|---|---|---|---|
+| held-out human | 500 | 0.923 [0.910, 0.935] | 0.912 [0.906, 0.918] | 531 | 0.13 |
+| sentences shuffled across docs | 500 | 0.344 [0.333, 0.356] | 0.905 [0.901, 0.908] | 532 | 0.15 |
+| trie samples (pooled) | 250 | 0.624 [0.598, 0.652] | 0.915 [0.910, 0.919] | 1653 | 0.00 |
+| trie samples T=1.0 | 250 | 0.624 [0.598, 0.654] | 0.915 [0.911, 0.919] | 1653 | 0.00 |
+
+GEN_EVAL k5_cont_bpb 1.348062 (word-level; an unknown word costs <unk>'s bits)
+
+GEN_EVAL copy32 T1.0 0.2947 verbatim13 0.0000 (0 of 250)
+
+## Five samples (T = 1.0)
+
+- **Prompt:** The first export of Holdens to New Zealand began in 1954, and for many years they were assembled at the General Motors New Zealand plant in Petone outside Wellington, until it closed in 1990.
+  **CyphaLM:**  After WWII, when a large enough suspension was followed, the biography of New Zealand Barbara Anderson was injured as the surrounding dock at the site. Brian Henderson was one of the most popular and successful New Zealand and attack ships in the world. The modern sector was opened in 1976 by the New Zealand artist Francis Upritchard. Auckland is a town located throughout the animal kingdom of Ne
+
+- **Prompt:** Black powder arms must be well cleaned inside and out after firing to remove the residue. The size of the granules of powder and the confinement determine the burn rate of black powder.
+  **CyphaLM:**  Standard grades of black holes. The way to run through the physical layer is activated by a falling tone. In other words, and thus are easier to find a way to use a new technology, and sample by difference. The fraction of the total area. The coastal plain and the human speech organs of the gun barrel. The American gunpowder weapons. There is usually an arid desert environment, relying on the fac
+
+- **Prompt:** A dominant position generally puts the top grappler in a very advantagous position, he or she can use the position to escape by standing up, pinning and exhausting the opponent, executing a submission hold, or striking the opponent.
+  **CyphaLM:**  The opponent in the body, which in turn. By the time it was originally titled " are closely related to the increased cross - training methods that can be used to represent the country to the other. For example, several with a wrestler must be buried, and left under the guidance of the key reasons for a culture of fear of political opponents, the planet of the Forgotten until 1979. On March 13, 20
+
+- **Prompt:** In lower concentrations (3%), it is used medically for cleaning wounds and removing dead tissue. The Food and Drug Administration has approved 3% hydrogen peroxide ("Food-Grade," or without added chemical stabilisers) for use as a mouthwash.
+  **CyphaLM:**  His books include the Food Food writing. It is a very popular series of works by writer and director Food writing.) Since the decomposition. The man - made and which must be treated with radioactive iodine. Although they could not complete. The complete identification with the hydrogen bonds and aromatic substitution reaction in organic chemistry. In organic foods, and most of its food to the mou
+
+- **Prompt:** The 2001 census figures released by the India Census Commission give a breakdown by various parameters including religion.
+  **CyphaLM:**  Many people combine elements of indigenous groups gives the country a rich diversity. It was formed in 1965 from the Municipal Council is composed of the Census Bureau has begun to rank the states of Northern Ireland as " the original style. Some peculiarities are estimates, based on his travels and South African popular music scene. They got together, the cash from the 2001 Census. some people i
+

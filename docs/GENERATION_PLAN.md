@@ -2610,3 +2610,18 @@ Old binary main 9cbd277; old and new were started together.
   - 1,500 characters: C1 0.500 [0.340, 0.660], CD 0.560 [0.400, 0.720].
   - **No difference. HLT stays.**
 - **What it says:** pushing K5's own words back into its distribution cannot make a thread. The cache either changes nothing or breaks the sentence. The content has to come from somewhere (G2's retrieval, a plan, more facts).
+### 13.66 G2, K5 reads up on the subject before it writes (registered 2026-11-12, before any arm runs; [K5_RETRIEVE](reports/K5_RETRIEVE.md))
+
+- **Why:** the gap the raters feel is content. Only 0.204 of the writer's sentences share a word with the one before (human 0.508, §13.59). Gate terms and form fixes did not help (§13.53 R2, §13.62).
+- **The change:** `--k5-retrieve k=N,rel=R` (`lm/retrieve.hpp`, off by default, byte-identical when off). For each prompt, K5 finds the N documents of `train_all.txt` most related to the prompt (BM25 over its own word ids). It adds their n-grams to its counts for that continuation, as `--k5-dyn` adds the prompt's. With `rel=R` the documents hold about R / (1 + R) of each order's mass where they saw the context.
+- **Guards:** only `train_all.txt` is searched (GEN-A and SCRIBE overlap removed; never K5's own 7 MB text). A leak check counts retrieved documents from the prompt's own page title (must be 0). The 12-word cap holds against the documents, which are K5's training text.
+- **Arms** (HLT plus): K1 (k 1, rel 0.5), K4 (k 4), K16 (k 16), K4L (k 4, rel 0.2), K4H (k 4, rel 1.5).
+- **Screen:** verbatim13 0; copy32 at most 0.30; SCRIBE v2 at least HLT − 0.03; fact precision at least HLT − 0.05; the leak check 0; my strict reading (keyword stuffing fails). J2's link to the previous sentence, the prompt's words by sentence and mean surprise are reported. At most 2 candidates.
+- **Judge:** blind pairwise raters against HLT at 460 characters (`bench/blind/ret_pair`, seed 20261124) and 1,500 characters (`bench/blind/ret_long`, seed 20261125). Adopted if better by §13.38's rule on either reading and at least 0.5 on the other.
+
+**§13.65 screen** (2026-11-12; [K5_RETRIEVE](reports/K5_RETRIEVE.md) "Results"):
+- Checks: main's build and my build with the flag off equal HLT (`cmp`). Leak check: **0** retrieved documents from the prompt's page title, 0 in GEN-A's source bytes, in every arm.
+- Dev (HLT → arm): SCRIBE v2 0.595 → K1 0.704, K4 0.714, K16 0.752, K4L 0.627, K4H 0.854; copy32 0.232 → 0.275, 0.294, **0.318**, 0.232, **0.501**; fact precision 0.935 → 0.918–0.936; verbatim13 0 everywhere.
+- The link to the sentence before (coh_measures) 0.146 → K4 0.194, K1 0.179; the prompt's words at sentence 2: 0.280 → 0.44. Mean surprise +0.4 bits.
+- By reading, K1 and K4 write from the prompt's field (Dune → Alia and Leto; grappling → ground and pound), with no better grammar and mild repetition. K16 and K4H fail copy32.
+- **Candidates K4 and K1.** Packets `bench/blind/ret_pair` and `bench/blind/ret_long` are committed; the raters have not run.
