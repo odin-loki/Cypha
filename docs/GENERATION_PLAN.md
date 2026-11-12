@@ -2475,3 +2475,18 @@ Old binary main 9cbd277; old and new were started together.
 - **What it means:**
   - To screen sampler and chooser settings, use mean surprise beside SCRIBE v2, registered and tested on fresh pairs.
   - The gap to human text is commitment (0.67 against 0.28 of sentences reuse an earlier word) and sentence length (19.7 words against 12.7). No chooser closes it; a writer that plans the paragraph might (J2's paragraph plan).
+
+### 13.58 CT3.4, fact precision of generated text (2026-11-12; [GEN_FACTS](reports/GEN_FACTS.md))
+
+- **Registered first** (b174b9c). `scripts/gen_fact_check.py` finds statements of fact with F2's 359 kept patterns plus one added "is a [nationality] [occupation]" pattern. It grades each against CyphaLM's own store (`e9_text` + `e9_v2`, GEN-A's prompt bytes dropped) as supported, contradicted or unknown. It is a measure only; no writer changes.
+- **The grader, checked by hand:** 36 of 40 verdicts right as registered. Amendment A1 (`--v2`, registered before its run, d451569) fixes a coarse date that hid a precise one, and "A, B" values: 38 of 40 right on a fresh draw, 0.95 [0.83, 0.99].
+- **Dev, v2:**
+  - today's default L1 states 1.48 statements a sample, and 0.324 [0.260, 0.396] of them contradict the store;
+  - precision (supported over supported plus contradicted) 0.437 [0.369, 0.507];
+  - W1b and G16 are the same to three decimals: all their fact sentences come from the planner;
+  - D0 0.445; H1b 0.958 [0.880, 1.000], with 0.007 contradicted;
+  - test reads: L1 0.426, G16 0.424, W1b 0.420.
+- **Where the errors are:** the fill makes up the second date (53 of 59 graded death dates wrong) and the month and day of birth (55 of 125 wrong). Errors grow down the paragraph: sentence 1 has 0.20 contradicted, sentence 4 on 0.37. The late ones are mostly the discourse writer's invented relatives.
+- **G4's fact precision of 0.9 is far off.** The honest fill meets it, but the raters did not prefer it (0.560). Next: a fill that refuses only the claims that are wrong most often (numbers and months), keeping names free for fluency.
+- Human continuations give 0.04 statements a sample and none graded, so this measures the planner's own kind of sentence.
+- Predictions F1–F8 and A1.1–A1.3: all hits, except human precision, which could not be scored.
