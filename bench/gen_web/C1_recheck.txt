@@ -1,0 +1,3 @@
+check /mnt/d/cypha_llm/c4prose/work/chk_00: 254443 documents, 0 hold a forbidden span (83468757 spans in the set)
+check /mnt/d/cypha_llm/c4prose/work/chk_01: 255374 documents, 0 hold a forbidden span (83468757 spans in the set)
+check /mnt/d/cypha_llm/c4prose/work/chk_02: 254229 documents, 0 hold a forbidden span (83468757 spans in the set)

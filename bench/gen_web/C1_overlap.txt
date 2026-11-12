@@ -1,0 +1,45 @@
+docs_in 349125
+bytes_in 713966409
+forbid /mnt/d/cypha_llm/c4prose/work/forbid_bench.txt spans_in_set 620160 docs_hit 4096 windows_hit 28236
+forbid /mnt/d/cypha_llm/c4prose/work/forbid_scribe_web.txt spans_in_set 57264507 docs_hit 137981 windows_hit 5886808
+forbid /mnt/d/cypha_llm/c4prose/work/forbid_scribe_wiki.txt spans_in_set 25606975 docs_hit 46485 windows_hit 367314
+docs_dropped_over_10pct 22978
+bytes_dropped 24841880
+docs_with_sentences_cut 125135
+sentences_cut 318421
+bytes_cut 47698306
+docs_emptied_by_cuts 30
+max_rounds 3
+docs_out 326117
+bytes_out 641426193
+recheck_kept_docs_with_forbidden_span 0
+docs_in 348745
+bytes_in 710164701
+forbid /mnt/d/cypha_llm/c4prose/work/forbid_bench.txt spans_in_set 620160 docs_hit 4057 windows_hit 30078
+forbid /mnt/d/cypha_llm/c4prose/work/forbid_scribe_web.txt spans_in_set 57264507 docs_hit 137528 windows_hit 5686361
+forbid /mnt/d/cypha_llm/c4prose/work/forbid_scribe_wiki.txt spans_in_set 25606975 docs_hit 46867 windows_hit 359645
+docs_dropped_over_10pct 22873
+bytes_dropped 24993080
+docs_with_sentences_cut 125003
+sentences_cut 315923
+bytes_cut 47459118
+docs_emptied_by_cuts 25
+max_rounds 3
+docs_out 325847
+bytes_out 637712478
+recheck_kept_docs_with_forbidden_span 0
+docs_in 349131
+bytes_in 715145066
+forbid /mnt/d/cypha_llm/c4prose/work/forbid_bench.txt spans_in_set 620160 docs_hit 4136 windows_hit 30926
+forbid /mnt/d/cypha_llm/c4prose/work/forbid_scribe_web.txt spans_in_set 57264507 docs_hit 138473 windows_hit 5807198
+forbid /mnt/d/cypha_llm/c4prose/work/forbid_scribe_wiki.txt spans_in_set 25606975 docs_hit 47289 windows_hit 358988
+docs_dropped_over_10pct 22902
+bytes_dropped 25142087
+docs_with_sentences_cut 125985
+sentences_cut 318346
+bytes_cut 47738172
+docs_emptied_by_cuts 25
+max_rounds 3
+docs_out 326204
+bytes_out 642264782
+recheck_kept_docs_with_forbidden_span 0
