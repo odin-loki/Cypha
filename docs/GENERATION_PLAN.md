@@ -2802,3 +2802,22 @@ Four fresh blind raters. Raters 1–2 rate the first 25 prompts, raters 3–4 th
   - K1 2.1–2.5 (2.28 last time);
   - K5 1.5–1.9;
   - T8 2.6–3.3, with at most 5% rated 6 or more.
+
+**§13.74 result** (2026-11-13; four blind raters, 50 prompts, two ratings per text):
+
+| Arm | Mean (1–10) [95%] | Rated 6 or more |
+|---|---|---|
+| human | **8.64** [8.45, 8.80] | 100 of 100 |
+| **T8** (today's default) | **2.50** [2.40, 2.61] | 0 of 100 |
+| K1 | 2.16 [2.07, 2.26] | 0 of 100 |
+| K5 (plain, 7 MB) | 1.50 [1.44, 1.56] | 0 of 100 |
+
+- **Paired:** T8 against K1 **+0.34 [+0.22, +0.47]**; T8 against plain K5 **+1.00 [+0.87, +1.12]**; T8 against human −6.14.
+- **Calibration across the two rounds:** K1 read 2.28 in §13.69 and 2.16 here, and K5 1.66 and 1.50, so these raters are about 0.1–0.15 stricter. Against the anchors, the default has gained about a point since plain K5 a week ago.
+- **No CyphaLM text reaches 6.** Readers still place today's writer between "word salad" (1) and "sentence-shaped but not connecting" (3).
+- **Predictions:**
+  - human 8.3–8.8: **hit**;
+  - K1 2.1–2.5: **hit** (2.16);
+  - K5 1.5–1.9: **hit** (1.50);
+  - T8 2.6–3.3: **miss** (2.50);
+  - at most 5% rated 6 or more: **hit** (0%).
