@@ -1,0 +1,941 @@
+{
+ "store": [
+  "bench/fact_store/e9_text",
+  "bench/fact_store/e9_v2"
+ ],
+ "drop": "75497472:100000000",
+ "v2": true,
+ "facts": 92460,
+ "dropped": 4601,
+ "patterns": 359,
+ "arms": {
+  "HLT": {
+   "samples": 250,
+   "statements": 281,
+   "supported_n": 145,
+   "contradicted_n": 10,
+   "unknown_n": 126,
+   "with_statement": 79,
+   "point": {
+    "per_sample": 1.124,
+    "contradicted": 0.03558718861209965,
+    "supported": 0.5160142348754448,
+    "precision": 0.9354838709677419,
+    "invalid_dates": 0.0,
+    "supported_partly": 0.0,
+    "pos1_n": 37,
+    "pos1_contradicted": 0.0,
+    "pos1_supported": 0.1891891891891892,
+    "pos2_n": 40,
+    "pos2_contradicted": 0.025,
+    "pos2_supported": 0.175,
+    "pos3_n": 34,
+    "pos3_contradicted": 0.058823529411764705,
+    "pos3_supported": 0.4411764705882353,
+    "pos4+_n": 170,
+    "pos4+_contradicted": 0.041176470588235294,
+    "pos4+_supported": 0.6823529411764706
+   },
+   "ci": {
+    "per_sample": [
+     0.86,
+     1.408
+    ],
+    "contradicted": [
+     0.013333333333333334,
+     0.06315789473684211
+    ],
+    "supported": [
+     0.4262948207171315,
+     0.5985401459854015
+    ],
+    "precision": [
+     0.8879310344827587,
+     0.9743589743589743
+    ],
+    "invalid_dates": [
+     0.0,
+     0.0
+    ],
+    "supported_partly": [
+     0.0,
+     0.0
+    ],
+    "pos1_n": [
+     25,
+     51
+    ],
+    "pos1_contradicted": [
+     0.0,
+     0.0
+    ],
+    "pos1_supported": [
+     0.045454545454545456,
+     0.34146341463414637
+    ],
+    "pos2_n": [
+     26,
+     56
+    ],
+    "pos2_contradicted": [
+     0.0,
+     0.08571428571428572
+    ],
+    "pos2_supported": [
+     0.0625,
+     0.3023255813953488
+    ],
+    "pos3_n": [
+     21,
+     48
+    ],
+    "pos3_contradicted": [
+     0.0,
+     0.16666666666666666
+    ],
+    "pos3_supported": [
+     0.23809523809523808,
+     0.6097560975609756
+    ],
+    "pos4+_n": [
+     123,
+     221
+    ],
+    "pos4+_contradicted": [
+     0.011904761904761904,
+     0.07432432432432433
+    ],
+    "pos4+_supported": [
+     0.5838509316770186,
+     0.7764705882352941
+    ]
+   },
+   "by_relation": {
+    "birth_date": {
+     "contradicted": 6,
+     "supported": 86,
+     "unknown": 1
+    },
+    "birth_place": {
+     "unknown": 37,
+     "supported": 4,
+     "contradicted": 4
+    },
+    "death_date": {
+     "supported": 39
+    },
+    "death_place": {
+     "unknown": 4
+    },
+    "is_a": {
+     "unknown": 83,
+     "supported": 8
+    },
+    "located_in": {
+     "unknown": 1
+    },
+    "nationality": {
+     "supported": 8
+    }
+   },
+   "file": "/home/odin/kc_runs/HLT.gen.txt"
+  },
+  "C1": {
+   "samples": 250,
+   "statements": 285,
+   "supported_n": 145,
+   "contradicted_n": 14,
+   "unknown_n": 126,
+   "with_statement": 82,
+   "point": {
+    "per_sample": 1.14,
+    "contradicted": 0.04912280701754386,
+    "supported": 0.5087719298245614,
+    "precision": 0.9119496855345912,
+    "invalid_dates": 0.0,
+    "supported_partly": 0.0,
+    "pos1_n": 35,
+    "pos1_contradicted": 0.0,
+    "pos1_supported": 0.2,
+    "pos2_n": 39,
+    "pos2_contradicted": 0.02564102564102564,
+    "pos2_supported": 0.1794871794871795,
+    "pos3_n": 33,
+    "pos3_contradicted": 0.09090909090909091,
+    "pos3_supported": 0.45454545454545453,
+    "pos4+_n": 178,
+    "pos4+_contradicted": 0.056179775280898875,
+    "pos4+_supported": 0.651685393258427
+   },
+   "ci": {
+    "per_sample": [
+     0.88,
+     1.424
+    ],
+    "contradicted": [
+     0.023316062176165803,
+     0.0794979079497908
+    ],
+    "supported": [
+     0.4198473282442748,
+     0.5871212121212122
+    ],
+    "precision": [
+     0.8597560975609756,
+     0.9573170731707317
+    ],
+    "invalid_dates": [
+     0.0,
+     0.0
+    ],
+    "supported_partly": [
+     0.0,
+     0.0
+    ],
+    "pos1_n": [
+     23,
+     48
+    ],
+    "pos1_contradicted": [
+     0.0,
+     0.0
+    ],
+    "pos1_supported": [
+     0.04878048780487805,
+     0.358974358974359
+    ],
+    "pos2_n": [
+     25,
+     55
+    ],
+    "pos2_contradicted": [
+     0.0,
+     0.09090909090909091
+    ],
+    "pos2_supported": [
+     0.06451612903225806,
+     0.3111111111111111
+    ],
+    "pos3_n": [
+     20,
+     47
+    ],
+    "pos3_contradicted": [
+     0.0,
+     0.21621621621621623
+    ],
+    "pos3_supported": [
+     0.25,
+     0.6296296296296297
+    ],
+    "pos4+_n": [
+     131,
+     228
+    ],
+    "pos4+_contradicted": [
+     0.020942408376963352,
+     0.09782608695652174
+    ],
+    "pos4+_supported": [
+     0.5524475524475524,
+     0.7445652173913043
+    ]
+   },
+   "by_relation": {
+    "birth_date": {
+     "contradicted": 8,
+     "supported": 86,
+     "unknown": 2
+    },
+    "birth_place": {
+     "unknown": 34,
+     "supported": 4,
+     "contradicted": 6
+    },
+    "death_date": {
+     "supported": 39,
+     "unknown": 1
+    },
+    "death_place": {
+     "unknown": 6
+    },
+    "director": {
+     "unknown": 1
+    },
+    "is_a": {
+     "unknown": 80,
+     "supported": 8
+    },
+    "language": {
+     "unknown": 1
+    },
+    "located_in": {
+     "unknown": 1
+    },
+    "nationality": {
+     "supported": 8
+    }
+   },
+   "file": "/home/odin/kc_runs/C1.gen.txt"
+  },
+  "C2": {
+   "samples": 250,
+   "statements": 276,
+   "supported_n": 145,
+   "contradicted_n": 10,
+   "unknown_n": 121,
+   "with_statement": 76,
+   "point": {
+    "per_sample": 1.104,
+    "contradicted": 0.036231884057971016,
+    "supported": 0.5253623188405797,
+    "precision": 0.9354838709677419,
+    "invalid_dates": 0.0,
+    "supported_partly": 0.0,
+    "pos1_n": 35,
+    "pos1_contradicted": 0.0,
+    "pos1_supported": 0.2,
+    "pos2_n": 39,
+    "pos2_contradicted": 0.02564102564102564,
+    "pos2_supported": 0.1794871794871795,
+    "pos3_n": 32,
+    "pos3_contradicted": 0.0625,
+    "pos3_supported": 0.46875,
+    "pos4+_n": 170,
+    "pos4+_contradicted": 0.041176470588235294,
+    "pos4+_supported": 0.6823529411764706
+   },
+   "ci": {
+    "per_sample": [
+     0.836,
+     1.384
+    ],
+    "contradicted": [
+     0.013605442176870748,
+     0.06382978723404255
+    ],
+    "supported": [
+     0.4362934362934363,
+     0.6091205211726385
+    ],
+    "precision": [
+     0.8879310344827587,
+     0.9743589743589743
+    ],
+    "invalid_dates": [
+     0.0,
+     0.0
+    ],
+    "supported_partly": [
+     0.0,
+     0.0
+    ],
+    "pos1_n": [
+     23,
+     48
+    ],
+    "pos1_contradicted": [
+     0.0,
+     0.0
+    ],
+    "pos1_supported": [
+     0.04878048780487805,
+     0.358974358974359
+    ],
+    "pos2_n": [
+     25,
+     55
+    ],
+    "pos2_contradicted": [
+     0.0,
+     0.08888888888888889
+    ],
+    "pos2_supported": [
+     0.06451612903225806,
+     0.3125
+    ],
+    "pos3_n": [
+     19,
+     46
+    ],
+    "pos3_contradicted": [
+     0.0,
+     0.17857142857142858
+    ],
+    "pos3_supported": [
+     0.25925925925925924,
+     0.6428571428571429
+    ],
+    "pos4+_n": [
+     123,
+     220
+    ],
+    "pos4+_contradicted": [
+     0.011976047904191617,
+     0.075
+    ],
+    "pos4+_supported": [
+     0.5808823529411765,
+     0.774869109947644
+    ]
+   },
+   "by_relation": {
+    "birth_date": {
+     "contradicted": 6,
+     "supported": 86
+    },
+    "birth_place": {
+     "unknown": 33,
+     "supported": 4,
+     "contradicted": 4
+    },
+    "death_date": {
+     "supported": 39
+    },
+    "death_place": {
+     "unknown": 4
+    },
+    "is_a": {
+     "unknown": 82,
+     "supported": 8
+    },
+    "language": {
+     "unknown": 1
+    },
+    "located_in": {
+     "unknown": 1
+    },
+    "nationality": {
+     "supported": 8
+    }
+   },
+   "file": "/home/odin/kc_runs/C2.gen.txt"
+  },
+  "C3": {
+   "samples": 250,
+   "statements": 281,
+   "supported_n": 146,
+   "contradicted_n": 11,
+   "unknown_n": 124,
+   "with_statement": 79,
+   "point": {
+    "per_sample": 1.124,
+    "contradicted": 0.03914590747330961,
+    "supported": 0.5195729537366548,
+    "precision": 0.9299363057324841,
+    "invalid_dates": 0.0,
+    "supported_partly": 0.0,
+    "pos1_n": 37,
+    "pos1_contradicted": 0.0,
+    "pos1_supported": 0.1891891891891892,
+    "pos2_n": 39,
+    "pos2_contradicted": 0.02564102564102564,
+    "pos2_supported": 0.1794871794871795,
+    "pos3_n": 35,
+    "pos3_contradicted": 0.08571428571428572,
+    "pos3_supported": 0.42857142857142855,
+    "pos4+_n": 170,
+    "pos4+_contradicted": 0.041176470588235294,
+    "pos4+_supported": 0.6882352941176471
+   },
+   "ci": {
+    "per_sample": [
+     0.86,
+     1.408
+    ],
+    "contradicted": [
+     0.01606425702811245,
+     0.0668693009118541
+    ],
+    "supported": [
+     0.43243243243243246,
+     0.6
+    ],
+    "precision": [
+     0.8828828828828829,
+     0.9696969696969697
+    ],
+    "invalid_dates": [
+     0.0,
+     0.0
+    ],
+    "supported_partly": [
+     0.0,
+     0.0
+    ],
+    "pos1_n": [
+     25,
+     50
+    ],
+    "pos1_contradicted": [
+     0.0,
+     0.0
+    ],
+    "pos1_supported": [
+     0.045454545454545456,
+     0.34146341463414637
+    ],
+    "pos2_n": [
+     25,
+     55
+    ],
+    "pos2_contradicted": [
+     0.0,
+     0.09090909090909091
+    ],
+    "pos2_supported": [
+     0.06451612903225806,
+     0.3111111111111111
+    ],
+    "pos3_n": [
+     22,
+     49
+    ],
+    "pos3_contradicted": [
+     0.0,
+     0.20588235294117646
+    ],
+    "pos3_supported": [
+     0.23076923076923078,
+     0.5945945945945946
+    ],
+    "pos4+_n": [
+     123,
+     219
+    ],
+    "pos4+_contradicted": [
+     0.012048192771084338,
+     0.07537688442211055
+    ],
+    "pos4+_supported": [
+     0.5891891891891892,
+     0.7816091954022989
+    ]
+   },
+   "by_relation": {
+    "birth_date": {
+     "contradicted": 7,
+     "supported": 86
+    },
+    "birth_place": {
+     "unknown": 34,
+     "supported": 4,
+     "contradicted": 4
+    },
+    "death_date": {
+     "supported": 39,
+     "unknown": 2
+    },
+    "death_place": {
+     "unknown": 4
+    },
+    "is_a": {
+     "unknown": 83,
+     "supported": 9
+    },
+    "located_in": {
+     "unknown": 1
+    },
+    "nationality": {
+     "supported": 8
+    }
+   },
+   "file": "/home/odin/kc_runs/C3.gen.txt"
+  },
+  "B1": {
+   "samples": 250,
+   "statements": 287,
+   "supported_n": 145,
+   "contradicted_n": 11,
+   "unknown_n": 131,
+   "with_statement": 83,
+   "point": {
+    "per_sample": 1.148,
+    "contradicted": 0.03832752613240418,
+    "supported": 0.5052264808362369,
+    "precision": 0.9294871794871795,
+    "invalid_dates": 0.0,
+    "supported_partly": 0.0,
+    "pos1_n": 37,
+    "pos1_contradicted": 0.0,
+    "pos1_supported": 0.1891891891891892,
+    "pos2_n": 41,
+    "pos2_contradicted": 0.024390243902439025,
+    "pos2_supported": 0.17073170731707318,
+    "pos3_n": 34,
+    "pos3_contradicted": 0.058823529411764705,
+    "pos3_supported": 0.4411764705882353,
+    "pos4+_n": 175,
+    "pos4+_contradicted": 0.045714285714285714,
+    "pos4+_supported": 0.6628571428571428
+   },
+   "ci": {
+    "per_sample": [
+     0.884,
+     1.432
+    ],
+    "contradicted": [
+     0.01606425702811245,
+     0.06513409961685823
+    ],
+    "supported": [
+     0.4185185185185185,
+     0.5850340136054422
+    ],
+    "precision": [
+     0.8828828828828829,
+     0.9696969696969697
+    ],
+    "invalid_dates": [
+     0.0,
+     0.0
+    ],
+    "supported_partly": [
+     0.0,
+     0.0
+    ],
+    "pos1_n": [
+     25,
+     50
+    ],
+    "pos1_contradicted": [
+     0.0,
+     0.0
+    ],
+    "pos1_supported": [
+     0.045454545454545456,
+     0.3448275862068966
+    ],
+    "pos2_n": [
+     27,
+     57
+    ],
+    "pos2_contradicted": [
+     0.0,
+     0.08333333333333333
+    ],
+    "pos2_supported": [
+     0.06060606060606061,
+     0.30434782608695654
+    ],
+    "pos3_n": [
+     22,
+     48
+    ],
+    "pos3_contradicted": [
+     0.0,
+     0.16129032258064516
+    ],
+    "pos3_supported": [
+     0.23809523809523808,
+     0.6136363636363636
+    ],
+    "pos4+_n": [
+     128,
+     226
+    ],
+    "pos4+_contradicted": [
+     0.014925373134328358,
+     0.08139534883720931
+    ],
+    "pos4+_supported": [
+     0.5602409638554217,
+     0.75625
+    ]
+   },
+   "by_relation": {
+    "birth_date": {
+     "contradicted": 7,
+     "supported": 86,
+     "unknown": 4
+    },
+    "birth_place": {
+     "unknown": 33,
+     "supported": 4,
+     "contradicted": 4
+    },
+    "death_date": {
+     "supported": 39,
+     "unknown": 2
+    },
+    "death_place": {
+     "unknown": 5
+    },
+    "is_a": {
+     "unknown": 86,
+     "supported": 8
+    },
+    "located_in": {
+     "unknown": 1
+    },
+    "nationality": {
+     "supported": 8
+    }
+   },
+   "file": "/home/odin/kc_runs/B1.gen.txt"
+  },
+  "D1": {
+   "samples": 250,
+   "statements": 276,
+   "supported_n": 145,
+   "contradicted_n": 10,
+   "unknown_n": 121,
+   "with_statement": 75,
+   "point": {
+    "per_sample": 1.104,
+    "contradicted": 0.036231884057971016,
+    "supported": 0.5253623188405797,
+    "precision": 0.9354838709677419,
+    "invalid_dates": 0.0,
+    "supported_partly": 0.0,
+    "pos1_n": 37,
+    "pos1_contradicted": 0.0,
+    "pos1_supported": 0.1891891891891892,
+    "pos2_n": 40,
+    "pos2_contradicted": 0.025,
+    "pos2_supported": 0.175,
+    "pos3_n": 32,
+    "pos3_contradicted": 0.0625,
+    "pos3_supported": 0.46875,
+    "pos4+_n": 167,
+    "pos4+_contradicted": 0.041916167664670656,
+    "pos4+_supported": 0.6946107784431138
+   },
+   "ci": {
+    "per_sample": [
+     0.84,
+     1.388
+    ],
+    "contradicted": [
+     0.013559322033898305,
+     0.06451612903225806
+    ],
+    "supported": [
+     0.4351145038167939,
+     0.6084142394822006
+    ],
+    "precision": [
+     0.8879310344827587,
+     0.9743589743589743
+    ],
+    "invalid_dates": [
+     0.0,
+     0.0
+    ],
+    "supported_partly": [
+     0.0,
+     0.0
+    ],
+    "pos1_n": [
+     25,
+     51
+    ],
+    "pos1_contradicted": [
+     0.0,
+     0.0
+    ],
+    "pos1_supported": [
+     0.045454545454545456,
+     0.34146341463414637
+    ],
+    "pos2_n": [
+     26,
+     56
+    ],
+    "pos2_contradicted": [
+     0.0,
+     0.08571428571428572
+    ],
+    "pos2_supported": [
+     0.0625,
+     0.3023255813953488
+    ],
+    "pos3_n": [
+     20,
+     45
+    ],
+    "pos3_contradicted": [
+     0.0,
+     0.17857142857142858
+    ],
+    "pos3_supported": [
+     0.2608695652173913,
+     0.6428571428571429
+    ],
+    "pos4+_n": [
+     120,
+     218
+    ],
+    "pos4+_contradicted": [
+     0.011976047904191617,
+     0.07692307692307693
+    ],
+    "pos4+_supported": [
+     0.5960264900662252,
+     0.7888198757763976
+    ]
+   },
+   "by_relation": {
+    "birth_date": {
+     "contradicted": 6,
+     "supported": 86,
+     "unknown": 1
+    },
+    "birth_place": {
+     "unknown": 34,
+     "supported": 4,
+     "contradicted": 4
+    },
+    "death_date": {
+     "supported": 39
+    },
+    "death_place": {
+     "unknown": 4
+    },
+    "is_a": {
+     "unknown": 81,
+     "supported": 8
+    },
+    "located_in": {
+     "unknown": 1
+    },
+    "nationality": {
+     "supported": 8
+    }
+   },
+   "file": "/home/odin/kc_runs/D1.gen.txt"
+  },
+  "CD": {
+   "samples": 250,
+   "statements": 284,
+   "supported_n": 145,
+   "contradicted_n": 12,
+   "unknown_n": 127,
+   "with_statement": 79,
+   "point": {
+    "per_sample": 1.136,
+    "contradicted": 0.04225352112676056,
+    "supported": 0.5105633802816901,
+    "precision": 0.9235668789808917,
+    "invalid_dates": 0.0,
+    "supported_partly": 0.0,
+    "pos1_n": 35,
+    "pos1_contradicted": 0.0,
+    "pos1_supported": 0.2,
+    "pos2_n": 39,
+    "pos2_contradicted": 0.02564102564102564,
+    "pos2_supported": 0.1794871794871795,
+    "pos3_n": 33,
+    "pos3_contradicted": 0.06060606060606061,
+    "pos3_supported": 0.45454545454545453,
+    "pos4+_n": 177,
+    "pos4+_contradicted": 0.05084745762711865,
+    "pos4+_supported": 0.655367231638418
+   },
+   "ci": {
+    "per_sample": [
+     0.872,
+     1.42
+    ],
+    "contradicted": [
+     0.016891891891891893,
+     0.07046979865771812
+    ],
+    "supported": [
+     0.42201834862385323,
+     0.5922619047619048
+    ],
+    "precision": [
+     0.875,
+     0.9666666666666667
+    ],
+    "invalid_dates": [
+     0.0,
+     0.0
+    ],
+    "supported_partly": [
+     0.0,
+     0.0
+    ],
+    "pos1_n": [
+     23,
+     48
+    ],
+    "pos1_contradicted": [
+     0.0,
+     0.0
+    ],
+    "pos1_supported": [
+     0.04878048780487805,
+     0.358974358974359
+    ],
+    "pos2_n": [
+     25,
+     55
+    ],
+    "pos2_contradicted": [
+     0.0,
+     0.09090909090909091
+    ],
+    "pos2_supported": [
+     0.06451612903225806,
+     0.3111111111111111
+    ],
+    "pos3_n": [
+     21,
+     47
+    ],
+    "pos3_contradicted": [
+     0.0,
+     0.1724137931034483
+    ],
+    "pos3_supported": [
+     0.25,
+     0.6296296296296297
+    ],
+    "pos4+_n": [
+     128,
+     228
+    ],
+    "pos4+_contradicted": [
+     0.017964071856287425,
+     0.09090909090909091
+    ],
+    "pos4+_supported": [
+     0.55625,
+     0.7483870967741936
+    ]
+   },
+   "by_relation": {
+    "birth_date": {
+     "contradicted": 6,
+     "supported": 86,
+     "unknown": 1
+    },
+    "birth_place": {
+     "unknown": 37,
+     "supported": 4,
+     "contradicted": 6
+    },
+    "death_date": {
+     "supported": 39,
+     "unknown": 1
+    },
+    "death_place": {
+     "unknown": 5
+    },
+    "is_a": {
+     "unknown": 82,
+     "supported": 8
+    },
+    "located_in": {
+     "unknown": 1
+    },
+    "nationality": {
+     "supported": 8
+    }
+   },
+   "file": "/home/odin/kc_runs/CD.gen.txt"
+  }
+ }
+}

@@ -2597,3 +2597,16 @@ Old binary main 9cbd277; old and new were started together.
   - birth dates 84 right and 5 wrong (L1: 66 and 58), death dates 41 and 1 (L1: 7 and 58).
 - **The default writer now states what CyphaLM's store holds.** G4's fact-precision bar of 0.9 is met on dev and test.
 - **Left:** invented birth places (12 right, 7 wrong on test) and K5's free sentences after the plan, which no flag touches.
+
+### 13.65 G1, K5's word cache and dynamic counts on today's writer (2026-11-12; [K5_CACHE2](reports/K5_CACHE2.md); not adopted)
+
+- **Registered first** (8574998). Existing flags only (`--k5-cache`, `--k5-cache2`, `--k5-cache-decay`, `--k5-dyn`), judged by readers for the first time on the fluent 337 MB writer. The default is now HLT (§13.63).
+- **Screen:** the link to the sentence before (§13.59) is 0.200 for HLT, human 0.508.
+  - Cache 0.05 and cache plus bigram cache raise it to 0.29 only by putting prompt words into broken clauses ("Copper is boy"), the §13.34 failure. SCRIBE v2 rewards them most (+0.07, +0.10), and they fail the reading.
+  - The weight where sentences survive, 0.02 (C1), moves the link only to 0.214.
+  - Fact precision stays at 0.91–0.94.
+- **Blind pairwise raters against HLT** (packets 43e3086):
+  - 460 characters: C1 0.500 [0.380, 0.620], CD (C1 + `--k5-dyn 30`) 0.520 [0.400, 0.640];
+  - 1,500 characters: C1 0.500 [0.340, 0.660], CD 0.560 [0.400, 0.720].
+  - **No difference. HLT stays.**
+- **What it says:** pushing K5's own words back into its distribution cannot make a thread. The cache either changes nothing or breaks the sentence. The content has to come from somewhere (G2's retrieval, a plan, more facts).
