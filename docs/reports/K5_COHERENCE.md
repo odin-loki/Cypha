@@ -95,3 +95,79 @@ Drift shows most in long text (§13.42 Q3). For G16 and each candidate: `cyphalm
 ## Results
 
 (Added after the runs, under this line.)
+
+### The screen (2026-11-12; dev, seed 0, 250 prompts; files in `bench/k5_coherence/runs/`)
+
+**Checks:** main's build (5abf1afc) gives a GEN file equal to `bench/tune_write/runs/G16.gen.txt` under `cmp`, MODEL line aside. My build with no new flag (G16n) equals it too. **Hit.** The selftest passes.
+
+| Arm | SCRIBE v2 [95%] | v3.1 | copy32 | verbatim13 | wall | peak RAM | samples unlike G16 | screen |
+|---|---|---|---|---|---|---|---|---|
+| G16 | 0.630 [0.597, 0.659] | 0.547 | 0.241 | 0 | 5:02 | 11.3 GB | – | baseline |
+| R1 wr=1 | 0.691 [0.659, 0.721] | 0.570 | 0.248 | 0 | 5:12 | 11.3 GB | 201 | pass, not chosen (R2 is the same family) |
+| R2 wr=2 | 0.693 [0.663, 0.722] | 0.573 | 0.255 | 0 | 5:18 | 11.3 GB | 209 | **pass, candidate** |
+| E1 grid cont | 0.609 [0.575, 0.638] | 0.544 | 0.237 | 0 | 5:19 | 11.3 GB | 63 | pass, not chosen |
+| E2 grid full | 0.602 [0.568, 0.632] | 0.542 | 0.225 | 0 | 5:20 | 11.3 GB | 168 | fail (reads worse: fragments) |
+| L1 LDA gate term | 0.610 [0.577, 0.645] | 0.546 | 0.242 | 0 | 5:24 | 11.4 GB | 166 | **pass, candidate** |
+| M1 MBR | 0.643 [0.605, 0.679] | 0.570 | 0.252 | 0 | 4:56 | 11.3 GB | 171 | fail (reads worse) |
+| D1 discourse g×2 | 0.626 [0.592, 0.657] | 0.543 | 0.241 | 0 | 4:53 | 11.3 GB | 26 | pass, not chosen (26 samples change) |
+| C = R2 + D1 | 0.692 [0.662, 0.722] | 0.573 | 0.252 | 0 | 5:26 | 11.3 GB | 208 (26 unlike R2) | pass, not chosen (it is R2 but for 26 samples) |
+
+Two arms at once on a shared PC. M1's SCRIBE row holds 238 samples (12 too short for SCRIBE: consensus picks short drafts).
+
+**`coh_measures.py`** (460 characters, 250 prompts):
+
+| Arm | 1st sentence on the prompt | 2nd | 3rd | 4th+ | shares a word with the sentence before | 3rd+ use of a word | top word's share |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| G16 | 0.376 | 0.316 | 0.253 | 0.086 | 0.150 | 0.015 | 0.057 |
+| R1 | 0.376 | 0.292 | 0.228 | 0.084 | 0.177 | 0.015 | 0.059 |
+| R2 | 0.376 | 0.276 | 0.228 | 0.078 | 0.183 | 0.016 | 0.059 |
+| C | 0.376 | 0.276 | 0.224 | 0.075 | 0.180 | 0.016 | 0.059 |
+| E1 | 0.352 | 0.308 | 0.244 | 0.079 | 0.139 | 0.015 | 0.055 |
+| E2 | 0.364 | 0.284 | 0.248 | 0.067 | 0.121 | 0.016 | 0.058 |
+| L1 | 0.360 | 0.276 | 0.241 | 0.090 | 0.150 | 0.015 | 0.056 |
+| M1 | 0.392 | 0.342 | 0.259 | 0.113 | 0.233 | 0.015 | 0.054 |
+| D1 | 0.376 | 0.316 | 0.253 | 0.089 | 0.153 | 0.016 | 0.058 |
+| human | 0.632 | 0.488 | 0.510 | 0.310 | 0.460 | 0.032 | 0.076 |
+
+**Reading** (dev 0, 1, 2, 3, 4, 5, 7, 9, 10, 11, 12, 13, each arm beside G16):
+- **The drift starts in the first sentence, not the third.** In half of the 12 prompts G16's first sentence is already off the subject ("Black powder arms …" → "Various Jews in Eastern European democracies"). Every arm keeps the same first sentence: the first gate has only the prompt to go on. So no chooser here can fix the start.
+- **R1 and R2** chain neighbouring sentences a little more often. Dev 4: "In 2005, the first of a series of battles … The Russian Revolution of 1917 … During World War I, the Austro-Hungarian and Russian." Dev 12 (R2): "He had two brothers … he grew up in a household … his younger brother." That is a thread, but a new one, not the prompt's. They do not repeat keywords (3rd+ use 0.015–0.016, as G16). About as G16 to read, sometimes a little more connected; R2 is the same as R1 with slightly more links. **SCRIBE v2 rises +0.06**, more than reading suggests. The stuffing measures do not move, but treat the rise with care (§13.34).
+- **E1** changes 63 samples and reads as G16. **E2** writes more fragments ("When his mother. After some weeks later."): worse.
+- **L1** reads about as G16, sometimes a little worse (dev 4). It does not keep closer to the prompt.
+- **M1** reads worse: more broken clauses and shorter drafts. Its "shares a word with the sentence before" (0.233) comes from short fragments sharing common words.
+- **D1** and **C** change only the planned prompts' free sentences, mostly past the 460-character cut.
+- **On the measures, only R1, R2 and C move the link to the sentence before up (0.150 → 0.18). No arm moves the prompt share up after sentence 1;** R and L lower it a little at sentences 2–3.
+
+**Candidates for the raters:** R2 (previous sentence) and L1 (LDA topic term). By the registered order (reading, then the link to the sentence before), C and D1 rank above L1. They are not sent because they change too few samples to rate (26 each; TUNE_WRITE's DH4 precedent). E1 changes 63 and has the lowest link share. So only two candidates go out, not three.
+- **The combination**, as registered, would join R with E or L. The `wr` term is not read by the z-scored gate that E and L use, so R + E and R + L would drop `wr`. The only combination that works is R + D (C), which ran and passed, but is R2 for all but 26 samples.
+
+### The long reading (1,800 bytes, cut 1,500; 25 prompts of `bench/blind/q3_long/prompts.json`)
+
+`--bytes 1800 --k5-max-words 600`, the same seeds. G16_long 6:28 and 11.3 GB; R2_long 6:57; L1_long 6:36, 11.4 GB.
+
+| Arm | 1st on the prompt | 2nd | 3rd | 4th+ | link to the sentence before | 3rd+ use | top word |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| G16 | 0.360 | 0.400 | 0.280 | 0.090 | 0.095 | 0.017 | 0.027 |
+| R2 | 0.360 | 0.320 | 0.200 | 0.072 | 0.139 | 0.016 | 0.025 |
+| L1 | 0.360 | 0.320 | 0.200 | 0.095 | 0.115 | 0.019 | 0.028 |
+| human | 0.560 | 0.400 | 0.400 | 0.364 | 0.482 | 0.037 | 0.070 |
+
+By reading (dev 4 and 12 at 1,500 characters), all three wander through unrelated subjects by the fourth sentence. R2 keeps short local threads (battles → revolutions → the war; a man's brothers → his household → his funeral) a little more often.
+
+### Packets (built before any rating)
+
+- `bench/blind/coh_pair/`: G16 against R2 and L1, the 50 prompts of `bench/blind/llm_rating/prompts.json`, seed 20261115. R2 differs from G16 on 45 of them, L1 on 39.
+- `bench/blind/coh_long/`: G16_long against R2_long and L1_long, the 25 long prompts, seed 20261116, `--cut 1500`. R2 differs on 25, L1 on 18.
+- `KEY.json` of each is kept outside the repository; `key.b64` and `RATER_PROMPT.md` are committed.
+
+### Predictions so far
+
+- Both checks equal G16: **hit**.
+- R1 link to the sentence before 0.22–0.30: **miss** (0.177). Sentences 2–3 on the prompt up 0.02–0.05: **miss** (down 0.02). Stuffing up at most 0.01: **hit** (0.000). SCRIBE v2 within ±0.02: **miss** (+0.061). copy32 within ±0.02: **hit** (+0.007).
+- R2 link 0.25–0.35: **miss** (0.183); stuffing up 0.01–0.02: **miss** (+0.001); may fail the reading for repetition: it did not.
+- E1, E2 link within ±0.03: **hit** (−0.011, −0.029). SCRIBE v2 within ±0.02: **miss** (−0.021, −0.028). E2 more fragments: **hit**. Neither passes the reading: **hit** for E2, **miss** for E1 (it reads as G16, so it passes).
+- L1 on the prompt up 0.01–0.03: **miss** (down); SCRIBE v2 +0.01 to +0.03: **miss** (−0.020); reads about as G16: **hit**.
+- M1 copy32 up 0.01–0.03: **hit** (+0.011); reads about as G16: **miss** (worse).
+- D1 fewer than 80 samples, within ±0.01: **hit** (26; SCRIBE v2 −0.004).
+- Peak RAM 11.3 ± 0.5 GB: **hit**; E and L +0.4 GB: **miss** (+0.0 to +0.04 GB).
+- The raters' predictions (R1/R2 about 0.60 on 460 characters, 0.60–0.65 long) wait for the raters.
