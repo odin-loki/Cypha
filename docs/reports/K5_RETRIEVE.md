@@ -118,3 +118,111 @@ For HLT and each candidate: the same command with `--bytes 1800 --k5-max-words 6
 ## Results
 
 (Added after the runs, under this line.)
+
+### Checks (2026-11-12)
+
+- main's build (e897970d) and my build with the flag off: both equal `bench/honest_dates2/runs/HLT.gen.txt` under `cmp` (MODEL line aside). **Hit.** The selftest passes.
+- HLT_long (my build, flag off, `--bytes 1800 --k5-max-words 600`): SCRIBE v2 0.490 [0.465, 0.513], copy32 0.235, 0 verbatim13, 6:40, 11.3 GB.
+
+### The screen (dev, seed 0, 250 prompts; files in `bench/k5_retrieve/runs/`, measures in `bench/k5_retrieve/screen/`)
+
+Two arms at a time on a shared PC.
+
+| Arm | SCRIBE v2 [95%] | v3.1 | copy32 | verbatim13 | fact precision [95%] | wall | peak RAM | screen |
+|---|---|---|---|---|---|---|---|---|
+| HLT | 0.595 [0.563, 0.630] | 0.539 | 0.232 | 0 | 0.935 [0.888, 0.974] | 8:48 | 11.3 GB | baseline |
+| K1 (k 1, rel 0.5) | 0.704 [0.673, 0.735] | 0.665 | 0.275 | 0 | 0.918 [0.867, 0.962] | 5:13 | 11.3 GB | **pass, candidate** |
+| K4 (k 4, rel 0.5) | 0.714 [0.682, 0.744] | 0.683 | 0.294 | 0 | 0.929 [0.881, 0.970] | 5:22 | 11.4 GB | **pass, candidate** |
+| K16 (k 16, rel 0.5) | 0.752 [0.724, 0.779] | 0.696 | **0.318** | 0 | 0.924 [0.873, 0.964] | 5:14 | 11.4 GB | fail (copy32) |
+| K4L (k 4, rel 0.2) | 0.627 [0.596, 0.659] | 0.596 | 0.232 | 0 | 0.935 [0.888, 0.974] | 7:38 | 11.4 GB | pass, not chosen |
+| K4H (k 4, rel 1.5) | 0.854 [0.830, 0.877] | 0.801 | **0.501** | 0 | 0.936 [0.889, 0.974] | 5:49 | 11.4 GB | fail (copy32) |
+
+Each arm differs from HLT in 214 of 250 samples (44 of the 50 rated). The other 36 are planned prompts whose text is all fact sentences, which the overlay does not touch. SCRIBE dropped 1–2 samples per arm in cleaning (248–250 kept).
+
+**The leak check** (`leak_check.py check`): every prompt's retrieval was logged and joined to its GEN-A page.
+
+| Arm | retrieved docs | distinct | same page title as the prompt | in GEN-A's source bytes | untitled |
+|---|---|---|---|---|---|
+| K1 | 250 | 249 | **0** | 0 | 0 |
+| K4, K4L, K4H | 1,000 | 983 | **0** | 0 | 0 |
+| K16 | 4,000 | 3,824 | **0** | 0 | 0 |
+
+**Copy against each prompt's own documents** (`leak_check.py copy`): bytes in 32-byte spans of them K1 0.084, K4 0.116, K16 0.153, K4L 0.024, K4H 0.392. The longest run of words shared with them is 12 in every arm (11 for K4L): the cap holds; no 13-word run.
+
+**The prompt's words and the link** (`coh_measures.py`, 460 characters):
+
+| Arm | on the prompt s1 | s2 | s3 | s4+ | link to the sentence before | stuff3 | top word |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| HLT | 0.372 | 0.280 | 0.229 | 0.115 | 0.146 | 0.015 | 0.056 |
+| K1 | 0.472 | 0.422 | 0.348 | 0.202 | 0.179 | 0.021 | 0.067 |
+| K4 | 0.448 | 0.442 | 0.382 | 0.225 | 0.194 | 0.020 | 0.065 |
+| K16 | 0.484 | 0.412 | 0.390 | 0.219 | 0.179 | 0.020 | 0.064 |
+| K4L | 0.436 | 0.380 | 0.347 | 0.159 | 0.158 | 0.017 | 0.059 |
+| K4H | 0.572 | 0.562 | 0.423 | 0.314 | 0.254 | 0.029 | 0.074 |
+| human | 0.632 | 0.488 | 0.510 | 0.310 | 0.460 | 0.032 | 0.076 |
+
+**J2's measures** (`hook_screen.py`, 460 characters; each arm minus HLT, 95% paired bootstrap):
+
+| Arm | link to the sentence before (`on_prev`) | stuff3 | mean surprise (bits a word) |
+|---|---|---|---|
+| HLT (level) | 0.200 | 0.0154 | 7.399 |
+| K1 | +0.031 [+0.008, +0.052] | +0.0060 [+0.0037, +0.0083] | +0.408 [+0.315, +0.497] |
+| K4 | +0.052 [+0.028, +0.074] | +0.0050 [+0.0029, +0.0075] | +0.400 [+0.309, +0.494] |
+| K16 | +0.040 [+0.015, +0.066] | +0.0046 [+0.0026, +0.0069] | +0.506 [+0.411, +0.599] |
+| K4L | +0.013 [−0.009, +0.034] | +0.0019 [+0.0006, +0.0035] | +0.211 [+0.130, +0.291] |
+| K4H | +0.123 [+0.093, +0.156] | +0.0134 [+0.0095, +0.0178] | +0.960 [+0.845, +1.076] |
+
+(`hook_screen.py` counts a sentence's link over its own sentence split, so its levels differ from `coh_measures.py`'s.) Orphan pronouns fall in every arm (K4 −0.049 [−0.084, −0.015]).
+
+**Reading** (dev 0, 1, 2, 3, 4, 5, 7, 9, 10, 11, 12, 13; HLT, K4L, K1 and K4 side by side):
+- **The free sentences now come from the prompt's field.** Dev 1 (black powder): K1 "Prior to burn … one part of fine cotton wool to be immersed … The sulfuric acid is added", K4 "The American gunpowder weapons"; HLT "Various Jews in Eastern European democracies". Dev 2 (grappling): K1 "Ground and pound is sometimes supplemented … mixed martial arts … maintain a grappling hook", K4 "a wrestler must be buried". Dev 11 (Interlingua): K1 "a type of constructed language whose grammar and morphology". Dev 12 (Dune): K1 and K4 write about Alia, Leto Atreides II and Children of Dune; HLT about "the South Korean … King of Scotland". Dev 10 (HAL): K1 "the Tycho monolith", "the Space Shuttle Columbia".
+- **The grammar is no better.** The sentences still break after a few words, as HLT's do ("The coastal plain and the human speech organs of the gun barrel."). The subject words arrive in a patchwork of fragments, more so in K4 (dev 4: "Census Bureau … 2001 Census … densely populated country").
+- **Keyword stuffing:** mild. A name repeats in a few samples (K4 dev 12: "Alia" three times in 460 characters), but no arm repeats the prompt's words line after line. stuff3 rises 0.005; the top word's share 0.056 → 0.065. I count this as no more repetition than HLT by reading, just.
+- **Prompts with plans** (dev 0, 3, 5, 7) keep their fact sentences word for word; only the free sentences after them change, toward the subject (dev 7: K1 "constituent colleges of the University. A large number of student organizations").
+- **K4L** changes less: its free sentences drift as HLT's do on most of the 12.
+- By my reading, **K1 and K4 read at least as well as HLT and keep nearer the subject**; K4L reads as HLT. K16 and K4H failed copy32, so I did not rule on them by reading (a glance at K4H shows the documents' phrases strung together).
+
+**Candidates** (by the registered order: reading, then the link, then SCRIBE v2): **K4** (link +0.052) and **K1** (+0.031). K4L passes but is not sent (at most 2).
+
+### Predictions so far
+
+- P1 flag off equals HLT: **hit**.
+- P2 leak check 0 and 0 for every arm: **hit**.
+- P3 `on_prev` 0.18–0.24 for K4 and K16: **hit** (0.194, 0.179); K4H highest 0.22–0.30: **hit** (0.254); K1 and K4L 0.16–0.20: **hit** for K1 (0.179), **miss** for K4L (0.158, just under).
+- P4 on the prompt at s2–s4+ up 0.03–0.10 for K4 and K16: **miss** in the good direction (K4 +0.162, +0.153, +0.110; K16 +0.132, +0.161, +0.104); s1 rises less: **miss** (s1 +0.08 and +0.11).
+- P5 stuff3 up at most 0.005 at rel 0.5: **hit** for K4 and K16 (+0.005), **miss** for K1 (+0.006); K4H +0.005–0.015: **hit** (+0.013).
+- P6 copy32 up 0.01–0.05 at rel 0.5: **hit** (K1 +0.043, K4 +0.062 is a **miss**, K16 +0.086 **miss**); K4H +0.03–0.08: **miss** (+0.269); verbatim13 0: **hit**; bytes in the prompt's documents 0.05–0.15 at rel 0.5: **hit** for K1 and K4, **miss** for K16 (0.153).
+- P7 SCRIBE v2 within −0.01 to +0.04: **miss** (+0.11 to +0.26; SCRIBE rewards the topic words, §13.34).
+- P8 fact precision within ±0.03: **hit** (−0.017 to +0.001).
+- P9 mean surprise up 0.1–0.4 bits: **hit** for K4L, K4 (+0.400), **miss** for K1 (+0.408), K16 and K4H.
+- P10 K4 or K16 passes, K4H fails, at least one candidate: **hit** (K4H fails on copy32, not by reading).
+- P11 raters: wait for the raters.
+- P12 wall 8–12 minutes: **miss** (5–8); peak RAM 11.3–11.6 GB: **hit**.
+
+### The long reading (1,800 bytes, cut 1,500; 25 prompts of `bench/blind/q3_long/prompts.json`)
+
+`--bytes 1800 --k5-max-words 600`, the same seeds; 250 dev prompts each.
+
+| Arm | SCRIBE v2 [95%] | copy32 | verbatim13 | bytes in the prompt's documents' spans | wall | peak RAM |
+|---|---|---|---|---|---|---|
+| HLT_long | 0.490 [0.465, 0.513] | 0.235 | 0 | – | 6:40 | 11.3 GB |
+| K1_long | 0.575 [0.551, 0.601] | 0.270 | 0 | 0.075 (longest run 12 words) | 8:38 | 11.3 GB |
+| K4_long | 0.624 [0.598, 0.652] | 0.295 | 0 | 0.117 (longest run 12 words) | 7:00 | 11.4 GB |
+
+Leak check on the long runs: 0 same-title documents and 0 in GEN-A's source bytes for both. K1_long and K4_long differ from HLT_long in all 25 rated long prompts.
+
+`coh_measures.py` at 1,500 characters on the 25 prompts:
+
+| Arm | on the prompt s1 | s2 | s3 | s4+ | link to the sentence before | stuff3 | top word |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| HLT_long | 0.360 | 0.320 | 0.160 | 0.114 | 0.106 | 0.017 | 0.028 |
+| K1_long | 0.440 | 0.440 | 0.320 | 0.189 | 0.111 | 0.031 | 0.034 |
+| K4_long | 0.360 | 0.480 | 0.200 | 0.212 | 0.106 | 0.026 | 0.030 |
+
+In long text the prompt's words come back later in the paragraph (s4+ 0.114 → 0.19–0.21), but the link to the sentence before does not move (0.106 → 0.106–0.111), and stuffing rises (0.017 → 0.026–0.031) on these 25 prompts.
+
+### Packets (built before any rating)
+
+- `bench/blind/ret_pair/`: HLT against K4 and K1, the 50 prompts of `bench/blind/llm_rating/prompts.json`, seed 20261124. Each differs from HLT on 44 of them.
+- `bench/blind/ret_long/`: HLT_long against K4_long and K1_long, the 25 long prompts, seed 20261125, `--cut 1500`. Each differs on all 25.
+- `KEY.json` of each is kept outside the repository; `key.b64` and `RATER_PROMPT.md` are committed. The lead runs the raters.
