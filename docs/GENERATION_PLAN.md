@@ -2670,3 +2670,26 @@ Old binary main 9cbd277; old and new were started together.
 - **Candidate RG.** Packet `bench/blind/ret2_long` (25 long prompts, seed 20261128) is committed; no short packet (the same text). The raters have not run.
 
 **§13.68 result** (2026-11-12): blind pairwise raters against K1 on the long reading (packet e31b425, four fresh raters, 25 prompts): **RG 0.620 [0.440, 0.780]**, rater pairs 0.54 and 0.69. The interval includes 0.5, so by the rule **RG is not adopted; K1 stays the default.** It leans better, and could be retried on more long prompts. The flags (`fill=1`, `grow=B,k2=N[,qtext=1]` on `--k5-retrieve`) are merged, off by default, byte-identical when off.
+
+### 13.69 An absolute reading: 1–10 ratings of today's writer beside human text (registered 2026-11-12, before the raters run)
+
+**Odin:** "Do we know the general textgen score? I want to focus on the core textgen capabilities." Then: "Rating round."
+
+**Why.** Pairwise rounds say only which of two reads better. SCRIBE is absolute but can be fooled by topic words (§13.57). The last 1–10 round (§13.36, 5 November) put K5 at about 2 and human text at 8.4–9.0.
+
+**Round.** `scripts/blind_rate.py make --mode rate --human`, the 50 prompts of `bench/blind/llm_rating/prompts.json`, cut 460 characters, seed 20261129. Four arms per prompt, shown in random order with no labels:
+- **K1**, today's default (§13.66), dev GEN `bench/k5_retrieve/runs/K1.gen.txt`;
+- **Q3t**, the default this morning (§13.42), `bench/k5_planner/Q3t_s0.gen.txt`;
+- **K5**, plain K5 on 7 MB (§13.19–13.24), `bench/k5_planner/K5_base_s0.gen.txt`;
+- **human**, the real continuation.
+
+Four fresh blind raters. Raters 1–2 rate the first 25 prompts, raters 3–4 the second 25. Packets and `key.b64` are committed before the raters run.
+
+**Reported:** each arm's mean score with a 95% bootstrap interval over prompts; the share rated 6 or more; each arm minus human and minus K5, paired by prompt. This is a measure, not a gate. Nothing changes a default.
+
+**Predictions:**
+- human 8.0–9.0;
+- K5 1.5–2.5;
+- Q3t 2.0–3.0;
+- K1 3.0–4.5, the gap to human still at least 4 points;
+- K1 rated 6 or more on at most 15% of prompts.
