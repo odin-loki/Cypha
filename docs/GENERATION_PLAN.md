@@ -2453,3 +2453,12 @@ Old binary main 9cbd277; old and new were started together.
 - **By the rule, the 1 TB file is recommended for `context8k`** (CURRENT.md). The default does not change; that is Odin's call.
 - Prediction 1.47–1.50: **hit**.
 - The gain is the same size as under the old stack (−0.0065 on 4 November). The online experts did not absorb it.
+
+### 13.56 The 1 TB trie is `context8k`'s default where the file is (2026-11-12; Odin: "You pick.")
+
+- **What:** `context8k` serves `/mnt/d/cypha_llm/corpus/trie/trie_1tb.pk` (or `CYPHA_CTX_MODEL`) when the file exists, unless `--model`, `--train N` or `--no-1tb` is given. Without the file (CI, other machines), it trains its own trie as before, with a message.
+- **Why `--train N` opts out:** a run that names its training size wants its own trie. So every small-setup check (`--train 1048576 --sample 1179648`) is unchanged.
+- **Answers:** `qa` is untouched (the change is for `context8k` only).
+- **Checks** (registered before they run):
+  - the small setup equals the binary before the change under `cmp`;
+  - the full default run equals §13.55's `--model` run under `cmp` (`context8k_bpc` 1.4900).

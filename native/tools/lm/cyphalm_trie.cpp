@@ -436,6 +436,7 @@ struct Args {
     // mixers, with the same output; N is the full mix's ring of row blocks. --no-pipeline runs every expert in place,
     // in the old order (the full mix keeps its two blocks).
     int pipeline = 4;
+    bool no_1tb = false, train_set = false;  // GENERATION_PLAN §13.56: context8k serves the 1 TB trie by default; --no-1tb, or --train N, trains its own
     bool no_k5_plan = false;  // §13.39: the planner is on by default under --k5; this turns it off
     std::vector<std::pair<std::string, std::string>> k5_opts;  // docs/reports/K5_UPGRADES.md: every other --k5-... flag
 };
@@ -454,7 +455,8 @@ Args parse(int argc, char** argv, int from) {
         if (s == "--wiki") wiki_flag = next();
         else if (s == "--dolly") dolly_flag = next();
         else if (s == "--prompt") a.prompt = next();
-        else if (s == "--train") a.cfg.train = std::strtoull(next(), nullptr, 10);
+        else if (s == "--train") a.cfg.train = std::strtoull(next(), nullptr, 10), a.train_set = true;
+        else if (s == "--no-1tb") a.no_1tb = true;  // §13.56: context8k trains its own 8 MiB trie, as before
         else if (s == "--sample") a.cfg.sample = std::strtoull(next(), nullptr, 10);
         else if (s == "--prompts") a.prompts = std::atoi(next());
         else if (s == "--bytes") a.bytes = std::atoi(next());
@@ -8376,6 +8378,15 @@ int main(int argc, char** argv) {
     if (a.bkn_answers != "on" && a.bkn_answers != "off") {  // BKN3
         std::cerr << "--bkn-answers on|off (Kneser-Ney inside answers: on, BKN2; off, the experts' gate)\n";
         return 2;
+    }
+    // GENERATION_PLAN §13.56 (from §13.55: 1.4900 against 1.4962): context8k serves the 1 TB trie when the file is
+    // there (CYPHA_CTX_MODEL, else /mnt/d/cypha_llm/corpus/trie/trie_1tb.pk), unless --model, --train N or --no-1tb
+    // was given; without the file it trains its own trie as before.
+    if (cmd == "context8k" && a.model.empty() && !a.no_1tb && !a.train_set) {
+        const char* em = std::getenv("CYPHA_CTX_MODEL");
+        const std::string dm = em ? em : "/mnt/d/cypha_llm/corpus/trie/trie_1tb.pk";
+        if (!dm.empty() && dm != "off" && std::ifstream(dm, std::ios::binary)) a.model = dm;
+        else std::cerr << "context8k: 1 TB trie not found (" << dm << "; set CYPHA_CTX_MODEL); training its own trie\n";
     }
     if ((!a.model.empty() || !a.save.empty()) && cmd != "chat" && cmd != "sample" && cmd != "qa" &&
         !(cmd == "context8k" && a.save.empty())) {
