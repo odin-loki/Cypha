@@ -92,3 +92,64 @@ Dev, seed 0, 250 prompts, the baseline's command plus:
 ## Results
 
 (Added after the runs, under this line.)
+
+### Checks (2026-11-12)
+
+- main's build (4629f68c) and my build with `wg` and `wf` off: both equal `bench/k5_retrieve/runs/K1.gen.txt` under `cmp` (MODEL line aside). **Hit.** 10:03 and 9:53 wall, 11.3 GB. The selftest passes.
+
+### The screen (dev, seed 0, 250 prompts; files in `bench/k5_decode/runs/`, measures in `bench/k5_decode/screen/`)
+
+One arm at a time, 6 threads, on a shared PC.
+
+| Arm | verbatim13 | copy32 | fact precision [95%] | mean surprise, minus K1 [95%] | SCRIBE v2 [95%] | v3.1 | whole sentences (12 prompts) | samples unlike K1 (of 50 rated) | wall | screen |
+|---|---|---|---|---|---|---|---|---|---|---|
+| K1 | 0 | 0.275 | 0.918 [0.867, 0.962] | 7.806 bits (level) | 0.704 [0.673, 0.735] | 0.665 | 24 of 60 (0.40) | – | 9:53 | baseline |
+| T9 | 0 | 0.394 | 0.918 [0.868, 0.961] | −0.190 [−0.281, −0.105] | 0.759 [0.730, 0.788] | 0.672 | 20 of 62 (0.32) | 214 (44) | 12:48 | fail (reading) |
+| **T8** | 0 | 0.487 | 0.924 [0.876, 0.966] | −0.227 [−0.320, −0.135] | 0.811 [0.785, 0.838] | 0.691 | **31 of 68 (0.46)** | 214 (44) | 12:42 | **pass, candidate** |
+| **F1** | 0 | 0.339 | 0.924 [0.874, 0.966] | −0.249 [−0.321, −0.179] | 0.719 [0.690, 0.747] | 0.650 | **29 of 65 (0.45)** | 198 (41) | 8:46 | **pass, candidate** |
+| F2 | 0 | 0.377 | 0.929 [0.881, 0.970] | −0.393 [−0.478, −0.313] | 0.707 [0.675, 0.739] | 0.631 | 29 of 67 (0.43) | 209 (43) | 9:31 | fail (leaves the subject) |
+| GR | 0 | 0.275 | 0.906 [0.853, 0.953] | −0.467 [−0.554, −0.382] | 0.705 [0.673, 0.735] | 0.622 | 32 of 74 (0.43) | 203 (41) | 10:47 | fail (leaves the subject) |
+| TF (T8 + F1) | **1 of 250** | 0.530 | 0.935 [0.888, 0.974] | −0.244 [−0.334, −0.147] | 0.829 [0.804, 0.856] | 0.687 | not counted | 215 (45) | 14:42 | **fail (verbatim13)** |
+
+Peak RAM 11.3 GB in every arm. The 36 samples that no arm changes are planned prompts whose text is all fact sentences.
+
+**Staying on the subject** (`coh_measures.py`, 460 characters; share of sentences with a prompt word, and the link to the sentence before):
+
+| Arm | s1 | s2 | s3 | s4+ | link | stuff3 |
+|---|---:|---:|---:|---:|---:|---:|
+| K1 | 0.472 | 0.422 | 0.348 | 0.202 | 0.179 | 0.021 |
+| T9 | 0.556 | 0.436 | 0.332 | 0.210 | 0.219 | 0.025 |
+| T8 | 0.516 | 0.462 | 0.391 | 0.239 | 0.247 | 0.030 |
+| F1 | 0.432 | 0.408 | 0.324 | 0.199 | 0.177 | 0.020 |
+| F2 | 0.412 | 0.420 | 0.294 | 0.167 | 0.162 | 0.020 |
+| GR | 0.416 | 0.386 | 0.331 | 0.184 | 0.156 | 0.020 |
+| TF | 0.544 | 0.420 | 0.434 | 0.228 | 0.238 | 0.028 |
+
+J2's link (`hook_screen.py`, minus K1): T8 +0.078 [+0.048, +0.108], T9 +0.068, F1 +0.006 [−0.014, +0.026], F2 −0.005, GR −0.018 [−0.037, +0.001].
+
+**The reading** (dev 0, 1, 2, 3, 4, 5, 7, 9, 10, 11, 12, 13; first 460 characters; the cut last sentence not counted). A sentence counts as whole if it is a grammatical English clause with a subject and a finite verb, whatever it means. "Brian Henderson was one of the most popular and successful New Zealand and attack ships in the world" counts; "The oxides of nitrogen and hydrogen." and "They are usually use more restrictive rules" do not. Dev 0, 5 and 7 open with the same fact sentences in every arm.
+- **Every arm is still far from readable text.** The best has fewer than half its sentences whole. The meaning breaks even where the grammar holds ("Auckland is a town located throughout the animal kingdom of New Zealand").
+- **T8** has the most whole sentences and stays nearer the subject. Dev 1: "The acid mixture was also changed to two parts sulfuric acid. … Color negative film was never manufactured with a deep lustre." Dev 10: "As the astronauts begin to die, the warning changes to the original plans". Dev 3: "For example, peroxide is an aqueous solution of hydrogen and helium." It also writes more noun phrases that end in a full stop ("The oxides of nitrogen and hydrogen.", "Children's book author."). It copies more short spans (copy32 0.487), within the cap. No boilerplate, lists or repeated names beyond K1's.
+- **T9** reads worse than K1: long run-ons ("As an example, say the Chicago School is a highly stylized way: unless the projection of the Earth's magnetic field …"). It fails.
+- **F1** trades long broken clauses for short fragments. It has fewer broken long sentences (14 against K1's 22) but more fragments (22 against 14). Dev 4 opens "In the United States, France and Spain. In the 18 th century. Some religious groups (see below). The main population." Dev 9 is better than K1: "This article focuses on the availability of oracles … These concepts are also privacy concerns." Its link to the sentence before is K1's. By the registered rule it passes: more whole sentences, no repetition, and no measurable loss of the subject. It passes narrowly.
+- **F2** has F1's fragments and leaves the subject more. Dev 12 (Alia, Dune) turns to "The fall of Kabul marked with the murder of her brother". It fails.
+- **GR** has the most whole sentences (32), but it writes longer texts of more, shorter sentences, and it leaves the subject. Dev 12: "He was the son of Poseidon. In his inaugural address"; dev 2 turns to Sussex. Its link falls (−0.018) and its prompt words fall at s1–s2. It fails.
+- **TF** (run because T8 and F1 passed, as registered) reads about as T8 by a glance (dev 13: "Messianic Jews consider the movement to be "too Jewish" for holding on entirely different grounds."). But one of its 250 samples has a 13-word copy. It fails Odin's cap, so it was not read further.
+
+**Candidates:** **T8** (temperature) and **F1** (gate), one per lever.
+
+### Packets (built before any rating)
+
+`bench/blind/dec_pair/`: K1 against T8 and F1, the 50 prompts of `bench/blind/llm_rating/prompts.json`, 460 characters, seed 20261201. T8 differs from K1 on 44 of the 50, F1 on 41. `KEY.json` is kept outside the repository; `key.b64` and `RATER_PROMPT.md` are committed. The lead runs the raters.
+
+### Predictions so far
+
+- D1 the field off equals K1: **hit**.
+- D2 verbatim13 0 in every arm: **hit** for the five single arms; **miss** for TF (1 of 250). The cap held for T8 alone and F1 alone, but not for both together.
+- D3 copy32: GR **hit** (0.275); T9 **miss** (0.394), T8 **miss** (0.487), F1 **miss** (0.339), F2 **miss** (0.377). Each copies more than predicted, by about 0.03–0.04 for the temperature arms. Retrieval adds to it (K1 started at 0.275, not T2's 0.239).
+- D4 mean surprise: F1 **hit** (−0.25), F2 **hit** (−0.39); T8 **miss** (−0.23, predicted 0.4–0.8), T9 **miss** (−0.19, just under 0.2), GR **miss** (−0.47, predicted at most 0.2).
+- D5 fact precision within ±0.03 of K1 and all at least 0.874: **hit** (0.906–0.935).
+- D6 SCRIBE v2 within ±0.04 for the gate arms, T8 up: **hit** (+0.001 to +0.015; T8 +0.107).
+- D7 T8 and F2 pass, GR fails: T8 **hit**; F2 **miss** (fails); GR fails **hit**, but not for the reason predicted: it changes 203 samples and leaves the subject.
+- D8 raters: wait for the raters.
+- D9 wall 5–9 minutes: **miss** (8:46–14:42, one arm at a time); peak RAM 11.3–11.6 GB: **hit**.
