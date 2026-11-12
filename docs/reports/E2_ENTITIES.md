@@ -217,7 +217,7 @@ cypha_ner run --train train.tsv --dev bench/e2_ner/silver_dev.tsv --test bench/e
   --prompts bench/eval/gen_prompts_dev.tsv --prompt-out final_prompt_spans.tsv --pred-out final
 ```
 
-Outputs in `bench/e2_ner/runs/`: `final.log`; the spans on the dev prompts, `final_prompt_spans.tsv`; the planner read, `e2_coverage.log` and `cov_final.tsv`; the predictions on dev, test and the hand set, `final.{dev,test,hand}.tsv`.
+Outputs in `bench/e2_ner/runs/` (every run log as `*.log.txt`): `final.log.txt`; the spans on the dev prompts, `final_prompt_spans.tsv`; the planner read, `e2_coverage.log.txt` and `cov_final.tsv`; the predictions on dev, test and the hand set, `final.{dev,test,hand}.tsv`.
 
 ## Decisions (by the registered rules)
 
