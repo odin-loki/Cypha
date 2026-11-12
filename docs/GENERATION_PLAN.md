@@ -2771,3 +2771,13 @@ Four fresh blind raters. Raters 1–2 rate the first 25 prompts, raters 3–4 th
   - **Rule:** T1's values become main's `context8k` defaults if `context8k_bpc` is below 1.4900, wall time at most +20% and peak RAM at most +20% against the 1 TB run (7:39, 2.92 GB). If not, they stay on `wip/tune-predict`, and the 8 MiB result is recorded only.
   - **Also checked:** `--train N` small runs still opt out of the 1 TB trie (they now get T1's values, as on T1's branch); `qa` rows are byte-identical; the writer default still equals T8.
   - **Prediction:** 1.476–1.484 (most of T1's −0.0114 survives, since the tuned settings are mostly the online experts' and mixers').
+
+### 13.73 D1, a bidirectional repair pass (2026-11-12; [K5_REPAIR](reports/K5_REPAIR.md); not adopted, nothing rated)
+
+- **Registered first** (with two amendments before the reruns, after crashes in the first runs).
+- **The method:** `--k5-repair` (`lm/k5_repair.hpp`) trains a right-to-left K5 on the same 337 MB. When a sentence ends, words that both directions find unlikely are flagged. They are resampled Gibbs-style over a 4-word window, scored forward plus backward. Facts, the prompt and each sentence's last word are never changed. Off, the output equals K1.
+- **Screen** (against K1, the default when it ran):
+  - SCRIBE v2 0.674–0.706; copy32 0.288–0.310; fact precision 0.924–0.929; mean surprise −0.20 to −0.40 bits a word; 8–19% of words changed.
+  - Every arm fails the reading. Breaks that span several words stay broken while single words are swapped ("in his memory" → "in his opinion"). The subject's own words are replaced by common ones ("died in Edinburgh" → "Paris"), the K5_MCMC failure on a smaller scale. R6 also fails copy32.
+- **Not adopted, nothing rated.** The code stays on `wip/k5-repair` (it changes `word_kn.hpp` in many places). The report and runs are on main.
+- **What it says:** repair word by word cannot mend a broken clause. The next attempt, if any, should redraw the whole clause from both sides and protect the retrieved document's words.
