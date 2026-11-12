@@ -31,3 +31,67 @@ Branch `wip/tune-predict`. Driver `scripts/tune_predict.py`. Logs on the PC unde
 - The mixers add 0.002 to 0.005 on top of the tuned experts on the small slice.
 - The gain on the 6 MiB slice is smaller than on the small one: between a third and two thirds of it.
 - The small slice's lower `--ngram-cap` helps less with more data; it is the setting most likely to hurt on 6 MiB.
+
+## Results (2026-11-12)
+
+**Kept.** `context8k_bpc` **1.4962 → 1.4848** (−0.0114) on the standard holdout. Wall time +1%, peak RAM +13%. Answers unchanged.
+
+### The search (1 MB tuning slice, scored on its second half)
+
+| Step | bpc | Peak RAM |
+|---|---:|---:|
+| Defaults | 1.7501 | 1302 MB |
+| Experts, round 1 (start 1.7360) | 1.7305 | 1551 MB |
+| Experts, round 2, end | **1.7276** | 1552 MB |
+| + mixers by replay over the tuned experts' dump | **1.7201** | — |
+| T\* confirmed by a run | 1.7201 | 1475 MB |
+
+- The new binary (main with O5) gives SM__default's stdout and dump unchanged under `cmp`, so the earlier trials stood.
+- Tuned experts: `--bkn 10:4:2:1 --doc cache,cand=2048 --lstm-window 5 --ngram-cap 8 --ngram-lr 0.000625 --ngram-orders 1,2,3,4,5,6,7,8,12,16`. `--ngram-cap` and `--lstm-window` stopped at the ends of their ladders.
+- Tuned mixers: `--full-mix-params apm=0.0331976,decay=0.0001,eps=2.31807e-05,floor=1.67652e-05,lr1=0.000564081,lr2=0.000150458,lrb=0.00181686 --meta-mix-params m1lr1=0.00545053,m1lr2=0.000200209,m2eta=0.340135,m2geta=0.831624,m2gshare=0.00149035,m2share=0.0014615,scales=0.5:1:2`. The restart from the best point won (1.7201 against the main search's 1.7205).
+- Best over the RAM limit: 1.7349 at 1576 MB (11 n-gram orders); not kept.
+
+### The 6 MiB check (dev, before the holdout)
+
+| Run | bpc | Wall | Peak RAM |
+|---|---:|---:|---:|
+| S0, defaults | 1.5796 | 39:41 | 1546 MB |
+| **T\*** | **1.5710** | 26:25 | 1754 MB |
+| Tuned mixers alone, replayed over S0's dump | 1.5742 | — | — |
+
+T\* is below S0, so E\* was not needed. The walls are from different loads on the shared PC.
+
+### The final pair (standard holdout, 4 threads each, started together in one turn of the lock)
+
+| | Default | Tuned | Change |
+|---|---:|---:|---:|
+| `context8k_bpc` | 1.4962 | **1.4848** | −0.0114 |
+| Wall | 2910 s | 2938 s | +1.0% |
+| CPU (user + system) | 5513 s | 6477 s | +17.5% |
+| Peak RAM | 1533 MB | 1732 MB | +13.0% |
+| Answer tallies (seen, change_first_letter, add_Thanks, paraphrase, heldout_dolly, wiki_fact) | 3/3, 3/3, 0/3, 0/3, 0/30, 0/8 | the same | — |
+
+The rule holds on all four counts: below 1.4962, time within +20%, RAM within +20%, answers not worse.
+
+### The default change (this branch; the lead merges)
+
+- `context8k_tuned()` in `cyphalm_trie.cpp` gives `context8k` the tuned values for every flag not on the command line. Mixer params given on the command line are read after the tuned ones.
+- `qa`, `sample` and `chat` keep their defaults.
+- `context8k` with no flags: stdout `cmp` equal to the tuned run of the pair (1.4848).
+- `qa`, 130 dev questions, before and after: the rows file is `cmp` equal. Stdout differs only in timing fields (build seconds, latencies).
+
+### Sensitivity (§13.43; `bench/tune/t1_sensitivity.tsv`)
+
+At θ\* on the small slice. Δbpc at ×0.5 / ×0.7 / ×1.4 / ×2:
+- steep: `m1lr1` +0.0012 / +0.0002 / +0.0004 / +0.0012; `apm` +0.0005 / +0.0001 / +0.0002 / +0.0010; similar-context T +0.0013 / +0.0005 / +0.0002 / +0.0008;
+- `--ngram-cap` still falling: −0.0017 at 4, +0.0021 at 16. It sits at the end of its ladder (8);
+- `eps` still falling upward (−0.0006 at ×2);
+- flat within ±0.0001: `lr2`, `m1lr2`, `m2eta`, `m2share`, `m2geta`, `m2gshare`, `--ngram-lr`;
+- small: `lr1`, `lrb`, `floor`, `decay` (≤ 0.0003).
+
+### Predictions
+
+- §13.42: `context8k_bpc` down 0.01 to 0.03: **hit** (−0.0114). Time and RAM within the limits: **hit** (+1% wall, +13% RAM).
+- The mixers add 0.002 to 0.005 on the tuned experts (small slice): **miss** (0.0075, more than predicted).
+- The 6 MiB gain is a third to two thirds of the small one: **miss**, just under (0.0086 of 0.0300: 29%). The holdout gain (0.0114) is 38%.
+- The lower `--ngram-cap` helps less with more data: **not settled**. It was not tested alone on 6 MiB. The tuned mixers alone give 0.0054 of T\*'s 0.0086 there. So the experts gain much less on 6 MiB than on 1 MB (0.0225 there), which fits the prediction but does not isolate the count limit.
