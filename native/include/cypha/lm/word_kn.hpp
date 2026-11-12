@@ -613,6 +613,15 @@ class ClassModel {
         return pc[cls_[w]] * pwc_[w] / z;
     }
     bool on() const { return V_ > 0; }
+    // K5_DECODE.md: log2 P(c(w) | the classes of ctx's last two words), the gate's grammar term.
+    double class_lp(const std::uint32_t* ctx, std::size_t n, std::uint32_t w) const {
+        std::uint32_t cc[2];
+        const std::size_t m = std::min<std::size_t>(n, 2);
+        for (std::size_t i = 0; i < m; ++i) cc[i] = cls_[ctx[n - m + i]];
+        double pc[4096 + 2];
+        kn_.dist(cc, m, pc);
+        return std::log2(std::max(pc[cls_[w]], 1e-300));
+    }
     void dist(const std::uint32_t* ctx, std::size_t n, double* p) const {
         std::uint32_t cc[2];
         const std::size_t m = std::min<std::size_t>(n, 2);
@@ -1002,6 +1011,10 @@ struct Options {
     // last sentence for the first draft), the same PPMI as wp's prompt term. 0 (the default): off, nothing computed.
     // Read by the plain gate and by the discourse writer's free sentences (z-scored there, as its other terms).
     double gate_wr = 0;
+    // K5_DECODE.md: --k5-gate K,wg=W adds W x z(a draft's mean log2 P(class | two classes before)) under the class
+    // model, a grammar term that ignores the words. Read by the z-scored gate and the discourse writer's free
+    // sentences, which with K5_DECODE also read wf (z-scored). 0 (the default): off, nothing computed.
+    double gate_wg = 0;
     std::size_t gate_min = 24, gate_max = 240;
     // K5_STRUCTURE.md: --k5-struct FILE (cyphalm_trie loads it); null: K5's own gate. desc goes on the MODEL line.
     std::shared_ptr<const StructureWriter> structure;
@@ -1059,6 +1072,7 @@ struct Options {
         if (gate_k != d.gate_k || gate_wf != d.gate_wf || gate_wp != d.gate_wp || gate_wm != d.gate_wm || gate_min != d.gate_min || gate_max != d.gate_max)
             add("gate", gate_k > 1 ? gate_k : 0), add("wf", gate_wf), add("wp", gate_wp), add("wm", gate_wm);
         if (gate_wr != 0) add("wr", gate_wr);  // K5_COHERENCE.md
+        if (gate_wg != 0) add("wg", gate_wg);  // K5_DECODE.md
         if (structure) s += "\tstruct=" + structure_desc;  // K5_STRUCTURE.md
         // K5_DISCOURSE.md
         if (mbr_sent_w != 0) add("mbr_sent", mbr_sent_w);
@@ -1197,6 +1211,7 @@ inline bool apply_flag(const std::string& name, const std::string& val, Options&
                 else if (k == "wp") o.gate_wp = v;
                 else if (k == "wm") o.gate_wm = v;
                 else if (k == "wr") o.gate_wr = v;  // K5_COHERENCE.md
+                else if (k == "wg") o.gate_wg = v;  // K5_DECODE.md
                 else if (k == "min") o.gate_min = static_cast<std::size_t>(v);
                 else if (k == "max") o.gate_max = static_cast<std::size_t>(v);
                 else return err = name + ": unknown field " + k, false;
@@ -1970,6 +1985,8 @@ class K5 {
         std::vector<std::string> text(K1 == K0 ? K0 : KM);
         std::vector<eg::SentRoles> roles(KM);
         std::vector<double> tf(K1 == K0 ? K0 : KM), tp(tf.size()), tm(tf.size()), te(tf.size()), tt(tf.size()), mk(tf.size());
+        const bool use_wg = o.gate_wg != 0 && cm_.on();  // K5_DECODE.md
+        std::vector<double> tg;
         // K5_FIRST.md req: the prompt's content words (content_lower), and per first-sentence draft whether it holds one.
         std::set<std::string> pcw;
         std::vector<char> hit;
@@ -1989,6 +2006,7 @@ class K5 {
         for (std::uint64_t sent = 0; s.step < o.max_words && s.out.size() < o.bytes; ++sent) {
             const std::size_t K = sent == 0 ? K1 : K0;  // K5_FIRST.md
             if (K1 != K0) text.resize(K), tf.resize(K), tp.resize(K), tm.resize(K), te.resize(K), tt.resize(K), mk.resize(K);
+            if (use_wg) tg.assign(K, 0.0);  // K5_DECODE.md
             const bool req = sent == 0 && !pcw.empty();
             for (std::size_t k = 0; k < K; ++k) {
                 State& c = cand[k];
@@ -1997,7 +2015,7 @@ class K5 {
                 const std::uint64_t cs = mix64(seed ^ mix64(0x6A7E000000ull + sent * 256 + static_cast<std::uint64_t>(k)));
                 std::mt19937_64 rng(cs);
                 const std::size_t b0 = c.out.size();
-                double slp = 0, spmi = 0, stop = 0;
+                double slp = 0, spmi = 0, stop = 0, sg = 0;
                 std::size_t nw = 0;
                 std::vector<std::string> toks;
                 while (c.step < o.max_words && c.out.size() < o.bytes) {
@@ -2005,6 +2023,7 @@ class K5 {
                     double lp = 0;
                     const std::uint32_t w = step_word(c, rng, salt, o, gk[k], nullptr, sc, &lp);
                     slp += lp, spmi += assoc.empty() ? 0.0 : assoc[w], stop += tlr.empty() ? 0.0 : tlr[w], ++nw;
+                    if (use_wg) sg += cm_.class_lp(c.ctx.data(), c.ctx.size() - 1, w);  // K5_DECODE.md
                     if (req && !hit[k] && pcw.count(content_lower(w))) hit[k] = 1;  // K5_FIRST.md
                     const std::string& t = vocab_[w];
                     if (use_eg) toks.push_back(t);
@@ -2016,6 +2035,7 @@ class K5 {
                 for (std::size_t i = b0; i < c.out.size(); ++i) m += std::string_view("[]{}|=<>&*#").find(c.out[i]) != std::string_view::npos;
                 const double nb = static_cast<double>(std::max<std::size_t>(c.out.size() - b0, 1)), n = static_cast<double>(std::max<std::size_t>(nw, 1));
                 tf[k] = slp / n, tp[k] = spmi / n, tt[k] = stop / n, mk[k] = static_cast<double>(m) / nb;
+                if (use_wg) tg[k] = sg / n;  // K5_DECODE.md
                 text[k] = c.out.substr(b0);
                 if (use_eg) {
                     roles[k] = eg_.roles(toks);
@@ -2025,6 +2045,7 @@ class K5 {
             }
             if (o.mbr_sent_w != 0) tm = mbr::utilities(text);
             z(tf), z(tp), z(tm), z(te), z(tt);
+            if (use_wg) z(tg);  // K5_DECODE.md
             std::size_t best = 0;
             double bscore = 0;
             const double xp = sent == 0 ? o.first_wp : 0.0, xl = sent == 0 ? o.first_wl : 0.0;  // K5_FIRST.md
@@ -2034,6 +2055,7 @@ class K5 {
                 if (any && !hit[k]) continue;  // K5_FIRST.md req
                 double score = o.gate_wf * tf[k] + o.gate_wp * tp[k] + o.mbr_sent_w * tm[k] + o.eg_w * te[k] + o.lda_w * tt[k] - o.gate_wm * mk[k];
                 if (xp != 0 || xl != 0) score += xp * tp[k] + xl * tt[k];
+                if (use_wg) score += o.gate_wg * tg[k];  // K5_DECODE.md
                 if (!have || score > bscore) bscore = score, best = k, have = true;
             }
             if (use_eg) eg_.append(hist, roles[best]);
@@ -3021,6 +3043,7 @@ inline bool self_test(std::string& err) {
             apply_flag("--k5-nucleus", "1.5", o, e) || apply_flag("--k5-bogus", "1", o, e) || !apply_flag("--k5-class-mode", "mix", o, e) ||
             o.class_mode != 2 || Options{}.describe() != "" || Options{}.gate_wr != 0 || !apply_flag("--k5-gate", "16,wr=1.5", o, e) ||
             o.gate_wr != 1.5 || o.gate_k != 16 ||  // K5_COHERENCE.md: wr parses, off by default
+            Options{}.gate_wg != 0 || !apply_flag("--k5-gate", "16,wg=0.5", o, e) || o.gate_wg != 0.5 ||  // K5_DECODE.md
             Options{}.first_k != 0 || Options{}.first_req != 0 || !apply_flag("--k5-first", "k=64,wp=2,wl=1.5,req=1", o, e) ||
             o.first_k != 64 || o.first_wp != 2 || o.first_wl != 1.5 || o.first_req != 1 || apply_flag("--k5-first", "req=3", o, e) ||
             apply_flag("--k5-first", "k", o, e)) {  // K5_FIRST.md: parses, off by default
