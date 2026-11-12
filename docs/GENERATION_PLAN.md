@@ -2419,3 +2419,22 @@ Every branch first merges `origin/main` (M1 and M2 are exact, so P1 and every ba
 - **The default:** when K5 counts from the 337 MB text, `sample --k5` adds L1's term. The LDA model is loaded from `CYPHA_K5_DISC_CACHE`, else `/mnt/d/cypha_llm/disc/cache`; without a cache, it is trained once. `--k5-lda 0` restores G16. Checked by `cmp` on the 250 dev prompts: the default equals L1's GEN file, and `--k5-lda 0` equals G16's.
 - **The one test read** (`bench/k5_coherence/test_read/`): SCRIBE v2 **0.629 [0.597, 0.663]** (G16 0.621), v3.1 0.570, copy32 0.234, no 13-word copies.
 - **What is left:** in half the read prompts, the first sentence is already off the subject. The first gate has only the prompt to go on, and no chooser tested here fixes that.
+
+### 13.54 O2 and O3 results (2026-11-12; merged to main)
+
+Old binary main 9cbd277; old and new were started together.
+
+- **O2, the expert pipeline** ([OPT_PIPELINE](reports/OPT_PIPELINE.md), `wip/opt-pipeline` 3e3cf2f): **exact, kept, on by default.** Every check is `cmp` equal:
+  - the small default, `--no-meta-mix`, `--no-full-mix`, `--no-pipeline`, and one pipeline thread;
+  - the planner's and `--no-k5-plan`'s dev GEN files;
+  - the full run reproduces `context8k_bpc` 1.4962.
+  - Each run had 6 CPUs, as registered before the runs. The full run fell from 1,960 s to **712 s (−63.7%)**, the small run by 28.5%. Peak RAM +7–24% (full run 1.53 → 1.91 GB).
+  - The bound is not the LSTM, as guessed. It is the similar-context expert's serial pass (680 s) in the full run, and the trie's training in the small run.
+  - `--no-pipeline` restores the old order with the same output.
+  - Predictions: exact **hit**; at least −30% **hit**.
+- **O3, Boolean minimisation** ([OPT_BOOLEAN](reports/OPT_BOOLEAN.md), `wip/opt-boolean` 8cb2d87): **exact, kept.**
+  - Every check is `cmp` equal: smoke, small default, `--no-meta-mix`, `--no-full-mix`, both dev GEN files, and the full run at 1.4962.
+  - 15 Boolean functions were found and minimised. No minimised formula beat a table, a bit set, a count of compares or `bit_width`. The gain came from removing unpredictable branches (the trie's quantiser, the similar-context expert's top-k).
+  - Small runs −9.6% (default), −12.3%, −16.5% on 4 CPUs; RAM the same. O5's patch to `online_ngram.hpp` is applied; the O2, O6 and Q2 patches were left.
+  - Predictions: exact **hit**; under 3% **miss** (the gain was larger).
+- **The merge, checked** (main + L1 + O2 + O3, `g++ -O2`): small `context8k` default 1.7501, `--no-meta-mix` 1.7633 and `--no-full-mix` 1.8384 each equal the binary before the merge under `cmp`. The default `sample --k5` on the 250 dev prompts equals L1's GEN file. Selftest passes.

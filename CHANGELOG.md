@@ -9,6 +9,7 @@ milestone or a significant self-contained change.
 ## [Unreleased]
 
 ### Added
+- **`context8k` 64% faster, exact** (2026-11-12; GENERATION_PLAN §13.50–13.54): the expert pipeline (O2, `--no-pipeline` for the old order; full run 1,960 → 712 s), branch-free hot paths (O3, −10% to −17%), grouped gate experts (M4, gate −43% to −50%) and the meta-mixer bank (O8, SSE2, −14.8%). Every output is unchanged under `cmp`; `context8k_bpc` 1.4962 reproduces.
 - **A topic term in K5's sentence gate by default** (2026-11-12; GENERATION_PLAN §13.53, [K5_COHERENCE](docs/reports/K5_COHERENCE.md), ledger 131): LDA over the 337 MB text scores each draft's fit to the prompt's topics. Raters prefer it to the 16-draft gate alone 0.610 (460 characters) and 0.700 (1,500); test SCRIBE v2 0.629. `--k5-lda 0` restores the old output. `--k5-gate K,wr=W` (a previous-sentence link) is kept off: raters 0.390.
 - **K5's sentence gate holds 16 drafts by default** (2026-11-12; GENERATION_PLAN §13.51, [TUNE_WRITE](docs/reports/TUNE_WRITE.md), ledger 130): blind raters prefer it to the 8-draft default 0.670 [0.570, 0.770]; test SCRIBE v2 0.621. `--k5-gate 8` restores the old output.
 - **Faster K5 sampling, exact** (2026-11-12; GENERATION_PLAN §13.50, [OPT_NUCLEUS](docs/reports/OPT_NUCLEUS.md)): the lazy exact nucleus picks the same word without sorting the vocabulary (K5 sampling −33% to −70%; `CYPHA_K5_NUCLEUS=full` for the old path). **`scripts/pgo_build.sh --cc clang`** ([OPT_BUILD](docs/reports/OPT_BUILD.md)): an exact PGO, ThinLTO, `-march=native` build, off by default.
