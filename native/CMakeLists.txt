@@ -2762,3 +2762,10 @@ foreach(_cypha_module core lm online classify eval knowledge forecast semantics 
   endif()
 endforeach()
 
+
+# E2: the Cypha-classifier entity recogniser (docs/reports/E2_ENTITIES.md)
+add_executable(cypha_ner tools/classify/cypha_ner.cpp)
+target_link_libraries(cypha_ner PRIVATE cypha_core cypha_lm_native)
+cypha_mingw_apply_exe_link_options(cypha_ner)
+add_test(NAME native_cypha_ner_selftest COMMAND "$<TARGET_FILE:cypha_ner>" selftest)
+set_tests_properties(native_cypha_ner_selftest PROPERTIES TIMEOUT 60)

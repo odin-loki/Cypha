@@ -1,0 +1,5 @@
+typed titles 150465  redirects 67486  types {'MISC': 65866, 'PLACE': 43399, 'PERSON': 27309, 'DISAMBIG': 8394, 'ORG': 5497}
+sentences read 301576
+train: pages 14898 sentences 100000 words 1899330 spans {'NUMBER': 16093, 'DATE': 9609, 'MISC': 18100, 'PERSON': 11432, 'PLACE': 6303, 'ORG': 2147}
+dev: pages 460 sentences 3000 words 56532 spans {'MISC': 565, 'PERSON': 289, 'DATE': 270, 'PLACE': 150, 'NUMBER': 472, 'ORG': 45}
+test: pages 527 sentences 3000 words 56532 spans {'PERSON': 319, 'PLACE': 220, 'DATE': 316, 'NUMBER': 543, 'ORG': 64, 'MISC': 537}

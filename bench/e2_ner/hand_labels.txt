@@ -1,0 +1,63 @@
+# E2 hand-checked set: gold entities for the first 60 sentences of hand_pool.tsv (the annotation rules are in
+# docs/reports/E2_ENTITIES.md). One line per sentence: its number (1-60), a tab, then TYPE=surface items in text
+# order, separated by " | ". A line with only the number has no entity.
+1	MISC=Servlet API
+2
+3	PERSON=Yahya | DATE=1970
+4	PLACE=Uzbekistan | MISC=Central Asian | PLACE=Turkey | PLACE=Azerbaijan | MISC=Turkic | PLACE=Uzbekistan | MISC=Central Asian
+5	MISC=Alkanna tinctoria | MISC=Dyer's Bugloss | MISC=Anchusa officinalis | MISC=Common Bugloss
+6
+7	MISC=Office | NUMBER=11.0 | DATE=2003 | MISC=XML
+8	ORG=MITS
+9	ORG=ABC
+10	PLACE=Plymouth Colony | PERSON=Bradford | DATE=1640
+11	PLACE=Mulu national park | MISC=World Heritage Site | DATE=2001
+12	PLACE=Philadelphia
+13	ORG=Luftwaffe
+14
+15	PLACE=Fergana Valley | PLACE=Central Asia | PLACE=Tajikistan | PLACE=Uzbekistan | PLACE=Kyrgyzstan
+16
+17
+18
+19
+20	PERSON=Self | ORG=NAA | MISC=Tomahawk | ORG=Curtiss
+21	PERSON=Eivind Groven
+22
+23	ORG=Globe | DATE=1872 | PLACE=Boston | PERSON=Eben Jordan | NUMBER=150,000
+24	NUMBER=26
+25	MISC=Japanese | ORG=Nikon | ORG=Canon | ORG=Yashica | DATE=1959 | MISC=F | MISC=Canonflex | MISC=Yashica Pentamatic
+26	MISC=Restoration | ORG=London Gazette | DATE=November 16, 1665 | ORG=Oxford Gazette | ORG=Crown
+27
+28
+29	NUMBER=106.8
+30
+31
+32
+33	PERSON=Adorno | PLACE=Germany
+34
+35
+36
+37
+38	PLACE=Pylos | PLACE=Morea | PLACE=Sphacteria | PLACE=Sphagia | PLACE=Sfaktiria | MISC=Spartans | MISC=Battle of Pylos | MISC=Peloponnesian War
+39	PERSON=Nick Maggio
+40
+41	PLACE=Fergana Valley | PLACE=Kofarnihon | PLACE=Vakhsh Valleys
+42	PERSON=Naomi Klein | DATE=1970 | MISC=Canadian
+43	ORG=Butler Committee | PLACE=England
+44
+45	MISC=English
+46	MISC=Siberians | MISC=Samoyed | MISC=Alaskan Malamute
+47	ORG=DARPA | MISC=Rich Transcription
+48	ORG=North American | MISC=P-51D Mustang
+49	MISC=Uruguayans | MISC=Spanish | MISC=Italian
+50	PERSON=Waingro | PERSON=Hanna
+51	PERSON=Newton
+52
+53	NUMBER=27-year-old | MISC=Slav
+54	PLACE=Germany | ORG=EXIT | PERSON=Adorno | DATE=21 century
+55
+56
+57	ORG=RCA | MISC=RCA 1802 | MISC=CDP1802 | MISC=RCA COSMAC | DATE=1976 | ORG=NASA | MISC=Voyager | MISC=Viking | DATE=1970s | MISC=Galileo | MISC=Jupiter | DATE=1989 | DATE=1995
+58
+59	PLACE=Uzbekistan | MISC=Islam | DATE=8th century AD | MISC=Arab | MISC=Zoroastrianism | MISC=Buddhism | MISC=Nestorian Christianity
+60
