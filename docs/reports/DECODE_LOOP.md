@@ -144,6 +144,19 @@ One arm at a time (two only while `free -g` shows 30 GB or more available), 6 th
 | L8 | The loop stops before round 8 on two confirmations with no gain |
 | L9 | A loop arm takes 6–10 minutes on 150 prompts (plus SCRIBE and the fact check) at 11.3–12.6 GB peak |
 
+## Amendment 1: X1's probe metrics (2026-11-13, before any candidate was screened or read)
+
+- **Why:** X1 (WHERE_IT_BREAKS, §13.75) found the main fault: K5 sees four words, so it rates "splices" as likely (a 4-word context it has seen, followed by a word that never followed it). The lead asked for X1's break-marking as a screen metric. X1 marked breaks by reading; that cannot run per candidate. Its probe can.
+- **The metrics** (`bench/decode_loop/loop_probe.py`; `k5_probe --modes map --no-learner`, built from main ea3a784c): on X1's 30 prompts (the first 30 of subset A, the same ids), each arm's text cut as the raters read it:
+  - `splice`: the share of words whose 4-word context K5 has seen but never followed by that word;
+  - `tail`: the share of words of rank above 10 in K5's distribution, or P below 0.02.
+  - Both are read under T8's model (with the overlay), whatever the arm's settings.
+- **Screen:** a candidate is also dropped if its splice share is more than 0.03 above the best's.
+- **Ranking, rounds 1–3:** splice (lower) is added as a fifth metric to the rank sum.
+- **Logged** beside the readers' verdicts like every other per-text metric, and trusted by the same rule. `tail` is logged, not screened: human text has far more tail words than any writer (half its words lie outside the nucleus, WHERE_IT_BREAKS).
+- **Later knobs:** F1's `--k5-minp`, gate fluency floor and clause or splice judge (`wip/k5-fixes`) join the knob table by a further amendment once they are on the base, after I read their report.
+- **What had run when this was written:** START and the first round-1 candidate (T 0.75), written and measured; no candidate was screened, ranked or read.
+
 ## Results
 
 (Added after the runs, under this line.)

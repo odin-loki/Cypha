@@ -59,13 +59,13 @@ includes include contains contain refers refer means mean uses use consists cons
 appears appear occurs occur exists exist allows allow requires require provides provide represents represent shows
 show describes describe produces produce involves involve forms form serves serve plays play works work comprises""".split())
 SUBJ = {"he", "she", "it", "which", "that", "who", "this", "they"}
-FEATS = ["surp_mean", "surp_sd", "sl_mean", "on_prev", "verbless", "stuff3", "commit_text", "junk", "rep3"]
+FEATS = ["surp_mean", "surp_sd", "sl_mean", "on_prev", "verbless", "stuff3", "commit_text", "junk", "rep3", "splice", "tail"]
 HUMAN_RANGE = ["surp_mean", "surp_sd", "sl_mean", "on_prev", "verbless", "stuff3"]
 # The registered good direction of every metric: +1 higher reads better, -1 lower, "h" nearer the human mean.
 DIRECTION = {"surp_mean": -1, "surp_sd": "h", "sl_mean": "h", "on_prev": +1, "verbless": -1, "stuff3": -1,
              "commit_text": +1, "junk": -1, "rep3": -1, "scribe_v2": +1, "scribe_v31": +1, "fact_precision": +1,
-             "copy32": -1}
-INITIAL_RANK = ["surp_mean", "scribe_v2", "stuff3", "verbless"]
+             "copy32": -1, "splice": -1, "tail": -1}
+INITIAL_RANK = ["surp_mean", "scribe_v2", "stuff3", "verbless", "splice"]  # splice: amendment 1
 
 
 def verbless(sentences):
@@ -119,6 +119,10 @@ def cmd_feats(a):
             t = g.get(i, "")
             per[i] = text_feats(kn, pr[i], t) if len(t.strip()) >= 20 else {}
             per[i]["text"] = sp.cut(t, CUT)
+        pj = os.path.join(RUNS, f"{label}.probe.json")  # amendment 1: X1's probe metrics on its 30 prompts
+        if os.path.exists(pj):
+            for i, v in json.load(open(pj)).items():
+                per[int(i)].update(splice=v["splice"], tail=v["tail"])
         arm = arm_level(label) if label != "human" else {}
         json.dump({"label": label, "per": per, "arm": arm}, open(os.path.join(RUNS, f"{label}.feats.json"), "w"))
         print(f"{label}: features of {len(per)} texts", file=sys.stderr)
@@ -146,10 +150,9 @@ def arm_level(label):
         pass
     try:
         d = json.load(open(os.path.join(RUNS, f"facts_{label}", "summary.json")))["arms"][label]
-        out["fact_precision"] = d["precision"]
-        for k in ("precision_lo", "precision_hi", "ci_precision"):
-            if k in d:
-                out[k] = d[k]
+        out["fact_precision"] = d["point"]["precision"]
+        out["fact_precision_lo"], out["fact_precision_hi"] = d["ci"]["precision"]
+        out["fact_statements"] = d["statements"]
     except (OSError, KeyError):
         pass
     return out
@@ -213,6 +216,10 @@ def cmd_screen(a):
             d = gap(r[k], hr, k) - gap(B[k], hr, k)
             if d > 0.5:
                 why.append(f"{k} {d:+.2f} human sd further from human")
+        if r.get("splice") is None:
+            why.append("no probe metrics")
+        elif B.get("splice") is not None and r["splice"] - B["splice"] > 0.03:
+            why.append(f"splice {r['splice'] - B['splice']:+.3f}")  # amendment 1
         print(f"- {lab}: " + ("pass" if not why else "FAIL (" + "; ".join(why) + ")"))
         if not why:
             passed.append(lab)
