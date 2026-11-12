@@ -644,6 +644,11 @@ class DiscourseWriter final : public wkn::StructureWriter {
         const Model& md = *md_;
         m.regrow(s, o, true);  // K5_RETRIEVE2.md: once, before the drafts copy the state (off: nothing)
         const int K = static_cast<int>(drafts.size());
+        std::optional<wkn::Options> oc;  // K5_CONTROL.md: the controller's knobs for this sentence (off: o itself)
+        double cwl = 0;
+        if (o.ctl.on()) oc = m.control(s, o, &cwl);
+        const wkn::Options& ox = oc ? *oc : o;
+        std::vector<double> tlen(o.ctl.on() ? static_cast<std::size_t>(K) : 0);
         std::vector<double> pmi(static_cast<std::size_t>(K)), topic(pmi.size()), grid(pmi.size()), mk(pmi.size()), rec(pmi.size());
         std::vector<double> flu(pmi.size()), gram(pmi.size());  // K5_DECODE.md
         std::vector<double> ar;  // K5_COHERENCE.md (--k5-gate K,wr=W): the association with the previous sentence
@@ -660,8 +665,9 @@ class DiscourseWriter final : public wkn::StructureWriter {
         std::vector<double> lp;
         for (int k = 0; k < K; ++k) {
             const auto ku = static_cast<std::size_t>(k);
-            m.draft(s, seed, no, k, o, drafts[ku], words, lp, gs[ku]);
+            m.draft(s, seed, no, k, ox, drafts[ku], words, lp, gs[ku]);
             const auto& out = drafts[ku].out;
+            if (!tlen.empty()) tlen[ku] = wkn::ctl::draft_words(std::string_view(out).substr(s.out.size()));  // K5_CONTROL.md
             std::size_t nm = 0;
             for (std::size_t i = s.out.size(); i < out.size(); ++i) nm += std::string_view("[]{}|=<>&*#").find(out[i]) != std::string_view::npos;
             mk[ku] = static_cast<double>(nm) / static_cast<double>(std::max<std::size_t>(out.size() - s.out.size(), 1));
@@ -677,6 +683,7 @@ class DiscourseWriter final : public wkn::StructureWriter {
         const auto zr = ar.empty() ? std::vector<double>{} : zscores(rec);
         const auto zf = o.gate_wf != 0 ? zscores(flu) : std::vector<double>{};  // K5_DECODE.md
         const auto zgr = o.gate_wg != 0 ? zscores(gram) : std::vector<double>{};
+        if (!tlen.empty()) tlen = wkn::ctl::length_z(std::move(tlen));  // K5_CONTROL.md
         const auto zj = jw != 0 ? zscores(jt) : std::vector<double>{};  // K5_MIXDEC.md
         int best = 0;
         double bsc = -1e300;
@@ -686,6 +693,7 @@ class DiscourseWriter final : public wkn::StructureWriter {
             if (!ar.empty()) sc += o.gate_wr * zr[ku];  // K5_COHERENCE.md
             if (!zf.empty()) sc += o.gate_wf * zf[ku];   // K5_DECODE.md
             if (!zgr.empty()) sc += o.gate_wg * zgr[ku];
+            if (!tlen.empty()) sc += cwl * tlen[ku];  // K5_CONTROL.md
             if (jw != 0) sc += jw * zj[ku];              // K5_MIXDEC.md
             if (k == 0 || sc > bsc) bsc = sc, best = k;
         }

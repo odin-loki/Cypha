@@ -2821,3 +2821,21 @@ Four fresh blind raters. Raters 1–2 rate the first 25 prompts, raters 3–4 th
   - K5 1.5–1.9: **hit** (1.50);
   - T8 2.6–3.3: **miss** (2.50);
   - at most 5% rated 6 or more: **hit** (0%).
+
+### 13.76 C1, a decoding controller that steers toward human text (registered 2026-11-13, before any arm runs; [K5_CONTROL](reports/K5_CONTROL.md))
+
+(Numbered after §13.75, X1 on main. Branch `wip/k5-control`, from D5's `wip/mixdec-t8` 42206a76: T8 with D4's decoder merged, off.)
+
+- **Odin's choice:** learning while it writes, guided by a target taken from real human text. Not the model's own output (it looped, GEN-C), not lower surprise (§13.57), not real against draft (§13.31–13.36).
+- **The idea:** before each sentence K5 writes itself, measure the text so far and move decoding knobs to bring two properties into the human range. A feedback loop, as Mirostat holds surprise at a target, but on whole sentences. It learns nothing from its own text.
+- **Properties and targets** (human GEN-A dev continuations, cut as the raters read them; `bench/k5_control/ctl_measures.py`):
+  - **link**, the share of sentences that share a content word with the one before: human **0.508**; T8 0.310 at 460 characters and 0.222 at 1,500;
+  - **words a sentence:** human **20.4**; T8 13.6 (14.2 long). No setting tried so far moves it (12.8–13.8 in every dev file).
+  - Not steered: surprise (readers chose the colder sampler, and a sample cannot reach human text's surprise under its own model), verbless fragments (no tagger on the PC; the share of sentences under 8 words is reported), keyword repetition (a guard).
+- **Knobs:** link → temperature (0.70–0.90 around 0.8) and the retrieved documents' weight rel (0.25–1.0 around 0.5); words → a new gate term, wl × z(words in the draft), wl in [−1, 1]. From the committed dev files: T 1.0 → 0.8 raised link 0.078, rel 0.2 → 1.5 raised it 0.11, and readers rewarded both levers. The gate's own link term (R2) read worse, so link is moved through content, not by picking drafts for it.
+- **The law:** running means over the sentences written (λ 0.5, started at the target, so the first sentence is T8's); a dead band (link ±0.15, words ±0.3 in log2); a leaky integral; u = clamp(kp e + ki I, −1, 1).
+- **Code:** `lm/control.hpp` (new), `sample --k5 … --k5-control SPEC`, hooks in `gate_z` and the discourse writer's `free_sentence`. Off by default. With it off, a main build with the same hooks equals T8's dev GEN file under `cmp`; repeated on the base's build before the arms. Today's default already breaks the 12-word cap once in 250 long texts (T8_long, verbatim13 1 of 250).
+- **Arms** (dev, 250 prompts, short and long): CL (link), CW (words), CLW (both).
+- **Screen:** verbatim13 0 short (long: no more than T8_long's 1 of 250, which today's default already has); fact precision at least 0.874; the steered properties at least 10% nearer human than T8 on one reading and no farther on the other; mean surprise no more than 0.5 bits below T8; my strict reading. At most 2 candidates.
+- **Judge:** blind pairwise raters against T8 at 460 characters (`bench/blind/ctl_pair`, seed 20261206) and against T8_long at 1,500 (`bench/blind/ctl_long`, the 25 `coh_long` prompts, seed 20261207). Adopted if better by §13.38's rule on either reading and at least 0.5 on the other.
+- **Predictions:** in the report. In short: link up 0.02–0.07, words up 2–4, copy32 up a little for the link loop; raters 0.45–0.60 at 460 and 0.50–0.65 at 1,500; adoption less likely than not.

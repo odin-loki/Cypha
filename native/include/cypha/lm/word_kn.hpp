@@ -59,6 +59,7 @@
 #include <iterator>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <random>
 #include <set>
 #include <string>
@@ -67,6 +68,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "cypha/lm/control.hpp"      // K5_CONTROL.md
 #include "cypha/lm/count_index.hpp"  // GENERATION_PLAN §13.40 M1: K5's counts and copy cap
 #include "cypha/lm/entity_grid.hpp"  // K5_DISCOURSE.md
 #include "cypha/lm/lda.hpp"          // K5_DISCOURSE.md
@@ -1069,6 +1071,9 @@ struct Options {
     // K5_RETRIEVE.md: --k5-retrieve k=N,rel=R|w=L: the n-grams of the N documents of the --k5-more text most related
     // to the prompt (BM25 over K5's ids) join K5's counts for that continuation. k 0 (the default): off.
     retrieve::Params ret;
+    // K5_CONTROL.md: --k5-control SPEC, the decoding controller (control.hpp): before each free sentence it sets the
+    // temperature, the retrieved documents' rel and a gate length weight from the sentences written so far. Off by default.
+    ctl::Params ctl;
     bool zgate() const { return mbr_sent_w != 0 || eg_w != 0 || lda_w != 0; }
     // The settings that differ from K5's, for the MODEL line (empty for K5 itself).
     std::string describe() const {
@@ -1105,6 +1110,7 @@ struct Options {
         if (first_k || first_wp != 0 || first_wl != 0 || first_req)  // K5_FIRST.md
             add("first_k", first_k), add("first_wp", first_wp), add("first_wl", first_wl), add("first_req", first_req);
         if (ret.on()) s += ret.describe();  // K5_RETRIEVE.md
+        if (ctl.on()) s += ctl.describe();  // K5_CONTROL.md
         return s;
     }
 };
@@ -1149,6 +1155,7 @@ inline bool apply_flag(const std::string& name, const std::string& val, Options&
     if (name == "--k5-cache-decay") return num(o.cache_r, 0.5, 1);
     if (name == "--k5-dyn") return num(o.dyn, 0, 1e6);
     if (name == "--k5-retrieve") return retrieve::parse(val, o.ret, err);  // K5_RETRIEVE.md
+    if (name == "--k5-control") return ctl::parse(val, o.ctl, err);        // K5_CONTROL.md
     if (name == "--k5-order") return num(x, 2, kMaxOrder) && ((o.order = static_cast<int>(x)), true);
     if (name == "--k5-classes") return num(x, 0, 4096) && ((o.classes = static_cast<std::size_t>(x)), true);
     if (name == "--k5-class-w") return num(o.class_w, 0, 1);
@@ -1549,6 +1556,7 @@ class K5 {
         std::size_t ret_np = 0;
         std::string ret_prompt;
         std::shared_ptr<MixDec> mix;  // K5_MIXDEC.md (null: off)
+        ctl::Track ctl;  // K5_CONTROL.md (used only with --k5-control)
     };
     State start(std::string_view prompt, const Options& o) const {
         State s;
@@ -1559,6 +1567,7 @@ class K5 {
             s.has_prev = true;
         });
         s.rep = RepeatBan(prompt);
+        if (o.ctl.on()) s.ctl.begin(prompt, o.ctl);  // K5_CONTROL.md
         if (o.dyn > 0) {
             s.ov.L = o.dyn;
             s.ov.order = kn_.order();
@@ -1649,6 +1658,27 @@ class K5 {
         s.rov = retrieved(s.ret_prompt, q, rp, "grow=" + std::to_string(r));
     }
     const retrieve::Index* retrieval() const { return ret_.get(); }
+    // K5_CONTROL.md: the controller reads the sentences written so far and sets the knobs for the next one: o's copy with
+    // its temperature, s's retrieved overlay with its rel (a copy; the shared one is not changed); wl gets the gate's
+    // length weight. Called at a sentence boundary, before the drafts copy s.
+    Options control(State& s, const Options& o, double* wl) const {
+        Options x = o;
+        const ctl::Knobs k = s.ctl.step(o.ctl, s.out, o.temperature, s.rov ? o.ret.rel : 0.0);
+        x.temperature = k.temperature;
+        if (s.rov && s.rov->rel > 0 && k.rel > 0 && k.rel != s.rov->rel) {
+            auto ov = std::make_shared<Overlay>(*s.rov);
+            ov->rel = k.rel;
+            s.rov = std::move(ov);
+        }
+        *wl = k.wl;
+        {  // one line a sentence on stderr: sentences read, the knobs, the running link and words a sentence
+            static std::mutex mu;
+            const std::lock_guard<std::mutex> lock(mu);
+            std::fprintf(stderr, "K5CTL\t%d\t%.4f\t%.4f\t%.4f\t%.4f\t%.2f\n", s.ctl.n, k.temperature, s.rov ? s.rov->rel : 0.0, k.wl,
+                         s.ctl.x_link, std::exp2(s.ctl.x_words));
+        }
+        return x;
+    }
     // K5_RETRIEVE.md: the retrieval index over the documents from id `from` on (load: the --k5-more text's).
     void index_retrieval(std::size_t from, std::string log = {}) {
         ret_ = std::make_shared<retrieve::Index>();
@@ -2044,6 +2074,11 @@ class K5 {
         };
         for (std::uint64_t sent = 0; s.step < o.max_words && s.out.size() < o.bytes; ++sent) {
             const std::size_t K = sent == 0 ? K1 : K0;  // K5_FIRST.md
+            std::optional<Options> oc;  // K5_CONTROL.md: the controller's knobs for this sentence (off: o itself)
+            double cwl = 0;
+            if (o.ctl.on()) oc = control(s, o, &cwl);
+            const Options& ox = oc ? *oc : o;
+            std::vector<double> tlen(o.ctl.on() ? K : 0);
             if (K1 != K0) text.resize(K), tf.resize(K), tp.resize(K), tm.resize(K), te.resize(K), tt.resize(K), mk.resize(K);
             if (use_wg) tg.assign(K, 0.0);  // K5_DECODE.md
             tj.assign(K, 0.0);  // K5_MIXDEC.md
@@ -2062,7 +2097,7 @@ class K5 {
                 while (c.step < o.max_words && c.out.size() < o.bytes) {
                     const std::uint64_t salt = mix64(cs ^ mix64(static_cast<std::uint64_t>(c.step) + 0x5EED));
                     double lp = 0;
-                    const std::uint32_t w = step_word(c, rng, salt, o, gk[k], fb.get(), sc, &lp);
+                    const std::uint32_t w = step_word(c, rng, salt, ox, gk[k], fb.get(), sc, &lp);
                     slp += lp, spmi += assoc.empty() ? 0.0 : assoc[w], stop += tlr.empty() ? 0.0 : tlr[w], ++nw;
                     if (use_wg) sg += cm_.class_lp(c.ctx.data(), c.ctx.size() - 1, w);  // K5_DECODE.md
                     if (req && !hit[k] && pcw.count(content_lower(w))) hit[k] = 1;  // K5_FIRST.md
@@ -2078,6 +2113,7 @@ class K5 {
                 tf[k] = slp / n, tp[k] = spmi / n, tt[k] = stop / n, mk[k] = static_cast<double>(m) / nb;
                 if (use_wg) tg[k] = sg / n;  // K5_DECODE.md
                 text[k] = c.out.substr(b0);
+                if (!tlen.empty()) tlen[k] = ctl::draft_words(text[k]);  // K5_CONTROL.md
                 if (s.mix && s.mix->judge_w() != 0) tj[k] = s.mix->judge(s.out, text[k]);  // K5_MIXDEC.md
                 if (use_eg) {
                     roles[k] = eg_.roles(toks);
@@ -2088,6 +2124,7 @@ class K5 {
             if (o.mbr_sent_w != 0) tm = mbr::utilities(text);
             z(tf), z(tp), z(tm), z(te), z(tt);
             if (use_wg) z(tg);  // K5_DECODE.md
+            if (!tlen.empty()) tlen = ctl::length_z(std::move(tlen));  // K5_CONTROL.md
             const double jw = s.mix ? s.mix->judge_w() : 0.0;  // K5_MIXDEC.md: the judge, z-scored as the other terms
             if (jw != 0) z(tj);
             std::size_t best = 0;
@@ -2100,6 +2137,7 @@ class K5 {
                 double score = o.gate_wf * tf[k] + o.gate_wp * tp[k] + o.mbr_sent_w * tm[k] + o.eg_w * te[k] + o.lda_w * tt[k] - o.gate_wm * mk[k];
                 if (xp != 0 || xl != 0) score += xp * tp[k] + xl * tt[k];
                 if (use_wg) score += o.gate_wg * tg[k];  // K5_DECODE.md
+                if (!tlen.empty()) score += cwl * tlen[k];  // K5_CONTROL.md
                 if (jw != 0) score += jw * tj[k];  // K5_MIXDEC.md
                 if (!have || score > bscore) bscore = score, best = k, have = true;
             }
@@ -3168,6 +3206,27 @@ inline bool self_test(std::string& err) {
                 !apply_flag("--k5-retrieve", "k=1,rel=0.5,fill=1,grow=400,k2=4,qtext=1", r2, re) || !r2.ret.fill || r2.ret.grow != 400 ||
                 r2.ret.k2 != 4 || !r2.ret.qtext || apply_flag("--k5-retrieve", "k=1,rel=0.5,fill=2", r2, re)) {
                 err = "--k5-retrieve parse (K5_RETRIEVE2)";
+                return false;
+            }
+        }
+        {  // K5_CONTROL.md: off by default; parses; reads sentences and moves the knobs the registered way
+            Options c0 = k5_v1();
+            ctl::Params cp;
+            std::string ce;
+            if (Options{}.ctl.on() || !apply_flag("--k5-control", "link=1,words=1", c0, ce) || !c0.ctl.link || !c0.ctl.words ||
+                apply_flag("--k5-control", "link=0", c0, ce) || apply_flag("--k5-control", "link=1,x=1", c0, ce) ||
+                !apply_flag("--k5-control", "off", c0, ce) || c0.ctl.on() || !ctl::parse("link=1,words=1", cp, ce)) {
+                err = "--k5-control parse";
+                return false;
+            }
+            ctl::Track t;
+            t.begin("The river runs north.", cp);
+            const ctl::Knobs k0 = t.step(cp, "", 0.8, 0.5);
+            const ctl::Knobs k1 = t.step(cp, " Cats eat. Dogs bark at cars all day long here.", 0.8, 0.5);
+            if (k0.temperature != 0.8 || k0.rel != 0.5 || k0.wl != 0 || t.n != 1 || !(k1.temperature < 0.8) || !(k1.rel > 0.5) ||
+                !(k1.wl > 0) || ctl::split_sentences("He met Dr. Smith at the station. Then he left the city in May.").size() != 2 ||
+                ctl::count_words("It's a well-known 1990s band.") != 5) {
+                err = "--k5-control loop";
                 return false;
             }
         }
