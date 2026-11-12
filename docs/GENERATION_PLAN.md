@@ -2462,3 +2462,16 @@ Old binary main 9cbd277; old and new were started together.
 - **Checks** (registered before they run):
   - the small setup equals the binary before the change under `cmp`;
   - the full default run equals §13.55's `--model` run under `cmp` (`context8k_bpc` 1.4900).
+
+### 13.57 The signal coherent text needs: which text signals agree with the raters (2026-11-12; [WRITING_SIGNAL](reports/WRITING_SIGNAL.md); §13.14's research item)
+
+- **Registered first** (51532b0): 15 text signals plus SCRIBE v2 and v3.1, each with a direction, scored on every committed blind round. That is 14 rounds and 1,431 writer-against-writer judgments, with the texts as the raters saw them. A signal tracks the raters if its share of agreeing pairs has a 95% interval above 0.5. The raters agree with each other 0.840.
+- **One text signal passes: lower mean surprise per word** (a word trigram Kneser–Ney model on `train.txt`), 0.588 [0.544, 0.630]. SCRIBE v2 just passes, 0.547 [0.508, 0.584]. **SCRIBE v3.1 does not** (0.473). No signal beats SCRIBE v2 over all rounds (+0.041 [−0.021, +0.098]).
+- **The rounds disagree.**
+  - Between settings of one writer, lower surprise agrees 0.738, in all six rounds.
+  - On today's 337 MB writer, lower surprise agrees 0.643 against SCRIBE v2's 0.566. This split is exploratory.
+  - When the arms add content (the planner's facts, the 337 MB counts), the raters prefer the more surprising text (0.367 and 0.14).
+- **Low surprise is a screen, not a target.** Human text is far more surprising (AUC 0.93). Commitment, burstiness and sentence rhythm separate human from writer (AUC about 0.8), but not one writer from another (0.47–0.54). A fit over all signals fails on rounds it did not see (0.467).
+- **What it means:**
+  - To screen sampler and chooser settings, use mean surprise beside SCRIBE v2, registered and tested on fresh pairs.
+  - The gap to human text is commitment (0.67 against 0.28 of sentences reuse an earlier word) and sentence length (19.7 words against 12.7). No chooser closes it; a writer that plans the paragraph might (J2's paragraph plan).
