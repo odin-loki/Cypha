@@ -1,0 +1,122 @@
+setting	kind	how	theta_star	mult	value	bpc	delta_vs_theta_star	note
+(theta*) replay	-	replay		1		1.7201	+0.0000	the tuned point itself (small slice, second half)
+(theta*) run	-	run		1		1.7201	+0.0000	the tuned point itself (small slice, second half)
+lr1	continuous	replay	0.000564081	0.5	0.000282041	1.7203	+0.0002	bitwise mixers' first-layer step (and the 2-input mixers')
+lr1	continuous	replay	0.000564081	0.7	0.000394857	1.7201	+0.0000	bitwise mixers' first-layer step (and the 2-input mixers')
+lr1	continuous	replay	0.000564081	0.85	0.000479469	1.7200	-0.0001	bitwise mixers' first-layer step (and the 2-input mixers')
+lr1	continuous	replay	0.000564081	1.15	0.000648693	1.7201	+0.0000	bitwise mixers' first-layer step (and the 2-input mixers')
+lr1	continuous	replay	0.000564081	1.4	0.000789713	1.7202	+0.0001	bitwise mixers' first-layer step (and the 2-input mixers')
+lr1	continuous	replay	0.000564081	2	0.00112816	1.7203	+0.0002	bitwise mixers' first-layer step (and the 2-input mixers')
+lr2	continuous	replay	0.000150458	0.5	7.5229e-05	1.7200	-0.0001	bitwise mixers' second-layer step
+lr2	continuous	replay	0.000150458	0.7	0.000105321	1.7200	-0.0001	bitwise mixers' second-layer step
+lr2	continuous	replay	0.000150458	0.85	0.000127889	1.7200	-0.0001	bitwise mixers' second-layer step
+lr2	continuous	replay	0.000150458	1.15	0.000173027	1.7201	+0.0000	bitwise mixers' second-layer step
+lr2	continuous	replay	0.000150458	1.4	0.000210641	1.7201	+0.0000	bitwise mixers' second-layer step
+lr2	continuous	replay	0.000150458	2	0.000300916	1.7202	+0.0001	bitwise mixers' second-layer step
+lrb	continuous	replay	0.00181686	0.5	0.00090843	1.7204	+0.0003	geometric mixer's step
+lrb	continuous	replay	0.00181686	0.7	0.0012718	1.7202	+0.0001	geometric mixer's step
+lrb	continuous	replay	0.00181686	0.85	0.00154433	1.7201	+0.0000	geometric mixer's step
+lrb	continuous	replay	0.00181686	1.15	0.00208939	1.7201	+0.0000	geometric mixer's step
+lrb	continuous	replay	0.00181686	1.4	0.0025436	1.7201	+0.0000	geometric mixer's step
+lrb	continuous	replay	0.00181686	2	0.00363372	1.7204	+0.0003	geometric mixer's step
+apm	continuous	replay	0.0331976	0.5	0.0165988	1.7206	+0.0005	SSE (APM) rate
+apm	continuous	replay	0.0331976	0.7	0.0232383	1.7202	+0.0001	SSE (APM) rate
+apm	continuous	replay	0.0331976	0.85	0.028218	1.7201	+0.0000	SSE (APM) rate
+apm	continuous	replay	0.0331976	1.15	0.0381772	1.7201	+0.0000	SSE (APM) rate
+apm	continuous	replay	0.0331976	1.4	0.0464766	1.7203	+0.0002	SSE (APM) rate
+apm	continuous	replay	0.0331976	2	0.0663952	1.7211	+0.0010	SSE (APM) rate
+eps	continuous	replay	2.31807e-05	0.5	1.15903e-05	1.7207	+0.0006	stretch clamp
+eps	continuous	replay	2.31807e-05	0.7	1.62265e-05	1.7204	+0.0003	stretch clamp
+eps	continuous	replay	2.31807e-05	0.85	1.97036e-05	1.7202	+0.0001	stretch clamp
+eps	continuous	replay	2.31807e-05	1.15	2.66578e-05	1.7199	-0.0002	stretch clamp
+eps	continuous	replay	2.31807e-05	1.4	3.2453e-05	1.7198	-0.0003	stretch clamp
+eps	continuous	replay	2.31807e-05	2	4.63614e-05	1.7195	-0.0006	stretch clamp
+floor	continuous	replay	1.67652e-05	0.5	8.3826e-06	1.7202	+0.0001	geometric mixer's distribution floor
+floor	continuous	replay	1.67652e-05	0.7	1.17356e-05	1.7201	+0.0000	geometric mixer's distribution floor
+floor	continuous	replay	1.67652e-05	0.85	1.42504e-05	1.7201	+0.0000	geometric mixer's distribution floor
+floor	continuous	replay	1.67652e-05	1.15	1.928e-05	1.7201	+0.0000	geometric mixer's distribution floor
+floor	continuous	replay	1.67652e-05	1.4	2.34713e-05	1.7200	-0.0001	geometric mixer's distribution floor
+floor	continuous	replay	1.67652e-05	2	3.35304e-05	1.7199	-0.0002	geometric mixer's distribution floor
+m1lr1	continuous	replay	0.00545053	0.5	0.00272527	1.7213	+0.0012	M1 first-layer step
+m1lr1	continuous	replay	0.00545053	0.7	0.00381537	1.7203	+0.0002	M1 first-layer step
+m1lr1	continuous	replay	0.00545053	0.85	0.00463295	1.7201	+0.0000	M1 first-layer step
+m1lr1	continuous	replay	0.00545053	1.15	0.00626811	1.7202	+0.0001	M1 first-layer step
+m1lr1	continuous	replay	0.00545053	1.4	0.00763074	1.7205	+0.0004	M1 first-layer step
+m1lr1	continuous	replay	0.00545053	2	0.0109011	1.7213	+0.0012	M1 first-layer step
+m1lr2	continuous	replay	0.000200209	0.5	0.000100104	1.7203	+0.0002	M1 second-layer step
+m1lr2	continuous	replay	0.000200209	0.7	0.000140146	1.7201	+0.0000	M1 second-layer step
+m1lr2	continuous	replay	0.000200209	0.85	0.000170178	1.7201	+0.0000	M1 second-layer step
+m1lr2	continuous	replay	0.000200209	1.15	0.00023024	1.7201	+0.0000	M1 second-layer step
+m1lr2	continuous	replay	0.000200209	1.4	0.000280293	1.7201	+0.0000	M1 second-layer step
+m1lr2	continuous	replay	0.000200209	2	0.000400418	1.7203	+0.0002	M1 second-layer step
+m2eta	continuous	replay	0.340135	0.5	0.170068	1.7201	+0.0000	M2A master's exponent
+m2eta	continuous	replay	0.340135	0.7	0.238094	1.7201	+0.0000	M2A master's exponent
+m2eta	continuous	replay	0.340135	0.85	0.289115	1.7201	+0.0000	M2A master's exponent
+m2eta	continuous	replay	0.340135	1.15	0.391155	1.7201	+0.0000	M2A master's exponent
+m2eta	continuous	replay	0.340135	1.4	0.476189	1.7201	+0.0000	M2A master's exponent
+m2eta	continuous	replay	0.340135	2	0.68027	1.7201	+0.0000	M2A master's exponent
+m2share	continuous	replay	0.0014615	0.5	0.00073075	1.7201	+0.0000	M2A master's share
+m2share	continuous	replay	0.0014615	0.7	0.00102305	1.7201	+0.0000	M2A master's share
+m2share	continuous	replay	0.0014615	0.85	0.00124227	1.7201	+0.0000	M2A master's share
+m2share	continuous	replay	0.0014615	1.15	0.00168072	1.7201	+0.0000	M2A master's share
+m2share	continuous	replay	0.0014615	1.4	0.0020461	1.7201	+0.0000	M2A master's share
+m2share	continuous	replay	0.0014615	2	0.002923	1.7201	+0.0000	M2A master's share
+m2geta	continuous	replay	0.831624	0.5	0.415812	1.7201	+0.0000	M2G master's exponent
+m2geta	continuous	replay	0.831624	0.7	0.582137	1.7201	+0.0000	M2G master's exponent
+m2geta	continuous	replay	0.831624	0.85	0.70688	1.7201	+0.0000	M2G master's exponent
+m2geta	continuous	replay	0.831624	1.15	0.956368	1.7201	+0.0000	M2G master's exponent
+m2geta	continuous	replay	0.831624	1.4	1.16427	1.7201	+0.0000	M2G master's exponent
+m2geta	continuous	replay	0.831624	2	1.66325	1.7201	+0.0000	M2G master's exponent
+m2gshare	continuous	replay	0.00149035	0.5	0.000745175	1.7201	+0.0000	M2G master's share
+m2gshare	continuous	replay	0.00149035	0.7	0.00104324	1.7201	+0.0000	M2G master's share
+m2gshare	continuous	replay	0.00149035	0.85	0.0012668	1.7201	+0.0000	M2G master's share
+m2gshare	continuous	replay	0.00149035	1.15	0.0017139	1.7201	+0.0000	M2G master's share
+m2gshare	continuous	replay	0.00149035	1.4	0.00208649	1.7201	+0.0000	M2G master's share
+m2gshare	continuous	replay	0.00149035	2	0.0029807	1.7200	-0.0001	M2G master's share
+decay	continuous	replay	0.0001	0.5	5e-05	1.7203	+0.0002	step decay per weight set (tried 3e-5, 1e-4)
+decay	continuous	replay	0.0001	0.7	7e-05	1.7202	+0.0001	step decay per weight set (tried 3e-5, 1e-4)
+decay	continuous	replay	0.0001	0.85	8.5e-05	1.7201	+0.0000	step decay per weight set (tried 3e-5, 1e-4)
+decay	continuous	replay	0.0001	1.15	0.000115	1.7200	-0.0001	step decay per weight set (tried 3e-5, 1e-4)
+decay	continuous	replay	0.0001	1.4	0.00014	1.7200	-0.0001	step decay per weight set (tried 3e-5, 1e-4)
+decay	continuous	replay	0.0001	2	0.0002	1.7199	-0.0002	step decay per weight set (tried 3e-5, 1e-4)
+ngram-cap	continuous	run	8	0.5	4	1.7184	-0.0017	n-gram count limit (counts halve past it)
+ngram-cap	continuous	run	8	0.7	6	1.7194	-0.0007	n-gram count limit (counts halve past it)
+ngram-cap	continuous	run	8	0.85	7	1.7198	-0.0003	n-gram count limit (counts halve past it)
+ngram-cap	continuous	run	8	1.15	9	1.7207	+0.0006	n-gram count limit (counts halve past it)
+ngram-cap	continuous	run	8	1.4	11	1.7213	+0.0012	n-gram count limit (counts halve past it)
+ngram-cap	continuous	run	8	2	16	1.7222	+0.0021	n-gram count limit (counts halve past it)
+ngram-lr	continuous	run	0.000625	0.5	0.0003125	1.7201	+0.0000	n-gram order mixer's step
+ngram-lr	continuous	run	0.000625	0.7	0.0004375	1.7201	+0.0000	n-gram order mixer's step
+ngram-lr	continuous	run	0.000625	0.85	0.00053125	1.7201	+0.0000	n-gram order mixer's step
+ngram-lr	continuous	run	0.000625	1.15	0.00071875	1.7201	+0.0000	n-gram order mixer's step
+ngram-lr	continuous	run	0.000625	1.4	0.000875	1.7201	+0.0000	n-gram order mixer's step
+ngram-lr	continuous	run	0.000625	2	0.00125	1.7201	+0.0000	n-gram order mixer's step
+sim T	continuous	run	0.05	0.5	0.025	1.7214	+0.0013	similar-context softmax temperature (qa reads it too)
+sim T	continuous	run	0.05	0.7	0.035	1.7206	+0.0005	similar-context softmax temperature (qa reads it too)
+sim T	continuous	run	0.05	0.85	0.0425	1.7203	+0.0002	similar-context softmax temperature (qa reads it too)
+sim T	continuous	run	0.05	1.15	0.0575	1.7200	-0.0001	similar-context softmax temperature (qa reads it too)
+sim T	continuous	run	0.05	1.4	0.07	1.7203	+0.0002	similar-context softmax temperature (qa reads it too)
+sim T	continuous	run	0.05	2	0.1	1.7209	+0.0008	similar-context softmax temperature (qa reads it too)
+ngram-orders	structural	run	1,2,3,4,5,6,8,12					online n-gram orders
+lstm-window	structural	run	20					LSTM BPTT window (one Adam step a window)
+bkn	structural	run	6:4:2:1					byte Kneser-Ney order:prune-from:min-context:drop-singletons (qa too)
+cls	structural	run	shape (= shape:6:3:cp2)					class expert tail:orders:storage (qa too)
+doc	structural	run	cache					document experts' parts and the cache's word settings (cand, stop)
+ngram-tb	structural	none	24					table bits: 23 lost (ONLINE_LEARNING_UPGRADES O1); 25 adds ~590 MB (+38%), over the +20% RAM limit
+lstm-size	structural	none	256					64, 128 or 256 only; 256 is the largest built, smaller ones lost (L4, C-L1)
+sim k	structural	none	8192					neighbours a query; the similar-context loop is the row loop's critical path
+copy-min	structural	none	8					clips only the frozen copy lambdas answers read; the online chain ignores it (content_mixer.hpp online_mix), so context8k's bpc cannot move
+final-gate	structural	none	copy					ig or lstm turn the full and meta mix off
+two-rates	structural	none	on					a switch (§13.21 measured it), not a setting
+ssef	structural	replay	0					SSE output: 0 fixed average, 1 learned
+a2bits	structural	replay	18					order-2 APM contexts (2^a2bits)
+l2	structural	replay	1					M1 second layer by bit position (0) or partial byte (1)
+m1r	structural	replay	1					M1 at each rate scale (1) or one (0)
+scales	structural	replay	0.25:0.5:1:2:4					M2 rate multiples
+m2m	structural	replay	0					M2A master: fixed share (0) or logistic (1)
+m3a, m3eta, m3l*	continuous (not tuned)	none	1e-4, 1, ...					M3 and M3L only: not in the headline M1Gs
+sel	structural	none	0:...:13					M1's selectors; META_MIXING found each adds
+headline	structural	none	M1Gs					the arm context8k_bpc reads (every arm is logged)
+chain rates	continuous (not tuned)	none	eta 0.02, slow/fast 0.005/0.08					no flag (content_mixer.hpp); T1 changes no code
+LSTM rate	continuous (not tuned)	none	0.003					no flag (ByteLSTMT's constructor in cmd_context8k)
+trie Config	continuous (not tuned)	none	alpha, eta, ...					no flag

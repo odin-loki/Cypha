@@ -2761,3 +2761,13 @@ Four fresh blind raters. Raters 1–2 rate the first 25 prompts, raters 3–4 th
   - fact precision 0.924 (K1 0.924);
   - copy32 0.476, no 13-word copies.
 - **SCRIBE rises partly because lower temperature copies more and stays on topic words** (§13.57). The raters' 0.855 is the evidence. A new 1–10 round (§13.69) will say how far the absolute score moved.
+
+### 13.72 T1's tuned `context8k` settings with the 1 TB trie (registered 2026-11-12, before the run)
+
+- **T1** ([TUNE_PREDICT](reports/TUNE_PREDICT.md), `wip/tune-predict` 86187fa) tuned `context8k`'s experts and mixers on enwik8's first 1.125 MiB. On the 8 MiB-trie default it is kept by its registered final pair: 1.4962 → **1.4848** (−0.0114), wall +1%, RAM +13%, answers unchanged.
+- **T1b** (`wip/tune-adapt`): settings that move while the model runs. Not kept: adapt 1.4849, noise 1.4881, both 1.4870, against the fixed 1.4848. The flag stays on its branch.
+- **But main's default is now the 1 TB trie (§13.56: 1.4900),** which T1 never ran with. So, before it becomes the default:
+  - **Run:** main + T1's `context8k_tuned()`, default flags (1 TB trie), full holdout, under `flock ~/.cypha_full.lock`.
+  - **Rule:** T1's values become main's `context8k` defaults if `context8k_bpc` is below 1.4900, wall time at most +20% and peak RAM at most +20% against the 1 TB run (7:39, 2.92 GB). If not, they stay on `wip/tune-predict`, and the 8 MiB result is recorded only.
+  - **Also checked:** `--train N` small runs still opt out of the 1 TB trie (they now get T1's values, as on T1's branch); `qa` rows are byte-identical; the writer default still equals T8.
+  - **Prediction:** 1.476–1.484 (most of T1's −0.0114 survives, since the tuned settings are mostly the online experts' and mixers').
