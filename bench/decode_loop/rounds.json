@@ -1,1 +1,13 @@
-{"rounds": []}
+{
+ "rounds": [
+  {
+   "name": "loop_r1",
+   "kind": "round",
+   "best": "START",
+   "arms": [
+    "r1_N9",
+    "r1_T75"
+   ]
+  }
+ ]
+}

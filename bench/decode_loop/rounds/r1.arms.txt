@@ -1,0 +1,20 @@
+start START avail=32G 00:58:04 flags: 
+GEN_EVAL copy32 T0.8 0.4983 verbatim13 0.0000 (0 of 150)
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 7:40.92
+	Maximum resident set size (kbytes): 11048480
+start r1_T75 avail=37G 01:07:30 flags: --temps 0.75
+GEN_EVAL copy32 T0.75 0.5252 verbatim13 0.0000 (0 of 150)
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 9:54.04
+	Maximum resident set size (kbytes): 11319036
+start r1_T85 avail=19G 01:18:02 flags: --temps 0.85
+GEN_EVAL copy32 T0.85 0.4380 verbatim13 0.0000 (0 of 150)
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 8:37.27
+	Maximum resident set size (kbytes): 11320192
+start r1_N7 avail=17G 01:27:30 flags: --k5-nucleus 0.7
+GEN_EVAL copy32 T0.8 0.5309 verbatim13 0.0000 (0 of 150)
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 9:51.50
+	Maximum resident set size (kbytes): 11315952
+start r1_N9 avail=25G 01:38:16 flags: --k5-nucleus 0.9
+GEN_EVAL copy32 T0.8 0.4237 verbatim13 0.0000 (0 of 150)
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 12:20.90
+	Maximum resident set size (kbytes): 11318040
