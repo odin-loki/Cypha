@@ -2438,3 +2438,13 @@ Old binary main 9cbd277; old and new were started together.
   - Small runs −9.6% (default), −12.3%, −16.5% on 4 CPUs; RAM the same. O5's patch to `online_ngram.hpp` is applied; the O2, O6 and Q2 patches were left.
   - Predictions: exact **hit**; under 3% **miss** (the gain was larger).
 - **The merge, checked** (main + L1 + O2 + O3, `g++ -O2`): small `context8k` default 1.7501, `--no-meta-mix` 1.7633 and `--no-full-mix` 1.8384 each equal the binary before the merge under `cmp`. The default `sample --k5` on the 250 dev prompts equals L1's GEN file. Selftest passes.
+
+### 13.55 The 1 TB trie under today's `context8k` default (registered 2026-11-12, before the run)
+
+**Why.** The handoff (2026-11-05 §3) names the 1 TB trie as the recommended model file, but it was last run under the 4 November default (§13.20). Since then the full mix, meta mix, O5 and O2 have landed.
+
+**Run.** Main c51f6c2b, `g++ -O2`: `cyphalm_trie context8k ENWIK8 DOLLY --model /mnt/d/cypha_llm/corpus/trie/trie_1tb.pk`, default threads, under `flock ~/.cypha_full.lock`. It is compared with main's own full run, 1.4962 (8 MiB trie trained in the run).
+
+**Rule.** If `context8k_bpc` is lower by more than 0.005, the 1 TB file is recommended for `context8k` in CURRENT.md. The default itself does not change; that is Odin's call, because the file is 992 MB and lives only on the PC. Answers are not read here.
+
+**Prediction.** 1.47–1.50: the online experts now carry most of the gain, and the 1 TB trie helped by only 0.006 under the old stack (1.6906 against 1.6971).
