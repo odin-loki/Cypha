@@ -4,6 +4,12 @@ The language model being taken forward is the packed byte trie. hp gate24 stays 
 
 **The default plan is now [`PLAN.md`](PLAN.md)** (2026-10-26). The 1 TB run below continues inside it as Track A, with its predictions registered there. The question-answering and 8K count-context results are in [`reports/CYPHALM_QA_AND_CONTEXT_TEST.md`](reports/CYPHALM_QA_AND_CONTEXT_TEST.md).
 
+## The writer today (2026-11-13): T8
+
+`sample --k5` writes with K1's stack (337 MB counts, 16-draft gate, LDA term, honest fill, retrieval k=1) at temperature 0.8 (GENERATION_PLAN §13.71). Blind raters prefer it to K1 0.855; it reads 2.50 of 10 to blind raters, human text 8.64 (§13.74). Dev SCRIBE v2 0.811, copy32 0.487, fact precision 0.924, no 13-word copies.
+
+Merged, off by default: D4's decoder `--mixdec` (§13.76; raters 0.750–0.760 against K1, but on top of T8 it fails the reading screen) and D2's `wf` and `wg` gate terms.
+
 ## `context8k` today (2026-11-13): 1.4786
 
 The 1 TB trie with T1's tuned settings (GENERATION_PLAN §13.72): `context8k_bpc` **1.4786**. Without T1's values: 1.4900; with the 8 MiB trie and T1's values: 1.4848; the 8 MiB trie alone: 1.4962.

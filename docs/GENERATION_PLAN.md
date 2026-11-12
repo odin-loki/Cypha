@@ -2844,3 +2844,31 @@ Not a cause: sentence starts (4 of 90 breaks).
 - rating `--no-k5-plan` against T8 and tightening fact fills (cause 2);
 - min-p and a fluency floor in the gate (causes 3–4);
 - later, a vocabulary from the 337 MB (cause 5).
+
+### 13.76 D4 and D5, CyphaLM's decoder (2026-11-13; [K5_MIXDEC](reports/K5_MIXDEC.md), [MIXDEC_T8](reports/MIXDEC_T8.md), design [DECODER](DECODER.md); merged, off by default; T8 stays)
+
+**Odin:** "Lets make a mixer decoder and an architecture like a LLM architecture … We should do the reverse of compression."
+
+**D4, the decoder** (`--mixdec SPEC`, `lm/decoder/{arith,learner,mixdec}.hpp`; registered first, 060b4e52):
+- A byte learner (the 1 TB trie, byte Kneser–Ney, a byte LSTM, n-grams) is primed on the retrieved article and frozen. It enters K5's choice in three ways, never as a plain blend:
+  - a context ratio on the nucleus's 16 most probable words (`ratio=R`);
+  - a veto (`veto=V`);
+  - a judge term in the sentence gate (`judge=J`).
+- Words are drawn by arithmetic decoding of K5's (reweighted) nucleus. Every word written is still one of K5's candidates. The planner's fact sentences are not touched.
+- **Screen** (against K1, the default when it ran): all four arms passed the numbers. By reading, MR and MRJ stay on the prompt's subject where K1 drifts. The price is more verbless fragments and repetition of the subject's word. MV and MJ read like K1.
+- **Blind pairwise raters against K1** (`bench/blind/mix_pair`, seed 20261203, four fresh raters, 460 characters): **MR 0.750 [0.650, 0.840]**, **MRJ 0.760 [0.660, 0.860]**. Both intervals lie above 0.5 (rater replies in `bench/blind/mix_pair`, scored by the lead).
+- By then T8 was the default (§13.71), so D4 was not adopted on this result alone. D5 put it on top of T8.
+
+**D5, the decoder on T8** (`wip/mixdec-t8`; registered first, 42206a76):
+- **The merge.** `word_kn.hpp` (4 blocks) and `discourse.hpp` (3 blocks) conflicted. D2's gate terms (`wf`, `wg`) and D4's judge term were added at the same lines. They are independent, so each block keeps both.
+- **Checks** (250 dev prompts, `cmp`): the default equals T8; `--temps 1.0` equals K1; with MR's and MRJ's specs it equals D4's files. The selftest passes.
+- **Arms** against T8: T8MR (`--mixdec ratio=0.3,copy=0`) and T8MRJ (`--mixdec ratio=0.3,judge=1,copy=0`).
+- **Screen** (dev):
+  - Both pass the numbers: verbatim13 0; fact precision 0.935 and 0.929.
+  - SCRIBE v2 0.868 and 0.838 (T8 0.811); copy32 0.450 and 0.454 (T8 0.487).
+  - Both fail my strict reading of 12 prompts. Whole sentences: T8 0.48, T8MR 0.46, T8MRJ 0.41. Verbless fragments: T8 0.34, T8MR 0.36, T8MRJ 0.42. T8MRJ repeats the subject's word in three sentences running in 3 of 12 prompts.
+  - T8MR fails narrowly: more whole sentences in count (35 against 32), but more pieces in all.
+- **By the rule nothing went to the raters. T8 stays the default.**
+- **Why it did not add up:** T8 already gets MR's gain. MR's win over K1 was staying on the subject's words; the lower temperature already does that. On top of T8, what is left is the decoder's price: more short pieces, more fragments, more repetition.
+- **Merged to main, off by default:** `--mixdec` (D4), with D2's `wf` and `wg`. The default output is T8's (`cmp`).
+- **What it says:** the decoder and T8 pull the text toward the subject by the same means. A next decoder step should target form, for example whole clauses judged by a longer-context model (§13.75, cause 1), not more topic.
