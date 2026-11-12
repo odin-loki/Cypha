@@ -2391,3 +2391,16 @@ Every branch first merges `origin/main` (M1 and M2 are exact, so P1 and every ba
 - **Checks** (`cmp`, 250 dev prompts, MODEL line aside): the default equals G16's dev GEN file, and `--k5-gate 8` equals W1b's.
 - **The one test read** (GEN-A test, 250 prompts; `bench/tune_write/test_read/`): SCRIBE v2 **0.621 [0.589, 0.655]** (W1b 0.600), v3.1 0.566 (0.550), copy32 0.237, no 13-word copies.
 - **Still weak**, from reading every arm: no setting stops the drift after one or two sentences. That needs a plan for the paragraph, not a sampling setting.
+
+### 13.52 M4, O8 and O7 results (2026-11-12; M4 and O8 merged to main)
+
+- **M4, grouped gate experts** ([MERGE_GATE](reports/MERGE_GATE.md), `wip/merge-gate` 7905a85): **exact, kept.** Old and new were started together. The discourse planner's and `--k5-struct`'s dev GEN files are equal under `cmp`, as are their SCRIBE tables and the checked-in Q3t and W5 files. Gate time −43% under the planner and −50% under `--k5-struct` (medians). Peak RAM −26 MB and −306 MB. Wall time is unchanged (the gate is under 1% of either writer). Code +19 lines. Predictions: exact **hit**; gate −20% **hit**.
+- **O8, SIMD across weight sets** ([OPT_META_SIMD](reports/OPT_META_SIMD.md), `wip/opt-meta-simd` 61ff9d2): **exact, kept with SSE2 kernels.** M1's 5 rates × 14 weight sets are one bank, with the rates' weights side by side. Exact in every check; the full run reproduces `context8k_bpc` 1.4962 under `cmp`.
+  - AVX-512, as registered: meta-mix time +3.9% (median), because AVX-512 lowers this Xeon's clock.
+  - Amendment O8b, registered before its runs: SSE2 on the same layout, meta-mix −14.8%, the full mix's own time −8%. Scalar loops on the new layout give −13.2%, so the layout does most of it. Wall time and RAM are unchanged. `CYPHA_META_SIMD` selects avx512 or scalar.
+  - Predictions: exact **hit**; −50% **miss**.
+- **O7, Huffman binarisation** ([OPT_HUFFMAN](reports/OPT_HUFFMAN.md), `wip/opt-huffman` 4c5c52d): **not kept, not merged.**
+  - 5.1 binary decisions a byte instead of 8. The full mix's own time −15.6%, wall time about −1%.
+  - `context8k_bpc` 1.5069 on the full run (+0.0107), +0.018 on the small one. A tree node groups bytes by frequency, not by shared high bits, so the contexts lose meaning.
+  - Predictions: 4.6 decisions **miss** (5.1); bpc within +0.002 **miss**; time −20% **miss**.
+- **The merge, checked:** main + M4 + O8, built with `g++ -O2`. Small `context8k` (`--train 1048576 --sample 1179648`) equals main's binary under `cmp` (1.7501). The default `sample --k5` on the 250 dev prompts equals G16's GEN file. The selftest passes.
