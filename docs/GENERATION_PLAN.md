@@ -2716,3 +2716,14 @@ Four fresh blind raters. Raters 1–2 rate the first 25 prompts, raters 3–4 th
   - K1 3.0–4.5: **miss** (2.28);
   - gap to human at least 4: **hit** (6.26);
   - K1 rated 6 or more on at most 15%: **hit** (0%).
+
+### 13.70 D3, free sentences from mined sentence shapes (2026-11-12; [K5_SKELFREE](reports/K5_SKELFREE.md); not adopted)
+
+- **Registered first** (524840c). `--k5-skelfree bank=FILE,...` (`planner/free_skel.hpp`, miner `k5_skelfree.cpp`) writes free sentences skeleton-first. The bank is 164,983 class-code skeletons of whole real sentences from `train_all.txt` [0, 100 MB). Each skeleton is filled by K5, cut to the class at each position, with the retrieval overlay, nucleus 0.8, the copy cap and the repeat ban. The drafts go into today's gate beside K5's own.
+- **Screen** (dev):
+  - SH (8 skeleton + 8 K5 drafts): SCRIBE v2 0.690, fact precision 0.918;
+  - SHF (2 fills each): 0.688, 0.884;
+  - skeleton-only arms fail SCRIBE (0.650, 0.664).
+  - By reading, whole-clause share rises from 0.27 to 0.36. But many whole sentences are nonsense ("He was about 100 km long."), and the class cut causes agreement errors ("They is living…").
+- **Blind pairwise raters against K1** (packets 6e004cc): SH 0.400 [0.300, 0.500], rater pairs 0.36 and 0.44; SHF 0.470 [0.360, 0.580]. **Not adopted; K1 stays.**
+- **What it says:** grammatical form without sense reads no better than broken form. The code stays on `wip/k5-skelfree`, unmerged: D4 edits `discourse.hpp` now. The report, runs and packets are on main.

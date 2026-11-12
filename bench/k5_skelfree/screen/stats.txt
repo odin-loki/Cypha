@@ -1,0 +1,5 @@
+K1.gen.txt	samples 250	unlike K1 0 (rated 0 of 50)	ended sentences in 460 chars 1515/1761 = 0.860
+SA.gen.txt	samples 250	unlike K1 215 (rated 45 of 50)	ended sentences in 460 chars 1789/2028 = 0.882
+SH.gen.txt	samples 250	unlike K1 214 (rated 44 of 50)	ended sentences in 460 chars 1564/1806 = 0.866
+SF.gen.txt	samples 250	unlike K1 215 (rated 45 of 50)	ended sentences in 460 chars 1764/2002 = 0.881
+SHF.gen.txt	samples 250	unlike K1 214 (rated 44 of 50)	ended sentences in 460 chars 1588/1830 = 0.868
