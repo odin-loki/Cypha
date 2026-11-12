@@ -2381,3 +2381,13 @@ Every branch first merges `origin/main` (M1 and M2 are exact, so P1 and every ba
   - Speed: `context8k` small −6.5% (**miss**: −10% predicted); K5 sampling −16% with the planner and −29% without (**hit**).
   - It stays off by default because `-march=native` binaries run only on CPUs like this PC's.
 - **The merge, checked:** main + O6 + O1, built with `g++ -O2`. The default `sample --k5` on the 250 dev prompts equals W1b's GEN file (`cmp`, MODEL line aside). Selftest passes. Not checked: O1's build at 337 MB, and O1 and O6 built together.
+
+### 13.51 T2, writing tuned on the 337 MB default (2026-11-12; [TUNE_WRITE](reports/TUNE_WRITE.md))
+
+- **Registered first** (11e8448): ten arms against W1b, each moving one setting. They cover nucleus, temperature, order, gate size and two discourse knobs, screened on dev by SCRIBE, copy32 and reading.
+- **Screen** (dev, 250 prompts): three candidates passed, one per setting: N7 (nucleus 0.7), O6 (order 6) and G16 (a sentence gate of 16 drafts). T8 and T9 copy too much (copy32 0.39, 0.31). The combination N7+O6+G16 failed on copy32 (0.309). §13.43's wandering setting has no flag for writing and is not built.
+- **Blind pairwise raters against W1b** (packets 7e401c7): **G16 0.670 [0.570, 0.770]**, **N7 0.670 [0.560, 0.770]**, O6 0.580 [0.460, 0.690].
+- **The tie**, broken by a rule registered before any further run (0bad504): the higher lower bound, then the lower copy32. **G16 is the default** (`gate_k` 16; `--k5-gate 8` restores W1b). The pair NG (N7 + G16) was registered as a new arm. It passed the screen (v2 0.652, copy32 0.280), but against G16 it reads the same: 0.510 [0.400, 0.620]. Not adopted.
+- **Checks** (`cmp`, 250 dev prompts, MODEL line aside): the default equals G16's dev GEN file, and `--k5-gate 8` equals W1b's.
+- **The one test read** (GEN-A test, 250 prompts; `bench/tune_write/test_read/`): SCRIBE v2 **0.621 [0.589, 0.655]** (W1b 0.600), v3.1 0.566 (0.550), copy32 0.237, no 13-word copies.
+- **Still weak**, from reading every arm: no setting stops the drift after one or two sentences. That needs a plan for the paragraph, not a sampling setting.
