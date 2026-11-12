@@ -1,0 +1,23 @@
+	Command being timed: "scripts/gen_eval.sh dev C150 /home/odin/k5c4_runs/gena --prompts 250 --k5 /mnt/d/cypha_llm/fuzzy/train.txt --k5-more /mnt/d/cypha_llm/c4prose/k5c4_C150.txt --k5-disc-text /mnt/d/cypha_llm/k5scale/clean/train_all.txt"
+	User time (seconds): 912.21
+	System time (seconds): 25.12
+	Percent of CPU this job got: 149%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 10:29.02
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 16220964
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 4
+	Minor (reclaiming a frame) page faults: 5532860
+	Voluntary context switches: 164226
+	Involuntary context switches: 6006
+	Swaps: 0
+	File system inputs: 12240
+	File system outputs: 800
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0

@@ -1,0 +1,551 @@
+{
+ "store": [
+  "bench/fact_store/e9_text",
+  "bench/fact_store/e9_v2"
+ ],
+ "drop": "75497472:100000000",
+ "v2": true,
+ "facts": 92460,
+ "dropped": 4601,
+ "patterns": 359,
+ "arms": {
+  "HLT": {
+   "samples": 250,
+   "statements": 281,
+   "supported_n": 145,
+   "contradicted_n": 10,
+   "unknown_n": 126,
+   "with_statement": 79,
+   "point": {
+    "per_sample": 1.124,
+    "contradicted": 0.03558718861209965,
+    "supported": 0.5160142348754448,
+    "precision": 0.9354838709677419,
+    "invalid_dates": 0.0,
+    "supported_partly": 0.0,
+    "pos1_n": 37,
+    "pos1_contradicted": 0.0,
+    "pos1_supported": 0.1891891891891892,
+    "pos2_n": 40,
+    "pos2_contradicted": 0.025,
+    "pos2_supported": 0.175,
+    "pos3_n": 34,
+    "pos3_contradicted": 0.058823529411764705,
+    "pos3_supported": 0.4411764705882353,
+    "pos4+_n": 170,
+    "pos4+_contradicted": 0.041176470588235294,
+    "pos4+_supported": 0.6823529411764706
+   },
+   "ci": {
+    "per_sample": [
+     0.86,
+     1.408
+    ],
+    "contradicted": [
+     0.013333333333333334,
+     0.06315789473684211
+    ],
+    "supported": [
+     0.4262948207171315,
+     0.5985401459854015
+    ],
+    "precision": [
+     0.8879310344827587,
+     0.9743589743589743
+    ],
+    "invalid_dates": [
+     0.0,
+     0.0
+    ],
+    "supported_partly": [
+     0.0,
+     0.0
+    ],
+    "pos1_n": [
+     25,
+     51
+    ],
+    "pos1_contradicted": [
+     0.0,
+     0.0
+    ],
+    "pos1_supported": [
+     0.045454545454545456,
+     0.34146341463414637
+    ],
+    "pos2_n": [
+     26,
+     56
+    ],
+    "pos2_contradicted": [
+     0.0,
+     0.08571428571428572
+    ],
+    "pos2_supported": [
+     0.0625,
+     0.3023255813953488
+    ],
+    "pos3_n": [
+     21,
+     48
+    ],
+    "pos3_contradicted": [
+     0.0,
+     0.16666666666666666
+    ],
+    "pos3_supported": [
+     0.23809523809523808,
+     0.6097560975609756
+    ],
+    "pos4+_n": [
+     123,
+     221
+    ],
+    "pos4+_contradicted": [
+     0.011904761904761904,
+     0.07432432432432433
+    ],
+    "pos4+_supported": [
+     0.5838509316770186,
+     0.7764705882352941
+    ]
+   },
+   "by_relation": {
+    "birth_date": {
+     "contradicted": 6,
+     "supported": 86,
+     "unknown": 1
+    },
+    "birth_place": {
+     "unknown": 37,
+     "supported": 4,
+     "contradicted": 4
+    },
+    "death_date": {
+     "supported": 39
+    },
+    "death_place": {
+     "unknown": 4
+    },
+    "is_a": {
+     "unknown": 83,
+     "supported": 8
+    },
+    "located_in": {
+     "unknown": 1
+    },
+    "nationality": {
+     "supported": 8
+    }
+   },
+   "file": "/home/odin/k5c4_runs/gena/HLT.gen.txt"
+  },
+  "C150": {
+   "samples": 250,
+   "statements": 270,
+   "supported_n": 137,
+   "contradicted_n": 13,
+   "unknown_n": 120,
+   "with_statement": 74,
+   "point": {
+    "per_sample": 1.08,
+    "contradicted": 0.04814814814814815,
+    "supported": 0.5074074074074074,
+    "precision": 0.9133333333333333,
+    "invalid_dates": 0.0,
+    "supported_partly": 0.0,
+    "pos1_n": 33,
+    "pos1_contradicted": 0.0,
+    "pos1_supported": 0.18181818181818182,
+    "pos2_n": 28,
+    "pos2_contradicted": 0.0,
+    "pos2_supported": 0.17857142857142858,
+    "pos3_n": 32,
+    "pos3_contradicted": 0.03125,
+    "pos3_supported": 0.40625,
+    "pos4+_n": 177,
+    "pos4+_contradicted": 0.06779661016949153,
+    "pos4+_supported": 0.6384180790960452
+   },
+   "ci": {
+    "per_sample": [
+     0.828,
+     1.344
+    ],
+    "contradicted": [
+     0.02112676056338028,
+     0.07692307692307693
+    ],
+    "supported": [
+     0.4157303370786517,
+     0.5947712418300654
+    ],
+    "precision": [
+     0.8598726114649682,
+     0.9615384615384616
+    ],
+    "invalid_dates": [
+     0.0,
+     0.0
+    ],
+    "supported_partly": [
+     0.0,
+     0.0
+    ],
+    "pos1_n": [
+     21,
+     46
+    ],
+    "pos1_contradicted": [
+     0.0,
+     0.0
+    ],
+    "pos1_supported": [
+     0.030303030303030304,
+     0.3448275862068966
+    ],
+    "pos2_n": [
+     18,
+     41
+    ],
+    "pos2_contradicted": [
+     0.0,
+     0.0
+    ],
+    "pos2_supported": [
+     0.034482758620689655,
+     0.3548387096774194
+    ],
+    "pos3_n": [
+     19,
+     45
+    ],
+    "pos3_contradicted": [
+     0.0,
+     0.1111111111111111
+    ],
+    "pos3_supported": [
+     0.2,
+     0.6
+    ],
+    "pos4+_n": [
+     127,
+     229
+    ],
+    "pos4+_contradicted": [
+     0.028169014084507043,
+     0.10824742268041238
+    ],
+    "pos4+_supported": [
+     0.5436241610738255,
+     0.7258064516129032
+    ]
+   },
+   "by_relation": {
+    "birth_date": {
+     "supported": 80,
+     "unknown": 2,
+     "contradicted": 5
+    },
+    "birth_place": {
+     "unknown": 40,
+     "contradicted": 7,
+     "supported": 4
+    },
+    "death_date": {
+     "supported": 38,
+     "unknown": 1
+    },
+    "death_place": {
+     "unknown": 5
+    },
+    "is_a": {
+     "unknown": 72,
+     "supported": 6
+    },
+    "located_in": {
+     "supported": 3,
+     "contradicted": 1
+    },
+    "nationality": {
+     "supported": 6
+    }
+   },
+   "file": "/home/odin/k5c4_runs/gena/C150.gen.txt"
+  },
+  "C300": {
+   "samples": 250,
+   "statements": 261,
+   "supported_n": 137,
+   "contradicted_n": 10,
+   "unknown_n": 114,
+   "with_statement": 76,
+   "point": {
+    "per_sample": 1.044,
+    "contradicted": 0.038314176245210725,
+    "supported": 0.524904214559387,
+    "precision": 0.9319727891156463,
+    "invalid_dates": 0.0,
+    "supported_partly": 0.0,
+    "pos1_n": 37,
+    "pos1_contradicted": 0.0,
+    "pos1_supported": 0.1891891891891892,
+    "pos2_n": 29,
+    "pos2_contradicted": 0.0,
+    "pos2_supported": 0.2413793103448276,
+    "pos3_n": 22,
+    "pos3_contradicted": 0.09090909090909091,
+    "pos3_supported": 0.5,
+    "pos4+_n": 173,
+    "pos4+_contradicted": 0.046242774566473986,
+    "pos4+_supported": 0.6473988439306358
+   },
+   "ci": {
+    "per_sample": [
+     0.796,
+     1.304
+    ],
+    "contradicted": [
+     0.014925373134328358,
+     0.06598984771573604
+    ],
+    "supported": [
+     0.4225941422594142,
+     0.6140350877192983
+    ],
+    "precision": [
+     0.8803418803418803,
+     0.9742268041237113
+    ],
+    "invalid_dates": [
+     0.0,
+     0.0
+    ],
+    "supported_partly": [
+     0.0,
+     0.0
+    ],
+    "pos1_n": [
+     25,
+     50
+    ],
+    "pos1_contradicted": [
+     0.0,
+     0.0
+    ],
+    "pos1_supported": [
+     0.04,
+     0.34782608695652173
+    ],
+    "pos2_n": [
+     17,
+     43
+    ],
+    "pos2_contradicted": [
+     0.0,
+     0.0
+    ],
+    "pos2_supported": [
+     0.08,
+     0.42857142857142855
+    ],
+    "pos3_n": [
+     12,
+     33
+    ],
+    "pos3_contradicted": [
+     0.0,
+     0.25
+    ],
+    "pos3_supported": [
+     0.23076923076923078,
+     0.7142857142857143
+    ],
+    "pos4+_n": [
+     124,
+     225
+    ],
+    "pos4+_contradicted": [
+     0.015873015873015872,
+     0.08235294117647059
+    ],
+    "pos4+_supported": [
+     0.5348837209302325,
+     0.7414965986394558
+    ]
+   },
+   "by_relation": {
+    "birth_date": {
+     "supported": 81,
+     "contradicted": 6,
+     "unknown": 1
+    },
+    "birth_place": {
+     "unknown": 41,
+     "supported": 5,
+     "contradicted": 4
+    },
+    "death_date": {
+     "supported": 36,
+     "unknown": 1
+    },
+    "death_place": {
+     "unknown": 3
+    },
+    "is_a": {
+     "unknown": 67,
+     "supported": 5
+    },
+    "language": {
+     "unknown": 1
+    },
+    "located_in": {
+     "supported": 2
+    },
+    "nationality": {
+     "supported": 8
+    }
+   },
+   "file": "/home/odin/k5c4_runs/gena/C300.gen.txt"
+  },
+  "C600": {
+   "samples": 250,
+   "statements": 272,
+   "supported_n": 142,
+   "contradicted_n": 14,
+   "unknown_n": 116,
+   "with_statement": 80,
+   "point": {
+    "per_sample": 1.088,
+    "contradicted": 0.051470588235294115,
+    "supported": 0.5220588235294118,
+    "precision": 0.9102564102564102,
+    "invalid_dates": 0.0,
+    "supported_partly": 0.0,
+    "pos1_n": 36,
+    "pos1_contradicted": 0.05555555555555555,
+    "pos1_supported": 0.16666666666666666,
+    "pos2_n": 34,
+    "pos2_contradicted": 0.11764705882352941,
+    "pos2_supported": 0.20588235294117646,
+    "pos3_n": 34,
+    "pos3_contradicted": 0.029411764705882353,
+    "pos3_supported": 0.35294117647058826,
+    "pos4+_n": 168,
+    "pos4+_contradicted": 0.041666666666666664,
+    "pos4+_supported": 0.6964285714285714
+   },
+   "ci": {
+    "per_sample": [
+     0.848,
+     1.336
+    ],
+    "contradicted": [
+     0.02181818181818182,
+     0.0846774193548387
+    ],
+    "supported": [
+     0.43612334801762115,
+     0.596078431372549
+    ],
+    "precision": [
+     0.8579234972677595,
+     0.9596774193548387
+    ],
+    "invalid_dates": [
+     0.0,
+     0.0
+    ],
+    "supported_partly": [
+     0.0,
+     0.0
+    ],
+    "pos1_n": [
+     24,
+     49
+    ],
+    "pos1_contradicted": [
+     0.0,
+     0.18181818181818182
+    ],
+    "pos1_supported": [
+     0.02564102564102564,
+     0.3235294117647059
+    ],
+    "pos2_n": [
+     21,
+     49
+    ],
+    "pos2_contradicted": [
+     0.0,
+     0.2702702702702703
+    ],
+    "pos2_supported": [
+     0.06666666666666667,
+     0.37037037037037035
+    ],
+    "pos3_n": [
+     22,
+     48
+    ],
+    "pos3_contradicted": [
+     0.0,
+     0.1111111111111111
+    ],
+    "pos3_supported": [
+     0.14814814814814814,
+     0.5405405405405406
+    ],
+    "pos4+_n": [
+     121,
+     217
+    ],
+    "pos4+_contradicted": [
+     0.0125,
+     0.07547169811320754
+    ],
+    "pos4+_supported": [
+     0.6025641025641025,
+     0.7738095238095238
+    ]
+   },
+   "by_relation": {
+    "birth_date": {
+     "contradicted": 9,
+     "supported": 83,
+     "unknown": 1
+    },
+    "birth_place": {
+     "unknown": 35,
+     "supported": 5,
+     "contradicted": 4
+    },
+    "death_date": {
+     "supported": 38,
+     "contradicted": 1
+    },
+    "death_place": {
+     "unknown": 4
+    },
+    "director": {
+     "unknown": 1
+    },
+    "is_a": {
+     "unknown": 73,
+     "supported": 7
+    },
+    "language": {
+     "unknown": 1
+    },
+    "located_in": {
+     "supported": 1,
+     "unknown": 1
+    },
+    "nationality": {
+     "supported": 8
+    }
+   },
+   "file": "/home/odin/k5c4_runs/gena/C600.gen.txt"
+  }
+ }
+}
