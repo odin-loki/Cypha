@@ -2505,3 +2505,18 @@ Old binary main 9cbd277; old and new were started together.
   - its sentences are short (16 tokens against 23).
 - **Predictions:** 13 hits, 13 misses. The largest gap was predicted to be the subject's name; it is the lexical link.
 - **Registered, not built:** `--k5-para-plan` (`lm/para_plan.hpp`, off by default). It adds a sentence-gate term from the mined (function, reference) chain, with penalties for orphan pronouns and for lead sentences mid-paragraph. Arms PP1–PP3 against L1, judged by four blind pairwise raters at 460 and 1,500 characters under the §13.38 rule. It waits for `word_kn.hpp` and `planner/` to be free (T4).
+
+### 13.60 T4, the first sentence on the prompt's subject (2026-11-12; [K5_FIRST](reports/K5_FIRST.md); not adopted)
+
+- **Registered first** (3491cad, with amendment b5073ac before RS64 ran). The new flag `--k5-first k=N,wp=W,wl=W,req=0|1|2` acts on the first sentence's gate only. It is off by default and byte-identical when off.
+- **Why:** 173 of 250 dev prompts get no plan. On those, only 0.110 of first sentences hold a prompt content word; human text has 0.601.
+- **Screen:** six arms all passed the numbers. Three changed enough rated prompts to judge:
+  - K64, 64 drafts;
+  - RS64, K64 with a strict need for a prompt word;
+  - RQ64, K64 with a loose need.
+- **Blind pairwise raters against L1** (packets 8e855dc):
+  - K64 0.600 [0.500, 0.700], rater pairs 0.56 and 0.64;
+  - RS64 0.590 [0.490, 0.690];
+  - RQ64 0.520 [0.410, 0.630].
+- **No arm clears the rule.** K64's interval touches 0.5. **L1 stays the default.** K64 leans better and could be retried with more prompts.
+- By reading, no arm really fixes the start. 3–4 of 12 first sentences are on the subject in every arm. The prompt-word filter mostly matches common words.
