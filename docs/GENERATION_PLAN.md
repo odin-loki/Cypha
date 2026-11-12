@@ -2821,3 +2821,26 @@ Four fresh blind raters. Raters 1–2 rate the first 25 prompts, raters 3–4 th
   - K5 1.5–1.9: **hit** (1.50);
   - T8 2.6–3.3: **miss** (2.50);
   - at most 5% rated 6 or more: **hit** (0%).
+
+### 13.75 X1, where the writing breaks: log-probability maps and the most probable output (2026-11-13; [WHERE_IT_BREAKS](reports/WHERE_IT_BREAKS.md))
+
+**Odin:** "a logistic map of the output and a best effort of the most probable output. Somethings fucking up somewhere." Read as a per-word log-probability map under each part of the model, and the model's most probable output by beam search.
+
+**Method.** Registered first (e2357ac): 30 dev prompts outside the rated 50, and 90 broken spots in T8's text, marked by reading before any map existed. `k5_probe` re-derives every word, the gate's 16 drafts and its choice (145 of 145 plain-gate choices reproduced).
+
+**Ranked causes:**
+1. **K5's 4-word window.** 45 of the 63 breaks in K5's own sentences are words K5 ranks in its top 10, and 24 have P ≥ 0.1. 48% are splices: a seen 4-word context and a word never seen after it (25% of all words). 70% of breaks had their full context. K5 rates its own breaks as likely: human text costs 7.5 bits a word against T8's 3.38, and only 48% of human words fall inside T8's nucleus.
+2. **The planner's fact sentences:** 27 of 90 breaks from 21% of the words. They link the wrong entity and fill skeletons badly; 38% of their words lie outside K5's nucleus.
+3. **A wide nucleus where K5 is unsure:** 18 breaks are tail draws (median nucleus 12 words at breaks, 6 overall). A min-p cut at 0.1 would remove 14 of the 63.
+4. **The gate picks topic over form:** the kept draft is the most fluent of the 16 in only 19% of sentences; it gives up 0.85 bits a word.
+5. **The 7 MB vocabulary** causes none of T8's breaks, but 7.7% of human words are outside it, mostly the subject's names.
+
+Not a cause: sentence starts (4 of 90 breaks).
+
+**The most probable output** (beam 16): 1.35 bits a word, on the subject, no loops (the repeat ban), but stitched training text: "Ground and pound … is a stand-up comedian and actor." Whole sentences 0.25, against T8's 0.15. So the model itself is the main fault; sampling, the planner and the gate add to it.
+
+**Points to:**
+- judging whole clauses with a longer-context model (cause 1);
+- rating `--no-k5-plan` against T8 and tightening fact fills (cause 2);
+- min-p and a fluency floor in the gate (causes 3–4);
+- later, a vocabulary from the 337 MB (cause 5).
