@@ -160,3 +160,10 @@ An arm passes if all hold:
 ## Results
 
 (Added after the runs, under this line.)
+
+### Status (2026-11-13, 04:15): stopped on Odin's word
+
+- **Checks, on the base branch's build:** with `--k5-control` off, the short dev run equals `bench/k5_decode/runs/T8.gen.txt`, and the long run equals the T8_long made earlier on a main build (`cmp`, MODEL line aside). The selftest passes. Files: `bench/k5_control/checks/`, `bench/k5_control/runs/T8_long.*`.
+- **Arm CL (short) finished** (`bench/k5_control/runs/CL.*`): verbatim13 0, copy32 0.530 (T8 0.487). At 460 characters link rose 0.310 → 0.338 and words stayed 13.6 (`checks/CL_props460.txt`). Its knobs, sentence by sentence, are in `CL.k5ctl.tsv`. It has not been screened, fact-checked or read.
+- **Not run:** CL_long (killed partway when WSL fell over at 03:46), CW, CW_long, CLW, CLW_long. No packets have been made and no raters have run.
+- **To resume:** `setsid ~/heavy.sh bench/k5_control/ctl_queue2.sh ~/ctl_bin` (it skips arms already done), then `bench/k5_control/ctl_screen.sh`, my reading and the packets as registered.

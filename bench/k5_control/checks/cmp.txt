@@ -1,0 +1,3 @@
+short: EQUAL
+long: EQUAL
+main-build check (01:06): OFF_main equal to T8.gen.txt
