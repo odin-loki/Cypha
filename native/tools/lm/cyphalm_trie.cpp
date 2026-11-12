@@ -1065,6 +1065,10 @@ struct FullMixRun {
             cs.doc_on[0] = dp.trig, cs.doc_on[1] = dp.cache, cs.doc_on[2] = dp.topic;
         }
         cs.ngram_orders = ng ? ng->orders() : 0;
+        if (P.huff) {  // OPT_HUFFMAN.md: the Huffman code is built from the training bytes' counts
+            cs.byte_freq.assign(256, 0);
+            for (std::size_t i = 0; i < kTrain; ++i) ++cs.byte_freq[data[i]];
+        }
         const int O = cs.ngram_orders;
         fm = std::make_unique<fx::FullMixer>(cs, P, half);
         fm->set_trie_weights(w);

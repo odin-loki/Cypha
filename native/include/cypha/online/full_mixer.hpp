@@ -36,7 +36,9 @@
 #include <functional>
 #include <iostream>
 #include <memory>
+#include <queue>
 #include <string>
+#include <tuple>
 #include <vector>
 
 namespace cypha::online::fullmix {
@@ -81,6 +83,7 @@ struct ChainSpec {
     bool doc_on[3] = {false, true, false};
     std::string final_gate = "copy";  // copy | ig
     int ngram_orders = 0;             // the online n-gram's orders (0: no n-gram stage; ONLINE_LEARNING_UPGRADES)
+    std::vector<std::uint64_t> byte_freq;  // OPT_HUFFMAN.md: the training bytes' counts (huff=1 codes by them; empty: 8 bits)
 };
 
 /// Tuning knobs (k=v,k=v). Defaults are the registered ones (FULL_DISTRIBUTION_MIXING.md).
@@ -91,6 +94,7 @@ struct Params {
     double lr_decay = 0;      // lr_t = lr / (1 + t * lr_decay) per weight set, t = updates of that set
     int sse_final = 0;        // 0: fixed average (mixer + APMs) / n in the probability domain; 1: learned in stretch
     int a2_bits = 18;         // the order-2 APM: (two previous bytes, partial byte) hashed into 2^a2_bits contexts
+    int huff = 0;             // OPT_HUFFMAN.md: 0 the byte's 8 bits; 1 a Huffman code of the training bytes (fewer decisions)
     std::string headline = "ABs";
     bool parse(const std::string& s) {
         return mix::parse_kv(s, [&](const std::string& k, const std::string& v) {
@@ -105,9 +109,141 @@ struct Params {
             else if (k == "decay") lr_decay = x;
             else if (k == "ssef") sse_final = static_cast<int>(x);
             else if (k == "a2bits") a2_bits = static_cast<int>(x);
+            else if (k == "huff") huff = static_cast<int>(x);
             else return false;
             return true;
         });
+    }
+};
+
+
+// ------------------------------------------------------------------------------------------------ the binarisation
+
+/// How a byte becomes binary decisions (OPT_HUFFMAN.md, GENERATION_PLAN §13.41 O7). Nodes are numbered 1..255, the
+/// root 1. The leaves lie in the tree's left-to-right order (leaf[pos] is a byte, pos[byte] its place), so node c covers
+/// the run [lo[c], hi[c]) of that order: its 0-branch [lo, mid), its 1-branch [mid, hi). By default (binary) node c is
+/// the partial byte c0 of the byte's 8 bits, most significant first, and everything is the old code's. With huff=1
+/// the tree is a Huffman code of the training bytes' frequencies (each count + 1, so every byte has a code; counts are
+/// halved until no code is longer than kMaxDepth), so frequent bytes take few decisions.
+struct Code {
+    static constexpr int kMaxDepth = 24;
+    std::array<std::uint8_t, 256> leaf{};
+    std::array<std::uint16_t, 256> pos{}, lo{}, mid{}, hi{};
+    std::array<std::array<std::uint16_t, 2>, 256> kid{};  // the child node of each branch (0: a leaf)
+    std::array<std::uint8_t, 256> len{};                  // each byte's code length
+    bool binary = true;
+    double mean_len = 8;  // the code length averaged over the training bytes
+
+    Code() { make_binary(); }
+    void make_binary() {
+        binary = true;
+        for (int b = 0; b < 256; ++b) leaf[b] = static_cast<std::uint8_t>(b), pos[b] = static_cast<std::uint16_t>(b), len[b] = 8;
+        for (int c = 1; c < 256; ++c) {
+            int d = 0;
+            while ((c >> (d + 1)) != 0) ++d;  // depth of node c
+            const int size = 256 >> d;
+            lo[c] = static_cast<std::uint16_t>((c - (1 << d)) * size);
+            hi[c] = static_cast<std::uint16_t>(lo[c] + size);
+            mid[c] = static_cast<std::uint16_t>(lo[c] + size / 2);
+            kid[c][0] = static_cast<std::uint16_t>(d < 7 ? 2 * c : 0);
+            kid[c][1] = static_cast<std::uint16_t>(d < 7 ? 2 * c + 1 : 0);
+        }
+        mean_len = 8;
+    }
+    /// The Huffman code of f (256 counts). Ties go to the lower id, so the tree depends on the counts only.
+    void make_huffman(const std::vector<std::uint64_t>& f) {
+        std::vector<std::uint64_t> w(256);
+        for (int b = 0; b < 256; ++b) w[b] = f[b] + 1;
+        for (;;) {
+            // nodes 0..255 are leaves (bytes), 256.. internal; ch[n] its two children (first popped is the 0-branch)
+            std::vector<std::array<int, 2>> ch(511, {-1, -1});
+            using E = std::tuple<std::uint64_t, int>;
+            std::priority_queue<E, std::vector<E>, std::greater<E>> q;
+            for (int b = 0; b < 256; ++b) q.emplace(w[b], b);
+            int next = 256;
+            while (q.size() > 1) {
+                const auto [wa, a] = q.top();
+                q.pop();
+                const auto [wb, bb] = q.top();
+                q.pop();
+                ch[next] = {a, bb};
+                q.emplace(wa + wb, next++);
+            }
+            const int root = std::get<1>(q.top());
+            // depths, left to right (depth first), and node ids breadth first
+            std::vector<int> depth(511, 0), id(511, 0);
+            std::vector<int> order;  // depth-first, 0-branch first
+            std::vector<int> st = {root};
+            while (!st.empty()) {
+                const int n = st.back();
+                st.pop_back();
+                order.push_back(n);
+                if (n >= 256)
+                    for (int s = 1; s >= 0; --s) depth[ch[n][s]] = depth[n] + 1, st.push_back(ch[n][s]);
+            }
+            int maxd = 0;
+            for (int b = 0; b < 256; ++b) maxd = std::max(maxd, depth[b]);
+            if (maxd > kMaxDepth) {
+                for (auto& v : w) v = (v + 1) / 2;
+                continue;
+            }
+            binary = false;
+            int np = 0;
+            for (int n : order)
+                if (n < 256) leaf[np] = static_cast<std::uint8_t>(n), pos[n] = static_cast<std::uint16_t>(np), ++np;
+            std::vector<int> bfs = {root};
+            for (std::size_t i = 0; i < bfs.size(); ++i)
+                if (bfs[i] >= 256) bfs.push_back(ch[bfs[i]][0]), bfs.push_back(ch[bfs[i]][1]);
+            int nid = 1;
+            for (int n : bfs)
+                if (n >= 256) id[n] = nid++;
+            // each internal node's run: from its leftmost leaf to past its rightmost
+            std::vector<int> l(511), h(511);
+            for (auto it = order.rbegin(); it != order.rend(); ++it) {
+                const int n = *it;
+                if (n < 256) l[n] = pos[n], h[n] = pos[n] + 1;
+                else l[n] = l[ch[n][0]], h[n] = h[ch[n][1]];
+            }
+            for (int n = 256; n < next; ++n) {
+                const int c = id[n];
+                lo[c] = static_cast<std::uint16_t>(l[n]), hi[c] = static_cast<std::uint16_t>(h[n]);
+                mid[c] = static_cast<std::uint16_t>(h[ch[n][0]]);
+                for (int s = 0; s < 2; ++s) kid[c][s] = static_cast<std::uint16_t>(ch[n][s] >= 256 ? id[ch[n][s]] : 0);
+            }
+            double tot = 0, sum = 0;
+            for (int b = 0; b < 256; ++b) len[b] = static_cast<std::uint8_t>(depth[b]), tot += static_cast<double>(f[b]),
+                                          sum += static_cast<double>(f[b]) * depth[b];
+            mean_len = tot > 0 ? sum / tot : 8;
+            return;
+        }
+    }
+    /// y's path: node[j] and bit[j] for j < len[y]; returns len[y].
+    int path(unsigned y, int* node, int* bit) const {
+        const int p = pos[y];
+        int c = 1, j = 0;
+        while (c) {
+            const int b = p >= mid[c] ? 1 : 0;
+            node[j] = c, bit[j] = b, ++j;
+            c = kid[c][b];
+        }
+        return j;
+    }
+    /// Is byte b under node c, and on which branch.
+    bool covers(int c, unsigned b) const { return pos[b] >= lo[c] && pos[b] < hi[c]; }
+    int branch(int c, unsigned b) const { return pos[b] >= mid[c] ? 1 : 0; }
+    /// mix::path_bits along this code: each decision's probability of 1 is the 1-branch's mass over the node's mass,
+    /// 0.5 when the node has no mass. Binary: mix::path_bits itself.
+    void path_bits(const double* D, unsigned y, double* out) const {
+        if (binary) return mix::path_bits(D, y, out);
+        const int p = pos[y];
+        int c = 1, j = 0;
+        while (c) {
+            double s0 = 0, s1 = 0;
+            for (int i = lo[c]; i < mid[c]; ++i) s0 += D[leaf[i]];
+            for (int i = mid[c]; i < hi[c]; ++i) s1 += D[leaf[i]];
+            out[j++] = s0 + s1 > 0 ? s1 / (s0 + s1) : 0.5;
+            c = kid[c][p >= mid[c] ? 1 : 0];
+        }
     }
 };
 
@@ -159,11 +295,12 @@ class Sse {
 /// prediction of each bit before any arm learns the bit. With no hook set (the default), step is unchanged.
 struct StepHook {
     virtual ~StepHook() = default;
+    const Code* code = nullptr;  // the binarisation (OPT_HUFFMAN.md); set by FullMixer::set_hook
     /// After B's distribution, before the bit loop. L: the geometric mixer's log inputs (nL, nullptr: absent), g its
     /// weight set, PB its mixture; bits: every "all" input's 8 path bits (nb inputs), lstm_at the LSTM's index (-1: none).
-    virtual void byte_begin(const ByteIn& in, const double* const* L, int nL, int g, const double* PB, const double (*bits)[8],
-                            int nb, int lstm_at) = 0;
-    /// Bit j along the true byte. xa: the bitwise mixer's nxa stretched inputs; ctx: its 4 contexts; arm: the bit's
+    virtual void byte_begin(const ByteIn& in, const double* const* L, int nL, int g, const double* PB,
+                            const double (*bits)[Code::kMaxDepth], int nb, int lstm_at) = 0;
+    /// Decision j along the true byte's code (c0: its node; j < 8 and c0 the partial byte for the 8-bit code). xa: the bitwise mixer's nxa stretched inputs; ctx: its 4 contexts; arm: the bit's
     /// probability of 1 from Fs, A, As, R, Rs, Bs, ABs (in that order), each before it learns.
     virtual void bit(int j, int bit, unsigned c0, const double* xa, int nxa, const int* ctx, const double* arm) = 0;
     /// After the geometric mixer learned y (its L is still valid), before the final layer learns.
@@ -210,6 +347,7 @@ class FullMixer {
         abmix_ = std::make_unique<BitMixer>(2, std::vector<int>{8}, 0, P.lr1, P.lr2, 0, P.eps);
         for (auto* s : {&sseF_, &sseA_, &sseR_, &sseB_}) *s = std::make_unique<Sse>(P);
         copy_ok_.assign(8 * 8, {1.0, 2.0});
+        if (P.huff && cs.byte_freq.size() == 256) code_.make_huffman(cs.byte_freq);
     }
 
     std::size_t bytes() const {
@@ -349,10 +487,10 @@ class FullMixer {
                                     cs_.two_rates ? static_cast<const double*>(ch[2]) : nullptr, static_cast<const double*>(Fn)})
                 all[n++] = d;
         }
-        double bits[kMax][8];
+        double bits[kMax][Code::kMaxDepth];
         for (int j = 0; j < kAll_; ++j) {
-            if (all[j]) path_bits(all[j], y, bits[j]);
-            else std::fill(bits[j], bits[j] + 8, 0.5);
+            if (all[j]) code_.path_bits(all[j], y, bits[j]);
+            else std::fill(bits[j], bits[j] + Code::kMaxDepth, 0.5);
         }
 
         tick(3);
@@ -376,8 +514,8 @@ class FullMixer {
         }
         double PB[256];
         geo_->dist(L, g, PB);
-        double bitsB[8];
-        path_bits(PB, y, bitsB);
+        double bitsB[Code::kMaxDepth];
+        code_.path_bits(PB, y, bitsB);
         if (hook_) hook_->byte_begin(in, L, kAll_ + 1, g, PB, bits, kAll_, cs_.lstm ? 15 : -1);
 
         tick(4);
@@ -386,25 +524,31 @@ class FullMixer {
         lp[0] = std::log2(std::max(pf, 1e-12));
         lp[1] = std::log2(std::max(Fn[y], 1e-300));
         lp[6] = std::log2(std::max(PB[y], 1e-300));
-        unsigned c0 = 1;
         const int cb = cyphalm::copy_bucket(in.cn);
-        for (int j = 0; j < 8; ++j) {
-            const int bit = (y >> (7 - j)) & 1;
+        int node[Code::kMaxDepth], cbit[Code::kMaxDepth];
+        const int nbits = code_.path(y, node, cbit);
+        nbits_ += static_cast<std::size_t>(nbits);
+        for (int j = 0; j < nbits; ++j) {
+            // OPT_HUFFMAN.md: decision j of y's code at node c0; contexts and weight sets that were chosen by the bit position
+            // take the depth, capped at 7 (the 8-bit code's c0 and j, unchanged)
+            const int bit = cbit[j];
+            const unsigned c0 = static_cast<unsigned>(node[j]);
+            const int jj = std::min(j, 7);
             // copy's input: the predicted bit, if the partial byte still agrees with copy's byte, at its learned confidence
             int cst = 0;  // 0 none, 1 disagrees, 2 expects 0, 3 expects 1
             double xc = 0;
             if (in.cpred >= 0) {
                 const unsigned cp = static_cast<unsigned>(in.cpred);
-                if ((cp + 256) >> (8 - j) == c0) {
-                    const int eb = (cp >> (7 - j)) & 1;
+                if (code_.covers(static_cast<int>(c0), cp)) {
+                    const int eb = code_.branch(static_cast<int>(c0), cp);
                     cst = 2 + eb;
-                    const auto& ok = copy_ok_[static_cast<std::size_t>(cb * 8 + j)];
+                    const auto& ok = copy_ok_[static_cast<std::size_t>(cb * 8 + jj)];
                     const double st = stretch_eps(ok[0] / ok[1], P_.eps);
                     xc = eb ? st : -st;
                 } else
                     cst = 1;
             }
-            const int ctx[4] = {static_cast<int>(c0), std::min(in.ig_b, 31) * 8 + j, (cb * 4 + cst) * 8 + j,
+            const int ctx[4] = {static_cast<int>(c0), std::min(in.ig_b, 31) * 8 + jj, (cb * 4 + cst) * 8 + jj,
                                 bc * 256 + static_cast<int>(c0)};
             double xa[kMax + 2], xr[kMax + 2];
             for (int i = 0; i < kAll_; ++i) xa[i] = stretch_eps(bits[i][j], P_.eps);
@@ -413,15 +557,15 @@ class FullMixer {
             for (int i = 0; i < kRaw_; ++i) xr[i] = xa[i];
             xr[kRaw_] = xc;
             xr[kRaw_ + 1] = 0.25;
-            const double pA = std::clamp(mixA_->p(xa, ctx, j), P_.eps, 1 - P_.eps);
-            const double pR = std::clamp(mixR_->p(xr, ctx, j), P_.eps, 1 - P_.eps);
-            const double pFs = sseF_->p(std::clamp(bits[kAll_ - 1][j], P_.eps, 1 - P_.eps), in, c0, j);
-            const double pAs = sseA_->p(pA, in, c0, j);
-            const double pRs = sseR_->p(pR, in, c0, j);
-            const double pBs = sseB_->p(std::clamp(bitsB[j], P_.eps, 1 - P_.eps), in, c0, j);
+            const double pA = std::clamp(mixA_->p(xa, ctx, jj), P_.eps, 1 - P_.eps);
+            const double pR = std::clamp(mixR_->p(xr, ctx, jj), P_.eps, 1 - P_.eps);
+            const double pFs = sseF_->p(std::clamp(bits[kAll_ - 1][j], P_.eps, 1 - P_.eps), in, c0, jj);
+            const double pAs = sseA_->p(pA, in, c0, jj);
+            const double pRs = sseR_->p(pR, in, c0, jj);
+            const double pBs = sseB_->p(std::clamp(bitsB[j], P_.eps, 1 - P_.eps), in, c0, jj);
             const double xab[2] = {stretch_eps(pAs, P_.eps), stretch_eps(pBs, P_.eps)};
             const int z0 = 0;
-            const double pAB = std::clamp(abmix_->p(xab, &z0, j), P_.eps, 1 - P_.eps);
+            const double pAB = std::clamp(abmix_->p(xab, &z0, jj), P_.eps, 1 - P_.eps);
             if (hook_) {
                 const double arm[7] = {pFs, pA, pAs, pR, pRs, pBs, pAB};
                 hook_->bit(j, bit, c0, xa, nall_, ctx, arm);
@@ -441,12 +585,11 @@ class FullMixer {
             sseB_->update(bit);
             abmix_->update(bit);
             if (cst >= 2) {
-                auto& ok = copy_ok_[static_cast<std::size_t>(cb * 8 + j)];
+                auto& ok = copy_ok_[static_cast<std::size_t>(cb * 8 + jj)];
                 ok[0] += (bit == cst - 2) ? 1.0 : 0.0;
                 ok[1] += 1.0;
                 if (ok[1] > 1024) ok[0] *= 0.5, ok[1] *= 0.5;
             }
-            c0 = c0 * 2 + static_cast<unsigned>(bit);
         }
         const int h = k >= half_ ? 1 : 0;
         for (int a = 0; a < kArms; ++a) bits_[h][a] -= lp[a];
@@ -469,7 +612,13 @@ class FullMixer {
         return o;
     }
     void set_trie_weights(const double w[6]) { std::copy(w, w + 6, tw_); }
-    void set_hook(StepHook* h) { hook_ = h; }  // META_MIXING.md (nullptr: none, the default)
+    void set_hook(StepHook* h) {  // META_MIXING.md (nullptr: none, the default)
+        hook_ = h;
+        if (h) h->code = &code_;
+    }
+    const Code& code() const { return code_; }
+    /// Binary decisions made per holdout byte so far (8 for the 8-bit code).
+    double decisions_per_byte() const { return n_[0] + n_[1] ? static_cast<double>(nbits_) / static_cast<double>(n_[0] + n_[1]) : 0; }
     double chain_y() const { return chain_y_; }    // the replica chain's probability of the last true byte
     double snap3_y() const { return snap3_y_; }    // ... after copy
     double bpc(int half, int arm) const { return n_[half] ? bits_[half][arm] / static_cast<double>(n_[half]) : 0; }
@@ -487,6 +636,11 @@ class FullMixer {
         }
         std::snprintf(buf, sizeof buf, "full_mix_replica_mass %.6f (the final layer's whole distribution's mean sum)\n", mean_fsum());
         o << buf;
+        if (!code_.binary) {  // OPT_HUFFMAN.md (the 8-bit code prints nothing new)
+            std::snprintf(buf, sizeof buf, "full_mix_huffman decisions_per_byte %.4f (training bytes' mean code length %.4f)\n",
+                          decisions_per_byte(), code_.mean_len);
+            o << buf;
+        }
     }
 
  private:
@@ -520,6 +674,8 @@ class FullMixer {
     double bits_[2][kArms] = {};
     std::size_t n_[2] = {0, 0};
     StepHook* hook_ = nullptr;
+    Code code_;              // OPT_HUFFMAN.md: the byte's 8 bits unless huff=1
+    std::size_t nbits_ = 0;  // decisions made
 };
 
 // ------------------------------------------------------------------------------------------------ dump and replay

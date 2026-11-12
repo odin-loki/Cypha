@@ -167,8 +167,8 @@ class MetaMixer : public fx::StepHook {
         m3ls_ = std::make_unique<fx::Sse>(P);
         m3s_ = std::make_unique<fx::Sse>(P);
     }
-    void byte_begin(const fx::ByteIn& in, const double* const* L, int nL, int g, const double* PB, const double (*bits)[8],
-                    int nb, int lstm_at) override {
+    void byte_begin(const fx::ByteIn& in, const double* const* L, int nL, int g, const double* PB,
+                    const double (*bits)[fx::Code::kMaxDepth], int nb, int lstm_at) override {
         in_ = &in;
         lstm_at_ = lstm_at;
         (void)nb;
@@ -189,13 +189,17 @@ class MetaMixer : public fx::StepHook {
             const double w = fsG_.w[static_cast<std::size_t>(r)];
             for (int s = 0; s < 256; ++s) PM[s] += w * Pr[s];
         }
-        mix::path_bits(PM, in.y, bitsG_);
+        if (code) code->path_bits(PM, in.y, bitsG_);  // OPT_HUFFMAN.md: along the full mix's code
+        else mix::path_bits(PM, in.y, bitsG_);
         lpG_ = std::log2(std::max(PM[in.y], 1e-300));
         (void)bits;
     }
 
-    void bit(int j, int bit, unsigned c0, const double* xa, int nxa, const int* ctx, const double* arm) override {
+    void bit(int jd, int bit, unsigned c0, const double* xa, int nxa, const int* ctx, const double* arm) override {
         const fx::ByteIn& in = *in_;
+        // OPT_HUFFMAN.md: jd is the decision's depth in the code; contexts and weight sets by bit position take it capped
+        // at 7 (for the 8-bit code, the bit position itself)
+        const int j = std::min(jd, 7);
         const double eps = P_.eps;
         auto cl = [eps](double p) { return std::clamp(p, eps, 1 - eps); };
         auto st = [eps](double p) { return mix::stretch_eps(p, eps); };
@@ -260,7 +264,7 @@ class MetaMixer : public fx::StepHook {
         }
         const double pM2A = cl(M_.m2m ? m2am_->p(xr, &z0, j) : fsA_.mix(pr));
         const double pM2As = m2as_->p(pM2A, in, c0, j);
-        const double pM2Gs = m2gs_->p(cl(bitsG_[j]), in, c0, j);
+        const double pM2Gs = m2gs_->p(cl(bitsG_[jd]), in, c0, j);
         const double x2[2] = {st(pM2As), st(pM2Gs)};
         const double pM2AB = cl(m2ab_->p(x2, &z0, j));
         const double x1g[2] = {st(pM1s), st(pM2Gs)};
@@ -388,7 +392,7 @@ class MetaMixer : public fx::StepHook {
     std::vector<std::unique_ptr<mix::GeoMixer>> m2g_;
     std::vector<std::array<double, 256>> PG_;
     FixedShare fsA_, fsG_, fs3_, fsM1_;
-    double bitsG_[8] = {}, lpG_ = 0, lpGs_ = 0;
+    double bitsG_[fx::Code::kMaxDepth] = {}, lpG_ = 0, lpGs_ = 0;
     double lp_[kArms] = {};
     double bits_[2][kArms] = {}, g_bits_[2] = {};
     std::size_t n_[2] = {0, 0};
