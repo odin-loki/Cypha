@@ -42,3 +42,57 @@ The same β and b serve A1, A2 and A3.
 **Rule** (§13.43, unchanged): an arm is kept if its mean `context8k_bpc` is below A0's by more than its seeds' spread, and time rises at most 10%. A3 must also beat A1 by the same margin for the noise to count. Answers must not get worse.
 
 **Added 2026-11-12, before the choice runs ended:** a tie in β or b (equal at 4 decimals) goes to the value listed first. The σ values from the rule (T1 table, 2026-11-12): `lr1`, `lr2`, `lrb`, `m1lr2`, `m2eta`, `m2share`, `m2geta`, `m2gshare`, `--ngram-lr` 0.5 (flat curves); `apm` 0.396; `m1lr1` 0.280; `--ngram-cap` 0.280; temperature 0.265.
+
+## Results (2026-11-12)
+
+**Not kept.** No arm beats A0. Noise costs 0.002 to 0.003 bits per byte. Adapting alone is a tie.
+
+### Checks
+
+- Without `--hyper-adapt`, the output is unchanged under `cmp`:
+  - default small run against SM__default;
+  - small run of T1's tuned set against SM__Tstar;
+  - full run A0 against T1's tuned final run (1.4848).
+- `qa` dev rows: `cmp` equal with the T1b binary.
+
+### Choices on the 1 MB slice (seed 1; T1's tuned set 1.7201 without the flag)
+
+| Arm | β | b | bpc |
+|---|---:|---:|---:|
+| A1 | **0.003** | 0.25 | 1.7227 |
+| A1 | 0.01 | 0.25 | 1.7231 |
+| A1 | 0.03 | 0.25 | 1.7252 |
+| A3 | 0.003 | **0** | 1.7215 |
+| A3 | 0.003 | 0.1 | 1.7223 |
+| A3 | 0.003 | 0.25 | 1.7239 |
+| A3 | 0.003 | 0.5 | 1.7271 |
+
+Every arm was worse than the fixed tuned set on the slice already. The least movement won: β 0.003, and b 0 (no back-off).
+
+### Full runs (standard holdout, one turn of the lock each, 4 threads)
+
+| Arm | Seeds | `context8k_bpc` | Mean | Spread | vs A0 | CPU s | Peak RAM |
+|---|---|---|---:|---:|---:|---:|---:|
+| A0 fixed | — | 1.4848 | 1.4848 | 0 | — | 3443 | 1767 MB |
+| A1 adapt | — | 1.4849 | 1.4849 | 0 | +0.0001 | 3980 | 1889 MB |
+| A2 noise | 1, 2, 3 | 1.4881, 1.4878, 1.4883 | 1.4881 | 0.0005 | +0.0033 | 3611, 6803, 5979 | 1891 MB |
+| A3 both | 1, 2, 3 | 1.4873, 1.4866, 1.4872 | 1.4870 | 0.0007 | +0.0022 | 3535, 6613, 6935 | 1894 MB |
+
+- Answer tallies are the same in every arm.
+- CPU time doubled for the runs after 19:30 because the PC's load rose. The early runs are the fair comparison: A1 took +16% CPU against A0, and A2s1 and A3s1 took +5% and +3%. The extra RAM (+7%) is each weight set's last gradient.
+- Where A1's centres went (θ\* → end): `m1lr1` 0.00545 → 0.00115 (÷4.7); `lr1` and `lr2` ×2.9; `--ngram-lr` ×1.8; `lrb` ÷1.5; the rest within 10%. The hypergradient moved the rates a long way, and the total stayed the same.
+- A0 was restarted once: another job's stray `pkill` killed it at 17:37. Only the clean runs are counted.
+
+### Rule
+
+- A1: not below A0 (+0.0001). Not kept.
+- A2, A3: above A0 by more than their spreads. Not kept.
+- A3 against A1: worse by 0.0021, so the noise did not count as "beneficial stochastics".
+
+### Predictions
+
+- A2 within ±0.002 of A0: **miss** (+0.0033; noise cost more than predicted).
+- A1 and A3 below A0 by 0.003 to 0.01: **miss** (A1 +0.0001, A3 +0.0022).
+- A3 against A1 within ±0.002: **miss**, just (+0.0021, the noise's cost).
+
+The code stays on this branch behind the flag, off by default. Nothing goes to main from T1b.
