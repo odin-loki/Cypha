@@ -2170,6 +2170,20 @@ int cmd_sample(const Args& a) {
                 else std::cerr << "k5: more text not found (" << dm << "; set CYPHA_K5_MORE); K5 counts from its own text alone\n";
             }
         }
+        {  // GENERATION_PLAN §13.53 (K5_COHERENCE L1): the LDA topic term in K5's sentence gate, learned from the same
+           // 337 MB text, by default when K5 counts from it, unless a --k5-lda flag chose. --k5-lda 0 turns it off.
+            bool chosen = false;
+            for (const auto& kv : a.k5_opts) chosen = chosen || kv.first == "--k5-lda";
+            if (!chosen && !base.more.empty() && base.lda_k == 0) {
+                base.lda_k = 100, base.lda_w = 1;
+                if (base.disc_text.empty()) base.disc_text = base.more;
+                if (base.disc_cache.empty()) {
+                    const char* ec = std::getenv("CYPHA_K5_DISC_CACHE");
+                    const std::string dc = ec ? ec : "/mnt/d/cypha_llm/disc/cache";
+                    if (std::ifstream(dc + "/lda_train_all.txt_K100_it200_t1.bin")) base.disc_cache = dc;
+                }
+            }
+        }
         if (k5_plan.empty() && k5_struct.empty() && !a.no_k5_plan) {  // §13.39: the planner is on by default
             const char* es = std::getenv("CYPHA_K5_PLAN_STORE");
             const char* em = std::getenv("CYPHA_K5_PLAN_MODEL");
