@@ -1,0 +1,26 @@
+E2 config: alpha 0.50 D 238 whiten 0.100 delta_lr 0.0010 world_lr 0.0020 passes 3 seed 1 | counts from 100000 sentences (2160432 tokens, 1765496 keys); Cypha rows 15000 sentences (323786 tokens); dev 3000 sentences; features 58.1 s
+  dev, Cypha, pass 1                       micro F1 (5 types) 0.6205  with MISC 0.5867  token acc 0.9821
+    PERSON  P 0.5161 R 0.1107 F1 0.1823  (gold 289)
+    PLACE   P 0.6905 R 0.3867 F1 0.4957  (gold 150)
+    ORG     P 0.0000 R 0.0000 F1 0.0000  (gold 45)
+    DATE    P 0.5935 R 0.5573 F1 0.5748  (gold 262)
+    NUMBER  P 0.7271 R 1.0000 F1 0.8420  (gold 445)
+    MISC    P 0.4496 R 0.6549 F1 0.5331  (gold 565)
+    train 39.2 s so far
+  dev, Cypha, pass 2                       micro F1 (5 types) 0.6239  with MISC 0.5294  token acc 0.9806
+    PERSON  P 0.4046 R 0.2422 F1 0.3030  (gold 289)
+    PLACE   P 0.6444 R 0.1933 F1 0.2974  (gold 150)
+    ORG     P 0.2609 R 0.1333 F1 0.1765  (gold 45)
+    DATE    P 0.5971 R 0.6221 F1 0.6093  (gold 262)
+    NUMBER  P 0.7741 R 0.9933 F1 0.8701  (gold 445)
+    MISC    P 0.3059 R 0.5522 F1 0.3937  (gold 565)
+    train 81.9 s so far
+  dev, Cypha, pass 3                       micro F1 (5 types) 0.6235 [0.5887, 0.6582]  with MISC 0.5352  token acc 0.9821
+    PERSON  P 0.4742 R 0.3495 F1 0.4024 [0.3466, 0.4603]  (gold 289)
+    PLACE   P 0.7143 R 0.0333 F1 0.0637 [0.0134, 0.1205]  (gold 150)
+    ORG     P 0.0000 R 0.0000 F1 0.0000 [0.0000, 0.0000]  (gold 45)
+    DATE    P 0.5897 R 0.6145 F1 0.6019 [0.5387, 0.6667]  (gold 262)
+    NUMBER  P 0.7417 R 1.0000 F1 0.8517 [0.8201, 0.8804]  (gold 445)
+    MISC    P 0.3207 R 0.5381 F1 0.4019 [0.3633, 0.4409]  (gold 565)
+    train 124.6 s so far
+227.21 s 980628 KB

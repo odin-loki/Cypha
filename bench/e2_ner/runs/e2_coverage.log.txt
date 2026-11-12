@@ -1,0 +1,17 @@
+store bench/fact_store/e9_text: 56084 facts (2383 dropped), 22718 subjects; 250 prompts; E2 spans for 250 prompts
+find1     any  24 = 0.096 [0.065, 0.139]   main  24 = 0.096 [0.065, 0.139]
+find2     any  24 = 0.096 [0.065, 0.139]   main  24 = 0.096 [0.065, 0.139]
+e2        any  18 = 0.072 [0.046, 0.111]   main  18 = 0.072 [0.046, 0.111]
+e2ppo     any   5 = 0.020 [0.009, 0.046]   main   5 = 0.020 [0.009, 0.046]
+e2+find1  any  27 = 0.108 [0.075, 0.153]   main  27 = 0.108 [0.075, 0.153]
+ngram     any  36 = 0.144 [0.106, 0.193]   main  36 = 0.144 [0.106, 0.193]
+find2     vs find1 (any): +0 prompts [-3, +3]; only find2 1, only find1 1, both but a different subject 0
+find2     vs find1 (main): +0 prompts [-3, +3]; only find2 1, only find1 1, both but a different subject 0
+e2        vs find1 (any): -6 prompts [-13, +1]; only e2 3, only find1 9, both but a different subject 2
+e2        vs find1 (main): -6 prompts [-13, +0]; only e2 3, only find1 9, both but a different subject 2
+e2ppo     vs find1 (any): -19 prompts [-29, -11]; only e2ppo 2, only find1 21, both but a different subject 1
+e2ppo     vs find1 (main): -19 prompts [-28, -10]; only e2ppo 2, only find1 21, both but a different subject 1
+e2+find1  vs find1 (any): +3 prompts [+0, +7]; only e2+find1 3, only find1 0, both but a different subject 2
+e2+find1  vs find1 (main): +3 prompts [+0, +7]; only e2+find1 3, only find1 0, both but a different subject 2
+ngram     vs find1 (any): +12 prompts [+6, +19]; only ngram 12, only find1 0, both but a different subject 2
+ngram     vs find1 (main): +12 prompts [+6, +19]; only ngram 12, only find1 0, both but a different subject 2

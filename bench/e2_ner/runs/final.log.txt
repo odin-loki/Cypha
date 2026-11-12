@@ -1,0 +1,29 @@
+E2 config: alpha 0.50 D 238 whiten 0.100 delta_lr 0.0030 world_lr 0.0020 passes 1 seed 1 | counts from 100000 sentences (2160432 tokens, 1765496 keys); Cypha rows 15000 sentences (323786 tokens); dev 3000 sentences; features 32.6 s
+  dev, Cypha, pass 1                       micro F1 (5 types) 0.6512 [0.6201, 0.6830]  with MISC 0.5568  token acc 0.9669
+    PERSON  P 0.7717 R 0.3391 F1 0.4712 [0.4051, 0.5339]  (gold 289)
+    PLACE   P 0.5177 R 0.4867 F1 0.5017 [0.4219, 0.5801]  (gold 150)
+    ORG     P 1.0000 R 0.0667 F1 0.1250 [0.0000, 0.2564]  (gold 45)
+    DATE    P 0.5704 R 0.5878 F1 0.5789 [0.5152, 0.6486]  (gold 262)
+    NUMBER  P 0.6948 R 0.9978 F1 0.8192 [0.7834, 0.8507]  (gold 445)
+    MISC    P 0.3354 R 0.4726 F1 0.3924 [0.3550, 0.4274]  (gold 565)
+    train 33.8 s so far
+prompts: 328 sentences tagged, 727 spans, 1.4 s -> /home/odin/e2_work/runs/final_prompt_spans.tsv
+
+TEST READ (once)
+  silver test, Cypha                       micro F1 (5 types) 0.6782 [0.6466, 0.7075]  with MISC 0.5708  token acc 0.9670
+    PERSON  P 0.6838 R 0.2915 F1 0.4088 [0.3467, 0.4683]  (gold 319)
+    PLACE   P 0.5789 R 0.5500 F1 0.5641 [0.4874, 0.6418]  (gold 220)
+    ORG     P 1.0000 R 0.0469 F1 0.0896 [0.0000, 0.1951]  (gold 64)
+    DATE    P 0.6741 R 0.6871 F1 0.6805 [0.6190, 0.7381]  (gold 310)
+    NUMBER  P 0.7442 R 0.9981 F1 0.8526 [0.8223, 0.8781]  (gold 513)
+    MISC    P 0.2902 R 0.4637 F1 0.3570 [0.3208, 0.3926]  (gold 537)
+  gate (micro F1 over the 5 types >= 0.80 on the silver test): NOT MET
+  hand-checked set, Cypha                  micro F1 (5 types) 0.4262 [0.2750, 0.5714]  with MISC 0.3790  token acc 0.9209
+    PERSON  P 0.4000 R 0.1667 F1 0.2353 [0.0000, 0.5000]  (gold 12)
+    PLACE   P 0.4706 R 0.3200 F1 0.3810 [0.0588, 0.6190]  (gold 25)
+    ORG     P 0.0000 R 0.0000 F1 0.0000 [0.0000, 0.0000]  (gold 18)
+    DATE    P 0.7333 R 0.7857 F1 0.7586 [0.4348, 0.9565]  (gold 14)
+    NUMBER  P 0.4545 R 1.0000 F1 0.6250 [0.2857, 0.9167]  (gold 5)
+    MISC    P 0.2530 R 0.4884 F1 0.3333 [0.1942, 0.4380]  (gold 43)
+  cost: training 33.8 s (1 passes), tagging 5504 tokens/s single thread, count tables 1765496 keys
+95.46 s 987572 KB

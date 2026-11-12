@@ -1,0 +1,16 @@
+E2 config: alpha 2.00 D 238 whiten 0.100 delta_lr 0.0100 world_lr 0.0080 passes 0 seed 1 | counts from 100000 sentences (2160432 tokens, 1765496 keys); Cypha rows 15000 sentences (323786 tokens); dev 3000 sentences; features 64.9 s
+  dev, counts alone (no learning)          micro F1 (5 types) 0.5074  with MISC 0.3819  token acc 0.9705
+    PERSON  P 0.0000 R 0.0000 F1 0.0000  (gold 289)
+    PLACE   P 0.0000 R 0.0000 F1 0.0000  (gold 150)
+    ORG     P 0.0000 R 0.0000 F1 0.0000  (gold 45)
+    DATE    P 0.8037 R 0.5000 F1 0.6165  (gold 262)
+    NUMBER  P 0.8997 R 0.6652 F1 0.7649  (gold 445)
+    MISC    P 0.7500 R 0.0053 F1 0.0105  (gold 565)
+  dev, exact class means (diagnostic)      micro F1 (5 types) 0.7037  with MISC 0.5211  token acc 0.9586
+    PERSON  P 0.7094 R 0.4983 F1 0.5854  (gold 289)
+    PLACE   P 0.3066 R 0.2800 F1 0.2927  (gold 150)
+    ORG     P 0.0000 R 0.0000 F1 0.0000  (gold 45)
+    DATE    P 0.8224 R 0.8130 F1 0.8177  (gold 262)
+    NUMBER  P 0.9199 R 0.9551 F1 0.9372  (gold 445)
+    MISC    P 0.1397 R 0.1363 F1 0.1380  (gold 565)
+123.41 s 936972 KB
