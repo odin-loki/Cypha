@@ -89,7 +89,14 @@ for f in "$TRIE" "$RC"; do [ -x "$f" ] || { echo "missing binary $f" >&2; exit 2
 case ",$PARTS," in *,gen,*) [ -x "$SC" ] || { echo "missing binary $SC" >&2; exit 2; };; esac
 mkdir -p "$OUT"
 
-# peak OUTFILE cmd args... : run cmd, poll VmHWM every second, write "peak_rss_kb N seconds S rc R".
+# tree_hwm PID : the largest VmHWM of PID and its descendants. gen_eval.sh runs sample and scribe as children; polling
+# only the script's own PID read the shell's 3 MB (QA_RECHECK, 2026-11-12).
+tree_hwm() {
+    local c
+    awk '/VmHWM/{print $2}' "/proc/$1/status" 2>/dev/null || true
+    for c in $(pgrep -P "$1" 2>/dev/null || true); do tree_hwm "$c"; done
+}
+# peak OUTFILE cmd args... : run cmd, poll VmHWM every second (the process and its children), write "peak_rss_kb N seconds S rc R".
 peak() {
     local out=$1; shift
     local t0 t1 pid hwm=0 v rc=0
@@ -97,7 +104,7 @@ peak() {
     "$@" &
     pid=$!
     while kill -0 "$pid" 2>/dev/null; do
-        v=$(awk '/VmHWM/{print $2}' "/proc/$pid/status" 2>/dev/null || true)
+        v=$(tree_hwm "$pid" | sort -n | tail -1)
         if [ -n "$v" ] && [ "$v" -gt "$hwm" ]; then hwm=$v; fi
         sleep 1
     done
@@ -171,7 +178,7 @@ run_one() {
                 cp -f "$OUT/gena/$L.scribe31.md" "$P.scribe31.md" 2>/dev/null || true
                 cp -f "$OUT/gena/$L.gen.txt" "$P.gen_dev.txt" 2>/dev/null || true
             fi
-            [ $FRESH = 1 ] && echo "[card] gena: fresh prompts are GEN-A's test split; read it through gen_eval.sh test, not the card" >&2
+            if [ $FRESH = 1 ]; then echo "[card] gena: fresh prompts are GEN-A's test split; read it through gen_eval.sh test, not the card" >&2; fi
         fi
     fi
 }

@@ -1,0 +1,45 @@
+label	commit	date	section	metric	value	lo	hi	n	split	note
+card_20261112	0d5cfbf4	2026-11-12	BPC	qa holdout, the configuration's fullest stack	1.6974	n/a	n/a		dev	fixed holdout; no absolute interval (cyphalm_trie writes no per-block bits); line holdout2_trie_ig_cls_sim_copy_doc_bpc (qa scores copy on the first 512 KiB of the holdout's second half)
+card_20261112	0d5cfbf4	2026-11-12	BPC	qa holdout, trie + InfiniGram	1.9186	n/a	n/a		dev	fixed holdout; no absolute interval (cyphalm_trie writes no per-block bits)
+card_20261112	0d5cfbf4	2026-11-12	BPC	gain sim_lci trie_cls (paired, 90%)	0.1749	0.1640	0.1868		dev	cyphalm_trie's block bootstrap
+card_20261112	0d5cfbf4	2026-11-12	BPC	gain sim_lci trie_ig_cls (paired, 90%)	0.1208	0.1125	0.1302		dev	cyphalm_trie's block bootstrap
+card_20261112	0d5cfbf4	2026-11-12	BPC	gain copy_lci trie_cls_sim (paired, 90%)	0.0514	0.0453	0.0584		dev	cyphalm_trie's block bootstrap
+card_20261112	0d5cfbf4	2026-11-12	BPC	gain copy_lci trie_ig_cls_sim (paired, 90%)	0.0466	0.0409	0.0532		dev	cyphalm_trie's block bootstrap
+card_20261112	0d5cfbf4	2026-11-12	BPC	gain cls_given_copy_lci trie (paired, 90%)	0.1512	0.1431	0.1601		dev	cyphalm_trie's block bootstrap
+card_20261112	0d5cfbf4	2026-11-12	BPC	gain cls_given_copy_lci trie_ig (paired, 90%)	0.1046	0.0993	0.1105		dev	cyphalm_trie's block bootstrap
+card_20261112	0d5cfbf4	2026-11-12	BPC	gain doc_lci trie_ig_cls_sim_copy (paired, 90%)	0.0282	0.0253	0.0311		dev	cyphalm_trie's block bootstrap
+card_20261112	0d5cfbf4	2026-11-12	BPC	context8k headline (the run's best line)	1.4962	n/a	n/a		dev	fixed holdout; no absolute interval (cyphalm_trie writes no per-block bits); line context8k_bpc
+card_20261112	0d5cfbf4	2026-11-12	Answers (dev)	right, kept by the gate (CV chat/trie_ig all)	0.023	0.008	0.066	130	dev	3 of 130
+card_20261112	0d5cfbf4	2026-11-12	Answers (dev)	wrong, kept by the gate	0.015	0.004	0.054	130	dev	2 of 130; the gate's target is 2% (chosen out of fold, 5-fold inside dev)
+card_20261112	0d5cfbf4	2026-11-12	Answers (dev)	abstained (the gate or CyphaLM's own don't-know)	0.962	0.913	0.983	130	dev	125 of 130
+card_20261112	0d5cfbf4	2026-11-12	Answers (dev)	coverage (answered)	0.038	0.017	0.087	130	dev	5 of 130
+card_20261112	0d5cfbf4	2026-11-12	Answers (dev)	right, before the gate	0.046	0.021	0.097	130	dev	6 of 130
+card_20261112	0d5cfbf4	2026-11-12	Answers (dev)	wrong, before the gate	0.431	0.349	0.517	130	dev	56 of 130
+card_20261112	0d5cfbf4	2026-11-12	Answers (dev)	abstained, before the gate (CyphaLM's own don't-know)	0.523	0.438	0.607	130	dev	68 of 130
+card_20261112	0d5cfbf4	2026-11-12	ECS: abstaining (dev)	don't-know precision (abstained and outside the slice)	0.441	0.329	0.559	68	dev	30 of 68
+card_20261112	0d5cfbf4	2026-11-12	ECS: abstaining (dev)	don't-know recall (questions outside the slice refused)	1.000	0.886	1.000	30	dev	30 of 30
+card_20261112	0d5cfbf4	2026-11-12	ECS: abstaining (dev)	refused, of the in-slice questions the base rows (--base) get wrong	0.388	0.297	0.487	98	dev	38 of 98
+card_20261112	0d5cfbf4	2026-11-12	ECS: abstaining (dev)	<|unknown|> tags complete	0.429	0.300	0.567	49	dev	21 of 49
+card_20261112	0d5cfbf4	2026-11-12	ECS: abstaining (dev)	<|unknown|> tags with the right reason	0.612	0.472	0.736	49	dev	30 of 49
+card_20261112	0d5cfbf4	2026-11-12	Text (SCRIBE v2, surface S)	CyphaLM samples, pooled: SCRIBE v2	0.610	0.577	0.645	250	dev	scribe's 95% bootstrap
+card_20261112	0d5cfbf4	2026-11-12	Text (SCRIBE v2, surface S)	CyphaLM samples, pooled: surface S	0.929	0.925	0.933	250	dev	scribe's 95% bootstrap
+card_20261112	0d5cfbf4	2026-11-12	Text (SCRIBE v2, surface S)	CyphaLM samples, T 1.0: SCRIBE v2	0.610	0.580	0.646	250	dev	scribe's 95% bootstrap
+card_20261112	0d5cfbf4	2026-11-12	Text (SCRIBE v2, surface S)	CyphaLM samples, T 1.0: surface S	0.929	0.925	0.933	250	dev	scribe's 95% bootstrap
+card_20261112	0d5cfbf4	2026-11-12	Text (SCRIBE v2, surface S)	human text (reference rung): SCRIBE v2	0.923	0.910	0.935	500	dev	scribe's 95% bootstrap
+card_20261112	0d5cfbf4	2026-11-12	Text (SCRIBE v2, surface S)	human text (reference rung): surface S	0.912	0.906	0.918	500	dev	scribe's 95% bootstrap
+card_20261112	0d5cfbf4	2026-11-12	Text (SCRIBE v2, surface S)	sentences shuffled across documents (control rung): SCRIBE v2	0.344	0.333	0.356	500	dev	scribe's 95% bootstrap
+card_20261112	0d5cfbf4	2026-11-12	Text (SCRIBE v2, surface S)	sentences shuffled across documents (control rung): surface S	0.905	0.901	0.908	500	dev	scribe's 95% bootstrap
+card_20261112	0d5cfbf4	2026-11-12	Text (SCRIBE v3.1, surface S)	CyphaLM samples, pooled: SCRIBE v3.1	0.546	0.519	0.573	250	dev	scribe's 95% bootstrap
+card_20261112	0d5cfbf4	2026-11-12	Text (SCRIBE v3.1, surface S)	CyphaLM samples, pooled: surface S	0.929	0.925	0.933	250	dev	scribe's 95% bootstrap
+card_20261112	0d5cfbf4	2026-11-12	Text (SCRIBE v3.1, surface S)	CyphaLM samples, T 1.0: SCRIBE v3.1	0.546	0.520	0.576	250	dev	scribe's 95% bootstrap
+card_20261112	0d5cfbf4	2026-11-12	Text (SCRIBE v3.1, surface S)	CyphaLM samples, T 1.0: surface S	0.929	0.925	0.933	250	dev	scribe's 95% bootstrap
+card_20261112	0d5cfbf4	2026-11-12	Text (SCRIBE v3.1, surface S)	human text (reference rung): SCRIBE v3.1	0.919	0.909	0.930	500	dev	scribe's 95% bootstrap
+card_20261112	0d5cfbf4	2026-11-12	Text (SCRIBE v3.1, surface S)	human text (reference rung): surface S	0.912	0.906	0.918	500	dev	scribe's 95% bootstrap
+card_20261112	0d5cfbf4	2026-11-12	Text (SCRIBE v3.1, surface S)	sentences shuffled across documents (control rung): SCRIBE v3.1	0.546	0.539	0.553	500	dev	scribe's 95% bootstrap
+card_20261112	0d5cfbf4	2026-11-12	Text (SCRIBE v3.1, surface S)	sentences shuffled across documents (control rung): surface S	0.905	0.901	0.908	500	dev	scribe's 95% bootstrap
+card_20261112	0d5cfbf4	2026-11-12	Cost	qa peak RSS (MB)	201.1	n/a	n/a			one run; no interval
+card_20261112	0d5cfbf4	2026-11-12	Cost	qa wall time (s)	1559	n/a	n/a			one run on a shared machine
+card_20261112	0d5cfbf4	2026-11-12	Cost	context8k peak RSS (MB)	1976.3	n/a	n/a			one run; no interval
+card_20261112	0d5cfbf4	2026-11-12	Cost	context8k wall time (s)	1193	n/a	n/a			one run on a shared machine
+card_20261112	0d5cfbf4	2026-11-12	Cost	sample peak RSS (MB)	11307.8	n/a	n/a			one run; no interval
+card_20261112	0d5cfbf4	2026-11-12	Cost	sample wall time (s)	494	n/a	n/a			one run on a shared machine

@@ -199,7 +199,8 @@ std::pair<std::string, double> headline(const std::map<std::string, double>& m, 
     }
     return {"", NAN};
 }
-const std::vector<std::string> kQaPref = {"holdout2_trie_ig_cls_sim_copy_bpc", "holdout2_trie_ig_cls_sim_bpc",
+// GEN-C2: the document experts' cache is a default of qa's holdout lines, so its line is the fullest (QA_RECHECK, 2026-11-12).
+const std::vector<std::string> kQaPref = {"holdout2_trie_ig_cls_sim_copy_doc_bpc", "holdout2_trie_ig_cls_sim_copy_bpc", "holdout2_trie_ig_cls_sim_bpc",
                                           "holdout2_trie_ig_cls_copy_bpc", "holdout2_trie_ig_sim_copy_bpc",
                                           "holdout2_trie_ig_copy_bpc", "holdout2_trie_ig_cls_bpc",
                                           "holdout2_trie_ig_sim_bpc", "holdout2_trie_ig_bpc"};
@@ -781,6 +782,10 @@ int selftest() {
         CHECK_NEAR(headline(m, kCtxPref).second, 1.5051, 1e-9);
         const auto m2 = bpc_pairs({"trie_plus_context_8192_cls_sim_copy_bpc 1.7897", "online_final_bpc 1.5793 (chain 1.6103)"});
         CHECK(headline(m2, kCtxPref).first == "online_final_bpc");
+        // qa: the doc cache's line (GEN-C2) wins over the stack without it
+        const auto m3 = bpc_pairs({"holdout2_trie_ig_cls_sim_copy_bpc 1.725565 holdout2_trie_ig_cls_sim_copy_doc_bpc 1.697360 (first 524288 bytes of the second half)"});
+        CHECK(headline(m3, kQaPref).first == "holdout2_trie_ig_cls_sim_copy_doc_bpc");
+        CHECK_NEAR(headline(m3, kQaPref).second, 1.697360, 1e-9);
     }
     CHECK(a.gains.size() == 2 && std::fabs(a.gains[0].lo - 0.145523) < 1e-9);
     const Tally t = find_tally(a.qa, "CV", "chat/trie_ig", "all");

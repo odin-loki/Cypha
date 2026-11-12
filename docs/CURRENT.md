@@ -66,19 +66,18 @@ Surface scores of trie samples are about **0.74–0.83**. That is readable fragm
 
 BPC is held-out `−log2 p`. It is not a generation score.
 
-### Report card, main's defaults (2026-10-29, dev, before BKN2's switch)
+### Report card, main's defaults (2026-11-12, dev)
 
-The card below is from before byte Kneser–Ney became a default (BKN2: `qa` holdout 1.7273, GEN-A dev SCRIBE 0.125). Run `scripts/cypha_report_card.sh` again for today's defaults; `--no-bkn` reproduces this card.
-
-[`reports/REPORT_CARD.md`](reports/REPORT_CARD.md); `scripts/cypha_report_card.sh` makes it for any set of flags.
+[`reports/REPORT_CARD.md`](reports/REPORT_CARD.md) (card of 2026-11-12, main `fb79cc93`); checks in [`reports/QA_RECHECK.md`](reports/QA_RECHECK.md). `scripts/cypha_report_card.sh` makes it for any set of flags.
 
 | Measure | Result |
 |---|---|
-| BPC | `qa` holdout **1.7895**, `context8k` 1.7897; every expert's paired gain interval is clear of zero |
-| Answers, after the gate | 2 right / 0 wrong / 128 abstained of 130 (before the gate 7 / 57 / 66) |
-| Don't know | recall 30/30; precision 0.455 [0.340, 0.574] |
-| Text | SCRIBE v2 0.063 [0.051, 0.078] (human 0.923, sentences shuffled 0.344); surface S 0.860 |
-| Peak RAM | `qa` 184.7 MB, `context8k` 202.3 MB, `sample` 69.8 MB, `scribe` 400 MB |
+| BPC | `context8k_bpc` **1.4962** (8 MiB trie, main `fb79cc93`; with the 1 TB trie, the default since §13.56: **1.4900**); `qa` holdout 1.6974 (with the doc cache); every expert's paired gain interval is clear of zero |
+| Answers, after the gate | 3 right / 2 wrong / 125 abstained of 130 (before the gate 6 / 56 / 68); unchanged by today's merges |
+| Don't know | recall 30/30; precision 0.441 [0.329, 0.559] |
+| T-perturb | seen 3/3, one letter changed 3/3, " Thanks." 0/3, paraphrase 0/3 |
+| Text (K5) | SCRIBE v2 0.610 [0.577, 0.645] (human 0.923, sentences shuffled 0.344), v3.1 0.546; surface S 0.929 |
+| Peak RAM | `qa` 196.3 MiB built (served 189.7), `context8k` 1.98 GB, writer 11.3 GB |
 
 ### What the measurements settled
 
