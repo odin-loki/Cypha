@@ -5,7 +5,7 @@
 // each document read backwards by word, with K5's vocabulary and K5's 256 exchange classes (a class floor counted on
 // the reversed class stream). Its counts come from one more suffix array over the reversed ids (lm/count_index.hpp).
 //
-// When K5 finishes a sentence (a word . ! ? or a newline, the byte limit or the word limit), the pass looks at the
+// When K5 finishes a sentence (a word . ! ? or a newline, the gate's draft cut, the byte or the word limit), the pass looks at the
 // words K5's sampler wrote in it since the last repair. Words the planner wrote (fact sentences) and the prompt are
 // never changed, nor is the sentence's last word.
 //   - Flag. sf(i) = -log2 Pf(x_i | the 4 words before), sb(i) = -log2 Pb(x_i | the up to 4 words after, inside the
@@ -220,7 +220,10 @@ class Repairer {
         if (!seg.empty() && seg[seg.size() - 2] + 1 != i) seg.clear();  // not right after the last word K5 drew here
         seg.push_back(i);
         seg.push_back(static_cast<std::uint32_t>(s.out.size() - pb));
-        if (!sentence_end(m.vocab()[s.ctx[i]]) && s.out.size() < o.bytes && s.step < o.max_words) return;
+        // The sentence gate also cuts a draft at gate_max bytes without a sentence end: the segment ends there too, so
+        // a repair never reaches before the draft it is in (seg starts with the draft: the last one ended here).
+        const bool cut = o.gate_k > 1 && s.out.size() - seg[1] >= o.gate_max;
+        if (!sentence_end(m.vocab()[s.ctx[i]]) && !cut && s.out.size() < o.bytes && s.step < o.max_words) return;
         const auto t0 = std::chrono::steady_clock::now();
         fix(m, s, o);
         seg.clear();

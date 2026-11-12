@@ -138,3 +138,10 @@ Dev, seed 0, 250 prompts, the baseline's command plus:
 ## Results
 
 (Added after the runs, under this line.)
+
+### Amendment 1 (2026-11-12, a fault fix; recorded before the arms are rerun)
+
+- **What happened.** All four arms stopped in the sampler (`std::out_of_range` in `basic_string::substr`) after about 5 minutes. No SCRIBE ran; no text was read; nothing was scored.
+- **The fault.** The gate also ends a draft at 240 bytes without a sentence end. The pass's segment then ran on into the next draft, so a repair could rewrite text from before that draft began. The gate's own code reads the draft from its start offset, which the shorter rewrite had moved.
+- **The fix.** The segment also ends where the gate cuts a draft (`gate_max` bytes since the segment began). A repair then never reaches before the draft it is in. The method, arms, screen and predictions are unchanged.
+- The 8-prompt smoke run did not meet the fault. The selftest passes. The flag-off check stands (the change is inside the pass, which does not run when the flag is off).
