@@ -1,0 +1,815 @@
+{
+ "store": [
+  "bench/fact_store/e9_text",
+  "bench/fact_store/e9_v2"
+ ],
+ "drop": "75497472:100000000",
+ "v2": true,
+ "facts": 92460,
+ "dropped": 4601,
+ "patterns": 359,
+ "arms": {
+  "K1": {
+   "samples": 250,
+   "statements": 286,
+   "supported_n": 145,
+   "contradicted_n": 13,
+   "unknown_n": 128,
+   "with_statement": 81,
+   "point": {
+    "per_sample": 1.144,
+    "contradicted": 0.045454545454545456,
+    "supported": 0.506993006993007,
+    "precision": 0.9177215189873418,
+    "invalid_dates": 0.0,
+    "supported_partly": 0.0,
+    "pos1_n": 37,
+    "pos1_contradicted": 0.02702702702702703,
+    "pos1_supported": 0.1891891891891892,
+    "pos2_n": 45,
+    "pos2_contradicted": 0.022222222222222223,
+    "pos2_supported": 0.15555555555555556,
+    "pos3_n": 33,
+    "pos3_contradicted": 0.09090909090909091,
+    "pos3_supported": 0.45454545454545453,
+    "pos4+_n": 171,
+    "pos4+_contradicted": 0.04678362573099415,
+    "pos4+_supported": 0.6783625730994152
+   },
+   "ci": {
+    "per_sample": [
+     0.876,
+     1.42
+    ],
+    "contradicted": [
+     0.020172910662824207,
+     0.07508532423208192
+    ],
+    "supported": [
+     0.4189189189189189,
+     0.5910543130990416
+    ],
+    "precision": [
+     0.8666666666666667,
+     0.9622641509433962
+    ],
+    "invalid_dates": [
+     0.0,
+     0.0
+    ],
+    "supported_partly": [
+     0.0,
+     0.0
+    ],
+    "pos1_n": [
+     25,
+     51
+    ],
+    "pos1_contradicted": [
+     0.0,
+     0.09090909090909091
+    ],
+    "pos1_supported": [
+     0.045454545454545456,
+     0.34285714285714286
+    ],
+    "pos2_n": [
+     30,
+     61
+    ],
+    "pos2_contradicted": [
+     0.0,
+     0.07692307692307693
+    ],
+    "pos2_supported": [
+     0.05405405405405406,
+     0.28
+    ],
+    "pos3_n": [
+     20,
+     47
+    ],
+    "pos3_contradicted": [
+     0.0,
+     0.21739130434782608
+    ],
+    "pos3_supported": [
+     0.25,
+     0.625
+    ],
+    "pos4+_n": [
+     124,
+     221
+    ],
+    "pos4+_contradicted": [
+     0.015748031496062992,
+     0.08163265306122448
+    ],
+    "pos4+_supported": [
+     0.575,
+     0.7734806629834254
+    ]
+   },
+   "by_relation": {
+    "birth_date": {
+     "contradicted": 9,
+     "supported": 86
+    },
+    "birth_place": {
+     "unknown": 35,
+     "supported": 4,
+     "contradicted": 4
+    },
+    "death_date": {
+     "supported": 39,
+     "unknown": 1
+    },
+    "death_place": {
+     "unknown": 6
+    },
+    "is_a": {
+     "unknown": 85,
+     "supported": 8
+    },
+    "located_in": {
+     "unknown": 1
+    },
+    "nationality": {
+     "supported": 8
+    }
+   },
+   "file": "/home/odin/mixdec_runs/K1.gen.txt"
+  },
+  "MA": {
+   "samples": 250,
+   "statements": 278,
+   "supported_n": 145,
+   "contradicted_n": 10,
+   "unknown_n": 123,
+   "with_statement": 77,
+   "point": {
+    "per_sample": 1.112,
+    "contradicted": 0.03597122302158273,
+    "supported": 0.5215827338129496,
+    "precision": 0.9354838709677419,
+    "invalid_dates": 0.0,
+    "supported_partly": 0.0,
+    "pos1_n": 37,
+    "pos1_contradicted": 0.0,
+    "pos1_supported": 0.1891891891891892,
+    "pos2_n": 40,
+    "pos2_contradicted": 0.025,
+    "pos2_supported": 0.175,
+    "pos3_n": 33,
+    "pos3_contradicted": 0.06060606060606061,
+    "pos3_supported": 0.45454545454545453,
+    "pos4+_n": 168,
+    "pos4+_contradicted": 0.041666666666666664,
+    "pos4+_supported": 0.6904761904761905
+   },
+   "ci": {
+    "per_sample": [
+     0.844,
+     1.392
+    ],
+    "contradicted": [
+     0.013333333333333334,
+     0.06415094339622641
+    ],
+    "supported": [
+     0.43346007604562736,
+     0.6044303797468354
+    ],
+    "precision": [
+     0.8879310344827587,
+     0.9743589743589743
+    ],
+    "invalid_dates": [
+     0.0,
+     0.0
+    ],
+    "supported_partly": [
+     0.0,
+     0.0
+    ],
+    "pos1_n": [
+     25,
+     50
+    ],
+    "pos1_contradicted": [
+     0.0,
+     0.0
+    ],
+    "pos1_supported": [
+     0.045454545454545456,
+     0.34146341463414637
+    ],
+    "pos2_n": [
+     26,
+     56
+    ],
+    "pos2_contradicted": [
+     0.0,
+     0.08571428571428572
+    ],
+    "pos2_supported": [
+     0.0625,
+     0.30434782608695654
+    ],
+    "pos3_n": [
+     20,
+     47
+    ],
+    "pos3_contradicted": [
+     0.0,
+     0.16666666666666666
+    ],
+    "pos3_supported": [
+     0.25,
+     0.6206896551724138
+    ],
+    "pos4+_n": [
+     121,
+     218
+    ],
+    "pos4+_contradicted": [
+     0.012121212121212121,
+     0.07692307692307693
+    ],
+    "pos4+_supported": [
+     0.5909090909090909,
+     0.7848101265822784
+    ]
+   },
+   "by_relation": {
+    "birth_date": {
+     "contradicted": 6,
+     "supported": 86,
+     "unknown": 1
+    },
+    "birth_place": {
+     "unknown": 34,
+     "supported": 4,
+     "contradicted": 4
+    },
+    "death_date": {
+     "supported": 39
+    },
+    "death_place": {
+     "unknown": 4
+    },
+    "director": {
+     "unknown": 1
+    },
+    "is_a": {
+     "unknown": 81,
+     "supported": 8
+    },
+    "language": {
+     "unknown": 1
+    },
+    "located_in": {
+     "unknown": 1
+    },
+    "nationality": {
+     "supported": 8
+    }
+   },
+   "file": "/home/odin/mixdec_runs/MA.gen.txt"
+  },
+  "MJ": {
+   "samples": 250,
+   "statements": 285,
+   "supported_n": 145,
+   "contradicted_n": 12,
+   "unknown_n": 128,
+   "with_statement": 80,
+   "point": {
+    "per_sample": 1.14,
+    "contradicted": 0.042105263157894736,
+    "supported": 0.5087719298245614,
+    "precision": 0.9235668789808917,
+    "invalid_dates": 0.0,
+    "supported_partly": 0.0,
+    "pos1_n": 36,
+    "pos1_contradicted": 0.027777777777777776,
+    "pos1_supported": 0.19444444444444445,
+    "pos2_n": 43,
+    "pos2_contradicted": 0.023255813953488372,
+    "pos2_supported": 0.16279069767441862,
+    "pos3_n": 33,
+    "pos3_contradicted": 0.09090909090909091,
+    "pos3_supported": 0.45454545454545453,
+    "pos4+_n": 173,
+    "pos4+_contradicted": 0.04046242774566474,
+    "pos4+_supported": 0.6705202312138728
+   },
+   "ci": {
+    "per_sample": [
+     0.872,
+     1.416
+    ],
+    "contradicted": [
+     0.017921146953405017,
+     0.07092198581560284
+    ],
+    "supported": [
+     0.42,
+     0.5925925925925926
+    ],
+    "precision": [
+     0.8742138364779874,
+     0.9661016949152542
+    ],
+    "invalid_dates": [
+     0.0,
+     0.0
+    ],
+    "supported_partly": [
+     0.0,
+     0.0
+    ],
+    "pos1_n": [
+     24,
+     49
+    ],
+    "pos1_contradicted": [
+     0.0,
+     0.09375
+    ],
+    "pos1_supported": [
+     0.046511627906976744,
+     0.3488372093023256
+    ],
+    "pos2_n": [
+     29,
+     59
+    ],
+    "pos2_contradicted": [
+     0.0,
+     0.08108108108108109
+    ],
+    "pos2_supported": [
+     0.05714285714285714,
+     0.2857142857142857
+    ],
+    "pos3_n": [
+     20,
+     46
+    ],
+    "pos3_contradicted": [
+     0.0,
+     0.21739130434782608
+    ],
+    "pos3_supported": [
+     0.25,
+     0.625
+    ],
+    "pos4+_n": [
+     126,
+     222
+    ],
+    "pos4+_contradicted": [
+     0.011560693641618497,
+     0.0736196319018405
+    ],
+    "pos4+_supported": [
+     0.5693430656934306,
+     0.764367816091954
+    ]
+   },
+   "by_relation": {
+    "birth_date": {
+     "contradicted": 8,
+     "supported": 86
+    },
+    "birth_place": {
+     "unknown": 35,
+     "supported": 4,
+     "contradicted": 4
+    },
+    "death_date": {
+     "supported": 39
+    },
+    "death_place": {
+     "unknown": 4
+    },
+    "is_a": {
+     "unknown": 87,
+     "supported": 8
+    },
+    "language": {
+     "unknown": 1
+    },
+    "located_in": {
+     "unknown": 1
+    },
+    "nationality": {
+     "supported": 8
+    }
+   },
+   "file": "/home/odin/mixdec_runs/MJ.gen.txt"
+  },
+  "MR": {
+   "samples": 250,
+   "statements": 291,
+   "supported_n": 145,
+   "contradicted_n": 13,
+   "unknown_n": 133,
+   "with_statement": 82,
+   "point": {
+    "per_sample": 1.164,
+    "contradicted": 0.044673539518900345,
+    "supported": 0.49828178694158076,
+    "precision": 0.9177215189873418,
+    "invalid_dates": 0.0,
+    "supported_partly": 0.0,
+    "pos1_n": 39,
+    "pos1_contradicted": 0.0,
+    "pos1_supported": 0.1794871794871795,
+    "pos2_n": 42,
+    "pos2_contradicted": 0.023809523809523808,
+    "pos2_supported": 0.16666666666666666,
+    "pos3_n": 32,
+    "pos3_contradicted": 0.0625,
+    "pos3_supported": 0.46875,
+    "pos4+_n": 178,
+    "pos4+_contradicted": 0.056179775280898875,
+    "pos4+_supported": 0.651685393258427
+   },
+   "ci": {
+    "per_sample": [
+     0.888,
+     1.448
+    ],
+    "contradicted": [
+     0.019498607242339833,
+     0.07317073170731707
+    ],
+    "supported": [
+     0.41007194244604317,
+     0.5773809523809523
+    ],
+    "precision": [
+     0.8666666666666667,
+     0.9621212121212122
+    ],
+    "invalid_dates": [
+     0.0,
+     0.0
+    ],
+    "supported_partly": [
+     0.0,
+     0.0
+    ],
+    "pos1_n": [
+     27,
+     52
+    ],
+    "pos1_contradicted": [
+     0.0,
+     0.0
+    ],
+    "pos1_supported": [
+     0.041666666666666664,
+     0.3235294117647059
+    ],
+    "pos2_n": [
+     27,
+     58
+    ],
+    "pos2_contradicted": [
+     0.0,
+     0.08333333333333333
+    ],
+    "pos2_supported": [
+     0.05714285714285714,
+     0.2926829268292683
+    ],
+    "pos3_n": [
+     19,
+     46
+    ],
+    "pos3_contradicted": [
+     0.0,
+     0.17857142857142858
+    ],
+    "pos3_supported": [
+     0.2608695652173913,
+     0.6428571428571429
+    ],
+    "pos4+_n": [
+     131,
+     229
+    ],
+    "pos4+_contradicted": [
+     0.02072538860103627,
+     0.09615384615384616
+    ],
+    "pos4+_supported": [
+     0.5534591194968553,
+     0.7412587412587412
+    ]
+   },
+   "by_relation": {
+    "birth_date": {
+     "contradicted": 7,
+     "supported": 86,
+     "unknown": 3
+    },
+    "birth_place": {
+     "unknown": 40,
+     "supported": 4,
+     "contradicted": 5
+    },
+    "death_date": {
+     "supported": 39,
+     "contradicted": 1
+    },
+    "death_place": {
+     "unknown": 4
+    },
+    "is_a": {
+     "unknown": 85,
+     "supported": 8
+    },
+    "located_in": {
+     "unknown": 1
+    },
+    "nationality": {
+     "supported": 8
+    }
+   },
+   "file": "/home/odin/mixdec_runs/MR.gen.txt"
+  },
+  "MV": {
+   "samples": 250,
+   "statements": 297,
+   "supported_n": 145,
+   "contradicted_n": 10,
+   "unknown_n": 142,
+   "with_statement": 89,
+   "point": {
+    "per_sample": 1.188,
+    "contradicted": 0.03367003367003367,
+    "supported": 0.4882154882154882,
+    "precision": 0.9354838709677419,
+    "invalid_dates": 0.0,
+    "supported_partly": 0.0,
+    "pos1_n": 39,
+    "pos1_contradicted": 0.0,
+    "pos1_supported": 0.1794871794871795,
+    "pos2_n": 42,
+    "pos2_contradicted": 0.023809523809523808,
+    "pos2_supported": 0.16666666666666666,
+    "pos3_n": 36,
+    "pos3_contradicted": 0.05555555555555555,
+    "pos3_supported": 0.4166666666666667,
+    "pos4+_n": 180,
+    "pos4+_contradicted": 0.03888888888888889,
+    "pos4+_supported": 0.6444444444444445
+   },
+   "ci": {
+    "per_sample": [
+     0.92,
+     1.464
+    ],
+    "contradicted": [
+     0.012539184952978056,
+     0.06007067137809187
+    ],
+    "supported": [
+     0.4,
+     0.567741935483871
+    ],
+    "precision": [
+     0.8879310344827587,
+     0.9743589743589743
+    ],
+    "invalid_dates": [
+     0.0,
+     0.0
+    ],
+    "supported_partly": [
+     0.0,
+     0.0
+    ],
+    "pos1_n": [
+     27,
+     53
+    ],
+    "pos1_contradicted": [
+     0.0,
+     0.0
+    ],
+    "pos1_supported": [
+     0.043478260869565216,
+     0.325
+    ],
+    "pos2_n": [
+     28,
+     58
+    ],
+    "pos2_contradicted": [
+     0.0,
+     0.08333333333333333
+    ],
+    "pos2_supported": [
+     0.058823529411764705,
+     0.28888888888888886
+    ],
+    "pos3_n": [
+     23,
+     51
+    ],
+    "pos3_contradicted": [
+     0.0,
+     0.15625
+    ],
+    "pos3_supported": [
+     0.2222222222222222,
+     0.59375
+    ],
+    "pos4+_n": [
+     133,
+     230
+    ],
+    "pos4+_contradicted": [
+     0.011299435028248588,
+     0.0718232044198895
+    ],
+    "pos4+_supported": [
+     0.5416666666666666,
+     0.7395348837209302
+    ]
+   },
+   "by_relation": {
+    "birth_date": {
+     "contradicted": 6,
+     "supported": 86,
+     "unknown": 2
+    },
+    "birth_place": {
+     "unknown": 38,
+     "supported": 4,
+     "contradicted": 4
+    },
+    "death_date": {
+     "supported": 39
+    },
+    "death_place": {
+     "unknown": 9
+    },
+    "director": {
+     "unknown": 3
+    },
+    "is_a": {
+     "unknown": 89,
+     "supported": 8
+    },
+    "located_in": {
+     "unknown": 1
+    },
+    "nationality": {
+     "supported": 8
+    }
+   },
+   "file": "/home/odin/mixdec_runs/MV.gen.txt"
+  },
+  "MRJ": {
+   "samples": 250,
+   "statements": 292,
+   "supported_n": 145,
+   "contradicted_n": 13,
+   "unknown_n": 134,
+   "with_statement": 86,
+   "point": {
+    "per_sample": 1.168,
+    "contradicted": 0.04452054794520548,
+    "supported": 0.4965753424657534,
+    "precision": 0.9177215189873418,
+    "invalid_dates": 0.0,
+    "supported_partly": 0.0,
+    "pos1_n": 38,
+    "pos1_contradicted": 0.0,
+    "pos1_supported": 0.18421052631578946,
+    "pos2_n": 42,
+    "pos2_contradicted": 0.023809523809523808,
+    "pos2_supported": 0.16666666666666666,
+    "pos3_n": 33,
+    "pos3_contradicted": 0.06060606060606061,
+    "pos3_supported": 0.45454545454545453,
+    "pos4+_n": 179,
+    "pos4+_contradicted": 0.055865921787709494,
+    "pos4+_supported": 0.6480446927374302
+   },
+   "ci": {
+    "per_sample": [
+     0.896,
+     1.444
+    ],
+    "contradicted": [
+     0.02097902097902098,
+     0.07308970099667775
+    ],
+    "supported": [
+     0.4083333333333333,
+     0.5744047619047619
+    ],
+    "precision": [
+     0.8695652173913043,
+     0.9586776859504132
+    ],
+    "invalid_dates": [
+     0.0,
+     0.0
+    ],
+    "supported_partly": [
+     0.0,
+     0.0
+    ],
+    "pos1_n": [
+     26,
+     51
+    ],
+    "pos1_contradicted": [
+     0.0,
+     0.0
+    ],
+    "pos1_supported": [
+     0.044444444444444446,
+     0.3333333333333333
+    ],
+    "pos2_n": [
+     27,
+     58
+    ],
+    "pos2_contradicted": [
+     0.0,
+     0.08108108108108109
+    ],
+    "pos2_supported": [
+     0.058823529411764705,
+     0.2926829268292683
+    ],
+    "pos3_n": [
+     20,
+     47
+    ],
+    "pos3_contradicted": [
+     0.0,
+     0.1724137931034483
+    ],
+    "pos3_supported": [
+     0.25,
+     0.627906976744186
+    ],
+    "pos4+_n": [
+     132,
+     228
+    ],
+    "pos4+_contradicted": [
+     0.024539877300613498,
+     0.09340659340659341
+    ],
+    "pos4+_supported": [
+     0.5460122699386503,
+     0.7382198952879581
+    ]
+   },
+   "by_relation": {
+    "birth_date": {
+     "contradicted": 7,
+     "supported": 86,
+     "unknown": 1
+    },
+    "birth_place": {
+     "unknown": 39,
+     "supported": 4,
+     "contradicted": 4
+    },
+    "death_date": {
+     "supported": 39,
+     "contradicted": 2
+    },
+    "death_place": {
+     "unknown": 4
+    },
+    "director": {
+     "unknown": 1
+    },
+    "is_a": {
+     "unknown": 88,
+     "supported": 8
+    },
+    "located_in": {
+     "unknown": 1
+    },
+    "nationality": {
+     "supported": 8
+    }
+   },
+   "file": "/home/odin/mixdec_runs/MRJ.gen.txt"
+  }
+ }
+}

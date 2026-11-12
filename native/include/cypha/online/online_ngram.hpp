@@ -204,6 +204,15 @@ public:
         for (int q = 0; q < O_; ++q) tree(pq[q], Po + q * 256);
     }
 
+    // K5_MIXDEC.md: the history read so far (its last 64 bytes), and setting it, so a frozen copy can read hypothetical
+    // bytes and come back (lm/decoder/learner.hpp). Nothing else uses them.
+    const std::vector<std::uint8_t>& history() const { return hist_; }
+    void set_history(const std::vector<std::uint8_t>& h) {
+        if (h.size() != hist_.size() || std::equal(h.begin(), h.end(), hist_.begin())) return;
+        hist_ = h;
+        ctx_ok_ = false;
+    }
+
     std::size_t bytes() const {
         std::size_t b = W_.size() * sizeof(double);
         for (const auto& t : t_) b += t.size() * (p_.check ? 5 : 4);  // as before: two 16-bit counts and the check
