@@ -1030,6 +1030,7 @@ Everything raised on 2026-10-26, and where this plan covers it.
 | 128 | The discourse planner is the default (§13.42 Q3; Odin: "keep it focussed but let it drift a little and long context"): after the facts, the plan goes on through linked entities; blind raters prefer it to P1t (0.590 [0.540, 0.640]); test SCRIBE v2 0.631 (P1t 0.537, K5 0.524). Q1 (more facts, gibberish filter) and Q2 (typed slots, smoothing) tie P1t and stay flags | [`GENERATION_PLAN.md`](GENERATION_PLAN.md) §13.42, [`reports/PLAN_DISCOURSE.md`](reports/PLAN_DISCOURSE.md) |
 | 129 | Odin (2026-11-12): "get the CyphaLM generating quality text". K5's counts from 337 MB of clean enwik9 with K5's own vocabulary and classes (§13.48 W1b): blind raters prefer it to the discourse planner on 7 MB 0.940 [0.860, 1.000]; it is the default (`--no-k5-more` restores the old). Test SCRIBE v2 0.600 (old 0.631). The honest fill (H1b) ties (0.560), off by default | [`GENERATION_PLAN.md`](GENERATION_PLAN.md) §13.48 |
 | 130 | T2, writing tuned on the 337 MB default (§13.51): a sentence gate of 16 drafts reads better than 8 (raters 0.670 [0.570, 0.770]) and is the default; nucleus 0.7 tied it, order 6 and N7+G16 did not help; test SCRIBE v2 0.621 | [`GENERATION_PLAN.md`](GENERATION_PLAN.md) §13.51 |
+| 131 | T3 (§13.53): the LDA topic term in K5's sentence gate is the default; raters 0.610 at 460 characters and 0.700 at 1,500 against the 16-draft gate; the previous-sentence link reads worse (0.390) though SCRIBE rose; test SCRIBE v2 0.629 | [`GENERATION_PLAN.md`](GENERATION_PLAN.md) §13.53 |
 
 ---
 

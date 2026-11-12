@@ -2404,3 +2404,18 @@ Every branch first merges `origin/main` (M1 and M2 are exact, so P1 and every ba
   - `context8k_bpc` 1.5069 on the full run (+0.0107), +0.018 on the small one. A tree node groups bytes by frequency, not by shared high bits, so the contexts lose meaning.
   - Predictions: 4.6 decisions **miss** (5.1); bpc within +0.002 **miss**; time −20% **miss**.
 - **The merge, checked:** main + M4 + O8, built with `g++ -O2`. Small `context8k` (`--train 1048576 --sample 1179648`) equals main's binary under `cmp` (1.7501). The default `sample --k5` on the 250 dev prompts equals G16's GEN file. The selftest passes.
+
+### 13.53 T3, a topic term in the sentence gate (2026-11-12; [K5_COHERENCE](reports/K5_COHERENCE.md))
+
+- **Registered first** (f72b6c4): choosers for keeping the paragraph on topic, revisited on the fluent 337 MB writer. Every one of them read at about 2/10 on the 7 MB K5 (§13.31–13.36). The new flag `--k5-gate K,wr=W` rewards a link to the previous sentence; it is off by default and byte-identical when off.
+- **Screen** (dev): two candidates.
+  - **R2:** the link to the previous sentence. It raised the link share from 0.150 to 0.183 (human text: 0.460) and SCRIBE v2 by +0.06.
+  - **L1:** the LDA topic term in the gate (`--k5-lda 100 --k5-lda-w 1`, learned from the same 337 MB).
+  - Rejected: E2 (entity grid, fragments) and M1 (MBR, short broken drafts). C and D1 changed only 26 samples each, too few to rate.
+- **Blind pairwise raters against G16** (packets a0136e9):
+  - 460 characters: **L1 0.610 [0.510, 0.720]**, rater pairs 0.64 and 0.58; R2 0.390 [0.280, 0.500].
+  - 1,500 characters: **L1 0.700 [0.560, 0.820]**, pairs 0.62 and 0.77; R2 0.460 [0.280, 0.640].
+  - **By the registered rule, L1 is adopted; R2 reads worse.** SCRIBE rose most for R2, which the raters marked down (as in §13.34).
+- **The default:** when K5 counts from the 337 MB text, `sample --k5` adds L1's term. The LDA model is loaded from `CYPHA_K5_DISC_CACHE`, else `/mnt/d/cypha_llm/disc/cache`; without a cache, it is trained once. `--k5-lda 0` restores G16. Checked by `cmp` on the 250 dev prompts: the default equals L1's GEN file, and `--k5-lda 0` equals G16's.
+- **The one test read** (`bench/k5_coherence/test_read/`): SCRIBE v2 **0.629 [0.597, 0.663]** (G16 0.621), v3.1 0.570, copy32 0.234, no 13-word copies.
+- **What is left:** in half the read prompts, the first sentence is already off the subject. The first gate has only the prompt to go on, and no chooser tested here fixes that.
