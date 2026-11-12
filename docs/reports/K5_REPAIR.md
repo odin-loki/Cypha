@@ -152,3 +152,56 @@ Dev, seed 0, 250 prompts, the baseline's command plus:
 - **Why amendment 1 was not enough.** When a sentence ends before the gate's 24-byte minimum, the gate does not end the draft, but the pass had started a new segment there. Its 240-byte cut was then counted from the wrong place, and a segment could still run into the next draft.
 - **The fix.** The pass now follows the gate's own rule for where a draft ends: at a sentence end once the draft holds 24 bytes, at 240 bytes, or at the limits, tested on the text after the repair. It keeps the draft's start in the state, and a segment never begins before it. The method, arms, screen and predictions are unchanged.
 - **Checked before the rerun:** the selftest passes, and two 250-prompt stress runs on K5's own 7 MB text with a very loose flag (`tau=3`), one with and one without the planner, ran to the end.
+
+### Checks (2026-11-12)
+
+- main's build (4629f68c) and my build with the flag off: both equal `bench/k5_retrieve/runs/K1.gen.txt` under `cmp`, MODEL line included. **Hit.** The selftest passes.
+- The first two runs of the arms stopped on a fault (amendments 1 and 2). The third ran to the end; the numbers below are from it.
+
+### The screen (dev, seed 0, 250 prompts; files in `bench/k5_repair/runs/`, measures in `bench/k5_repair/screen/`)
+
+One arm at a time, 6 threads, on a PC shared with other jobs (wall times vary by load).
+
+| Arm | SCRIBE v2 [95%] | v3.1 | copy32 | verbatim13 | fact precision [95%] | mean surprise, minus K1 [95%] | words changed | wall | peak RAM | screen |
+|---|---|---|---|---|---|---|---|---|---|---|
+| K1 | 0.704 [0.673, 0.735] | 0.665 | 0.275 | 0 | 0.918 [0.867, 0.962] | (7.806 bits) | — | 8:44 | 11.3 GB | baseline |
+| R8 | 0.696 [0.665, 0.728] | 0.641 | 0.288 | 0 | 0.929 [0.881, 0.970] | −0.205 [−0.271, −0.140] | 9.0% | 9:13 | 12.1 GB | numbers pass; **fails by reading** |
+| R6 | 0.674 [0.642, 0.707] | 0.609 | **0.310** | 0 | 0.929 [0.881, 0.970] | −0.396 [−0.477, −0.316] | 19.4% | 13:22 | 12.1 GB | **fails (copy32)** |
+| P8 | 0.706 [0.673, 0.736] | 0.644 | 0.293 | 0 | 0.924 [0.875, 0.966] | −0.230 [−0.298, −0.166] | 8.1% | 10:58 | 12.1 GB | numbers pass; **fails by reading** |
+| F8 | 0.701 [0.670, 0.734] | 0.650 | 0.288 | 0 | 0.924 [0.877, 0.966] | −0.204 [−0.271, −0.143] | 8.1% | 10:37 | 12.1 GB | numbers pass; **fails by reading** |
+
+- "Words changed" is the share of the words K5's sampler drafted (every gate draft) that the pass changed. R8: 31,124 sentences, 78,301 flags, 48,594 words changed in 18,698 sentences.
+- Each arm differs from K1 in 210–213 of 250 samples. The other 37–40 are planned prompts written wholly by the planner, which the pass does not touch.
+- The pass costs more than the smoke run showed: 437–492 s of thread time in R8, P8 and F8 (1,389 s in R6), against about 1,500 s of sampling. The backward model built in 88–163 s, 772 MB.
+- J2's other measures do not move: `on_prev` +0.005 to +0.013 (all intervals hold 0), orphans, DEF+BIRTH and the subject kept by sentence within noise. stuff3 falls a little (R6 −0.0026).
+- Sentences of 4 words or fewer (first 460 characters, all 250 samples): K1 0.121, R8 0.113, R6 0.105, P8 0.110, F8 0.118. The pass does not add fragments overall.
+
+**Reading** (dev 0, 1, 2, 3, 4, 5, 7, 9, 10, 11, 12, 13; K1, R8, P8 and F8 side by side, R6 on five of them):
+- **Most breaks stay.** The flagged words are mostly replaced one by one, and the clause around them stays broken. "As it turned out, in his memory." becomes "As it turned out, in his opinion." (dev 12). "This is not the most secure near 90 degrees." becomes "This is not the most easily rotated 90 degrees." (R8) or "the most skilled at 90 degrees" (P8) (dev 2).
+- **Some real mends, few.** Dev 5: "only states may be obtained by the king" becomes "may be appointed by the king". Dev 11, R8: "used to determine the carrier is Esperanto. Alfred was not as affluent countries, whose economies." becomes "used to determine the sequence of Esperanto. They can be used to describe the way to India." Dev 2, R8: "Taliban, perhaps" becomes "which, perhaps".
+- **The changes reach the next sentences.** Each draft is repaired before the gate chooses, so the gate picks other drafts, and the paragraph after the first change is new text. It breaks about as often as K1's. In dev 1 and dev 7, R8's new text is a run of fragments ("The character of sulfuric acid. An alternative method. … The nerve conduction."; "The University. He also the world."). The count above shows this is not a trend over all 250 samples.
+- **Topic words go.** Lower surprise here partly means common words replace the subject's rare ones: dev 12 "time zones of Dune" becomes "of investment" (R8) or "of thought" (P8, F8), and the Alia thread is lost; "He died in Edinburgh" becomes "Paris" or "London"; dev 0 and 7 lose "region" for "process" or "species". This is the K5_MCMC failure again, on a smaller scale.
+- **My count** of sentences that break mid-clause, in the first 460 characters of the 12 prompts: K1 about 26, R8 about 31, P8 and F8 about the same as K1. R6 is worse (many long run-on clauses: dev 2 "which, if any. But where is it in a time slot in each of the different types of active galaxy, …").
+- By the registered rule (fewer broken sentences than K1, and no new kind of fault), **no arm passes**. R8, P8 and F8 pass every number; R6 fails copy32.
+
+**Candidates: none.** By the registered rule, nothing goes to the raters, and no packets were made.
+
+### Predictions
+
+- P1 flag off equals K1: **hit**.
+- P2 R8 changes 6–12% of drafted words: **hit** (9.0%); R6 1.5–2.5 times as many: **hit** (2.2 times).
+- P3 verbatim13 0 in every arm: **hit**; copy32 within ±0.02 of K1: **hit** for R8 (+0.013), P8 (+0.018), F8 (+0.013), **miss** for R6 (+0.035).
+- P4 fact precision within ±0.02 of K1: **hit** (0.924–0.929).
+- P5 SCRIBE v2 within ±0.03: **hit** in every arm (R6 −0.030, at the edge).
+- P6 mean surprise falls in every arm: **hit**; by 0.02–0.15 bits: **miss** (0.20–0.40); R6 and P8 the most: **hit**.
+- P7 R8 and F8 mend about 1 in 5 broken sentences: **miss** (a few mends, about as many new breaks); P8 blander: not seen beyond R8; R6 makes new breaks: **hit**.
+- P8 at least one arm passes the screen: **miss**.
+- P9 raters: not run.
+- P10 build 100–160 s: **hit** for three arms, **miss** for R8 (163 s; 88 s for P8 is also below); +0.5–1.5 GB peak RAM: **hit** (+0.8 GB); the pass under 5% of sampling: **miss** (about a third); wall +2–4 minutes: **hit** apart from R6 (+4:38).
+
+### What it says
+
+- A right-to-left K5 finds the words a left-to-right K5 drew badly: it flags about 15% of drafted words at 8 bits, and resampling them lowers mean surprise by 0.2 bits a word with copy and fact precision held.
+- But the breaks readers see are not single bad words. A clause goes wrong over several words, and a 5-gram in either direction, read 4 words at a time, finds each word plausible next to its neighbours. Swapping words one at a time keeps the broken frame; where it lowers surprise most, it does so by putting common words in place of the subject's own.
+- Lower surprise is a screen between variants of one writer (§13.57), not proof. Here the reading says the arms are not better, so they were not rated. If the lead wants a second opinion, R8 (or F8, the task's first form) is the arm to rate; that would need an amendment.
+- Next, if this line goes on: repair at the level of the clause (redraw the span between two flagged joins with both directions, so the frame can change), and keep the retrieved document's words from being replaced (a word the overlay raises stays).
